@@ -760,6 +760,7 @@ func mapSysInfoEntries(m map[string]string) []libvirtxml.DomainSysInfoEntry {
 
 // ---------------- Devices ----------------
 
+//nolint:gocyclo // libvirt device-list builder (20+ device types via if-nil-append); cohesive inventory; per-device extraction bloats and obscures the taxonomy
 func buildDomainDevices(spec *VmSpec, rt VmRuntimeParams) *libvirtxml.DomainDeviceList {
 	out := &libvirtxml.DomainDeviceList{}
 	var lvd *LibvirtDevices

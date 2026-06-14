@@ -86,142 +86,7 @@ func RunCheckLive(ctx context.Context, deployment, scoreName string, plan []Step
 		if len(bucket) == 0 {
 			continue
 		}
-		pod := bucket[0].step.Pod
-
-		var ephemeralCleanup func(bool)
-		if pod != "" && isEphemeralDeploy(deployRoots, pod) {
-			fmt.Fprintf(os.Stderr, "score live: ephemeral wrap — charly deploy add %s\n", pod)
-			exe, _ := os.Executable()
-			addCmd := exec.Command(exe, "deploy", "add", pod)
-			addCmd.Stderr = os.Stderr
-			addCmd.Stdout = os.Stdout
-			if err := addCmd.Run(); err != nil {
-				fmt.Fprintf(os.Stderr, "score live: ephemeral add %s failed: %v\n", pod, err)
-			}
-			keepOnFailure := ephemeralKeepOnFailure(deployRoots, pod)
-			ephemeralCleanup = func(failed bool) {
-				if failed && keepOnFailure {
-					fmt.Fprintf(os.Stderr, "score live: keep_on_failure=true; leaving %s alive\n", pod)
-					return
-				}
-				delCmd := exec.Command(exe, deployDelArgv(pod)...)
-				delCmd.Stderr = os.Stderr
-				delCmd.Stdout = os.Stdout
-				_ = delCmd.Run()
-			}
-		}
-
-		chainExec, chainErr := resolveScoringChain(deployRoots, pod)
-		reachableErr := chainErr
-		if reachableErr == nil {
-			o, _, exit, err := chainExec.RunCapture(ctx, "echo ok")
-			if err != nil {
-				reachableErr = fmt.Errorf("chain %q unreachable: %w", chainExec.Venue(), err)
-			} else if exit != 0 {
-				reachableErr = fmt.Errorf("chain %q probe non-zero (%d): %s", chainExec.Venue(), exit, strings.TrimSpace(o))
-			}
-		}
-		if reachableErr != nil {
-			fmt.Fprintf(os.Stderr, "score live: pod %q unreachable: %v\n", pod, reachableErr)
-		}
-
-		var runner *Runner
-		if reachableErr == nil {
-			runner = NewRunner(chainExec, &CheckVarResolver{}, RunModeLive)
-			runner.Box = pod
-			roots := deployRoots
-			runner.TargetResolver = func(target string) (*CheckVarResolver, DeployExecutor, error) {
-				ex, err := resolveScoringChain(roots, target)
-				if err != nil {
-					return nil, nil, err
-				}
-				return &CheckVarResolver{}, ex, nil
-			}
-			runner.ValidateAiArtifacts = opts.ValidateAiArtifacts
-			runner.IterStartTime = opts.IterStartTime
-			applyPeerVarsSteps(runner, bucketSteps(bucket), "")
-		}
-
-		for _, e := range bucket {
-			// depends_on cascade — only matters for scored steps.
-			if isScored(e.step) {
-				if blocked := firstUnmetDepStep(e.step, verdictByID); blocked != "" {
-					out.Step = append(out.Step, skippedStepScore(e, pod, blocked))
-					out.Summary.Total++
-					out.Summary.Skip++
-					verdictByID[e.id] = "skipped"
-					continue
-				}
-			}
-
-			if reachableErr != nil {
-				if isScored(e.step) {
-					out.Step = append(out.Step, StepScore{
-						ID:     e.id,
-						Origin: "pod:" + pod,
-						Text:   e.step.KeywordText(),
-						Tag:    EffectiveTags(e.step.Tag),
-						Status: "fail",
-					})
-					out.Summary.Total++
-					out.Summary.Fail++
-					verdictByID[e.id] = "fail"
-				}
-				continue
-			}
-
-			// Run the single step via RunPlan against the bucket's runner.
-			set := &LabelDescriptionSet{Candy: []LabeledDescription{{
-				Origin: "pod:" + pod,
-				Plan:   []Step{e.step},
-			}}}
-			results := RunPlan(ctx, runner, set, nil, false)
-			if !isScored(e.step) {
-				continue // provisioning run: step — executed, not scored
-			}
-			status := "fail"
-			if len(results) > 0 {
-				status = results[0].Result.Status.String()
-			}
-			score := StepScore{
-				ID:      e.id,
-				Origin:  "pod:" + pod,
-				Text:    e.step.KeywordText(),
-				Tag:     EffectiveTags(e.step.Tag),
-				Keyword: string(keywordOf(&e.step)),
-				Status:  status,
-			}
-			if len(results) > 0 {
-				score.Verb = results[0].Result.Verb
-			}
-			out.Step = append(out.Step, score)
-			out.Summary.Total++
-			switch status {
-			case "pass":
-				out.Summary.Pass++
-				verdictByID[e.id] = "pass"
-			case "fail":
-				out.Summary.Fail++
-				verdictByID[e.id] = "fail"
-			default: // skip
-				out.Summary.Skip++
-				verdictByID[e.id] = "fail"
-			}
-		}
-
-		if ephemeralCleanup != nil {
-			bucketFailed := false
-			for _, e := range bucket {
-				if v, ok := verdictByID[e.id]; ok && v == "fail" {
-					bucketFailed = true
-					break
-				}
-			}
-			ephemeralCleanup(bucketFailed)
-		}
-		if runner != nil {
-			runner.ClosePeers()
-		}
+		scoreOnePodBucket(ctx, bucket, deployRoots, opts, out, verdictByID)
 	}
 
 	// Cyclic scored steps get a deterministic fail verdict.
@@ -242,6 +107,151 @@ func RunCheckLive(ctx context.Context, deployment, scoreName string, plan []Step
 		verdictByID[e.id] = "fail"
 	}
 	return out, nil
+}
+
+// scoreOnePodBucket scores one same-pod bucket of (topologically ordered)
+// scored steps: it optionally ephemeral-wraps the pod (deploy add / del),
+// resolves and reachability-probes the scoring executor chain, builds the
+// bucket's runner, then runs each step — appending verdicts to out and
+// recording them in verdictByID. Split out of RunCheckLive, which keeps the
+// outer pod-grouping loop.
+func scoreOnePodBucket(ctx context.Context, bucket []scoredStep, deployRoots map[string]DeploymentNode, opts RunScoringOpts, out *CheckRunResults, verdictByID map[string]string) {
+	pod := bucket[0].step.Pod
+
+	var ephemeralCleanup func(bool)
+	if pod != "" && isEphemeralDeploy(deployRoots, pod) {
+		fmt.Fprintf(os.Stderr, "score live: ephemeral wrap — charly deploy add %s\n", pod)
+		exe, _ := os.Executable()
+		addCmd := exec.Command(exe, "deploy", "add", pod)
+		addCmd.Stderr = os.Stderr
+		addCmd.Stdout = os.Stdout
+		if err := addCmd.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "score live: ephemeral add %s failed: %v\n", pod, err)
+		}
+		keepOnFailure := ephemeralKeepOnFailure(deployRoots, pod)
+		ephemeralCleanup = func(failed bool) {
+			if failed && keepOnFailure {
+				fmt.Fprintf(os.Stderr, "score live: keep_on_failure=true; leaving %s alive\n", pod)
+				return
+			}
+			delCmd := exec.Command(exe, deployDelArgv(pod)...)
+			delCmd.Stderr = os.Stderr
+			delCmd.Stdout = os.Stdout
+			_ = delCmd.Run()
+		}
+	}
+
+	chainExec, chainErr := resolveScoringChain(deployRoots, pod)
+	reachableErr := chainErr
+	if reachableErr == nil {
+		o, _, exit, err := chainExec.RunCapture(ctx, "echo ok")
+		if err != nil {
+			reachableErr = fmt.Errorf("chain %q unreachable: %w", chainExec.Venue(), err)
+		} else if exit != 0 {
+			reachableErr = fmt.Errorf("chain %q probe non-zero (%d): %s", chainExec.Venue(), exit, strings.TrimSpace(o))
+		}
+	}
+	if reachableErr != nil {
+		fmt.Fprintf(os.Stderr, "score live: pod %q unreachable: %v\n", pod, reachableErr)
+	}
+
+	var runner *Runner
+	if reachableErr == nil {
+		runner = NewRunner(chainExec, &CheckVarResolver{}, RunModeLive)
+		runner.Box = pod
+		roots := deployRoots
+		runner.TargetResolver = func(target string) (*CheckVarResolver, DeployExecutor, error) {
+			ex, err := resolveScoringChain(roots, target)
+			if err != nil {
+				return nil, nil, err
+			}
+			return &CheckVarResolver{}, ex, nil
+		}
+		runner.ValidateAiArtifacts = opts.ValidateAiArtifacts
+		runner.IterStartTime = opts.IterStartTime
+		applyPeerVarsSteps(runner, bucketSteps(bucket), "")
+	}
+
+	for _, e := range bucket {
+		// depends_on cascade — only matters for scored steps.
+		if isScored(e.step) {
+			if blocked := firstUnmetDepStep(e.step, verdictByID); blocked != "" {
+				out.Step = append(out.Step, skippedStepScore(e, pod, blocked))
+				out.Summary.Total++
+				out.Summary.Skip++
+				verdictByID[e.id] = "skipped"
+				continue
+			}
+		}
+
+		if reachableErr != nil {
+			if isScored(e.step) {
+				out.Step = append(out.Step, StepScore{
+					ID:     e.id,
+					Origin: "pod:" + pod,
+					Text:   e.step.KeywordText(),
+					Tag:    EffectiveTags(e.step.Tag),
+					Status: "fail",
+				})
+				out.Summary.Total++
+				out.Summary.Fail++
+				verdictByID[e.id] = "fail"
+			}
+			continue
+		}
+
+		// Run the single step via RunPlan against the bucket's runner.
+		set := &LabelDescriptionSet{Candy: []LabeledDescription{{
+			Origin: "pod:" + pod,
+			Plan:   []Step{e.step},
+		}}}
+		results := RunPlan(ctx, runner, set, nil, false)
+		if !isScored(e.step) {
+			continue // provisioning run: step — executed, not scored
+		}
+		status := "fail"
+		if len(results) > 0 {
+			status = results[0].Result.Status.String()
+		}
+		score := StepScore{
+			ID:      e.id,
+			Origin:  "pod:" + pod,
+			Text:    e.step.KeywordText(),
+			Tag:     EffectiveTags(e.step.Tag),
+			Keyword: string(keywordOf(&e.step)),
+			Status:  status,
+		}
+		if len(results) > 0 {
+			score.Verb = results[0].Result.Verb
+		}
+		out.Step = append(out.Step, score)
+		out.Summary.Total++
+		switch status {
+		case "pass":
+			out.Summary.Pass++
+			verdictByID[e.id] = "pass"
+		case "fail":
+			out.Summary.Fail++
+			verdictByID[e.id] = "fail"
+		default: // skip
+			out.Summary.Skip++
+			verdictByID[e.id] = "fail"
+		}
+	}
+
+	if ephemeralCleanup != nil {
+		bucketFailed := false
+		for _, e := range bucket {
+			if v, ok := verdictByID[e.id]; ok && v == "fail" {
+				bucketFailed = true
+				break
+			}
+		}
+		ephemeralCleanup(bucketFailed)
+	}
+	if runner != nil {
+		runner.ClosePeers()
+	}
 }
 
 // topoSortScored orders scored steps by depends_on (id-keyed), returning the

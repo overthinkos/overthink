@@ -324,7 +324,7 @@ func (t *OCITarget) emitOp(s *OpStep) error {
 
 	// Render just this one op (the OpStep the compiler produced from a plan
 	// run: step) via the shared emitter.
-	_, err := t.Generator.emitTasks(&t.buf, layer, t.Box, []Op{*s.Op}, t.BuildDir, t.ContextRelPrefix, "0")
+	_, err := t.Generator.emitTasks(&t.buf, layer, t.Box, []Op{*s.Op}, t.BuildDir, t.ContextRelPrefix)
 	return err
 }
 

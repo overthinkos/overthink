@@ -404,58 +404,15 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	fmt.Fprintf(&b, "ARG BASE_IMAGE=%s\n\n", resolvedBase)
 
 	// Emit scratch stages for each candy
-	for _, candyName := range candyOrder {
-		layer := g.Candies[candyName]
-		stageName := layer.Name // use short name for stage alias
-		fmt.Fprintf(&b, "FROM scratch AS %s\n", stageName)
-		fmt.Fprintf(&b, "COPY %s/ /\n\n", g.candyCopySource(candyName))
-	}
+	g.emitScratchStages(&b, candyOrder)
 
 	// Emit per-candy multi-stage build stages — fully config-driven from build.yml builder: section.
-	// Each builder in build.yml builder: section declares detect_files and/or detect_config.
-	// For each candy that matches, the builder's stage_template is rendered.
-	if img.BuilderConfig != nil {
-		// Process builders in deterministic order
-		builderNames := img.BuilderConfig.BuilderNames()
-		for _, builderName := range builderNames {
-			builderDef := img.BuilderConfig.Builder[builderName]
-			if builderDef.Inline {
-				continue // inline builders handled in writeCandySteps
-			}
-			if builderDef.StageTemplate == "" {
-				continue
-			}
-			for _, candyName := range candyOrder {
-				layer := g.Candies[candyName]
-				if !g.candyNeedsBuilder(img, layer, builderDef) {
-					continue
-				}
-				builderRef := g.builderRefForFormat(boxName, builderName)
-				if builderRef == "" {
-					return fmt.Errorf("image %q: candy %q needs builder %q but no builders.%s configured", boxName, candyName, builderName, builderName)
-				}
-				ctx := g.buildStageContext(layer, builderName, builderDef, img, builderRef)
-				rendered, err := RenderTemplate(builderName+"-stage", builderDef.StageTemplate, ctx)
-				if err != nil {
-					return fmt.Errorf("image %q: rendering %s stage for candy %q: %w", boxName, builderName, candyName, err)
-				}
-				b.WriteString(rendered)
-				b.WriteString("\n")
-			}
-		}
+	if err := g.emitBuilderStages(&b, boxName, img, candyOrder); err != nil {
+		return err
 	}
 
 	// Emit extraction stages for candies with extract field
-	for _, candyName := range candyOrder {
-		layer := g.Candies[candyName]
-		if !layer.HasExtract() {
-			continue
-		}
-		for i, ext := range layer.Extract() {
-			stageName := fmt.Sprintf("%s-extract-%d", candyName, i)
-			fmt.Fprintf(&b, "FROM %s AS %s\n\n", ext.Source, stageName)
-		}
-	}
+	g.emitExtractStages(&b, candyOrder)
 
 	// Aggregate candy-contributed capabilities once for this image. Cache
 	// onto ResolvedBox so downstream emit paths (and label emission)
@@ -479,120 +436,16 @@ func (g *Generator) generateContainerfile(boxName string) error {
 		img.InitSystem, img.InitDef = img.InitConfig.ResolveInitSystem(g.Candies, candyOrder, "")
 	}
 
-	// Check if this image has route candies and traefik
-	hasRoutes := false
-	hasTraefik := false
-	for _, candyName := range candyOrder {
-		layer := g.Candies[candyName]
-		if layer.HasRoute() {
-			hasRoutes = true
-		}
-		if layer.Name == "traefik" {
-			hasTraefik = true
-		}
+	// Detect route/traefik candies and emit the traefik-routes scratch stage.
+	hasRoutes, hasTraefik, err := g.emitTraefikRouteStage(&b, boxName, img, candyOrder)
+	if err != nil {
+		return err
 	}
 
-	// Generate traefik routes only when traefik is actually present
-	if hasRoutes && hasTraefik {
-		if err := g.generateTraefikRoutes(boxName, candyOrder, img); err != nil {
-			return err
-		}
-		b.WriteString("FROM scratch AS traefik-routes\n")
-		fmt.Fprintf(&b, "COPY .build/%s/traefik-routes.yml /routes.yml\n\n", boxName)
-	}
-
-	// Emit init system stages (fragment assembly or file copy)
-	// When a child image adds services, include parent-provided configs
-	// so the assembled config contains all services from the full chain.
-	//
-	// Track which init defs actually received fragment content. When a candy
-	// chain only contributes via `system_services:` (plain unit names), no
-	// fragment files are COPY'd into the scratch stage — emitting an empty
-	// `FROM scratch AS <stage>` plus the `assembly_template` RUN that bind-
-	// mounts from it would fail at build time with "no such file or directory".
-	initHasFragments := map[string]bool{}
-	for initName, def := range activeInits {
-		initCandyOrder := candyOrder
-		if !img.IsExternalBase {
-			full := collectAllBoxCandies(boxName, g.Boxes, g.Candies)
-			if len(full) > 0 {
-				initCandyOrder = full
-			}
-		}
-		if err := g.generateInitFragments(boxName, initName, def, initCandyOrder); err != nil {
-			return err
-		}
-
-		// Pre-scan the candy chain to decide whether this init has any fragment
-		// content. If not, skip both the scratch stage emission and the
-		// assembly_template RUN (see second loop below).
-		hasFragments := false
-		for _, candyName := range initCandyOrder {
-			layer := g.Candies[candyName]
-			if def.Model == "fragment_assembly" && layer.HasInit(initName) {
-				hasFragments = true
-				break
-			}
-			if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
-				hasFragments = true
-				break
-			}
-			if def.Model == "file_copy" && len(layer.ServiceFiles()) > 0 {
-				hasFragments = true
-				break
-			}
-		}
-		initHasFragments[initName] = hasFragments
-		if !hasFragments {
-			continue
-		}
-
-		// Emit scratch stage with COPY lines for fragments
-		fmt.Fprintf(&b, "FROM scratch AS %s\n", def.StageName)
-		if def.StageHeaderCopy != "" {
-			headerCopy, err := g.rewriteHeaderCopyForRemote(def.StageHeaderCopy)
-			if err != nil {
-				return err
-			}
-			b.WriteString(headerCopy + "\n")
-		}
-		for i, candyName := range initCandyOrder {
-			layer := g.Candies[candyName]
-			// Service content fragments (fragment_assembly model)
-			if def.Model == "fragment_assembly" && layer.HasInit(initName) {
-				// Use the SHORT name (not the map key) — a remote candy's key is
-				// a slashed github ref that would create bogus nested dirs.
-				fileName := fmt.Sprintf("%02d-%s.conf", i+1, layer.Name)
-				copyLine, err := def.RenderStageFragmentCopy(boxName, fileName)
-				if err != nil {
-					return fmt.Errorf("rendering stage fragment copy for %s/%s: %w", initName, candyName, err)
-				}
-				b.WriteString(copyLine + "\n")
-			}
-			// Relay fragments
-			if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
-				for _, port := range layer.PortRelayPorts {
-					confName := fmt.Sprintf("%02d-relay-%d.conf", i+1, port)
-					copyLine, err := def.RenderStageFragmentCopy(boxName, confName)
-					if err != nil {
-						return fmt.Errorf("rendering relay copy for %s/%s port %d: %w", initName, candyName, port, err)
-					}
-					b.WriteString(copyLine + "\n")
-				}
-			}
-			// File copy model: copy detected service files
-			if def.Model == "file_copy" && len(layer.ServiceFiles()) > 0 {
-				for _, svcPath := range layer.ServiceFiles() {
-					svcName := filepath.Base(svcPath)
-					copyLine, err := def.RenderStageFragmentCopy(boxName, svcName)
-					if err != nil {
-						return fmt.Errorf("rendering service file copy for %s/%s: %w", initName, candyName, err)
-					}
-					b.WriteString(copyLine + "\n")
-				}
-			}
-		}
-		b.WriteString("\n")
+	// Emit init system stages and learn which inits received fragment content.
+	initHasFragments, err := g.emitInitFragmentStages(&b, boxName, img, candyOrder, activeInits)
+	if err != nil {
+		return err
 	}
 
 	// Main image
@@ -631,72 +484,10 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	// buildkit cache for every downstream RUN/COPY in a 100-step stack.
 
 	// Copy builder artifacts — fully config-driven from build.yml builder: section copy_artifacts/copy_binary
-	if img.BuilderConfig != nil {
-		builderNames := img.BuilderConfig.BuilderNames()
-		for _, builderName := range builderNames {
-			builderDef := img.BuilderConfig.Builder[builderName]
-			if builderDef.Inline || builderDef.StageTemplate == "" {
-				continue
-			}
-
-			// Find candies that triggered this builder
-			hasArtifacts := false
-			binaryCopied := false
-			for _, candyName := range candyOrder {
-				layer := g.Candies[candyName]
-				if !g.candyNeedsBuilder(img, layer, builderDef) {
-					continue
-				}
-				stageName := fmt.Sprintf("%s-%s-build", layer.Name, builderName)
-
-				// Copy artifacts
-				for _, art := range builderDef.CopyArtifacts {
-					if !hasArtifacts {
-						fmt.Fprintf(&b, "# Copy %s artifacts\n", builderName)
-						hasArtifacts = true
-					}
-					src := expandBuilderPath(art.Src, img)
-					dst := expandBuilderPath(art.Dst, img)
-					if art.Chown {
-						fmt.Fprintf(&b, "COPY --from=%s --chown=%d:%d %s %s\n", stageName, img.UID, img.GID, src, dst)
-					} else {
-						fmt.Fprintf(&b, "COPY --from=%s %s %s\n", stageName, src, dst)
-					}
-				}
-
-				// Copy binary (only once, from first matching candy)
-				if builderDef.CopyBinary != nil && !binaryCopied {
-					fmt.Fprintf(&b, "COPY --from=%s %s %s\n", stageName, builderDef.CopyBinary.Src, builderDef.CopyBinary.Dst)
-					binaryCopied = true
-				}
-			}
-			if hasArtifacts || binaryCopied {
-				b.WriteString("\n")
-			}
-		}
-	}
+	g.emitBuilderArtifacts(&b, img, candyOrder)
 
 	// Copy extracted files from multi-stage builds
-	hasExtract := false
-	for _, candyName := range candyOrder {
-		layer := g.Candies[candyName]
-		if !layer.HasExtract() {
-			continue
-		}
-		if !hasExtract {
-			b.WriteString("# Copy extracted files from Docker images\n")
-			b.WriteString("USER root\n")
-			hasExtract = true
-		}
-		for i, ext := range layer.Extract() {
-			stageName := fmt.Sprintf("%s-extract-%d", candyName, i)
-			fmt.Fprintf(&b, "COPY --from=%s --chown=%d:%d %s %s\n",
-				stageName, img.UID, img.GID, ext.Path, ext.Dest)
-		}
-	}
-	if hasExtract {
-		b.WriteString("\n")
-	}
+	g.emitExtractedFiles(&b, img, candyOrder)
 
 	// Stage data files from data candies into /data/ for deploy-time provisioning
 	g.writeDataStaging(&b, candyOrder, img)
@@ -712,6 +503,188 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	}
 
 	// Assemble init system configs (driven by build.yml init: section templates)
+	if err := g.emitInitAssembly(&b, candyOrder, activeInits, initHasFragments); err != nil {
+		return err
+	}
+
+	// Copy traefik dynamic routes if needed
+	if hasRoutes && hasTraefik {
+		b.WriteString("# Traefik dynamic routes\n")
+		b.WriteString("COPY --from=traefik-routes /routes.yml /etc/traefik/dynamic/routes.yml\n\n")
+	}
+
+	// Final USER directive (use UID for robustness)
+	// Compositions that declare preserve_user (e.g. bootc-config) boot
+	// with systemd managing user sessions — the container USER directive
+	// is irrelevant. Other compositions reset to the unprivileged uid.
+	if caps != nil && caps.PreserveUser {
+		// leave as root — systemd handles user sessions
+	} else if !inUserMode || needsRootAfter {
+		fmt.Fprintf(&b, "USER %d\n", img.UID)
+	}
+
+	// Emit image metadata labels LAST so test/label edits don't invalidate
+	// the buildkit cache for all upstream RUN/COPY steps. LABELs are pure
+	// metadata (attach to the final image manifest) and have no functional
+	// dependency on subsequent instructions — they're the ideal last-line
+	// of the Containerfile.
+	g.writeLabels(&b, boxName, candyOrder, img)
+
+	// imageDir was cleaned at the start of this function; ensure it exists
+	if err := os.MkdirAll(imageDir, 0755); err != nil {
+		return err
+	}
+
+	content := b.String()
+	g.Containerfiles[boxName] = content
+
+	containerfile := filepath.Join(imageDir, "Containerfile")
+	return os.WriteFile(containerfile, []byte(content), 0644)
+}
+
+// emitScratchStages emits one `FROM scratch AS <candy>` + COPY pair per candy.
+func (g *Generator) emitScratchStages(b *strings.Builder, candyOrder []string) {
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
+		stageName := layer.Name // use short name for stage alias
+		fmt.Fprintf(b, "FROM scratch AS %s\n", stageName)
+		fmt.Fprintf(b, "COPY %s/ /\n\n", g.candyCopySource(candyName))
+	}
+}
+
+// emitBuilderStages emits per-candy multi-stage build stages — fully
+// config-driven from the build.yml builder: section. Each builder declares
+// detect_files and/or detect_config; for each matching candy the builder's
+// stage_template is rendered.
+func (g *Generator) emitBuilderStages(b *strings.Builder, boxName string, img *ResolvedBox, candyOrder []string) error {
+	if img.BuilderConfig == nil {
+		return nil
+	}
+	// Process builders in deterministic order
+	builderNames := img.BuilderConfig.BuilderNames()
+	for _, builderName := range builderNames {
+		builderDef := img.BuilderConfig.Builder[builderName]
+		if builderDef.Inline {
+			continue // inline builders handled in writeCandySteps
+		}
+		if builderDef.StageTemplate == "" {
+			continue
+		}
+		for _, candyName := range candyOrder {
+			layer := g.Candies[candyName]
+			if !g.candyNeedsBuilder(img, layer, builderDef) {
+				continue
+			}
+			builderRef := g.builderRefForFormat(boxName, builderName)
+			if builderRef == "" {
+				return fmt.Errorf("image %q: candy %q needs builder %q but no builders.%s configured", boxName, candyName, builderName, builderName)
+			}
+			ctx := g.buildStageContext(layer, builderName, builderDef, img, builderRef)
+			rendered, err := RenderTemplate(builderName+"-stage", builderDef.StageTemplate, ctx)
+			if err != nil {
+				return fmt.Errorf("image %q: rendering %s stage for candy %q: %w", boxName, builderName, candyName, err)
+			}
+			b.WriteString(rendered)
+			b.WriteString("\n")
+		}
+	}
+	return nil
+}
+
+// emitExtractStages emits a `FROM <source> AS <candy>-extract-<i>` stage for
+// every extract entry across the candy chain.
+func (g *Generator) emitExtractStages(b *strings.Builder, candyOrder []string) {
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
+		if !layer.HasExtract() {
+			continue
+		}
+		for i, ext := range layer.Extract() {
+			stageName := fmt.Sprintf("%s-extract-%d", candyName, i)
+			fmt.Fprintf(b, "FROM %s AS %s\n\n", ext.Source, stageName)
+		}
+	}
+}
+
+// emitBuilderArtifacts copies builder artifacts/binaries into the main image —
+// fully config-driven from the build.yml builder: section copy_artifacts/copy_binary.
+func (g *Generator) emitBuilderArtifacts(b *strings.Builder, img *ResolvedBox, candyOrder []string) {
+	if img.BuilderConfig == nil {
+		return
+	}
+	builderNames := img.BuilderConfig.BuilderNames()
+	for _, builderName := range builderNames {
+		builderDef := img.BuilderConfig.Builder[builderName]
+		if builderDef.Inline || builderDef.StageTemplate == "" {
+			continue
+		}
+
+		// Find candies that triggered this builder
+		hasArtifacts := false
+		binaryCopied := false
+		for _, candyName := range candyOrder {
+			layer := g.Candies[candyName]
+			if !g.candyNeedsBuilder(img, layer, builderDef) {
+				continue
+			}
+			stageName := fmt.Sprintf("%s-%s-build", layer.Name, builderName)
+
+			// Copy artifacts
+			for _, art := range builderDef.CopyArtifacts {
+				if !hasArtifacts {
+					fmt.Fprintf(b, "# Copy %s artifacts\n", builderName)
+					hasArtifacts = true
+				}
+				src := expandBuilderPath(art.Src, img)
+				dst := expandBuilderPath(art.Dst, img)
+				if art.Chown {
+					fmt.Fprintf(b, "COPY --from=%s --chown=%d:%d %s %s\n", stageName, img.UID, img.GID, src, dst)
+				} else {
+					fmt.Fprintf(b, "COPY --from=%s %s %s\n", stageName, src, dst)
+				}
+			}
+
+			// Copy binary (only once, from first matching candy)
+			if builderDef.CopyBinary != nil && !binaryCopied {
+				fmt.Fprintf(b, "COPY --from=%s %s %s\n", stageName, builderDef.CopyBinary.Src, builderDef.CopyBinary.Dst)
+				binaryCopied = true
+			}
+		}
+		if hasArtifacts || binaryCopied {
+			b.WriteString("\n")
+		}
+	}
+}
+
+// emitExtractedFiles copies extracted files from multi-stage build stages into
+// the main image.
+func (g *Generator) emitExtractedFiles(b *strings.Builder, img *ResolvedBox, candyOrder []string) {
+	hasExtract := false
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
+		if !layer.HasExtract() {
+			continue
+		}
+		if !hasExtract {
+			b.WriteString("# Copy extracted files from Docker images\n")
+			b.WriteString("USER root\n")
+			hasExtract = true
+		}
+		for i, ext := range layer.Extract() {
+			stageName := fmt.Sprintf("%s-extract-%d", candyName, i)
+			fmt.Fprintf(b, "COPY --from=%s --chown=%d:%d %s %s\n",
+				stageName, img.UID, img.GID, ext.Path, ext.Dest)
+		}
+	}
+	if hasExtract {
+		b.WriteString("\n")
+	}
+}
+
+// emitInitAssembly assembles init system configs (driven by build.yml init:
+// section templates): the assembly template, system-level service enablement,
+// and any post-assembly step, per active init system.
+func (g *Generator) emitInitAssembly(b *strings.Builder, candyOrder []string, activeInits map[string]*InitDef, initHasFragments map[string]bool) error {
 	for initName, def := range activeInits {
 		// assembly_template bind-mounts from the scratch stage emitted above;
 		// skip it when no fragments were contributed (stage was not emitted).
@@ -769,40 +742,132 @@ func (g *Generator) generateContainerfile(boxName string) error {
 			b.WriteString("\n")
 		}
 	}
+	return nil
+}
 
-	// Copy traefik dynamic routes if needed
+// emitTraefikRouteStage detects whether the image has route candies plus the
+// traefik candy and, when both are present, generates the traefik routes and
+// emits the traefik-routes scratch stage. Returns the two detection flags
+// (consumed downstream for the root-reset decision and the routes COPY).
+func (g *Generator) emitTraefikRouteStage(b *strings.Builder, boxName string, img *ResolvedBox, candyOrder []string) (hasRoutes, hasTraefik bool, err error) {
+	// Check if this image has route candies and traefik
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
+		if layer.HasRoute() {
+			hasRoutes = true
+		}
+		if layer.Name == "traefik" {
+			hasTraefik = true
+		}
+	}
+
+	// Generate traefik routes only when traefik is actually present
 	if hasRoutes && hasTraefik {
-		b.WriteString("# Traefik dynamic routes\n")
-		b.WriteString("COPY --from=traefik-routes /routes.yml /etc/traefik/dynamic/routes.yml\n\n")
+		if rerr := g.generateTraefikRoutes(boxName, candyOrder, img); rerr != nil {
+			return hasRoutes, hasTraefik, rerr
+		}
+		b.WriteString("FROM scratch AS traefik-routes\n")
+		fmt.Fprintf(b, "COPY .build/%s/traefik-routes.yml /routes.yml\n\n", boxName)
 	}
+	return hasRoutes, hasTraefik, nil
+}
 
-	// Final USER directive (use UID for robustness)
-	// Compositions that declare preserve_user (e.g. bootc-config) boot
-	// with systemd managing user sessions — the container USER directive
-	// is irrelevant. Other compositions reset to the unprivileged uid.
-	if caps != nil && caps.PreserveUser {
-		// leave as root — systemd handles user sessions
-	} else if !inUserMode || needsRootAfter {
-		fmt.Fprintf(&b, "USER %d\n", img.UID)
+// emitInitFragmentStages emits the per-init scratch stages that COPY service
+// fragments, relay configs, and detected service files, and returns the
+// per-init map of whether any fragment content was contributed.
+//
+// When a child image adds services, parent-provided configs are included so the
+// assembled config contains all services from the full chain. The returned map
+// is consumed by emitInitAssembly: a candy chain contributing only via
+// `system_services:` (plain unit names) COPYs no fragment files, so emitting an
+// empty `FROM scratch AS <stage>` plus the `assembly_template` RUN that
+// bind-mounts from it would fail at build time with "no such file or directory".
+func (g *Generator) emitInitFragmentStages(b *strings.Builder, boxName string, img *ResolvedBox, candyOrder []string, activeInits map[string]*InitDef) (map[string]bool, error) {
+	initHasFragments := map[string]bool{}
+	for initName, def := range activeInits {
+		initCandyOrder := candyOrder
+		if !img.IsExternalBase {
+			full := collectAllBoxCandies(boxName, g.Boxes, g.Candies)
+			if len(full) > 0 {
+				initCandyOrder = full
+			}
+		}
+		if err := g.generateInitFragments(boxName, initName, def, initCandyOrder); err != nil {
+			return nil, err
+		}
+
+		// Pre-scan the candy chain to decide whether this init has any fragment
+		// content. If not, skip both the scratch stage emission and the
+		// assembly_template RUN (see emitInitAssembly).
+		hasFragments := false
+		for _, candyName := range initCandyOrder {
+			layer := g.Candies[candyName]
+			if def.Model == "fragment_assembly" && layer.HasInit(initName) {
+				hasFragments = true
+				break
+			}
+			if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
+				hasFragments = true
+				break
+			}
+			if def.Model == "file_copy" && len(layer.ServiceFiles()) > 0 {
+				hasFragments = true
+				break
+			}
+		}
+		initHasFragments[initName] = hasFragments
+		if !hasFragments {
+			continue
+		}
+
+		// Emit scratch stage with COPY lines for fragments
+		fmt.Fprintf(b, "FROM scratch AS %s\n", def.StageName)
+		if def.StageHeaderCopy != "" {
+			headerCopy, err := g.rewriteHeaderCopyForRemote(def.StageHeaderCopy)
+			if err != nil {
+				return nil, err
+			}
+			b.WriteString(headerCopy + "\n")
+		}
+		for i, candyName := range initCandyOrder {
+			layer := g.Candies[candyName]
+			// Service content fragments (fragment_assembly model)
+			if def.Model == "fragment_assembly" && layer.HasInit(initName) {
+				// Use the SHORT name (not the map key) — a remote candy's key is
+				// a slashed github ref that would create bogus nested dirs.
+				fileName := fmt.Sprintf("%02d-%s.conf", i+1, layer.Name)
+				copyLine, err := def.RenderStageFragmentCopy(boxName, fileName)
+				if err != nil {
+					return nil, fmt.Errorf("rendering stage fragment copy for %s/%s: %w", initName, candyName, err)
+				}
+				b.WriteString(copyLine + "\n")
+			}
+			// Relay fragments
+			if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
+				for _, port := range layer.PortRelayPorts {
+					confName := fmt.Sprintf("%02d-relay-%d.conf", i+1, port)
+					copyLine, err := def.RenderStageFragmentCopy(boxName, confName)
+					if err != nil {
+						return nil, fmt.Errorf("rendering relay copy for %s/%s port %d: %w", initName, candyName, port, err)
+					}
+					b.WriteString(copyLine + "\n")
+				}
+			}
+			// File copy model: copy detected service files
+			if def.Model == "file_copy" && len(layer.ServiceFiles()) > 0 {
+				for _, svcPath := range layer.ServiceFiles() {
+					svcName := filepath.Base(svcPath)
+					copyLine, err := def.RenderStageFragmentCopy(boxName, svcName)
+					if err != nil {
+						return nil, fmt.Errorf("rendering service file copy for %s/%s: %w", initName, candyName, err)
+					}
+					b.WriteString(copyLine + "\n")
+				}
+			}
+		}
+		b.WriteString("\n")
 	}
-
-	// Emit image metadata labels LAST so test/label edits don't invalidate
-	// the buildkit cache for all upstream RUN/COPY steps. LABELs are pure
-	// metadata (attach to the final image manifest) and have no functional
-	// dependency on subsequent instructions — they're the ideal last-line
-	// of the Containerfile.
-	g.writeLabels(&b, boxName, candyOrder, img)
-
-	// imageDir was cleaned at the start of this function; ensure it exists
-	if err := os.MkdirAll(imageDir, 0755); err != nil {
-		return err
-	}
-
-	content := b.String()
-	g.Containerfiles[boxName] = content
-
-	containerfile := filepath.Join(imageDir, "Containerfile")
-	return os.WriteFile(containerfile, []byte(content), 0644)
+	return initHasFragments, nil
 }
 
 // generateDataImageContainerfile produces a minimal FROM scratch Containerfile
@@ -1351,6 +1416,8 @@ func mapToKeyValueSlice(m map[string]string) []KeyValue {
 // skipRootReset prevents emitting USER root after user-mode steps (used for the
 // last candy when no post-candy root steps follow).
 // Returns true if the candy ended in user mode.
+//
+//nolint:gocyclo // candy-build step sequence (ENV/packages/localpkg/tasks/builders/shell/user-reset) sharing asUser state; conditionally ordered, cohesive
 func (g *Generator) writeCandySteps(b *strings.Builder, candyName string, img *ResolvedBox, skipRootReset bool) bool {
 	layer := g.Candies[candyName]
 	stageName := layer.Name // short name used as scratch stage alias
@@ -1446,7 +1513,7 @@ func (g *Generator) writeCandySteps(b *strings.Builder, candyName string, img *R
 		boxName := img.Name
 		buildDir := filepath.Join(g.BuildDir, boxName)
 		contextRelPrefix := filepath.ToSlash(filepath.Join(".build", boxName))
-		finalUser, err := g.emitTasks(b, layer, img, layer.runOps(), buildDir, contextRelPrefix, "0")
+		finalUser, err := g.emitTasks(b, layer, img, layer.runOps(), buildDir, contextRelPrefix)
 		if err != nil {
 			// Phase 0: log but continue; validator should catch this earlier.
 			fmt.Fprintf(b, "# emitTasks error: %v\n", err)
@@ -1690,6 +1757,8 @@ func (g *Generator) buildStageContext(layer *Candy, builderName string, builderD
 
 // writeLabels emits OCI LABEL directives with all runtime-relevant metadata.
 // Every runtime config option is embedded so images are fully self-contained.
+//
+//nolint:gocyclo // ~40 OCI label groups emitted sequentially from image capabilities/metadata; extracting each shares identical (b,g,img,candyOrder) params and harms readability
 func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder []string, img *ResolvedBox) {
 	b.WriteString("# Image metadata\n")
 

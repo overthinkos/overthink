@@ -466,22 +466,8 @@ func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []
 	// Auto-boot integration: if the VM isn't reachable on its SSH port
 	// yet, `charly vm build` + `charly vm create` to boot it. TCP probe — fast.
 	// Skipped in DryRun, when nested, and when CHARLY_DEPLOY_NO_AUTOBOOT is set.
-	if !opts.DryRun && opts.ParentExec == nil && os.Getenv("CHARLY_DEPLOY_NO_AUTOBOOT") == "" {
-		sshAddr := fmt.Sprintf("127.0.0.1:%d", sshPort)
-		conn, dialErr := net.DialTimeout("tcp", sshAddr, 2*time.Second)
-		if dialErr != nil {
-			fmt.Fprintf(os.Stderr,
-				"VM %q not reachable on %s — auto-booting via `charly vm build %s` + `charly vm create %s` (set CHARLY_DEPLOY_NO_AUTOBOOT=1 to skip)...\n",
-				vmName, sshAddr, vmName, vmName)
-			if bErr := runCharlySubcommand("vm", "build", vmName); bErr != nil {
-				return fmt.Errorf("auto-boot: charly vm build %s: %w", vmName, bErr)
-			}
-			if cErr := runCharlySubcommand("vm", "create", vmName); cErr != nil {
-				return fmt.Errorf("auto-boot: charly vm create %s: %w", vmName, cErr)
-			}
-		} else {
-			_ = conn.Close()
-		}
+	if err := autoBootVmIfNeeded(vmName, sshPort, opts); err != nil {
+		return err
 	}
 
 	// Emit plans.
@@ -500,16 +486,10 @@ func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []
 		return fmt.Errorf("retrieving candy artifacts: %w", err)
 	}
 
-	// Deploy nested target:pod children as persistent in-guest quadlets.
-	// Runs AFTER Emit (so the VM's own candies + any kernel-driver reboot
-	// are applied). Skipped on dry-run, nested VMs, and --node-only.
-	//
-	// The children come from the dispatch-merged dctx.Node — THE source
-	// of truth (R3).
-	if !opts.DryRun && opts.ParentExec == nil && !t.NodeOnly && node != nil && len(node.Nested) > 0 {
-		if err := deployNestedPodsInGuest(vmName, node, exec, opts); err != nil {
-			return fmt.Errorf("deploying nested pods in guest: %w", err)
-		}
+	// Deploy nested target:pod children as persistent in-guest quadlets
+	// (runs AFTER Emit; see helper doc for the skip conditions).
+	if err := t.deployNestedPodsIfNeeded(vmName, node, exec, opts); err != nil {
+		return err
 	}
 
 	// Write back updated VmDeployState to charly.yml.
@@ -526,5 +506,45 @@ func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []
 	}
 
 	fmt.Fprintf(os.Stderr, "Deployed %s (ssh: %s@127.0.0.1:%d)\n", deployName, sshUser, sshPort)
+	return nil
+}
+
+// autoBootVmIfNeeded probes the VM's SSH port and, when unreachable, boots it
+// via `charly vm build` + `charly vm create`. TCP probe — fast. No-op in
+// DryRun, when nested (ParentExec set), and when CHARLY_DEPLOY_NO_AUTOBOOT is set.
+func autoBootVmIfNeeded(vmName string, sshPort int, opts EmitOpts) error {
+	if opts.DryRun || opts.ParentExec != nil || os.Getenv("CHARLY_DEPLOY_NO_AUTOBOOT") != "" {
+		return nil
+	}
+	sshAddr := fmt.Sprintf("127.0.0.1:%d", sshPort)
+	conn, dialErr := net.DialTimeout("tcp", sshAddr, 2*time.Second)
+	if dialErr != nil {
+		fmt.Fprintf(os.Stderr,
+			"VM %q not reachable on %s — auto-booting via `charly vm build %s` + `charly vm create %s` (set CHARLY_DEPLOY_NO_AUTOBOOT=1 to skip)...\n",
+			vmName, sshAddr, vmName, vmName)
+		if bErr := runCharlySubcommand("vm", "build", vmName); bErr != nil {
+			return fmt.Errorf("auto-boot: charly vm build %s: %w", vmName, bErr)
+		}
+		if cErr := runCharlySubcommand("vm", "create", vmName); cErr != nil {
+			return fmt.Errorf("auto-boot: charly vm create %s: %w", vmName, cErr)
+		}
+	} else {
+		_ = conn.Close()
+	}
+	return nil
+}
+
+// deployNestedPodsIfNeeded deploys nested target:pod children as persistent
+// in-guest quadlets. Runs AFTER Emit (so the VM's own candies + any
+// kernel-driver reboot are applied). No-op on dry-run, nested VMs, --node-only,
+// and when the merged node declares no nested children. The children come from
+// the dispatch-merged dctx.Node — THE source of truth (R3).
+func (t *VmUnifiedTarget) deployNestedPodsIfNeeded(vmName string, node *DeploymentNode, exec DeployExecutor, opts EmitOpts) error {
+	if opts.DryRun || opts.ParentExec != nil || t.NodeOnly || node == nil || len(node.Nested) == 0 {
+		return nil
+	}
+	if err := deployNestedPodsInGuest(vmName, node, exec, opts); err != nil {
+		return fmt.Errorf("deploying nested pods in guest: %w", err)
+	}
 	return nil
 }

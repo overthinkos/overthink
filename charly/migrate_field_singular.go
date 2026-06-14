@@ -339,96 +339,18 @@ func discoverProjectYAMLs(dir string) ([]string, error) {
 		return nil, err
 	}
 	seen := map[string]struct{}{}
-	add := func(p string) {
-		if !filepath.IsAbs(p) {
-			p = filepath.Join(abs, p)
-		}
-		clean := filepath.Clean(p)
-		seen[clean] = struct{}{}
+
+	discoverRootYAMLs(abs, seen)
+	if err := discoverLayersYAMLs(abs, seen); err != nil {
+		return nil, err
 	}
 
-	// Project-root .yml siblings — always include if present.
-	for _, name := range []string{
-		"overthink.yml", "image.yml", "deploy.yml", "pod.yml",
-		"k8s.yml", "vm.yml", "eval.yml", "local.yml",
-	} {
-		p := filepath.Join(abs, name)
-		if _, err := os.Stat(p); err == nil {
-			add(p)
-		}
+	if err := discoverImportedYAMLs(abs, seen); err != nil {
+		return nil, err
 	}
 
-	// Standard project layout: walk layers/<name>/layer.yml. Every
-	// OpenCharly project has these by convention; we don't require an
-	// explicit discover: block.
-	if td := filepath.Join(abs, "layers"); statIsDir(td) {
-		if err := walkYAMLs(td, seen); err != nil {
-			return nil, err
-		}
-	}
-
-	// Read overthink.yml raw to extract includes:/include:/discover:
-	rootPath := filepath.Join(abs, "overthink.yml")
-	if data, err := os.ReadFile(rootPath); err == nil {
-		var doc yaml.Node
-		if err := yaml.Unmarshal(data, &doc); err == nil && len(doc.Content) > 0 && doc.Content[0].Kind == yaml.MappingNode {
-			rootMap := doc.Content[0]
-			// import: (canonical) / legacy includes: / include:
-			for _, key := range []string{"import", "includes", "include"} {
-				if seq := lookupMapNode(rootMap, key); seq != nil && seq.Kind == yaml.SequenceNode {
-					for _, item := range seq.Content {
-						if item.Kind == yaml.ScalarNode && item.Value != "" {
-							add(item.Value)
-						}
-					}
-				}
-			}
-			// discover: recursive scan
-			if discNode := lookupMapNode(rootMap, "discover"); discNode != nil && discNode.Kind == yaml.MappingNode {
-				for i := 0; i+1 < len(discNode.Content); i += 2 {
-					valNode := discNode.Content[i+1]
-					switch valNode.Kind {
-					case yaml.SequenceNode:
-						for _, item := range valNode.Content {
-							var p string
-							switch item.Kind {
-							case yaml.ScalarNode:
-								p = item.Value
-							case yaml.MappingNode:
-								if pn := lookupMapNode(item, "path"); pn != nil {
-									p = pn.Value
-								}
-							}
-							if p == "" {
-								continue
-							}
-							if err := walkYAMLs(filepath.Join(abs, p), seen); err != nil {
-								return nil, err
-							}
-						}
-					case yaml.ScalarNode:
-						if valNode.Value != "" {
-							if err := walkYAMLs(filepath.Join(abs, valNode.Value), seen); err != nil {
-								return nil, err
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// Self-migration mode: when running from the overthink repo root
-	// (detected via the ov/go.mod sentinel), also include
-	// ov/testdata/**/*.yml. These fixtures are loaded by Go tests and
-	// must stay in lockstep with the schema.
-	if _, err := os.Stat(filepath.Join(abs, "ov", "go.mod")); err == nil {
-		td := filepath.Join(abs, "ov", "testdata")
-		if statIsDir(td) {
-			if err := walkYAMLs(td, seen); err != nil {
-				return nil, err
-			}
-		}
+	if err := discoverTestdataYAMLs(abs, seen); err != nil {
+		return nil, err
 	}
 
 	out := make([]string, 0, len(seen))
@@ -437,6 +359,118 @@ func discoverProjectYAMLs(dir string) ([]string, error) {
 	}
 	sort.Strings(out)
 	return out, nil
+}
+
+// addSeenPath records a (possibly relative) yml path into the seen set,
+// resolving it against abs and cleaning it.
+func addSeenPath(abs, p string, seen map[string]struct{}) {
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(abs, p)
+	}
+	seen[filepath.Clean(p)] = struct{}{}
+}
+
+// discoverRootYAMLs adds the project-root .yml siblings (always included when
+// present) to the seen set.
+func discoverRootYAMLs(abs string, seen map[string]struct{}) {
+	// Project-root .yml siblings — always include if present.
+	for _, name := range []string{
+		"overthink.yml", "image.yml", "deploy.yml", "pod.yml",
+		"k8s.yml", "vm.yml", "eval.yml", "local.yml",
+	} {
+		p := filepath.Join(abs, name)
+		if _, err := os.Stat(p); err == nil {
+			addSeenPath(abs, p, seen)
+		}
+	}
+}
+
+// discoverLayersYAMLs walks the standard layers/<name>/layer.yml layout into
+// the seen set. Every OpenCharly project has this by convention, so it is
+// scanned without requiring an explicit discover: block.
+func discoverLayersYAMLs(abs string, seen map[string]struct{}) error {
+	if td := filepath.Join(abs, "layers"); statIsDir(td) {
+		if err := walkYAMLs(td, seen); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// discoverImportedYAMLs reads overthink.yml raw (NOT via LoadUnified, so it runs
+// on trees still carrying legacy plural keys) and adds every
+// import:/includes:/include: entry plus every discover: scan path to the seen
+// set.
+func discoverImportedYAMLs(abs string, seen map[string]struct{}) error {
+	rootPath := filepath.Join(abs, "overthink.yml")
+	data, err := os.ReadFile(rootPath)
+	if err != nil {
+		return nil
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil || len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return nil
+	}
+	rootMap := doc.Content[0]
+	// import: (canonical) / legacy includes: / include:
+	for _, key := range []string{"import", "includes", "include"} {
+		if seq := lookupMapNode(rootMap, key); seq != nil && seq.Kind == yaml.SequenceNode {
+			for _, item := range seq.Content {
+				if item.Kind == yaml.ScalarNode && item.Value != "" {
+					addSeenPath(abs, item.Value, seen)
+				}
+			}
+		}
+	}
+	// discover: recursive scan
+	if discNode := lookupMapNode(rootMap, "discover"); discNode != nil && discNode.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(discNode.Content); i += 2 {
+			valNode := discNode.Content[i+1]
+			switch valNode.Kind {
+			case yaml.SequenceNode:
+				for _, item := range valNode.Content {
+					var p string
+					switch item.Kind {
+					case yaml.ScalarNode:
+						p = item.Value
+					case yaml.MappingNode:
+						if pn := lookupMapNode(item, "path"); pn != nil {
+							p = pn.Value
+						}
+					}
+					if p == "" {
+						continue
+					}
+					if err := walkYAMLs(filepath.Join(abs, p), seen); err != nil {
+						return err
+					}
+				}
+			case yaml.ScalarNode:
+				if valNode.Value != "" {
+					if err := walkYAMLs(filepath.Join(abs, valNode.Value), seen); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// discoverTestdataYAMLs adds ov/testdata/**/*.yml to the seen set when running
+// from the overthink repo root (detected via the ov/go.mod sentinel). These
+// fixtures are loaded by Go tests and must stay in lockstep with the schema.
+func discoverTestdataYAMLs(abs string, seen map[string]struct{}) error {
+	if _, err := os.Stat(filepath.Join(abs, "ov", "go.mod")); err != nil {
+		return nil
+	}
+	td := filepath.Join(abs, "ov", "testdata")
+	if statIsDir(td) {
+		if err := walkYAMLs(td, seen); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func statIsDir(p string) bool {

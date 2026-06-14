@@ -390,61 +390,13 @@ func (c *Config) ResolveBox(name string, calverTag string, dir string, opts Reso
 		CheckLevel: ResolveCheckLevel(img.CheckLevel),
 	}
 
-	// `from: builder:<name>` — non-registry base via a kind: bootstrap
-	// builder. Mutually exclusive with base:; pre-build phase produces
-	// a rootfs tarball, generator emits FROM scratch + ADD.
-	switch {
-	case img.From != "":
-		if img.Base != "" {
-			return nil, fmt.Errorf("image %s: from: and base: are mutually exclusive", name)
-		}
-		resolved.From = img.From
-		resolved.BootstrapBuilderImage = img.BootstrapBuilderImage
-		resolved.Base = "scratch"
-		resolved.IsExternalBase = true
-	case img.DataImage:
-		resolved.Base = "scratch"
-		resolved.IsExternalBase = true
-	default:
-		// Resolve base: image -> defaults -> "quay.io/fedora/fedora:43"
-		resolved.Base = img.Base
-		if resolved.Base == "" {
-			resolved.Base = c.Defaults.Base
-		}
-		if resolved.Base == "" {
-			resolved.Base = "quay.io/fedora/fedora:43"
-		}
-
-		// Check if base is internal (another enabled image — local OR resolved
-		// through an import namespace, e.g. `cachyos.cachyos`) or external.
-		if baseImg, _, isInternal := c.resolveBoxRef(resolved.Base); isInternal && baseImg.IsEnabled() {
-			resolved.IsExternalBase = false
-		} else {
-			resolved.IsExternalBase = true
-		}
+	if err := c.resolveBase(resolved, img, name); err != nil {
+		return nil, err
 	}
 
-	// Resolve platforms: image -> defaults -> ["linux/amd64", "linux/arm64"]
-	resolved.Platforms = img.Platforms
-	if len(resolved.Platforms) == 0 {
-		resolved.Platforms = c.Defaults.Platforms
-	}
-	if len(resolved.Platforms) == 0 {
-		resolved.Platforms = []string{"linux/amd64", "linux/arm64"}
-	}
+	c.resolvePlatforms(resolved, img)
 
-	// Resolve tag: image -> defaults -> "auto"
-	resolved.Tag = img.Tag
-	if resolved.Tag == "" {
-		resolved.Tag = c.Defaults.Tag
-	}
-	if resolved.Tag == "" {
-		resolved.Tag = "auto"
-	}
-	// If tag is "auto", use the computed calver
-	if resolved.Tag == "auto" {
-		resolved.Tag = calverTag
-	}
+	c.resolveTag(resolved, img, calverTag)
 
 	// Resolve registry: image -> defaults -> ""
 	resolved.Registry = img.Registry
@@ -452,29 +404,10 @@ func (c *Config) ResolveBox(name string, calverTag string, dir string, opts Reso
 		resolved.Registry = c.Defaults.Registry
 	}
 
-	// Resolve distro: image -> walk base chain (if internal) -> defaults -> []
-	resolved.Distro = img.Distro
-	if len(resolved.Distro) == 0 {
-		resolved.Distro = c.walkBaseChainDistro(resolved.Base)
-	}
-	if len(resolved.Distro) == 0 {
-		resolved.Distro = c.Defaults.Distro
-	}
+	c.resolveDistro(resolved, img)
 
-	// Resolve build: image -> walk base chain (if internal) -> defaults (required, except for data images)
-	buildFmts := []string(img.Build)
-	if len(buildFmts) == 0 {
-		buildFmts = c.walkBaseChainBuild(resolved.Base)
-	}
-	if len(buildFmts) == 0 {
-		buildFmts = []string(c.Defaults.Build)
-	}
-	if len(buildFmts) == 0 && !img.DataImage {
-		return nil, fmt.Errorf("image %s: build: field required (set in image, base, or defaults)", name)
-	}
-	resolved.BuildFormats = buildFmts
-	if len(buildFmts) > 0 {
-		resolved.Pkg = buildFmts[0] // primary format for cache mounts
+	if err := c.resolveBuild(resolved, img, name); err != nil {
+		return nil, err
 	}
 
 	// Build unified Tags for task matching: ["all"] + Distro + BuildFormats
@@ -619,6 +552,106 @@ func (c *Config) ResolveBox(name string, calverTag string, dir string, opts Reso
 	}
 
 	return resolved, nil
+}
+
+// resolveBase resolves a box's base image (from-builder, data-image, or
+// base:/defaults chain) and sets IsExternalBase. Split out of ResolveBox.
+func (c *Config) resolveBase(resolved *ResolvedBox, img BoxConfig, name string) error {
+	// `from: builder:<name>` — non-registry base via a kind: bootstrap
+	// builder. Mutually exclusive with base:; pre-build phase produces
+	// a rootfs tarball, generator emits FROM scratch + ADD.
+	switch {
+	case img.From != "":
+		if img.Base != "" {
+			return fmt.Errorf("image %s: from: and base: are mutually exclusive", name)
+		}
+		resolved.From = img.From
+		resolved.BootstrapBuilderImage = img.BootstrapBuilderImage
+		resolved.Base = "scratch"
+		resolved.IsExternalBase = true
+	case img.DataImage:
+		resolved.Base = "scratch"
+		resolved.IsExternalBase = true
+	default:
+		// Resolve base: image -> defaults -> "quay.io/fedora/fedora:43"
+		resolved.Base = img.Base
+		if resolved.Base == "" {
+			resolved.Base = c.Defaults.Base
+		}
+		if resolved.Base == "" {
+			resolved.Base = "quay.io/fedora/fedora:43"
+		}
+
+		// Check if base is internal (another enabled image — local OR resolved
+		// through an import namespace, e.g. `cachyos.cachyos`) or external.
+		if baseImg, _, isInternal := c.resolveBoxRef(resolved.Base); isInternal && baseImg.IsEnabled() {
+			resolved.IsExternalBase = false
+		} else {
+			resolved.IsExternalBase = true
+		}
+	}
+	return nil
+}
+
+// resolvePlatforms resolves a box's target platforms
+// (image -> defaults -> linux/amd64+arm64). Split out of ResolveBox.
+func (c *Config) resolvePlatforms(resolved *ResolvedBox, img BoxConfig) {
+	resolved.Platforms = img.Platforms
+	if len(resolved.Platforms) == 0 {
+		resolved.Platforms = c.Defaults.Platforms
+	}
+	if len(resolved.Platforms) == 0 {
+		resolved.Platforms = []string{"linux/amd64", "linux/arm64"}
+	}
+}
+
+// resolveTag resolves a box's tag (image -> defaults -> "auto"), substituting
+// the computed calver when "auto". Split out of ResolveBox.
+func (c *Config) resolveTag(resolved *ResolvedBox, img BoxConfig, calverTag string) {
+	resolved.Tag = img.Tag
+	if resolved.Tag == "" {
+		resolved.Tag = c.Defaults.Tag
+	}
+	if resolved.Tag == "" {
+		resolved.Tag = "auto"
+	}
+	// If tag is "auto", use the computed calver
+	if resolved.Tag == "auto" {
+		resolved.Tag = calverTag
+	}
+}
+
+// resolveDistro resolves a box's distro tags
+// (image -> base-chain walk -> defaults). Split out of ResolveBox.
+func (c *Config) resolveDistro(resolved *ResolvedBox, img BoxConfig) {
+	resolved.Distro = img.Distro
+	if len(resolved.Distro) == 0 {
+		resolved.Distro = c.walkBaseChainDistro(resolved.Base)
+	}
+	if len(resolved.Distro) == 0 {
+		resolved.Distro = c.Defaults.Distro
+	}
+}
+
+// resolveBuild resolves a box's build formats (image -> base-chain walk ->
+// defaults; required unless a data image) and the primary cache-mount format.
+// Split out of ResolveBox.
+func (c *Config) resolveBuild(resolved *ResolvedBox, img BoxConfig, name string) error {
+	buildFmts := []string(img.Build)
+	if len(buildFmts) == 0 {
+		buildFmts = c.walkBaseChainBuild(resolved.Base)
+	}
+	if len(buildFmts) == 0 {
+		buildFmts = []string(c.Defaults.Build)
+	}
+	if len(buildFmts) == 0 && !img.DataImage {
+		return fmt.Errorf("image %s: build: field required (set in image, base, or defaults)", name)
+	}
+	resolved.BuildFormats = buildFmts
+	if len(buildFmts) > 0 {
+		resolved.Pkg = buildFmts[0] // primary format for cache mounts
+	}
+	return nil
 }
 
 // ResolveAllBox resolves all enabled images in the config. opts.IncludeDisabled

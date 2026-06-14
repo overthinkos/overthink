@@ -87,7 +87,23 @@ func BuildBootstrapVM(
 		return BootstrapVMResult{}, fmt.Errorf("creating build dir: %w", err)
 	}
 
-	// --- Step 1: bootstrap a rootfs.tar.gz via the privileged builder. ---
+	rootfsTar, builderRef, err := buildBootstrapRootfs(spec, builder, distro, buildDir)
+	if err != nil {
+		return BootstrapVMResult{}, err
+	}
+
+	diskPath, err := buildBootstrapDisk(spec, distro, builderRef, rootfsTar, outputDir)
+	if err != nil {
+		return BootstrapVMResult{}, err
+	}
+
+	return buildBootstrapSeedISO(spec, diskPath, rootfsTar, outputDir, vmStateDir, existingState)
+}
+
+// buildBootstrapRootfs runs Step 1: bootstrap a rootfs.tar.gz via the
+// privileged builder. Returns the rootfs tarball path and the resolved
+// (auto-built) builder image ref reused by the disk-build step.
+func buildBootstrapRootfs(spec *VmSpec, builder *BuilderDef, distro *DistroDef, buildDir string) (string, string, error) {
 	rootfsCtx := struct {
 		Distro            *DistroDef
 		Packages          []string
@@ -112,7 +128,7 @@ func BuildBootstrapVM(
 	// extra_repo source (single source of truth — see renderRuntimePacmanConf).
 	runtimeConf, rerr := renderRuntimePacmanConf(distro.Pacstrap)
 	if rerr != nil {
-		return BootstrapVMResult{}, rerr
+		return "", "", rerr
 	}
 	rootfsCtx.RuntimePacmanConf = runtimeConf
 	// Inject optional extra apt sources (security/backports) into
@@ -137,7 +153,7 @@ func BuildBootstrapVM(
 	}
 	bootstrapScript, err := renderBootstrapScript(builder, rootfsCtx)
 	if err != nil {
-		return BootstrapVMResult{}, fmt.Errorf("rendering bootstrap script: %w", err)
+		return "", "", fmt.Errorf("rendering bootstrap script: %w", err)
 	}
 	rootfsTar := filepath.Join(buildDir, "rootfs.tar.gz")
 	output := builder.OutputArtifact
@@ -157,7 +173,7 @@ func BuildBootstrapVM(
 	}
 	builderRef, err = ensureBuilderImageBuilt(engine, builderRef)
 	if err != nil {
-		return BootstrapVMResult{}, err
+		return "", "", err
 	}
 	if err := RunPrivileged(PrivilegedRun{
 		Image:      builderRef,
@@ -165,10 +181,15 @@ func BuildBootstrapVM(
 		OutputPath: output,
 		OutputDest: rootfsTar,
 	}); err != nil {
-		return BootstrapVMResult{}, fmt.Errorf("running bootstrap builder %q: %w", spec.Source.Builder, err)
+		return "", "", fmt.Errorf("running bootstrap builder %q: %w", spec.Source.Builder, err)
 	}
+	return rootfsTar, builderRef, nil
+}
 
-	// --- Step 2: build disk: partition + format + extract + bootloader. ---
+// buildBootstrapDisk runs Step 2: partition + format the disk, extract the
+// rootfs, and run the distro bootloader install inside the privileged builder.
+// Returns the qcow2 disk path.
+func buildBootstrapDisk(spec *VmSpec, distro *DistroDef, builderRef, rootfsTar, outputDir string) (string, error) {
 	rootfsKind := spec.Source.Rootfs
 	if rootfsKind == "" {
 		rootfsKind = "ext4"
@@ -179,7 +200,7 @@ func BuildBootstrapVM(
 		Mnt:               "/mnt",
 	})
 	if err != nil {
-		return BootstrapVMResult{}, fmt.Errorf("emitting disk build script: %w", err)
+		return "", fmt.Errorf("emitting disk build script: %w", err)
 	}
 	sshUser := ""
 	if spec.SSH != nil {
@@ -187,7 +208,7 @@ func BuildBootstrapVM(
 	}
 	bootloaderScript, err := renderBootloaderScript(distro, "/mnt", spec.Source.KernelArgs, rootfsKind, sshUser)
 	if err != nil {
-		return BootstrapVMResult{}, fmt.Errorf("rendering bootloader script: %w", err)
+		return "", fmt.Errorf("rendering bootloader script: %w", err)
 	}
 
 	installBody := fmt.Sprintf("%s\n%s\n", bootstrapRootfsExtractTar, bootloaderScript)
@@ -201,10 +222,15 @@ func BuildBootstrapVM(
 		OutputPath: "/out/disk.qcow2",
 		OutputDest: diskPath,
 	}); err != nil {
-		return BootstrapVMResult{}, fmt.Errorf("building bootstrap VM disk: %w", err)
+		return "", fmt.Errorf("building bootstrap VM disk: %w", err)
 	}
+	return diskPath, nil
+}
 
-	// --- Step 3: render cloud-init seed ISO if spec.CloudInit is set. ---
+// buildBootstrapSeedISO runs Step 3: render the cloud-init seed ISO when
+// spec.CloudInit is set and assemble the BootstrapVMResult (including the
+// rootfs tarball hash for traceability).
+func buildBootstrapSeedISO(spec *VmSpec, diskPath, rootfsTar, outputDir, vmStateDir string, existingState *VmDeployState) (BootstrapVMResult, error) {
 	res := BootstrapVMResult{
 		DiskPath: diskPath,
 	}

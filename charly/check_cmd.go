@@ -309,32 +309,7 @@ func (c *CheckLiveCmd) runVm() error {
 	if err != nil {
 		return err
 	}
-	// Schema v4: c.Box may be
-	//   (a) a kind:vm entity name directly (e.g. "arch"),
-	//   (b) a kind:deployment name with target:vm (e.g. "arch-vm") whose
-	//       Vm field points at the actual kind:vm entity, OR
-	//   (c) a dotted path "parent.child" where `parent` is a target:vm
-	//       deployment and `child` is a nested node whose tests run in
-	//       the parent's SSH substrate.
-	vmName := c.Box
-	var nestedLeaf *DeploymentNode
-	if uf.Deploy != nil {
-		if entry, ok := uf.Deploy[c.Box]; ok && entry.Target == "vm" && entry.Vm != "" {
-			vmName = entry.Vm
-		} else if idx := strings.Index(c.Box, "."); idx > 0 {
-			root := c.Box[:idx]
-			if parent, present := uf.Deploy[root]; present && parent.Target == "vm" {
-				if parent.Vm != "" {
-					vmName = parent.Vm
-				}
-				nestedLeaf = resolveNestedNode(uf.Deploy, c.Box)
-			}
-		}
-	}
-	var spec *VmSpec
-	if uf.VM != nil {
-		spec = uf.VM[vmName]
-	}
+	vmName, nestedLeaf, spec := c.resolveVmTarget(uf)
 
 	user := resolveVmSshUser(spec)
 	port, err := resolveVmSshPort(spec, vmName)
@@ -342,55 +317,7 @@ func (c *CheckLiveCmd) runVm() error {
 		return err
 	}
 
-	// Two deploy sources for VMs:
-	//   - project-level: charly.yml / charly.yml `deployments.images["vm:<name>"]`
-	//     → holds the authored `tests:` list (part of the repo).
-	//   - per-machine:   ~/.config/charly/charly.yml `images["vm:<name>"]`
-	//     → holds VmState written by `charly deploy add vm:<name>` and any local
-	//       overrides/additions.
-	//
-	// Schema v3: also accept plain-identifier deployment entries whose
-	// `target: vm` + `vm: <c.Box>` resolves to the same VM.
-	// This is what makes `charly check live <deploy-name>` work for beds like
-	// `arch-vm` that don't carry the legacy `vm:` prefix in the key.
-	// Merge by id (local replaces project); same rules as MergeDeployDescriptions.
-	// Resolve the VM's deploy entry via THE shared findVmDeployNode (deploy.go)
-	// — the same lookup `charly deploy add` uses — by deploy NAME (c.Box) first,
-	// then the vm entity (vmName). Keying by name first means a bed whose key
-	// differs from its vm entity (check-k3s-vm -> vm: k3s-vm) resolves to its
-	// own entry rather than being mis-matched via the vm entity name.
-	var projectPlan, localPlan []Step
-	var addCandies []string
-	// Nested dotted-path short-circuit: when the request is for a
-	// child node, use its own plan directly instead of the parent's.
-	if nestedLeaf != nil {
-		projectPlan = nestedLeaf.Plan
-		addCandies = nestedLeaf.AddCandy
-	} else if pc := uf.ProjectDeployConfig(); pc != nil {
-		if entry, ok := findVmDeployNode(pc.Deploy, c.Box, vmName); ok {
-			projectPlan = entry.Plan
-			addCandies = entry.AddCandy
-		}
-	}
-	if dc := loadDeployConfigForRead("charly check vm"); dc != nil {
-		if entry, ok := findVmDeployNode(dc.Deploy, c.Box, vmName); ok {
-			localPlan = entry.Plan
-			if entry.VmState != nil {
-				if entry.VmState.SshUser != "" {
-					user = entry.VmState.SshUser
-				}
-				if entry.VmState.SshPort > 0 {
-					port = entry.VmState.SshPort
-				}
-			}
-		}
-	}
-	plan := append(append([]Step(nil), projectPlan...), localPlan...)
-
-	// Collect deploy-scope steps from the candies this VM deployment applies,
-	// so ANY VM deploy — disposable bed OR persistent operator VM — that adds a
-	// candy automatically runs that candy's plan (R3).
-	plan = append(plan, collectAddCandySteps(uf, dir, addCandies)...)
+	plan, user, port := c.loadVmCheckPlans(uf, dir, vmName, nestedLeaf, user, port)
 
 	// SSH connection details (User/Port/IdentityFile) live in the
 	// managed ssh-config Host stanza (charly-<vmName>) written at deploy
@@ -513,6 +440,94 @@ func (c *CheckLiveCmd) runVm() error {
 		return &CheckFailedError{Failed: fails}
 	}
 	return nil
+}
+
+// resolveVmTarget resolves the VM check request (c.Box) to its kind:vm entity
+// name, an optional nested-leaf node (for a dotted "parent.child" path), and the
+// VmSpec.
+func (c *CheckLiveCmd) resolveVmTarget(uf *UnifiedFile) (vmName string, nestedLeaf *DeploymentNode, spec *VmSpec) {
+	// Schema v4: c.Box may be
+	//   (a) a kind:vm entity name directly (e.g. "arch"),
+	//   (b) a kind:deployment name with target:vm (e.g. "arch-vm") whose
+	//       Vm field points at the actual kind:vm entity, OR
+	//   (c) a dotted path "parent.child" where `parent` is a target:vm
+	//       deployment and `child` is a nested node whose tests run in
+	//       the parent's SSH substrate.
+	vmName = c.Box
+	if uf.Deploy != nil {
+		if entry, ok := uf.Deploy[c.Box]; ok && entry.Target == "vm" && entry.Vm != "" {
+			vmName = entry.Vm
+		} else if idx := strings.Index(c.Box, "."); idx > 0 {
+			root := c.Box[:idx]
+			if parent, present := uf.Deploy[root]; present && parent.Target == "vm" {
+				if parent.Vm != "" {
+					vmName = parent.Vm
+				}
+				nestedLeaf = resolveNestedNode(uf.Deploy, c.Box)
+			}
+		}
+	}
+	if uf.VM != nil {
+		spec = uf.VM[vmName]
+	}
+	return vmName, nestedLeaf, spec
+}
+
+// loadVmCheckPlans aggregates the VM deployment's check plan from the project
+// and per-machine deploy sources plus add_candy deploy-scope steps, returning
+// the merged plan and the SSH user/port (possibly overridden by local VmState).
+func (c *CheckLiveCmd) loadVmCheckPlans(uf *UnifiedFile, dir, vmName string, nestedLeaf *DeploymentNode, user string, port int) (plan []Step, outUser string, outPort int) {
+	outUser, outPort = user, port
+	// Two deploy sources for VMs:
+	//   - project-level: charly.yml / charly.yml `deployments.images["vm:<name>"]`
+	//     → holds the authored `tests:` list (part of the repo).
+	//   - per-machine:   ~/.config/charly/charly.yml `images["vm:<name>"]`
+	//     → holds VmState written by `charly deploy add vm:<name>` and any local
+	//       overrides/additions.
+	//
+	// Schema v3: also accept plain-identifier deployment entries whose
+	// `target: vm` + `vm: <c.Box>` resolves to the same VM.
+	// This is what makes `charly check live <deploy-name>` work for beds like
+	// `arch-vm` that don't carry the legacy `vm:` prefix in the key.
+	// Merge by id (local replaces project); same rules as MergeDeployDescriptions.
+	// Resolve the VM's deploy entry via THE shared findVmDeployNode (deploy.go)
+	// — the same lookup `charly deploy add` uses — by deploy NAME (c.Box) first,
+	// then the vm entity (vmName). Keying by name first means a bed whose key
+	// differs from its vm entity (check-k3s-vm -> vm: k3s-vm) resolves to its
+	// own entry rather than being mis-matched via the vm entity name.
+	var projectPlan, localPlan []Step
+	var addCandies []string
+	// Nested dotted-path short-circuit: when the request is for a
+	// child node, use its own plan directly instead of the parent's.
+	if nestedLeaf != nil {
+		projectPlan = nestedLeaf.Plan
+		addCandies = nestedLeaf.AddCandy
+	} else if pc := uf.ProjectDeployConfig(); pc != nil {
+		if entry, ok := findVmDeployNode(pc.Deploy, c.Box, vmName); ok {
+			projectPlan = entry.Plan
+			addCandies = entry.AddCandy
+		}
+	}
+	if dc := loadDeployConfigForRead("charly check vm"); dc != nil {
+		if entry, ok := findVmDeployNode(dc.Deploy, c.Box, vmName); ok {
+			localPlan = entry.Plan
+			if entry.VmState != nil {
+				if entry.VmState.SshUser != "" {
+					outUser = entry.VmState.SshUser
+				}
+				if entry.VmState.SshPort > 0 {
+					outPort = entry.VmState.SshPort
+				}
+			}
+		}
+	}
+	plan = append(append([]Step(nil), projectPlan...), localPlan...)
+
+	// Collect deploy-scope steps from the candies this VM deployment applies,
+	// so ANY VM deploy — disposable bed OR persistent operator VM — that adds a
+	// candy automatically runs that candy's plan (R3).
+	plan = append(plan, collectAddCandySteps(uf, dir, addCandies)...)
+	return plan, outUser, outPort
 }
 
 // vmHostdevCount returns how many <hostdev> passthrough devices the VM spec

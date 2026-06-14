@@ -63,6 +63,8 @@ func TestHasLegacyImagesKey(t *testing.T) {
 // TestMigrateLocalDeploy_FullExample exercises the full transformation
 // against a realistic legacy deploy.yml — the actual shape on disk before
 // the May-2026 cutover. Asserts every field-level transform.
+//
+//nolint:gocyclo // scenario test: writes legacy fixture, applies migration chain, asserts nested result structure
 func TestMigrateLocalDeploy_FullExample(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "deploy.yml")

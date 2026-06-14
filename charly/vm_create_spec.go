@@ -148,85 +148,98 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 	// Backend dispatch.
 	switch backend {
 	case "libvirt":
-		xmlStr, err := RenderDomainXML(spec, rt)
-		if err != nil {
-			return fmt.Errorf("rendering domain XML for %s: %w", vmDomainName, err)
-		}
-		conn, err := connectLibvirt("")
-		if err != nil {
-			return fmt.Errorf("connecting to libvirt: %w", err)
-		}
-		defer conn.Close() //nolint:errcheck
-		if err := conn.defineAndStartDomain(xmlStr); err != nil {
-			return fmt.Errorf("creating VM %s: %w", vmDomainName, err)
-		}
-		fmt.Fprintf(os.Stderr, "Created VM %s (libvirt session)\n", vmDomainName)
-
-		// Boot-autostart: set the libvirt flag, then wire the session-boot
-		// trigger (linger + user socket). The flag is load-bearing; the
-		// prereqs are best-effort with actionable warnings on failure.
-		if spec.Autostart {
-			if err := conn.setDomainAutostart(vmDomainName, true); err != nil {
-				return fmt.Errorf("enabling autostart for %s: %w", vmDomainName, err)
-			}
-			fmt.Fprintf(os.Stderr, "Autostart enabled for %s\n", vmDomainName)
-			ensureBootAutostartPrereqs(vmDomainName)
-		}
-
-		// Inject any raw libvirt snippets from candy/spec.libvirt.snippets.
-		if spec.Libvirt != nil && len(spec.Libvirt.Snippets) > 0 {
-			if err := InjectLibvirtXML(vmDomainName, spec.Libvirt.Snippets); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: libvirt snippet injection: %v\n", err)
-			}
-		}
-		if err := publishVmSshAlias(home, vmName, name, spec, rt); err != nil {
-			return fmt.Errorf("publishing ssh-config alias: %w", err)
-		}
-		fmt.Fprintf(os.Stderr, "SSH: ssh %s    (managed alias resolves user/port/key from ~/.config/charly/ssh_config)\n", VmSshAlias(name))
-		fmt.Fprintf(os.Stderr, "Console: charly vm console %s\n", vmName)
-		return nil
-
+		return runVmSpecCreateLibvirt(spec, rt, vmDomainName, home, vmName, name)
 	case "qemu":
-		if spec.Libvirt != nil && len(spec.Libvirt.Snippets) > 0 {
-			fmt.Fprintf(os.Stderr, "Warning: libvirt snippets are not supported with the QEMU backend (skipping %d snippet(s))\n", len(spec.Libvirt.Snippets))
-		}
-
-		// Prepare QEMU runtime paths.
-		monitorSocket := filepath.Join(vmStateDir, "monitor.sock")
-		qmpSocket := filepath.Join(vmStateDir, "qmp.sock")
-		consoleSocket := filepath.Join(vmStateDir, "console.sock")
-		pidFile := filepath.Join(vmStateDir, "qemu.pid")
-		qemuPaths := QemuRuntimePaths{
-			MonitorSocket: monitorSocket,
-			QmpSocket:     qmpSocket,
-			ConsoleSocket: consoleSocket,
-			PidFile:       pidFile,
-		}
-
-		args := RenderQemuArgv(spec, rt, qemuPaths)
-		bin := qemuSystemBinary()
-
-		// Persist the command line so `charly vm start <name>` can relaunch.
-		cmdLine := bin + " " + strings.Join(args, " ")
-		if err := os.WriteFile(filepath.Join(vmStateDir, "command"), []byte(cmdLine), 0o644); err != nil {
-			return err
-		}
-
-		cmd := exec.Command(bin, args...)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("qemu failed: %w", err)
-		}
-		fmt.Fprintf(os.Stderr, "Created and started VM %s (QEMU)\n", vmDomainName)
-		if err := publishVmSshAlias(home, vmName, name, spec, rt); err != nil {
-			return fmt.Errorf("publishing ssh-config alias: %w", err)
-		}
-		fmt.Fprintf(os.Stderr, "SSH: ssh %s    (managed alias resolves user/port/key from ~/.config/charly/ssh_config)\n", VmSshAlias(name))
-		fmt.Fprintf(os.Stderr, "Console: charly vm console %s\n", vmName)
-		return nil
+		return runVmSpecCreateQemu(spec, rt, vmDomainName, home, vmName, name, vmStateDir)
 	}
 	return fmt.Errorf("unknown backend %q", backend)
+}
+
+// runVmSpecCreateLibvirt creates the VM via the libvirt backend: render the
+// domain XML, define+start it, apply autostart + raw snippets, and publish the
+// managed ssh-config alias.
+func runVmSpecCreateLibvirt(spec *VmSpec, rt VmRuntimeParams, vmDomainName, home, vmName, name string) error {
+	xmlStr, err := RenderDomainXML(spec, rt)
+	if err != nil {
+		return fmt.Errorf("rendering domain XML for %s: %w", vmDomainName, err)
+	}
+	conn, err := connectLibvirt("")
+	if err != nil {
+		return fmt.Errorf("connecting to libvirt: %w", err)
+	}
+	defer conn.Close() //nolint:errcheck
+	if err := conn.defineAndStartDomain(xmlStr); err != nil {
+		return fmt.Errorf("creating VM %s: %w", vmDomainName, err)
+	}
+	fmt.Fprintf(os.Stderr, "Created VM %s (libvirt session)\n", vmDomainName)
+
+	// Boot-autostart: set the libvirt flag, then wire the session-boot
+	// trigger (linger + user socket). The flag is load-bearing; the
+	// prereqs are best-effort with actionable warnings on failure.
+	if spec.Autostart {
+		if err := conn.setDomainAutostart(vmDomainName, true); err != nil {
+			return fmt.Errorf("enabling autostart for %s: %w", vmDomainName, err)
+		}
+		fmt.Fprintf(os.Stderr, "Autostart enabled for %s\n", vmDomainName)
+		ensureBootAutostartPrereqs(vmDomainName)
+	}
+
+	// Inject any raw libvirt snippets from candy/spec.libvirt.snippets.
+	if spec.Libvirt != nil && len(spec.Libvirt.Snippets) > 0 {
+		if err := InjectLibvirtXML(vmDomainName, spec.Libvirt.Snippets); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: libvirt snippet injection: %v\n", err)
+		}
+	}
+	if err := publishVmSshAlias(home, vmName, name, spec, rt); err != nil {
+		return fmt.Errorf("publishing ssh-config alias: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "SSH: ssh %s    (managed alias resolves user/port/key from ~/.config/charly/ssh_config)\n", VmSshAlias(name))
+	fmt.Fprintf(os.Stderr, "Console: charly vm console %s\n", vmName)
+	return nil
+}
+
+// runVmSpecCreateQemu creates the VM via the direct-QEMU backend: render argv,
+// persist the relaunch command line, run qemu-system, and publish the managed
+// ssh-config alias.
+func runVmSpecCreateQemu(spec *VmSpec, rt VmRuntimeParams, vmDomainName, home, vmName, name, vmStateDir string) error {
+	if spec.Libvirt != nil && len(spec.Libvirt.Snippets) > 0 {
+		fmt.Fprintf(os.Stderr, "Warning: libvirt snippets are not supported with the QEMU backend (skipping %d snippet(s))\n", len(spec.Libvirt.Snippets))
+	}
+
+	// Prepare QEMU runtime paths.
+	monitorSocket := filepath.Join(vmStateDir, "monitor.sock")
+	qmpSocket := filepath.Join(vmStateDir, "qmp.sock")
+	consoleSocket := filepath.Join(vmStateDir, "console.sock")
+	pidFile := filepath.Join(vmStateDir, "qemu.pid")
+	qemuPaths := QemuRuntimePaths{
+		MonitorSocket: monitorSocket,
+		QmpSocket:     qmpSocket,
+		ConsoleSocket: consoleSocket,
+		PidFile:       pidFile,
+	}
+
+	args := RenderQemuArgv(spec, rt, qemuPaths)
+	bin := qemuSystemBinary()
+
+	// Persist the command line so `charly vm start <name>` can relaunch.
+	cmdLine := bin + " " + strings.Join(args, " ")
+	if err := os.WriteFile(filepath.Join(vmStateDir, "command"), []byte(cmdLine), 0o644); err != nil {
+		return err
+	}
+
+	cmd := exec.Command(bin, args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("qemu failed: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "Created and started VM %s (QEMU)\n", vmDomainName)
+	if err := publishVmSshAlias(home, vmName, name, spec, rt); err != nil {
+		return fmt.Errorf("publishing ssh-config alias: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "SSH: ssh %s    (managed alias resolves user/port/key from ~/.config/charly/ssh_config)\n", VmSshAlias(name))
+	fmt.Fprintf(os.Stderr, "Console: charly vm console %s\n", vmName)
+	return nil
 }
 
 // publishVmSshAlias writes (or refreshes) the managed ssh-config Host

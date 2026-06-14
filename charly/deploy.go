@@ -1440,6 +1440,8 @@ func (dc *DeployConfig) OccupiedHostPorts(excludeKey string) map[int]bool {
 // off meta.Image would read whichever sibling deploy merely shares the image and
 // clobber this entry's explicit port:/env:/security: — e.g. a bed remapping
 // 45434:11434 would lose its port to a running same-image deploy on 11434.
+//
+//nolint:gocyclo // field-by-field conditional overlay merge; every branch is a peer
 func MergeDeployOntoMetadata(meta *BoxMetadata, dc *DeployConfig, deployName, instance string) {
 	// Volume isolation runs UNCONDITIONALLY (independent of any charly.yml
 	// overlay), so every distinctly-named deploy gets its own volume namespace

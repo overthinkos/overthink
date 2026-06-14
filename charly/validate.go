@@ -315,34 +315,12 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 			// For bootc-flavored compositions with dual-init candies
 			// (service: + system_services:), skip supervisord depends_candy
 			// check when systemd is also triggered.
-			if len(def.RequiresCapability) == 0 && isBootcFlavored {
-				hasSystemdCandy := false
-				for _, candyName := range resolved {
-					if layer, ok := layers[candyName]; ok && layer.HasInit("systemd") {
-						hasSystemdCandy = true
-						break
-					}
-				}
-				if hasSystemdCandy {
-					continue
-				}
+			if checkInitSystemRequirements(def, isBootcFlavored, resolved, layers) {
+				continue
 			}
 
 			// Check if any candy requires this init system
-			var needsInit []string
-			for _, candyName := range resolved {
-				layer, ok := layers[candyName]
-				if !ok {
-					continue
-				}
-				if layer.HasInit(initName) {
-					needsInit = append(needsInit, candyName+" ("+initName+")")
-				}
-				// port_relay triggers init systems with relay_template
-				if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
-					needsInit = append(needsInit, candyName+" (port_relay)")
-				}
-			}
+			needsInit := collectInitSystemNeeds(initName, def, resolved, layers)
 
 			if len(needsInit) == 0 {
 				continue
@@ -377,31 +355,75 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 				// For dual-init candies (e.g., sshd with both service: and system_services:),
 				// skip the error if ALL triggering candies also support another init system.
 				// The candy is designed to use whichever init system the image provides.
-				allDualInit := true
-				for _, candyName := range resolved {
-					layer, ok := layers[candyName]
-					if !ok || !layer.HasInit(initName) {
-						continue
-					}
-					hasAlternativeInit := false
-					for altName := range initCfg.Init {
-						if altName != initName && layer.HasInit(altName) {
-							hasAlternativeInit = true
-							break
-						}
-					}
-					if !hasAlternativeInit {
-						allDualInit = false
-						break
-					}
-				}
-				if !allDualInit {
+				if !checkDualInitFallback(initName, resolved, layers, initCfg) {
 					errs.Add("box %q has candies requiring %s (%s) but missing the %q candy in its dependency chain; add %q to the box's candies or a base image",
 						imgName, initName, strings.Join(needsInit, ", "), def.DependsCandy, def.DependsCandy)
 				}
 			}
 		}
 	}
+}
+
+// checkInitSystemRequirements reports whether the depends_candy check for an
+// init system should be skipped: for bootc-flavored compositions with dual-init
+// candies (service: + system_services:), the supervisord depends_candy check is
+// skipped when systemd is also triggered by a resolved candy.
+func checkInitSystemRequirements(def *InitDef, isBootcFlavored bool, resolved []string, layers map[string]*Candy) bool {
+	if len(def.RequiresCapability) == 0 && isBootcFlavored {
+		for _, candyName := range resolved {
+			if layer, ok := layers[candyName]; ok && layer.HasInit("systemd") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// collectInitSystemNeeds returns the human-readable list of resolved candies
+// that require the given init system (directly via HasInit, or via port_relay
+// when the init def carries a relay template).
+func collectInitSystemNeeds(initName string, def *InitDef, resolved []string, layers map[string]*Candy) []string {
+	var needsInit []string
+	for _, candyName := range resolved {
+		layer, ok := layers[candyName]
+		if !ok {
+			continue
+		}
+		if layer.HasInit(initName) {
+			needsInit = append(needsInit, candyName+" ("+initName+")")
+		}
+		// port_relay triggers init systems with relay_template
+		if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
+			needsInit = append(needsInit, candyName+" (port_relay)")
+		}
+	}
+	return needsInit
+}
+
+// checkDualInitFallback reports whether ALL candies triggering the given init
+// system also support an alternative init system (dual-init candies like sshd
+// with both service: and system_services:). When true, a missing depends_candy
+// is not an error — the candy uses whichever init system the image provides.
+func checkDualInitFallback(initName string, resolved []string, layers map[string]*Candy, initCfg *InitConfig) bool {
+	allDualInit := true
+	for _, candyName := range resolved {
+		layer, ok := layers[candyName]
+		if !ok || !layer.HasInit(initName) {
+			continue
+		}
+		hasAlternativeInit := false
+		for altName := range initCfg.Init {
+			if altName != initName && layer.HasInit(altName) {
+				hasAlternativeInit = true
+				break
+			}
+		}
+		if !hasAlternativeInit {
+			allDualInit = false
+			break
+		}
+	}
+	return allDualInit
 }
 
 // validateBuildAndDistro validates build: and distro: entries.
@@ -1072,6 +1094,8 @@ func validateAliases(cfg *Config, layers map[string]*Candy, errs *ValidationErro
 }
 
 // validateBuilders validates builder and builds configuration
+//
+//nolint:gocyclo // builder validation: peer checks on defaults/produces/per-image builders/resolved formats; extraction fragments the validator
 func validateBuilders(cfg *Config, layers map[string]*Candy, builderCfg *BuilderConfig, dir string, opts ResolveOpts, errs *ValidationError) {
 	// Validate defaults.builder entries
 	for typ, builder := range cfg.Defaults.Builder {
@@ -1998,70 +2022,21 @@ func validateSingleTask(candyName string, idx int, verb string, t *Op, known map
 	// Per-verb required modifiers
 	switch verb {
 	case "command":
-		if strings.TrimSpace(t.Command) == "" {
-			errs.Add("candy %q: tasks[%d]: command: must be non-empty", candyName, idx)
-		}
-
+		validateCommandTask(candyName, idx, t, errs)
 	case "mkdir":
-		if !isAbsOrHomePath(t.Mkdir) {
-			errs.Add("candy %q: tasks[%d]: mkdir: %q must be an absolute path or start with ~/ / ${HOME}", candyName, idx, t.Mkdir)
-		}
-
+		validateMkdirTask(candyName, idx, t, errs)
 	case "copy":
-		switch {
-		case t.Copy == "":
-			errs.Add("candy %q: tasks[%d]: copy: requires a non-empty source", candyName, idx)
-		case strings.HasPrefix(t.Copy, "/"):
-			errs.Add("candy %q: tasks[%d]: copy: %q must be a relative path (candy-dir file)", candyName, idx, t.Copy)
-		case strings.Contains(t.Copy, ".."):
-			errs.Add("candy %q: tasks[%d]: copy: %q may not contain .. (no traversal)", candyName, idx, t.Copy)
-		}
-		if t.To == "" {
-			errs.Add("candy %q: tasks[%d]: copy: requires to: destination", candyName, idx)
-		} else if !isAbsOrHomePath(t.To) {
-			errs.Add("candy %q: tasks[%d]: copy to: %q must be an absolute path or start with ~/ / ${HOME}", candyName, idx, t.To)
-		}
-
+		validateCopyTask(candyName, idx, t, errs)
 	case "write":
-		if !isAbsOrHomePath(t.Write) {
-			errs.Add("candy %q: tasks[%d]: write: %q must be an absolute path or start with ~/ / ${HOME}", candyName, idx, t.Write)
-		}
-		if t.Content == "" {
-			errs.Add("candy %q: tasks[%d]: write: requires non-empty content:", candyName, idx)
-		}
-
+		validateWriteTask(candyName, idx, t, errs)
 	case "link":
-		if !isAbsOrHomePath(t.Link) {
-			errs.Add("candy %q: tasks[%d]: link: %q must be an absolute path or start with ~/ / ${HOME}", candyName, idx, t.Link)
-		}
-		if t.Target == "" {
-			errs.Add("candy %q: tasks[%d]: link: requires target: (what the symlink points to)", candyName, idx)
-		}
-
+		validateLinkTask(candyName, idx, t, errs)
 	case "download":
-		if t.Download == "" {
-			errs.Add("candy %q: tasks[%d]: download: requires a URL", candyName, idx)
-		}
-		if !taskExtractValid[t.Extract] {
-			errs.Add("candy %q: tasks[%d]: download extract: %q not valid (expected one of tar.gz, tar.xz, tar.zst, zip, none, sh)", candyName, idx, t.Extract)
-		}
-		// to: required unless extract=sh (script typically decides own install path)
-		if t.Extract != "sh" && t.To == "" {
-			errs.Add("candy %q: tasks[%d]: download requires to: destination (unless extract: sh)", candyName, idx)
-		}
-
+		validateDownloadTask(candyName, idx, t, errs)
 	case "setcap":
-		if !strings.HasPrefix(t.Setcap, "/") {
-			errs.Add("candy %q: tasks[%d]: setcap: %q must be an absolute path", candyName, idx, t.Setcap)
-		}
-		if t.Caps != "" && !taskCapsPattern.MatchString(t.Caps) {
-			errs.Add("candy %q: tasks[%d]: setcap caps: %q not valid (expected cap_name=flags[,cap_name=flags])", candyName, idx, t.Caps)
-		}
-
+		validateSetcapTask(candyName, idx, t, errs)
 	case "build":
-		if t.Build != "all" {
-			errs.Add("candy %q: tasks[%d]: build: %q not supported (initial implementation accepts only \"all\")", candyName, idx, t.Build)
-		}
+		validateBuildTask(candyName, idx, t, errs)
 	}
 
 	// ${VAR} reference validation in all non-shell fields.
@@ -2084,6 +2059,88 @@ func validateSingleTask(candyName string, idx int, verb string, t *Op, known map
 		if unresolved := taskUnresolvedRefs(val, known); len(unresolved) > 0 {
 			errs.Add("candy %q: tasks[%d]: %s references unknown ${VAR}: %s (declare in vars: or use an auto-export)", candyName, idx, field, strings.Join(unresolved, ", "))
 		}
+	}
+}
+
+// validateCommandTask checks the required modifiers for a command: task.
+func validateCommandTask(candyName string, idx int, t *Op, errs *ValidationError) {
+	if strings.TrimSpace(t.Command) == "" {
+		errs.Add("candy %q: tasks[%d]: command: must be non-empty", candyName, idx)
+	}
+}
+
+// validateMkdirTask checks the required modifiers for a mkdir: task.
+func validateMkdirTask(candyName string, idx int, t *Op, errs *ValidationError) {
+	if !isAbsOrHomePath(t.Mkdir) {
+		errs.Add("candy %q: tasks[%d]: mkdir: %q must be an absolute path or start with ~/ / ${HOME}", candyName, idx, t.Mkdir)
+	}
+}
+
+// validateCopyTask checks the required modifiers for a copy: task.
+func validateCopyTask(candyName string, idx int, t *Op, errs *ValidationError) {
+	switch {
+	case t.Copy == "":
+		errs.Add("candy %q: tasks[%d]: copy: requires a non-empty source", candyName, idx)
+	case strings.HasPrefix(t.Copy, "/"):
+		errs.Add("candy %q: tasks[%d]: copy: %q must be a relative path (candy-dir file)", candyName, idx, t.Copy)
+	case strings.Contains(t.Copy, ".."):
+		errs.Add("candy %q: tasks[%d]: copy: %q may not contain .. (no traversal)", candyName, idx, t.Copy)
+	}
+	if t.To == "" {
+		errs.Add("candy %q: tasks[%d]: copy: requires to: destination", candyName, idx)
+	} else if !isAbsOrHomePath(t.To) {
+		errs.Add("candy %q: tasks[%d]: copy to: %q must be an absolute path or start with ~/ / ${HOME}", candyName, idx, t.To)
+	}
+}
+
+// validateWriteTask checks the required modifiers for a write: task.
+func validateWriteTask(candyName string, idx int, t *Op, errs *ValidationError) {
+	if !isAbsOrHomePath(t.Write) {
+		errs.Add("candy %q: tasks[%d]: write: %q must be an absolute path or start with ~/ / ${HOME}", candyName, idx, t.Write)
+	}
+	if t.Content == "" {
+		errs.Add("candy %q: tasks[%d]: write: requires non-empty content:", candyName, idx)
+	}
+}
+
+// validateLinkTask checks the required modifiers for a link: task.
+func validateLinkTask(candyName string, idx int, t *Op, errs *ValidationError) {
+	if !isAbsOrHomePath(t.Link) {
+		errs.Add("candy %q: tasks[%d]: link: %q must be an absolute path or start with ~/ / ${HOME}", candyName, idx, t.Link)
+	}
+	if t.Target == "" {
+		errs.Add("candy %q: tasks[%d]: link: requires target: (what the symlink points to)", candyName, idx)
+	}
+}
+
+// validateDownloadTask checks the required modifiers for a download: task.
+func validateDownloadTask(candyName string, idx int, t *Op, errs *ValidationError) {
+	if t.Download == "" {
+		errs.Add("candy %q: tasks[%d]: download: requires a URL", candyName, idx)
+	}
+	if !taskExtractValid[t.Extract] {
+		errs.Add("candy %q: tasks[%d]: download extract: %q not valid (expected one of tar.gz, tar.xz, tar.zst, zip, none, sh)", candyName, idx, t.Extract)
+	}
+	// to: required unless extract=sh (script typically decides own install path)
+	if t.Extract != "sh" && t.To == "" {
+		errs.Add("candy %q: tasks[%d]: download requires to: destination (unless extract: sh)", candyName, idx)
+	}
+}
+
+// validateSetcapTask checks the required modifiers for a setcap: task.
+func validateSetcapTask(candyName string, idx int, t *Op, errs *ValidationError) {
+	if !strings.HasPrefix(t.Setcap, "/") {
+		errs.Add("candy %q: tasks[%d]: setcap: %q must be an absolute path", candyName, idx, t.Setcap)
+	}
+	if t.Caps != "" && !taskCapsPattern.MatchString(t.Caps) {
+		errs.Add("candy %q: tasks[%d]: setcap caps: %q not valid (expected cap_name=flags[,cap_name=flags])", candyName, idx, t.Caps)
+	}
+}
+
+// validateBuildTask checks the required modifiers for a build: task.
+func validateBuildTask(candyName string, idx int, t *Op, errs *ValidationError) {
+	if t.Build != "all" {
+		errs.Add("candy %q: tasks[%d]: build: %q not supported (initial implementation accepts only \"all\")", candyName, idx, t.Build)
 	}
 }
 

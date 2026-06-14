@@ -210,51 +210,15 @@ func (c *DeployAddCmd) Run() error {
 // at the root. Non-nil means "this node is a child of something" —
 // its target composes a NestedExecutor over parentExec.
 func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExec DeployExecutor, dir string) error {
-	opts := c.emitOpts()
-	opts.ParentExec = parentExec
-	opts.Path = path
-	// Note: opts.ParentNode is populated by the walker when available.
-
-	// Per-node field overlays from the charly.yml entry. On the root
-	// this matches the pre-v2 behavior; on children we must reload
-	// fields from the child node (not c.Name's top-level entry).
-	refStr := c.Ref
-	addCandies := append([]string(nil), c.AddCandy...)
-	tag := c.Tag
-	if node != nil {
-		if node.Version != "" {
-			tag = node.Version
-		}
-		if node.InstallOpts != nil {
-			opts = node.InstallOpts.ApplyTo(opts)
-		}
-		if len(addCandies) == 0 && len(node.AddCandy) > 0 {
-			addCandies = append([]string(nil), node.AddCandy...)
-		}
-	}
-	if refStr == "" {
-		if node == nil {
-			return fmt.Errorf("charly deploy add: no <ref> and charly.yml has no entry for %q", path)
-		}
-		// Schema v3: prefer the explicit `box:` cross-ref when set,
-		// so deployment names like "sway-pod" don't need to match a
-		// box name. Falls back to the deploy key for legacy entries.
-		switch {
-		case node.Box != "":
-			refStr = node.Box
-		default:
-			refStr = pathLeaf(path)
-		}
+	opts, refStr, addCandies, tag, err := c.resolveNodeOverlays(path, node, parentExec)
+	if err != nil {
+		return err
 	}
 
 	cfg, distroCfg, builderCfg, err := loadConfigForDeploy(dir)
 	if err != nil {
 		return err
 	}
-
-	var plans []*InstallPlan
-	var base string
-	var candySet []string
 
 	target := classifyNodeTarget(node, path)
 
@@ -269,87 +233,14 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 	// Resolve a kind:local template, when referenced. Template fields
 	// (candies + install_opts + env) merge BENEATH deployment-level
 	// overrides — so the precedence is CLI > deployment > template.
-	// `InstallOptsConfig.ApplyTo` is fill-empty, so calling it with the
-	// template's opts after the deployment's leaves the deployment's
-	// values intact and only fills the gaps.
-	if target == "local" && node != nil && node.Local != "" {
-		tmpl := findLocalSpec(dir, node.Local)
-		if tmpl == nil {
-			return fmt.Errorf("deployment %q: unknown kind:local template %q", path, node.Local)
-		}
-		// Prepend template candies; deployment add_candy are appended.
-		merged := append([]string(nil), tmpl.Candy...)
-		merged = append(merged, addCandies...)
-		addCandies = merged
-		// Fill install_opts gaps from the template.
-		opts = tmpl.InstallOpts.ApplyTo(opts)
+	addCandies, opts, err = resolveNodeTemplate(target, path, dir, node, addCandies, opts)
+	if err != nil {
+		return err
 	}
 
-	// Target-only deploys (local, vm, android) don't compile a primary
-	// image plan — everything comes from add_candy (for android: the
-	// candies' apk: packages installed onto the device).
-	if target == "local" || target == "vm" || target == "android" {
-		base = path
-	} else {
-		ref, err := ResolveDeployRef(refStr, dir)
-		if err != nil {
-			return fmt.Errorf("resolving ref %q: %w", refStr, err)
-		}
-		// Save c.Tag for compilePlans; restore after.
-		savedTag := c.Tag
-		c.Tag = tag
-		plans, base, candySet, err = c.compilePlans(ref, cfg, distroCfg, builderCfg, dir)
-		c.Tag = savedTag
-		if err != nil {
-			return err
-		}
-	}
-
-	// For pod/k8s targets the add_candy must compile against the BASE
-	// IMAGE's context (distro=fedora, pkg=rpm, etc.) rather than the
-	// operator host's context — otherwise the candy's install tasks pick
-	// the wrong distro section and the overlay build fails. Only host/vm
-	// targets use syntheticHostBox / syntheticVmBox (handled inside
-	// compileCandyPlans).
-	var baseImg *ResolvedBox
-	if (target == "pod" || target == "k8s") && refStr != "" {
-		if baseResolved, rerr := cfg.ResolveBox(refStr, tag, dir, ResolveOpts{}); rerr == nil {
-			baseImg = baseResolved
-			if distroCfg != nil {
-				baseImg.DistroDef = distroCfg.ResolveDistro(baseImg.Distro)
-			}
-			if builderCfg != nil {
-				baseImg.BuilderConfig = builderCfg
-			}
-		}
-	}
-	for _, al := range addCandies {
-		alRef, err := ResolveDeployRefAsCandy(al, dir)
-		if err != nil {
-			return fmt.Errorf("resolving --add-candy %q: %w", al, err)
-		}
-		var alPlans []*InstallPlan
-		if baseImg != nil {
-			alPlans, _, _, err = c.compileCandyPlansWithContext(alRef, cfg, distroCfg, builderCfg, dir, baseImg)
-		} else {
-			alPlans, _, _, err = c.compilePlans(alRef, cfg, distroCfg, builderCfg, dir)
-		}
-		if err != nil {
-			return fmt.Errorf("compiling --add-candy %q: %w", al, err)
-		}
-		// Mark each plan's own candy (plus transitive deps) as overlay
-		// candies so the Pod target picks them ALL up — not just the
-		// user-facing ref name (k3s-server without its k3s base dep).
-		overlayNames := make([]string, 0, len(alPlans))
-		for _, p := range alPlans {
-			if p.Candy != "" {
-				overlayNames = append(overlayNames, p.Candy)
-			}
-		}
-		for _, p := range alPlans {
-			p.AddCandies = append(p.AddCandies, overlayNames...)
-		}
-		plans = append(plans, alPlans...)
+	plans, base, candySet, err := c.compileNodePlans(target, refStr, tag, path, addCandies, cfg, distroCfg, builderCfg, dir)
+	if err != nil {
+		return err
 	}
 
 	deployID := computeDeployID(base, candySet, addCandies)
@@ -437,6 +328,144 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 	}
 
 	return utgt.Add(context.Background(), dctx, plans, opts)
+}
+
+// resolveNodeOverlays computes the per-node emit opts, ref string, add-candy
+// list and tag, applying the charly.yml entry's field overlays on top of the
+// CLI flags. On the root this matches the pre-v2 behavior; on children the
+// fields come from the child node (not c.Name's top-level entry). Returns an
+// error only when neither a <ref> nor a charly.yml entry resolves a ref.
+func (c *DeployAddCmd) resolveNodeOverlays(path string, node *DeploymentNode, parentExec DeployExecutor) (EmitOpts, string, []string, string, error) {
+	opts := c.emitOpts()
+	opts.ParentExec = parentExec
+	opts.Path = path
+	// Note: opts.ParentNode is populated by the walker when available.
+
+	refStr := c.Ref
+	addCandies := append([]string(nil), c.AddCandy...)
+	tag := c.Tag
+	if node != nil {
+		if node.Version != "" {
+			tag = node.Version
+		}
+		if node.InstallOpts != nil {
+			opts = node.InstallOpts.ApplyTo(opts)
+		}
+		if len(addCandies) == 0 && len(node.AddCandy) > 0 {
+			addCandies = append([]string(nil), node.AddCandy...)
+		}
+	}
+	if refStr == "" {
+		if node == nil {
+			return opts, "", addCandies, tag, fmt.Errorf("charly deploy add: no <ref> and charly.yml has no entry for %q", path)
+		}
+		// Schema v3: prefer the explicit `box:` cross-ref when set,
+		// so deployment names like "sway-pod" don't need to match a
+		// box name. Falls back to the deploy key for legacy entries.
+		switch {
+		case node.Box != "":
+			refStr = node.Box
+		default:
+			refStr = pathLeaf(path)
+		}
+	}
+	return opts, refStr, addCandies, tag, nil
+}
+
+// resolveNodeTemplate merges a referenced kind:local template into addCandies
+// and opts. Template fields merge BENEATH deployment-level overrides — the
+// precedence is CLI > deployment > template — because InstallOptsConfig.ApplyTo
+// is fill-empty, so applying the template's opts after the deployment's leaves
+// the deployment's values intact and only fills the gaps.
+func resolveNodeTemplate(target, path, dir string, node *DeploymentNode, addCandies []string, opts EmitOpts) ([]string, EmitOpts, error) {
+	if target == "local" && node != nil && node.Local != "" {
+		tmpl := findLocalSpec(dir, node.Local)
+		if tmpl == nil {
+			return addCandies, opts, fmt.Errorf("deployment %q: unknown kind:local template %q", path, node.Local)
+		}
+		// Prepend template candies; deployment add_candy are appended.
+		merged := append([]string(nil), tmpl.Candy...)
+		merged = append(merged, addCandies...)
+		addCandies = merged
+		// Fill install_opts gaps from the template.
+		opts = tmpl.InstallOpts.ApplyTo(opts)
+	}
+	return addCandies, opts, nil
+}
+
+// compileNodePlans compiles the InstallPlans for a node, dispatching on the
+// classified target. Target-only deploys (local, vm, android) don't compile a
+// primary image plan — everything comes from add_candy (for android: the
+// candies' apk: packages installed onto the device). For pod/k8s targets the
+// add_candy compiles against the BASE IMAGE's context (distro=fedora, pkg=rpm,
+// …) rather than the operator host's context — otherwise the candy's install
+// tasks pick the wrong distro section and the overlay build fails. Returns the
+// plans, the base identity, and the candy set.
+func (c *DeployAddCmd) compileNodePlans(target, refStr, tag, path string, addCandies []string, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
+	var plans []*InstallPlan
+	var base string
+	var candySet []string
+
+	if target == "local" || target == "vm" || target == "android" {
+		base = path
+	} else {
+		ref, err := ResolveDeployRef(refStr, dir)
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("resolving ref %q: %w", refStr, err)
+		}
+		// Save c.Tag for compilePlans; restore after.
+		savedTag := c.Tag
+		c.Tag = tag
+		plans, base, candySet, err = c.compilePlans(ref, cfg, distroCfg, builderCfg, dir)
+		c.Tag = savedTag
+		if err != nil {
+			return nil, "", nil, err
+		}
+	}
+
+	// Only host/vm targets use syntheticHostBox / syntheticVmBox (handled
+	// inside compileCandyPlans); pod/k8s resolve the base image context here.
+	var baseImg *ResolvedBox
+	if (target == "pod" || target == "k8s") && refStr != "" {
+		if baseResolved, rerr := cfg.ResolveBox(refStr, tag, dir, ResolveOpts{}); rerr == nil {
+			baseImg = baseResolved
+			if distroCfg != nil {
+				baseImg.DistroDef = distroCfg.ResolveDistro(baseImg.Distro)
+			}
+			if builderCfg != nil {
+				baseImg.BuilderConfig = builderCfg
+			}
+		}
+	}
+	for _, al := range addCandies {
+		alRef, err := ResolveDeployRefAsCandy(al, dir)
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("resolving --add-candy %q: %w", al, err)
+		}
+		var alPlans []*InstallPlan
+		if baseImg != nil {
+			alPlans, _, _, err = c.compileCandyPlansWithContext(alRef, cfg, distroCfg, builderCfg, dir, baseImg)
+		} else {
+			alPlans, _, _, err = c.compilePlans(alRef, cfg, distroCfg, builderCfg, dir)
+		}
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("compiling --add-candy %q: %w", al, err)
+		}
+		// Mark each plan's own candy (plus transitive deps) as overlay
+		// candies so the Pod target picks them ALL up — not just the
+		// user-facing ref name (k3s-server without its k3s base dep).
+		overlayNames := make([]string, 0, len(alPlans))
+		for _, p := range alPlans {
+			if p.Candy != "" {
+				overlayNames = append(overlayNames, p.Candy)
+			}
+		}
+		for _, p := range alPlans {
+			p.AddCandies = append(p.AddCandies, overlayNames...)
+		}
+		plans = append(plans, alPlans...)
+	}
+	return plans, base, candySet, nil
 }
 
 // classifyNodeTarget picks the target discriminator for a node. Uses

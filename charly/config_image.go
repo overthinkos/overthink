@@ -113,32 +113,28 @@ func (c *BoxConfigSetupCmd) Run() error {
 	return c.runConfig(rt)
 }
 
-func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
-	var detected DetectedDevices
-	if !c.NoAutoDetect {
-		detected = DetectHostDevices()
-		LogDetectedDevices(detected)
-	}
-
-	// Pattern B (arbitrary deploy-key + version-pin) lookup —
-	// /charly-core:deploy "Two supported deploy patterns". If `c.Box`
-	// (the positional arg) names a charly.yml entry with an
-	// explicit `box:` field, use that as the ref the rest of the
-	// pipeline pulls/inspects. Critically c.Box is NOT mutated:
-	// it remains the deploy-key for container-name / quadlet-name
-	// / secret-name / charly.yml-key composition. Pre-2026-05-12
-	// the arg was always treated as a kind:box short-name; this
-	// split lets the deploy-key and the image-ref diverge.
-	// Resolve the deploy key to its declared box short-name via THE shared
-	// resolver (deploy.go resolveDeployBoxName) that config / start / shell
-	// / check live all use, so they never diverge. Falls back to the key for
-	// the key==box convention. c.Box stays the deploy-KEY for container /
-	// quadlet / secret / charly.yml-key composition; only the image ref and
-	// the persisted `box:` field (below) use the resolved name. Routing the
-	// short name through resolveShellImageRef yields a full local-CalVer ref
-	// podman storage knows (storage is keyed by full registry refs like
-	// ghcr.io/overthinkos/arch:TAG, not bare short names).
-	var deployBoxName, imageRef string
+// resolveDeployRef resolves the deploy-key positional arg into the deploy box
+// short-name and the image ref the rest of the config pipeline pulls/inspects.
+//
+// Pattern B (arbitrary deploy-key + version-pin) lookup —
+// /charly-core:deploy "Two supported deploy patterns". If `c.Box`
+// (the positional arg) names a charly.yml entry with an
+// explicit `box:` field, use that as the ref the rest of the
+// pipeline pulls/inspects. Critically c.Box is NOT mutated:
+// it remains the deploy-key for container-name / quadlet-name
+// / secret-name / charly.yml-key composition. Pre-2026-05-12
+// the arg was always treated as a kind:box short-name; this
+// split lets the deploy-key and the image-ref diverge.
+// Resolve the deploy key to its declared box short-name via THE shared
+// resolver (deploy.go resolveDeployBoxName) that config / start / shell
+// / check live all use, so they never diverge. Falls back to the key for
+// the key==box convention. c.Box stays the deploy-KEY for container /
+// quadlet / secret / charly.yml-key composition; only the image ref and
+// the persisted `box:` field use the resolved name. Routing the
+// short name through resolveShellImageRef yields a full local-CalVer ref
+// podman storage knows (storage is keyed by full registry refs like
+// ghcr.io/overthinkos/arch:TAG, not bare short names).
+func (c *BoxConfigSetupCmd) resolveDeployRef() (deployBoxName, imageRef string) {
 	if c.ExplicitRef != "" {
 		// Source-less from-box deploy (`charly deploy from-box`): use the exact
 		// ref as-is; c.Box is the deploy-key/name only. No charly.yml
@@ -163,6 +159,145 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		}
 		imageRef = resolveShellImageRef("", deployBoxName, c.Tag)
 	}
+	return deployBoxName, imageRef
+}
+
+// prepareQuadletEnv resolves the EnvironmentFile= path for the quadlet:
+// CLI --env-file > charly.yml env_file > workspace .env. Split out of runConfig.
+func (c *BoxConfigSetupCmd) prepareQuadletEnv(dc *DeployConfig, bindMounts []ResolvedBindMount) string {
+	var quadletEnvFile string
+	if c.EnvFile != "" {
+		quadletEnvFile, _ = filepath.Abs(c.EnvFile)
+	}
+	// Check charly.yml env_file
+	if quadletEnvFile == "" && dc != nil {
+		if overlay, ok := dc.Deploy[deployKey(c.Box, c.Instance)]; ok && overlay.EnvFile != "" {
+			quadletEnvFile = expandHostHome(overlay.EnvFile)
+		}
+	}
+	// Also check workspace .env for quadlet EnvironmentFile
+	if quadletEnvFile == "" {
+		if wsHost := workspaceBindHost(bindMounts); wsHost != "" {
+			wsEnvPath := filepath.Join(wsHost, ".env")
+			if _, statErr := os.Stat(wsEnvPath); statErr == nil {
+				quadletEnvFile = wsEnvPath
+			}
+		}
+	}
+	return quadletEnvFile
+}
+
+// resolveSidecars resolves sidecars (embedded templates + charly.yml +
+// --sidecar flags), routes CLI -e flags to the matching sidecar (mutating
+// c.Env to the app-only set), and provisions sidecar secrets (appending any
+// fallback env to envVars). Returns the deploy sidecar defs, the resolved
+// sidecars, and the (possibly extended) env var list. Split out of runConfig.
+func (c *BoxConfigSetupCmd) resolveSidecars(dc *DeployConfig, rt *ResolvedRuntime, autoGen bool, envVars []string) (map[string]SidecarDef, []ResolvedSidecar, []string, error) {
+	var deploySidecars map[string]SidecarDef
+	if dc != nil {
+		if overlay, ok := dc.Deploy[deployKey(c.Box, c.Instance)]; ok {
+			deploySidecars = overlay.Sidecar
+		}
+	}
+	// Merge --sidecar flags into deploy sidecars
+	for _, scName := range c.Sidecar {
+		if deploySidecars == nil {
+			deploySidecars = make(map[string]SidecarDef)
+		}
+		if _, ok := deploySidecars[scName]; !ok {
+			deploySidecars[scName] = SidecarDef{} // empty override, inherits from template
+		}
+	}
+
+	var resolvedSidecars []ResolvedSidecar
+	var mergedSidecarDefs map[string]SidecarDef
+	if len(deploySidecars) > 0 {
+		// Route CLI -e flags: sidecar-related env vars go to the sidecar, not the app
+		sidecarEnvKeys := SidecarEnvKey(deploySidecars)
+		var appEnv, sidecarEnvOverrides []string
+		for _, e := range c.Env {
+			key := e
+			if before, _, ok := strings.Cut(e, "="); ok {
+				key = before
+			}
+			if scName, ok := sidecarEnvKeys[key]; ok {
+				// Route to sidecar
+				if deploySidecars[scName].Env == nil {
+					def := deploySidecars[scName]
+					def.Env = make(map[string]string)
+					deploySidecars[scName] = def
+				}
+				def := deploySidecars[scName]
+				if _, after, ok := strings.Cut(e, "="); ok {
+					def.Env[key] = after
+				}
+				deploySidecars[scName] = def
+				sidecarEnvOverrides = append(sidecarEnvOverrides, e)
+			} else {
+				appEnv = append(appEnv, e)
+			}
+		}
+		// Replace c.Env with app-only env vars (sidecar vars saved to charly.yml)
+		c.Env = appEnv
+
+		// Resolve: embedded templates + charly.yml overrides
+		var resolveErr error
+		mergedSidecarDefs, resolveErr = ResolveSidecarsForConfig(deploySidecars)
+		if resolveErr != nil {
+			return nil, nil, envVars, fmt.Errorf("resolving sidecars: %w", resolveErr)
+		}
+		if len(mergedSidecarDefs) > 0 {
+			var rsErr error
+			resolvedSidecars, rsErr = ResolveSidecar(mergedSidecarDefs, c.Box, c.Instance)
+			if rsErr != nil {
+				return nil, nil, envVars, fmt.Errorf("resolving sidecars: %w", rsErr)
+			}
+		}
+
+		// Log routed env vars
+		if len(sidecarEnvOverrides) > 0 {
+			for _, e := range sidecarEnvOverrides {
+				key := e
+				if before, _, ok := strings.Cut(e, "="); ok {
+					key = before
+				}
+				scName := sidecarEnvKeys[key]
+				fmt.Fprintf(os.Stderr, "Routed %s to sidecar %s\n", key, scName)
+			}
+		}
+	}
+
+	// Provision sidecar secrets as podman secrets
+	for i, sc := range resolvedSidecars {
+		if len(sc.Secret) > 0 {
+			scSecrets, _ := ApplySecretRefresh(sc.Secret, c.RefreshSecret)
+			scProvisioned, scFallback, scErr := ProvisionPodmanSecrets(rt.RunEngine, c.Box, c.Instance, scSecrets, autoGen)
+			if scErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not provision sidecar %s secrets: %v\n", sc.Name, scErr)
+			}
+			resolvedSidecars[i].Secret = scProvisioned
+			for _, kv := range scFallback {
+				envVars = appendEnvUnique(envVars, kv)
+			}
+		}
+	}
+
+	return deploySidecars, resolvedSidecars, envVars, nil
+}
+
+//nolint:gocyclo // sequential charly-config deploy pipeline (ref resolution → metadata merge → ports → env/secrets → sidecars → quadlet/systemd write → data seed → hooks); phases consume the previous phase's locals (meta/dc/envVars/ports). Major phases extracted (resolveDeployRef/prepareQuadletEnv/resolveSidecars); the residual orchestration is irreducibly above threshold without unwieldy multi-value param passing
+func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
+	var detected DetectedDevices
+	if !c.NoAutoDetect {
+		detected = DetectHostDevices()
+		LogDetectedDevices(detected)
+	}
+
+	// Resolve the deploy-key positional arg to (deploy-box-name, image-ref).
+	// c.Box stays the deploy-KEY for container/quadlet/secret/charly.yml-key
+	// composition; only the returned ref/name use the resolved box short-name.
+	// See resolveDeployRef for the Pattern-B + from-box details.
+	deployBoxName, imageRef := c.resolveDeployRef()
 	podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
 	if err := EnsureImage(imageRef, podmanRT); err != nil {
 		return err
@@ -343,25 +478,8 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 
 	// For quadlet, resolve env file to absolute path for EnvironmentFile=
-	var quadletEnvFile string
-	if c.EnvFile != "" {
-		quadletEnvFile, _ = filepath.Abs(c.EnvFile)
-	}
-	// Check charly.yml env_file
-	if quadletEnvFile == "" && dc != nil {
-		if overlay, ok := dc.Deploy[deployKey(c.Box, c.Instance)]; ok && overlay.EnvFile != "" {
-			quadletEnvFile = expandHostHome(overlay.EnvFile)
-		}
-	}
-	// Also check workspace .env for quadlet EnvironmentFile
-	if quadletEnvFile == "" {
-		if wsHost := workspaceBindHost(bindMounts); wsHost != "" {
-			wsEnvPath := filepath.Join(wsHost, ".env")
-			if _, statErr := os.Stat(wsEnvPath); statErr == nil {
-				quadletEnvFile = wsEnvPath
-			}
-		}
-	}
+	// (CLI --env-file > charly.yml env_file > workspace .env).
+	quadletEnvFile := c.prepareQuadletEnv(dc, bindMounts)
 
 	// Merge auto-detected devices into security config
 	if !security.Privileged {
@@ -438,95 +556,13 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	backend := resolveSecretBackend()
 	isKeyring := backend == "keyring" || backend == "auto" || backend == ""
 
-	// Resolve sidecars: embedded templates + charly.yml + --sidecar flags
-	var deploySidecars map[string]SidecarDef
-	if dc != nil {
-		if overlay, ok := dc.Deploy[deployKey(c.Box, c.Instance)]; ok {
-			deploySidecars = overlay.Sidecar
-		}
+	// Resolve sidecars (embedded templates + charly.yml + --sidecar flags),
+	// route CLI -e flags to the matching sidecar, and provision sidecar secrets.
+	deploySidecars, resolvedSidecars, sidecarEnv, scErr := c.resolveSidecars(dc, rt, autoGen, envVars)
+	if scErr != nil {
+		return scErr
 	}
-	// Merge --sidecar flags into deploy sidecars
-	for _, scName := range c.Sidecar {
-		if deploySidecars == nil {
-			deploySidecars = make(map[string]SidecarDef)
-		}
-		if _, ok := deploySidecars[scName]; !ok {
-			deploySidecars[scName] = SidecarDef{} // empty override, inherits from template
-		}
-	}
-
-	var resolvedSidecars []ResolvedSidecar
-	var mergedSidecarDefs map[string]SidecarDef
-	if len(deploySidecars) > 0 {
-		// Route CLI -e flags: sidecar-related env vars go to the sidecar, not the app
-		sidecarEnvKeys := SidecarEnvKey(deploySidecars)
-		var appEnv, sidecarEnvOverrides []string
-		for _, e := range c.Env {
-			key := e
-			if before, _, ok := strings.Cut(e, "="); ok {
-				key = before
-			}
-			if scName, ok := sidecarEnvKeys[key]; ok {
-				// Route to sidecar
-				if deploySidecars[scName].Env == nil {
-					def := deploySidecars[scName]
-					def.Env = make(map[string]string)
-					deploySidecars[scName] = def
-				}
-				def := deploySidecars[scName]
-				if _, after, ok := strings.Cut(e, "="); ok {
-					def.Env[key] = after
-				}
-				deploySidecars[scName] = def
-				sidecarEnvOverrides = append(sidecarEnvOverrides, e)
-			} else {
-				appEnv = append(appEnv, e)
-			}
-		}
-		// Replace c.Env with app-only env vars (sidecar vars saved to charly.yml)
-		c.Env = appEnv
-
-		// Resolve: embedded templates + charly.yml overrides
-		var resolveErr error
-		mergedSidecarDefs, resolveErr = ResolveSidecarsForConfig(deploySidecars)
-		if resolveErr != nil {
-			return fmt.Errorf("resolving sidecars: %w", resolveErr)
-		}
-		if len(mergedSidecarDefs) > 0 {
-			var rsErr error
-			resolvedSidecars, rsErr = ResolveSidecar(mergedSidecarDefs, c.Box, c.Instance)
-			if rsErr != nil {
-				return fmt.Errorf("resolving sidecars: %w", rsErr)
-			}
-		}
-
-		// Log routed env vars
-		if len(sidecarEnvOverrides) > 0 {
-			for _, e := range sidecarEnvOverrides {
-				key := e
-				if before, _, ok := strings.Cut(e, "="); ok {
-					key = before
-				}
-				scName := sidecarEnvKeys[key]
-				fmt.Fprintf(os.Stderr, "Routed %s to sidecar %s\n", key, scName)
-			}
-		}
-	}
-
-	// Provision sidecar secrets as podman secrets
-	for i, sc := range resolvedSidecars {
-		if len(sc.Secret) > 0 {
-			scSecrets, _ := ApplySecretRefresh(sc.Secret, c.RefreshSecret)
-			scProvisioned, scFallback, scErr := ProvisionPodmanSecrets(rt.RunEngine, c.Box, c.Instance, scSecrets, autoGen)
-			if scErr != nil {
-				fmt.Fprintf(os.Stderr, "Warning: could not provision sidecar %s secrets: %v\n", sc.Name, scErr)
-			}
-			resolvedSidecars[i].Secret = scProvisioned
-			for _, kv := range scFallback {
-				envVars = appendEnvUnique(envVars, kv)
-			}
-		}
-	}
+	envVars = sidecarEnv
 
 	// When sidecars are present, set PodName to enable pod mode
 	podName := ""
@@ -1514,6 +1550,8 @@ func checkMissingSecretRequires(boxName string, requires []EnvDependency, resolu
 // updateAllDeployedQuadlets regenerates quadlets for all other deployed images
 // to pick up global env changes. Lightweight: only regenerates the quadlet file,
 // does NOT re-provision secrets, encrypted volumes, or data.
+//
+//nolint:gocyclo // per-deploy quadlet-rewrite loop; each step (load metadata → merge deploy config → resolve env → rewrite quadlet) is a peer; extraction needs unwieldy param passing
 func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipBox string) error {
 	dc, err := LoadDeployConfig()
 	if err != nil || dc == nil {

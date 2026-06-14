@@ -21,6 +21,8 @@ import (
 // Scope: walks ONLY the current plan run's results (via r.Scenario).
 // summarize verbs invoked without a plan-run context skip with a clear
 // message.
+//
+//nolint:gocyclo,unparam // linear filter→sort→compute→validate pipeline; metric switch incidental; ctx unused (uniform verb-handler signature shared with the other runX(ctx, *Op) handlers)
 func (r *Runner) runSummarize(ctx context.Context, c *Op) CheckResult {
 	if r.Scenario == nil {
 		return skipf(c, "summarize: requires a plan-run context (use inside plan steps)")

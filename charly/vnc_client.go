@@ -233,6 +233,8 @@ const (
 )
 
 // vencryptHandshake performs VeNCrypt (security type 19) negotiation.
+//
+//nolint:gocyclo // VeNCrypt handshake (RFC 6143): sequential version/subtype/TLS negotiation steps depend on prior state; extraction breaks protocol flow
 func (c *VNCClient) vencryptHandshake(password string) error {
 	// Step 1: Version negotiation.
 	var serverMajor, serverMinor uint8
@@ -782,6 +784,8 @@ func (c *VNCClient) decodeZRLE(img *image.RGBA, rx, ry, rw, rh uint16) error {
 }
 
 // decodeZRLETile decodes a single ZRLE tile from the decompressed stream.
+//
+//nolint:gocyclo // ZRLE tile decoder (RFC 6143 §7.7.6): 5 encoding branches (raw/solid/packed-palette/RLE/palette-RLE) with distinct bit-unpacking; each is a complete codec variant
 func (c *VNCClient) decodeZRLETile(img *image.RGBA, tx, ty, tw, th, cpLen int) error {
 	var subenc uint8
 	if err := binary.Read(c.zReader, binary.BigEndian, &subenc); err != nil {

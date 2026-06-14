@@ -161,6 +161,8 @@ func persistBedDeployOverrides(name string, node DeploymentNode) {
 // runCheckBed executes the canonical R10 sequence for one `kind: check` bed
 // and writes per-step logs + summary.yml to .check/<name>/<calver>/. Returns
 // the result struct (always non-nil) and the first error encountered.
+//
+//nolint:gocyclo // canonical R10 bed sequence (build→check→deploy→check-live→update→teardown) woven from 6 interdependent inline closures (step/stepReady/fail/checkLiveTree/recoverVMIfDown/cleanup) over a shared mutable deployed flag + defer-bound preempt lease; contiguous-block extraction is not behavior-preserving
 func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRunResult, error) {
 	isVM := node.Target == "vm"
 	isLocal := node.Target == "local"

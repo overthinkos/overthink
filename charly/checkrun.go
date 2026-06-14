@@ -253,6 +253,8 @@ func (r *Runner) Run(ctx context.Context, checks []Op) []CheckResult {
 //     tests: runs pass nil TargetResolver and never hit this path.
 //  2. `eventually:` retry wrapper — when set, the verb dispatch is
 //     called repeatedly until pass or deadline.
+//
+//nolint:gocyclo // verb dispatch router with on: target-swap and eventually: retry wrapper; branching is essential to the execution model
 func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 	start := time.Now()
 	kind, err := c.Kind()

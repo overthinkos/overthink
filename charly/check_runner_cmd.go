@@ -138,6 +138,14 @@ func (c *CheckRunCmd) Run() error {
 		return runErr
 	}
 
+	return c.runIterateEntity(uf, node, hasNode, cwd)
+}
+
+// runIterateEntity drives the iterate: AI iteration loop for the named entity:
+// it resolves the sandbox target, generates a run ID, builds the run-local
+// argv, performs the disposable-pod preflight, and dispatches to the host/pod/
+// VM runner. Split out of Run, which keeps the kind:check bed-run branch inline.
+func (c *CheckRunCmd) runIterateEntity(uf *UnifiedFile, node DeploymentNode, hasNode bool, cwd string) error {
 	// iterate: path (AI iteration loop).
 	if !hasNode || node.Iterate == nil {
 		return fmt.Errorf("charly check run %s: no iterate: block and no kind:check bed by that name", c.Name)

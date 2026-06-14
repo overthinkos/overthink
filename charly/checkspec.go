@@ -415,6 +415,8 @@ func (c *Op) Kind() (string, error) {
 //	command: "uname -s"      # alone → command verb
 //	libvirt: guest/exec
 //	command: "uname -s"      # paired → modifier for guest/exec argv
+//
+//nolint:gocyclo // canonical verb-field enumeration; grep-able at Kind() call site for adding verbs
 func (c *Op) verbsSet() []string {
 	var set []string
 	if c.Mkdir != "" {

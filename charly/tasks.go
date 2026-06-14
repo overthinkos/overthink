@@ -543,7 +543,10 @@ func taskCoalescesWith(current, next Op, currentVerb string) bool {
 // Returns the final USER after processing (so writeCandySteps knows
 // whether to emit USER root for the candy boundary reset).
 // Returns an error if emission fails (only for download/write I/O).
-func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox, ops []Op, buildDir, contextRelPrefix, initialUser string) (string, error) {
+//
+//nolint:gocyclo // task verb dispatcher (9 verbs) in one loop managing shared runningUser/declaredDirs/index state; cases coupled to state transitions
+func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox, ops []Op, buildDir, contextRelPrefix string) (string, error) {
+	initialUser := "0" // candy-boundary starting USER (root); every caller starts at root
 	if len(ops) == 0 && !g.candyHasImplicitBuild(layer, img) {
 		return initialUser, nil
 	}

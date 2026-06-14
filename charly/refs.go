@@ -409,6 +409,8 @@ func CollectRemoteRefs(cfg *Config, layers map[string]*Candy) ([]RemoteDownload,
 // named image lands in the build working set but its remote candies are never
 // fetched/registered, surfacing as "unknown layer" while computing global candy
 // order.
+//
+//nolint:gocyclo // depth-first graph walker over base/candy/builder edges; nested loops are essential to the traversal
 func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Candy, opts ResolveOpts) ([]RemoteDownload, error) {
 	// Collect EVERY distinct (repo, git-tag) a ref is referenced at. The git tag
 	// is only the FETCH coordinate — per-entity-version arbitration (and any

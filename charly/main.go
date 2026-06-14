@@ -170,98 +170,33 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 	if c.Format != "" {
 		switch c.Format {
 		case "tag":
-			fmt.Println(resolved.FullTag)
+			formatTag(resolved)
 		case "base":
-			fmt.Println(resolved.Base)
+			formatBase(resolved)
 		case "builder":
-			for typ, builder := range resolved.Builder {
-				fmt.Printf("%s: %s\n", typ, builder)
-			}
+			formatBuilder(resolved)
 		case "builds":
-			for _, b := range resolved.BuilderCapabilities {
-				fmt.Println(b)
-			}
+			formatBuilds(resolved)
 		case "build":
-			for _, b := range resolved.BuildFormats {
-				fmt.Println(b)
-			}
+			formatBuild(resolved)
 		case "distro":
-			for _, d := range resolved.Distro {
-				fmt.Println(d)
-			}
+			formatDistro(resolved)
 		case "pkg":
-			fmt.Println(resolved.Pkg)
+			formatPkg(resolved)
 		case "registry":
-			fmt.Println(resolved.Registry)
+			formatRegistry(resolved)
 		case "platforms":
-			for _, p := range resolved.Platforms {
-				fmt.Println(p)
-			}
+			formatPlatforms(resolved)
 		case "candy":
-			for _, l := range resolved.Candy {
-				fmt.Println(l)
-			}
+			formatCandy(resolved)
 		case "ports":
-			layers, err := ScanAllCandyWithConfig(dir, cfg)
-			if err != nil {
-				return err
-			}
-			ports, err := CollectBoxPorts(cfg, layers, c.Box)
-			if err != nil {
-				return err
-			}
-			for _, p := range ports {
-				fmt.Println(p)
-			}
+			return c.formatPorts(cfg, dir)
 		case "volumes":
-			layers, err := ScanAllCandyWithConfig(dir, cfg)
-			if err != nil {
-				return err
-			}
-			volumes, err := CollectBoxVolume(cfg, layers, c.Box, resolved.Home, nil)
-			if err != nil {
-				return err
-			}
-			for _, vol := range volumes {
-				fmt.Printf("%s\t%s\n", vol.VolumeName, vol.ContainerPath)
-			}
+			return c.formatVolumes(cfg, dir, resolved)
 		case "aliases":
-			layers, err := ScanAllCandyWithConfig(dir, cfg)
-			if err != nil {
-				return err
-			}
-			aliases, err := CollectBoxAlias(cfg, layers, c.Box)
-			if err != nil {
-				return err
-			}
-			for _, a := range aliases {
-				fmt.Printf("%s\t%s\n", a.Name, a.Command)
-			}
+			return c.formatAliases(cfg, dir)
 		case "tunnel":
-			// Schema v4: Tunnel moved off BoxConfig/ResolvedBox —
-			// deploy-only. Resolve from DeploymentNode.Tunnel via charly.yml.
-			if overlay, ok := loadDeployConfigForRead("charly box inspect tunnel").Lookup(c.Box, c.Instance); ok && overlay.Tunnel != nil {
-				layers, err := ScanAllCandyWithConfig(dir, cfg)
-				if err == nil {
-					portProtos := make(map[int]string)
-					boxPorts, _ := CollectBoxPorts(cfg, layers, c.Box)
-					tc := ResolveTunnelConfig(overlay.Tunnel, c.Box, "", layers, resolved.Candy, portProtos, boxPorts)
-					if tc != nil && len(tc.Ports) > 0 {
-						fmt.Println("PORT\tACCESS\tPROTOCOL\tHOSTNAME")
-						for _, tp := range tc.Ports {
-							access := "private"
-							if tp.Public {
-								access = "public"
-							}
-							hostname := tp.Hostname
-							if hostname == "" {
-								hostname = "-"
-							}
-							fmt.Printf("%d\t%s\t%s\t%s\n", tp.Port, access, tp.Protocol, hostname)
-						}
-					}
-				}
-			}
+			c.formatTunnel(cfg, dir, resolved)
 		case "network":
 			fmt.Println(resolved.Network)
 		case "engine":
@@ -299,6 +234,141 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 	}
 	fmt.Println(string(data))
 	return nil
+}
+
+// formatTag prints the resolved box's full tag.
+func formatTag(resolved *ResolvedBox) { fmt.Println(resolved.FullTag) }
+
+// formatBase prints the resolved box's base image.
+func formatBase(resolved *ResolvedBox) { fmt.Println(resolved.Base) }
+
+// formatBuilder prints the resolved builder map (type: image).
+func formatBuilder(resolved *ResolvedBox) {
+	for typ, builder := range resolved.Builder {
+		fmt.Printf("%s: %s\n", typ, builder)
+	}
+}
+
+// formatBuilds prints the resolved builder capabilities.
+func formatBuilds(resolved *ResolvedBox) {
+	for _, b := range resolved.BuilderCapabilities {
+		fmt.Println(b)
+	}
+}
+
+// formatBuild prints the resolved build formats.
+func formatBuild(resolved *ResolvedBox) {
+	for _, b := range resolved.BuildFormats {
+		fmt.Println(b)
+	}
+}
+
+// formatDistro prints the resolved distro chain.
+func formatDistro(resolved *ResolvedBox) {
+	for _, d := range resolved.Distro {
+		fmt.Println(d)
+	}
+}
+
+// formatPkg prints the resolved package manager.
+func formatPkg(resolved *ResolvedBox) { fmt.Println(resolved.Pkg) }
+
+// formatRegistry prints the resolved registry.
+func formatRegistry(resolved *ResolvedBox) { fmt.Println(resolved.Registry) }
+
+// formatPlatforms prints the resolved platforms.
+func formatPlatforms(resolved *ResolvedBox) {
+	for _, p := range resolved.Platforms {
+		fmt.Println(p)
+	}
+}
+
+// formatCandy prints the resolved candy list.
+func formatCandy(resolved *ResolvedBox) {
+	for _, l := range resolved.Candy {
+		fmt.Println(l)
+	}
+}
+
+// formatPorts prints the collected box ports.
+func (c *InspectCmd) formatPorts(cfg *Config, dir string) error {
+	layers, err := ScanAllCandyWithConfig(dir, cfg)
+	if err != nil {
+		return err
+	}
+	ports, err := CollectBoxPorts(cfg, layers, c.Box)
+	if err != nil {
+		return err
+	}
+	for _, p := range ports {
+		fmt.Println(p)
+	}
+	return nil
+}
+
+// formatVolumes prints the collected box volumes.
+func (c *InspectCmd) formatVolumes(cfg *Config, dir string, resolved *ResolvedBox) error {
+	layers, err := ScanAllCandyWithConfig(dir, cfg)
+	if err != nil {
+		return err
+	}
+	volumes, err := CollectBoxVolume(cfg, layers, c.Box, resolved.Home, nil)
+	if err != nil {
+		return err
+	}
+	for _, vol := range volumes {
+		fmt.Printf("%s\t%s\n", vol.VolumeName, vol.ContainerPath)
+	}
+	return nil
+}
+
+// formatAliases prints the collected box aliases.
+func (c *InspectCmd) formatAliases(cfg *Config, dir string) error {
+	layers, err := ScanAllCandyWithConfig(dir, cfg)
+	if err != nil {
+		return err
+	}
+	aliases, err := CollectBoxAlias(cfg, layers, c.Box)
+	if err != nil {
+		return err
+	}
+	for _, a := range aliases {
+		fmt.Printf("%s\t%s\n", a.Name, a.Command)
+	}
+	return nil
+}
+
+// formatTunnel prints the deploy-time tunnel config for the box. Schema v4:
+// Tunnel moved off BoxConfig/ResolvedBox — deploy-only. Resolve from
+// DeploymentNode.Tunnel via charly.yml. Any resolution failure is silently
+// skipped (no tunnel output), matching the prior inline behaviour.
+func (c *InspectCmd) formatTunnel(cfg *Config, dir string, resolved *ResolvedBox) {
+	overlay, ok := loadDeployConfigForRead("charly box inspect tunnel").Lookup(c.Box, c.Instance)
+	if !ok || overlay.Tunnel == nil {
+		return
+	}
+	layers, err := ScanAllCandyWithConfig(dir, cfg)
+	if err != nil {
+		return
+	}
+	portProtos := make(map[int]string)
+	boxPorts, _ := CollectBoxPorts(cfg, layers, c.Box)
+	tc := ResolveTunnelConfig(overlay.Tunnel, c.Box, "", layers, resolved.Candy, portProtos, boxPorts)
+	if tc == nil || len(tc.Ports) == 0 {
+		return
+	}
+	fmt.Println("PORT\tACCESS\tPROTOCOL\tHOSTNAME")
+	for _, tp := range tc.Ports {
+		access := "private"
+		if tp.Public {
+			access = "public"
+		}
+		hostname := tp.Hostname
+		if hostname == "" {
+			hostname = "-"
+		}
+		fmt.Printf("%d\t%s\t%s\t%s\n", tp.Port, access, tp.Protocol, hostname)
+	}
 }
 
 // ListCmd groups list subcommands

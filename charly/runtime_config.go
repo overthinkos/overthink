@@ -375,6 +375,8 @@ func resolveAutoEnable(envVal string, cfgVal *bool) bool {
 }
 
 // GetConfigValue returns the value for a dot-notation key from the config file.
+//
+//nolint:gocyclo // flat dispatch over config keys + dynamic hosts./vnc.password subkeys; uniform getter
 func GetConfigValue(key string) (string, error) {
 	cfg, err := LoadRuntimeConfig()
 	if err != nil {
@@ -475,6 +477,8 @@ func GetConfigValue(key string) (string, error) {
 }
 
 // SetConfigValue sets a value for a dot-notation key in the config file.
+//
+//nolint:gocyclo // paired validate+persist switch over ~25 config keys; per-key logic is cohesive
 func SetConfigValue(key, value string) error {
 	// Validate value before writing
 	switch key {

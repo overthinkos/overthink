@@ -101,22 +101,46 @@ func MigrateSchemaV4(doc *yaml.Node) MigrateSchemaV4Result {
 		return result
 	}
 
-	changed := false
-	// 1. Bump a legacy integer version (1/2/3) to 4. A CalVer string (the
-	//    post-2026-05 schema version, e.g. 2026.141.1530) or an already-current
-	//    value is left untouched — the terminal calver-schema step owns the HEAD
-	//    stamp. Without this guard the v3→v4 bump would rewrite a CalVer DOWN to
-	//    "4" and corrupt every versioned file.
+	changed := migrateVersion(root, &result)
+
+	if migrateImageDeploymentNames(root, &result) {
+		changed = true
+	}
+
+	if migrateImageDeprecatedFields(root, &result) {
+		changed = true
+	}
+
+	if migrateDeploymentFieldNames(root, &result) {
+		changed = true
+	}
+
+	result.NoChanges = !changed
+	return result
+}
+
+// migrateVersion bumps a legacy integer version (1/2/3) to 4. A CalVer string
+// (the post-2026-05 schema version, e.g. 2026.141.1530) or an already-current
+// value is left untouched — the terminal calver-schema step owns the HEAD
+// stamp. Without this guard the v3→v4 bump would rewrite a CalVer DOWN to "4"
+// and corrupt every versioned file.
+func migrateVersion(root *yaml.Node, result *MigrateSchemaV4Result) bool {
 	if v := findMappingValue(root, "version"); v != nil && v.Kind == yaml.ScalarNode {
 		if _, isCalVer := ParseCalVer(v.Value); !isCalVer {
 			if n, err := strconv.Atoi(v.Value); err == nil && n < 4 {
 				result.Transforms = append(result.Transforms, fmt.Sprintf("version: %s → 4", v.Value))
 				v.Value = "4"
-				changed = true
+				return true
 			}
 		}
 	}
+	return false
+}
 
+// migrateImageDeploymentNames renames the top-level images: → image: and the
+// deployments[.images]: block → deployment:.
+func migrateImageDeploymentNames(root *yaml.Node, result *MigrateSchemaV4Result) bool {
+	changed := false
 	// 2a. images: → image:
 	if renameRootKey(root, "images", "image") {
 		result.Transforms = append(result.Transforms, "images: → image:")
@@ -138,77 +162,90 @@ func MigrateSchemaV4(doc *yaml.Node) MigrateSchemaV4Result {
 			changed = true
 		}
 	}
+	return changed
+}
 
-	// 3. For each kind:image entry, delete deploy-choice fields.
-	if img := findMappingValue(root, "image"); img != nil && img.Kind == yaml.MappingNode {
-		for i := 1; i < len(img.Content); i += 2 {
-			entry := img.Content[i]
-			if entry.Kind != yaml.MappingNode {
-				continue
-			}
-			for _, field := range []string{"tunnel", "engine", "dns", "acme_email"} {
-				if removeMappingKey(entry, field) {
-					result.Transforms = append(result.Transforms,
-						fmt.Sprintf("image.%s.%s removed (deploy-only in v4)", img.Content[i-1].Value, field))
-					changed = true
-				}
-			}
-			// Delete dead `vm:` sub-block on bootc image entries.
-			if removeMappingKey(entry, "vm") {
+// migrateImageDeprecatedFields strips deploy-choice fields (tunnel/engine/dns/
+// acme_email) and the dead bootc vm: sub-block from each kind:image entry.
+func migrateImageDeprecatedFields(root *yaml.Node, result *MigrateSchemaV4Result) bool {
+	img := findMappingValue(root, "image")
+	if img == nil || img.Kind != yaml.MappingNode {
+		return false
+	}
+	changed := false
+	for i := 1; i < len(img.Content); i += 2 {
+		entry := img.Content[i]
+		if entry.Kind != yaml.MappingNode {
+			continue
+		}
+		for _, field := range []string{"tunnel", "engine", "dns", "acme_email"} {
+			if removeMappingKey(entry, field) {
 				result.Transforms = append(result.Transforms,
-					fmt.Sprintf("image.%s.vm: removed (dead bootc YAML)", img.Content[i-1].Value))
+					fmt.Sprintf("image.%s.%s removed (deploy-only in v4)", img.Content[i-1].Value, field))
 				changed = true
 			}
 		}
-	}
-
-	// 4. For each kind:deployment entry (flat map), rename fields.
-	if deps := findMappingValue(root, "deploy"); deps != nil && deps.Kind == yaml.MappingNode {
-		for i := 1; i < len(deps.Content); i += 2 {
-			entry := deps.Content[i]
-			if entry.Kind != yaml.MappingNode {
-				continue
-			}
-			name := deps.Content[i-1].Value
-			if renameMappingKey(entry, "vm_source", "vm") {
-				result.Transforms = append(result.Transforms,
-					fmt.Sprintf("deployment.%s.vm_source: → vm:", name))
-				changed = true
-			}
-			if renameMappingKey(entry, "cluster", "k8s") {
-				result.Transforms = append(result.Transforms,
-					fmt.Sprintf("deployment.%s.cluster: → k8s:", name))
-				changed = true
-			}
-			if renameMappingKey(entry, "children", "nested") {
-				result.Transforms = append(result.Transforms,
-					fmt.Sprintf("deployment.%s.children: → nested:", name))
-				changed = true
-			}
-			// target: container → pod, target: kubernetes → k8s
-			if t := findMappingValue(entry, "target"); t != nil && t.Kind == yaml.ScalarNode {
-				switch t.Value {
-				case "container":
-					t.Value = "pod"
-					result.Transforms = append(result.Transforms,
-						fmt.Sprintf("deployment.%s.target: container → pod", name))
-					changed = true
-				case "kubernetes":
-					t.Value = "k8s"
-					result.Transforms = append(result.Transforms,
-						fmt.Sprintf("deployment.%s.target: kubernetes → k8s", name))
-					changed = true
-				}
-			}
-			// Recurse into nested: entries for the same renames.
-			if nested := findMappingValue(entry, "nested"); nested != nil && nested.Kind == yaml.MappingNode {
-				renameNestedDeployments(nested, name, &result.Transforms, &changed)
-			}
+		// Delete dead `vm:` sub-block on bootc image entries.
+		if removeMappingKey(entry, "vm") {
+			result.Transforms = append(result.Transforms,
+				fmt.Sprintf("image.%s.vm: removed (dead bootc YAML)", img.Content[i-1].Value))
+			changed = true
 		}
 	}
+	return changed
+}
 
-	result.NoChanges = !changed
-	return result
+// migrateDeploymentFieldNames renames per-deployment fields (vm_source→vm,
+// cluster→k8s, children→nested), maps legacy target: values (container→pod,
+// kubernetes→k8s), and recurses into nested: entries for the same renames.
+func migrateDeploymentFieldNames(root *yaml.Node, result *MigrateSchemaV4Result) bool {
+	deps := findMappingValue(root, "deploy")
+	if deps == nil || deps.Kind != yaml.MappingNode {
+		return false
+	}
+	changed := false
+	for i := 1; i < len(deps.Content); i += 2 {
+		entry := deps.Content[i]
+		if entry.Kind != yaml.MappingNode {
+			continue
+		}
+		name := deps.Content[i-1].Value
+		if renameMappingKey(entry, "vm_source", "vm") {
+			result.Transforms = append(result.Transforms,
+				fmt.Sprintf("deployment.%s.vm_source: → vm:", name))
+			changed = true
+		}
+		if renameMappingKey(entry, "cluster", "k8s") {
+			result.Transforms = append(result.Transforms,
+				fmt.Sprintf("deployment.%s.cluster: → k8s:", name))
+			changed = true
+		}
+		if renameMappingKey(entry, "children", "nested") {
+			result.Transforms = append(result.Transforms,
+				fmt.Sprintf("deployment.%s.children: → nested:", name))
+			changed = true
+		}
+		// target: container → pod, target: kubernetes → k8s
+		if t := findMappingValue(entry, "target"); t != nil && t.Kind == yaml.ScalarNode {
+			switch t.Value {
+			case "container":
+				t.Value = "pod"
+				result.Transforms = append(result.Transforms,
+					fmt.Sprintf("deployment.%s.target: container → pod", name))
+				changed = true
+			case "kubernetes":
+				t.Value = "k8s"
+				result.Transforms = append(result.Transforms,
+					fmt.Sprintf("deployment.%s.target: kubernetes → k8s", name))
+				changed = true
+			}
+		}
+		// Recurse into nested: entries for the same renames.
+		if nested := findMappingValue(entry, "nested"); nested != nil && nested.Kind == yaml.MappingNode {
+			renameNestedDeployments(nested, name, &result.Transforms, &changed)
+		}
+	}
+	return changed
 }
 
 // renameNestedDeployments applies the same field-rename set to every

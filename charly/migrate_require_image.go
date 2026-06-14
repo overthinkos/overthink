@@ -228,12 +228,7 @@ func migrateRequireImageOneFile(path string, dryRun bool, extraImageNames map[st
 			key := keyNode.Value
 
 			// Inference rule 1: <base>/<instance> deploy key.
-			if idx := strings.Index(key, "/"); idx > 0 {
-				base := key[:idx]
-				if injectImageField(valNode, base) {
-					mutated = true
-					changes = append(changes, fmt.Sprintf("injected image: %q on %q (Pattern A: <base>/<instance> key)", base, key))
-				}
+			if applyInferenceRule1(valNode, key, &changes, &mutated) {
 				continue
 			}
 
@@ -241,21 +236,12 @@ func migrateRequireImageOneFile(path string, dryRun bool, extraImageNames map[st
 			// Established multi-pod convention — see project
 			// deploy.yml's jupyter-pod → image: jupyter,
 			// jupyter-ml-pod → image: jupyter-ml.
-			if before, ok := strings.CutSuffix(key, "-pod"); ok {
-				base := before
-				if injectImageField(valNode, base) {
-					mutated = true
-					changes = append(changes, fmt.Sprintf("injected image: %q on %q (<base>-pod suffix convention)", base, key))
-				}
+			if applyInferenceRule2(valNode, key, &changes, &mutated) {
 				continue
 			}
 
 			// Inference rule 3: deploy key matches a kind:image entity.
-			if boxNames[key] {
-				if injectImageField(valNode, key) {
-					mutated = true
-					changes = append(changes, fmt.Sprintf("injected image: %q on %q (key matches kind:image entry)", key, key))
-				}
+			if applyInferenceRule3(valNode, key, boxNames, &changes, &mutated) {
 				continue
 			}
 
@@ -299,6 +285,50 @@ func migrateRequireImageOneFile(path string, dryRun bool, extraImageNames map[st
 		}
 	}
 	return &RequireImageResult{Path: path, Changes: changes}, warnings, nil
+}
+
+// applyInferenceRule1 handles the <base>/<instance> deploy-key pattern. When
+// the key matches it injects image:<base> and returns true (the caller stops
+// trying further rules); a non-matching key returns false. injectImageField is
+// the no-op defence when image: is already present.
+func applyInferenceRule1(valNode *yaml.Node, key string, changes *[]string, mutated *bool) bool {
+	idx := strings.Index(key, "/")
+	if idx <= 0 {
+		return false
+	}
+	base := key[:idx]
+	if injectImageField(valNode, base) {
+		*mutated = true
+		*changes = append(*changes, fmt.Sprintf("injected image: %q on %q (Pattern A: <base>/<instance> key)", base, key))
+	}
+	return true
+}
+
+// applyInferenceRule2 handles the <base>-pod deploy-key suffix convention (e.g.
+// jupyter-pod → image: jupyter). Returns true when the suffix matched.
+func applyInferenceRule2(valNode *yaml.Node, key string, changes *[]string, mutated *bool) bool {
+	base, ok := strings.CutSuffix(key, "-pod")
+	if !ok {
+		return false
+	}
+	if injectImageField(valNode, base) {
+		*mutated = true
+		*changes = append(*changes, fmt.Sprintf("injected image: %q on %q (<base>-pod suffix convention)", base, key))
+	}
+	return true
+}
+
+// applyInferenceRule3 handles a deploy key that matches a known kind:image
+// entity name. Returns true when the key matched a known image.
+func applyInferenceRule3(valNode *yaml.Node, key string, boxNames map[string]bool, changes *[]string, mutated *bool) bool {
+	if !boxNames[key] {
+		return false
+	}
+	if injectImageField(valNode, key) {
+		*mutated = true
+		*changes = append(*changes, fmt.Sprintf("injected image: %q on %q (key matches kind:image entry)", key, key))
+	}
+	return true
 }
 
 // collectDeployMaps returns every yaml.MappingNode that holds deploy

@@ -247,6 +247,8 @@ func defaultInspectLabels(engine, imageRef string) (map[string]string, error) {
 // ExtractMetadata reads OCI labels from a local image and returns parsed BoxMetadata.
 // Returns nil if the image has no ai.opencharly labels.
 // Returns ErrImageNotLocal wrapped with the image ref if the image is not in local storage.
+//
+//nolint:gocyclo // uniform extraction of ~40 OCI labels (exists→unmarshal→store); flat form is the clearest representation
 func ExtractMetadata(engine, imageRef string) (*BoxMetadata, error) {
 	labels, err := InspectLabels(engine, imageRef)
 	if err != nil {

@@ -1645,6 +1645,7 @@ type SecretsGpgDoctorCmd struct {
 	File string `short:"f" long:"file" default:".secrets" help:"Encrypted file to check"`
 }
 
+//nolint:gocyclo // diagnostic checker: 10 independent peer health checks in a cohesive ok()/warn() narrative; extraction fragments the diagnostic flow
 func (c *SecretsGpgDoctorCmd) Run() error {
 	failures := 0
 	warn := func(msg string) { failures++; fmt.Fprintln(os.Stderr, msg) }

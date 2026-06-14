@@ -35,116 +35,21 @@ func ValidateVmSpec(name string, spec *VmSpec, errs *ValidationError) {
 	}
 }
 
-// validateVmSource checks the discriminated-union invariants.
+// validateVmSource checks the discriminated-union invariants. It dispatches
+// to the per-kind validator and then applies the kind-independent checksum
+// check.
 func validateVmSource(name string, src *VmSource, errs *ValidationError) {
 	switch src.Kind {
 	case "cloud_image":
-		if src.URL == "" {
-			errs.Add("vm %q: source.kind == cloud_image requires source.url", name)
-		}
-		// Bootc-only fields should not appear here.
-		if src.Box != "" {
-			errs.Add("vm %q: source.box only valid when source.kind == bootc (got %q)", name, src.Kind)
-		}
-		if src.Transport != "" {
-			errs.Add("vm %q: source.transport only valid when source.kind == bootc", name)
-		}
-		if src.Rootfs != "" {
-			errs.Add("vm %q: source.rootfs only valid when source.kind == bootc", name)
-		}
-		if src.RootSize != "" {
-			errs.Add("vm %q: source.root_size only valid when source.kind == bootc", name)
-		}
-		if src.KernelArgs != "" {
-			errs.Add("vm %q: source.kernel_args only valid when source.kind == bootc", name)
-		}
+		validateVmSourceCloudImage(name, src, errs)
 	case "bootc":
-		if src.Box == "" {
-			errs.Add("vm %q: source.kind == bootc requires source.box (references a kind:box entry)", name)
-		}
-		if src.URL != "" {
-			errs.Add("vm %q: source.url only valid when source.kind == cloud_image", name)
-		}
-		if src.Checksum.Value != "" || src.Checksum.Type != "" {
-			errs.Add("vm %q: source.checksum only valid when source.kind == cloud_image", name)
-		}
-		if src.Cache != "" {
-			errs.Add("vm %q: source.cache only valid when source.kind == cloud_image", name)
-		}
-		if src.Rootfs != "" {
-			switch src.Rootfs {
-			case "ext4", "xfs", "btrfs":
-				// OK
-			default:
-				errs.Add("vm %q: source.rootfs %q is not supported (want ext4, xfs, or btrfs)", name, src.Rootfs)
-			}
-		}
-		if src.Transport != "" {
-			switch src.Transport {
-			case "registry", "containers-storage", "oci", "oci-archive":
-				// OK
-			default:
-				errs.Add("vm %q: source.transport %q is not supported (want registry, containers-storage, oci, or oci-archive)", name, src.Transport)
-			}
-		}
+		validateVmSourceBootc(name, src, errs)
 	case "clone":
-		if src.FromVm == "" {
-			errs.Add("vm %q: source.kind == clone requires source.from_vm (parent VM name)", name)
-		}
-		if src.FromSnapshot == "" {
-			errs.Add("vm %q: source.kind == clone requires source.from_snapshot (snapshot name on the parent)", name)
-		}
-		// cloud_image / bootc / imported fields should not appear on clone.
-		if src.URL != "" {
-			errs.Add("vm %q: source.url only valid when source.kind == cloud_image", name)
-		}
-		if src.Box != "" {
-			errs.Add("vm %q: source.box only valid when source.kind == bootc", name)
-		}
-		if src.LibvirtName != "" || src.DiskPath != "" || src.DiskFormat != "" {
-			errs.Add("vm %q: source.libvirt_name/disk_path/disk_format only valid when source.kind == imported", name)
-		}
+		validateVmSourceClone(name, src, errs)
 	case "imported":
-		if src.LibvirtName == "" {
-			errs.Add("vm %q: source.kind == imported requires source.libvirt_name", name)
-		}
-		if src.DiskPath == "" {
-			errs.Add("vm %q: source.kind == imported requires source.disk_path", name)
-		}
-		if src.DiskFormat == "" {
-			errs.Add("vm %q: source.kind == imported requires source.disk_format (qcow2 or raw)", name)
-		} else {
-			switch src.DiskFormat {
-			case "qcow2", "raw":
-				// OK
-			default:
-				errs.Add("vm %q: source.disk_format %q is not supported (want qcow2 or raw)", name, src.DiskFormat)
-			}
-		}
-		if src.URL != "" || src.Box != "" {
-			errs.Add("vm %q: source.url / source.box not valid when source.kind == imported", name)
-		}
-		if src.FromVm != "" || src.FromSnapshot != "" {
-			errs.Add("vm %q: source.from_vm / source.from_snapshot only valid when source.kind == clone", name)
-		}
+		validateVmSourceImported(name, src, errs)
 	case "bootstrap":
-		if src.Builder == "" {
-			errs.Add("vm %q: source.kind == bootstrap requires source.builder (name of a kind: bootstrap builder in build.yml)", name)
-		}
-		if src.Distro == "" {
-			errs.Add("vm %q: source.kind == bootstrap requires source.distro (selects DistroDef in build.yml)", name)
-		}
-		if src.Rootfs != "" {
-			switch src.Rootfs {
-			case "ext4", "xfs", "btrfs":
-				// OK
-			default:
-				errs.Add("vm %q: source.rootfs %q is not supported (want ext4, xfs, or btrfs)", name, src.Rootfs)
-			}
-		}
-		if src.URL != "" || src.Box != "" || src.Transport != "" {
-			errs.Add("vm %q: source.url / source.image / source.transport are not valid when source.kind == bootstrap", name)
-		}
+		validateVmSourceBootstrap(name, src, errs)
 	case "":
 		errs.Add("vm %q: source.kind is required (cloud_image, bootc, bootstrap, clone, or imported)", name)
 	default:
@@ -153,6 +58,128 @@ func validateVmSource(name string, src *VmSource, errs *ValidationError) {
 
 	if src.Checksum.Type != "" && src.Checksum.Type != "sha256" {
 		errs.Add("vm %q: source.checksum.type %q is not supported (only sha256)", name, src.Checksum.Type)
+	}
+}
+
+// validateVmSourceCloudImage checks the cloud_image source-kind invariants.
+func validateVmSourceCloudImage(name string, src *VmSource, errs *ValidationError) {
+	if src.URL == "" {
+		errs.Add("vm %q: source.kind == cloud_image requires source.url", name)
+	}
+	// Bootc-only fields should not appear here.
+	if src.Box != "" {
+		errs.Add("vm %q: source.box only valid when source.kind == bootc (got %q)", name, src.Kind)
+	}
+	if src.Transport != "" {
+		errs.Add("vm %q: source.transport only valid when source.kind == bootc", name)
+	}
+	if src.Rootfs != "" {
+		errs.Add("vm %q: source.rootfs only valid when source.kind == bootc", name)
+	}
+	if src.RootSize != "" {
+		errs.Add("vm %q: source.root_size only valid when source.kind == bootc", name)
+	}
+	if src.KernelArgs != "" {
+		errs.Add("vm %q: source.kernel_args only valid when source.kind == bootc", name)
+	}
+}
+
+// validateVmSourceBootc checks the bootc source-kind invariants.
+func validateVmSourceBootc(name string, src *VmSource, errs *ValidationError) {
+	if src.Box == "" {
+		errs.Add("vm %q: source.kind == bootc requires source.box (references a kind:box entry)", name)
+	}
+	if src.URL != "" {
+		errs.Add("vm %q: source.url only valid when source.kind == cloud_image", name)
+	}
+	if src.Checksum.Value != "" || src.Checksum.Type != "" {
+		errs.Add("vm %q: source.checksum only valid when source.kind == cloud_image", name)
+	}
+	if src.Cache != "" {
+		errs.Add("vm %q: source.cache only valid when source.kind == cloud_image", name)
+	}
+	if src.Rootfs != "" {
+		switch src.Rootfs {
+		case "ext4", "xfs", "btrfs":
+			// OK
+		default:
+			errs.Add("vm %q: source.rootfs %q is not supported (want ext4, xfs, or btrfs)", name, src.Rootfs)
+		}
+	}
+	if src.Transport != "" {
+		switch src.Transport {
+		case "registry", "containers-storage", "oci", "oci-archive":
+			// OK
+		default:
+			errs.Add("vm %q: source.transport %q is not supported (want registry, containers-storage, oci, or oci-archive)", name, src.Transport)
+		}
+	}
+}
+
+// validateVmSourceClone checks the clone source-kind invariants.
+func validateVmSourceClone(name string, src *VmSource, errs *ValidationError) {
+	if src.FromVm == "" {
+		errs.Add("vm %q: source.kind == clone requires source.from_vm (parent VM name)", name)
+	}
+	if src.FromSnapshot == "" {
+		errs.Add("vm %q: source.kind == clone requires source.from_snapshot (snapshot name on the parent)", name)
+	}
+	// cloud_image / bootc / imported fields should not appear on clone.
+	if src.URL != "" {
+		errs.Add("vm %q: source.url only valid when source.kind == cloud_image", name)
+	}
+	if src.Box != "" {
+		errs.Add("vm %q: source.box only valid when source.kind == bootc", name)
+	}
+	if src.LibvirtName != "" || src.DiskPath != "" || src.DiskFormat != "" {
+		errs.Add("vm %q: source.libvirt_name/disk_path/disk_format only valid when source.kind == imported", name)
+	}
+}
+
+// validateVmSourceImported checks the imported source-kind invariants.
+func validateVmSourceImported(name string, src *VmSource, errs *ValidationError) {
+	if src.LibvirtName == "" {
+		errs.Add("vm %q: source.kind == imported requires source.libvirt_name", name)
+	}
+	if src.DiskPath == "" {
+		errs.Add("vm %q: source.kind == imported requires source.disk_path", name)
+	}
+	if src.DiskFormat == "" {
+		errs.Add("vm %q: source.kind == imported requires source.disk_format (qcow2 or raw)", name)
+	} else {
+		switch src.DiskFormat {
+		case "qcow2", "raw":
+			// OK
+		default:
+			errs.Add("vm %q: source.disk_format %q is not supported (want qcow2 or raw)", name, src.DiskFormat)
+		}
+	}
+	if src.URL != "" || src.Box != "" {
+		errs.Add("vm %q: source.url / source.box not valid when source.kind == imported", name)
+	}
+	if src.FromVm != "" || src.FromSnapshot != "" {
+		errs.Add("vm %q: source.from_vm / source.from_snapshot only valid when source.kind == clone", name)
+	}
+}
+
+// validateVmSourceBootstrap checks the bootstrap source-kind invariants.
+func validateVmSourceBootstrap(name string, src *VmSource, errs *ValidationError) {
+	if src.Builder == "" {
+		errs.Add("vm %q: source.kind == bootstrap requires source.builder (name of a kind: bootstrap builder in build.yml)", name)
+	}
+	if src.Distro == "" {
+		errs.Add("vm %q: source.kind == bootstrap requires source.distro (selects DistroDef in build.yml)", name)
+	}
+	if src.Rootfs != "" {
+		switch src.Rootfs {
+		case "ext4", "xfs", "btrfs":
+			// OK
+		default:
+			errs.Add("vm %q: source.rootfs %q is not supported (want ext4, xfs, or btrfs)", name, src.Rootfs)
+		}
+	}
+	if src.URL != "" || src.Box != "" || src.Transport != "" {
+		errs.Add("vm %q: source.url / source.image / source.transport are not valid when source.kind == bootstrap", name)
 	}
 }
 
@@ -301,44 +328,7 @@ func ValidateLibvirtDomain(name string, spec *VmSpec, errs *ValidationError) {
 
 	// CPU mode + model coherence.
 	if lv.CPU != nil {
-		switch lv.CPU.Mode {
-		case "", "host-passthrough", "host-model", "custom":
-			// OK
-		default:
-			errs.Add("vm %q: libvirt.cpu.mode %q is unknown (want host-passthrough, host-model, or custom)", name, lv.CPU.Mode)
-		}
-		if lv.CPU.Mode == "custom" && lv.CPU.Model == "" {
-			errs.Add("vm %q: libvirt.cpu.mode: custom requires libvirt.cpu.model", name)
-		}
-		// Feature policy strings.
-		for i, f := range lv.CPU.Features {
-			switch f.Policy {
-			case "", "force", "require", "optional", "disable", "forbid":
-				// OK
-			default:
-				errs.Add("vm %q: libvirt.cpu.features[%d].policy %q is unknown (want force, require, optional, disable, or forbid)", name, i, f.Policy)
-			}
-			if f.Name == "" {
-				errs.Add("vm %q: libvirt.cpu.features[%d]: name is required", name, i)
-			}
-		}
-		// Host-vendor ↔ feature check: flag explicit +vmx on AMD or +svm on Intel.
-		hostVendor := detectHostCPUVendor()
-		for _, f := range lv.CPU.Features {
-			if f.Policy == "disable" || f.Policy == "forbid" {
-				continue
-			}
-			switch f.Name {
-			case "vmx":
-				if hostVendor == "AuthenticAMD" {
-					errs.Add("vm %q: libvirt.cpu.features requests 'vmx' but host CPU vendor is AMD (use 'svm' for nested virt)", name)
-				}
-			case "svm":
-				if hostVendor == "GenuineIntel" {
-					errs.Add("vm %q: libvirt.cpu.features requests 'svm' but host CPU vendor is Intel (use 'vmx' for nested virt)", name)
-				}
-			}
-		}
+		validateLibvirtCPU(name, lv.CPU, errs)
 	}
 
 	// Clock offset.
@@ -370,34 +360,83 @@ func ValidateLibvirtDomain(name string, spec *VmSpec, errs *ValidationError) {
 
 	// Devices coherence: graphics[].type, video[].model, input[].type.
 	if lv.Devices != nil {
-		for i, g := range lv.Devices.Graphics {
-			switch g.Type {
-			case "vnc", "spice", "rdp", "sdl", "egl-headless":
-				// OK
-			default:
-				errs.Add("vm %q: libvirt.devices.graphics[%d].type %q is unknown", name, i, g.Type)
+		validateLibvirtDevices(name, lv.Devices, errs)
+	}
+}
+
+// validateLibvirtCPU checks CPU mode/model coherence, feature policy strings,
+// and host-vendor ↔ nested-virt-feature consistency.
+func validateLibvirtCPU(name string, cpu *LibvirtCPU, errs *ValidationError) {
+	switch cpu.Mode {
+	case "", "host-passthrough", "host-model", "custom":
+		// OK
+	default:
+		errs.Add("vm %q: libvirt.cpu.mode %q is unknown (want host-passthrough, host-model, or custom)", name, cpu.Mode)
+	}
+	if cpu.Mode == "custom" && cpu.Model == "" {
+		errs.Add("vm %q: libvirt.cpu.mode: custom requires libvirt.cpu.model", name)
+	}
+	// Feature policy strings.
+	for i, f := range cpu.Features {
+		switch f.Policy {
+		case "", "force", "require", "optional", "disable", "forbid":
+			// OK
+		default:
+			errs.Add("vm %q: libvirt.cpu.features[%d].policy %q is unknown (want force, require, optional, disable, or forbid)", name, i, f.Policy)
+		}
+		if f.Name == "" {
+			errs.Add("vm %q: libvirt.cpu.features[%d]: name is required", name, i)
+		}
+	}
+	// Host-vendor ↔ feature check: flag explicit +vmx on AMD or +svm on Intel.
+	hostVendor := detectHostCPUVendor()
+	for _, f := range cpu.Features {
+		if f.Policy == "disable" || f.Policy == "forbid" {
+			continue
+		}
+		switch f.Name {
+		case "vmx":
+			if hostVendor == "AuthenticAMD" {
+				errs.Add("vm %q: libvirt.cpu.features requests 'vmx' but host CPU vendor is AMD (use 'svm' for nested virt)", name)
+			}
+		case "svm":
+			if hostVendor == "GenuineIntel" {
+				errs.Add("vm %q: libvirt.cpu.features requests 'svm' but host CPU vendor is Intel (use 'vmx' for nested virt)", name)
 			}
 		}
-		for i, v := range lv.Devices.Video {
-			if v.Model == "" {
-				errs.Add("vm %q: libvirt.devices.video[%d]: model is required", name, i)
-			}
+	}
+}
+
+// validateLibvirtDevices checks device-type coherence: graphics[].type,
+// video[].model, channel-path portability, hostdevs, and filesystems.
+func validateLibvirtDevices(name string, devices *LibvirtDevices, errs *ValidationError) {
+	for i, g := range devices.Graphics {
+		switch g.Type {
+		case "vnc", "spice", "rdp", "sdl", "egl-headless":
+			// OK
+		default:
+			errs.Add("vm %q: libvirt.devices.graphics[%d].type %q is unknown", name, i, g.Type)
 		}
-		// Channel-path portability: reject literal /home/<user>/ paths
-		// in <channel><source path=/></channel>. Authors must use
-		// {{.VmStateDir}}/<file> or a relative path that the libvirt
-		// renderer expands at create time. See expandVmPathTemplate
-		// in libvirt_yaml_bridge.go for the supported template vars.
-		for i, ch := range lv.Devices.Channels {
-			validateLibvirtChannelPath(name, i, ch.Path, errs)
-			validateLibvirtChannelPath(name, i, ch.Source, errs)
+	}
+	for i, v := range devices.Video {
+		if v.Model == "" {
+			errs.Add("vm %q: libvirt.devices.video[%d]: model is required", name, i)
 		}
-		for i, h := range lv.Devices.Hostdevs {
-			validateLibvirtHostdev(name, i, h, errs)
-		}
-		for i, f := range lv.Devices.Filesystems {
-			validateLibvirtFilesystem(name, i, f, errs)
-		}
+	}
+	// Channel-path portability: reject literal /home/<user>/ paths
+	// in <channel><source path=/></channel>. Authors must use
+	// {{.VmStateDir}}/<file> or a relative path that the libvirt
+	// renderer expands at create time. See expandVmPathTemplate
+	// in libvirt_yaml_bridge.go for the supported template vars.
+	for i, ch := range devices.Channels {
+		validateLibvirtChannelPath(name, i, ch.Path, errs)
+		validateLibvirtChannelPath(name, i, ch.Source, errs)
+	}
+	for i, h := range devices.Hostdevs {
+		validateLibvirtHostdev(name, i, h, errs)
+	}
+	for i, f := range devices.Filesystems {
+		validateLibvirtFilesystem(name, i, f, errs)
 	}
 }
 

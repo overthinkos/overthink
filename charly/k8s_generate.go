@@ -45,6 +45,8 @@ type K8sGenerateOpts struct {
 
 // GenerateK8sKustomize materializes the Kustomize tree on disk. Returns the
 // absolute path to the overlay that `kubectl apply -k` should target.
+//
+//nolint:gocyclo // Kustomize orchestrator: sequential phases with conditional file emissions; moderate complexity, extraction needs extensive output-path param passing
 func GenerateK8sKustomize(opts K8sGenerateOpts) (string, error) {
 	if opts.DeploymentName == "" {
 		return "", fmt.Errorf("deployment name is required")

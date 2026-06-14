@@ -1918,6 +1918,68 @@ func mergeBoxConfig(dst, src *BoxConfig) {
 // (same rule as the discover scanner), so the check is "register unless
 // already present."
 func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
+	_ = srcDir
+	count := validateKindCount(kd)
+	if count > 1 {
+		return fmt.Errorf("ambiguous kind-keyed document: multiple kind wrappers set")
+	}
+	if count == 0 {
+		return nil
+	}
+	switch {
+	case kd.Candy != nil:
+		return registerKindEntity(&merged.Candy, kd.Candy.Name, "candy", &InlineCandy{CandyYAML: kd.Candy.CandyYAML})
+	case kd.Image != nil:
+		return registerKindEntity(&merged.Box, kd.Image.Name, "box", kd.Image.BoxConfig)
+	case kd.Deploy != nil:
+		return registerKindEntity(&merged.Deploy, kd.Deploy.Name, "deployment", kd.Deploy.DeploymentNode)
+	case kd.Builder != nil:
+		builder := kd.Builder.BuilderDef
+		return registerKindEntity(&merged.Builder, kd.Builder.Name, "builder", &builder)
+	case kd.Distro != nil:
+		distro := kd.Distro.DistroDef
+		return registerKindEntity(&merged.Distro, kd.Distro.Name, "distro", &distro)
+	case kd.Init != nil:
+		initDef := kd.Init.InitDef
+		return registerKindEntity(&merged.Init, kd.Init.Name, "init", &initDef)
+	case kd.Resource != nil:
+		resDef := kd.Resource.ResourceDef
+		return registerKindEntity(&merged.Resource, kd.Resource.Name, "resource", &resDef)
+	case kd.VM != nil:
+		spec := kd.VM.Spec
+		return registerKindEntity(&merged.VM, kd.VM.Name, "vm", &spec)
+	case kd.Pod != nil:
+		spec := kd.Pod.PodSpec
+		return registerKindEntity(&merged.Pod, kd.Pod.Name, "pod", &spec)
+	case kd.K8s != nil:
+		spec := kd.K8s.K8sSpec
+		return registerKindEntity(&merged.K8s, kd.K8s.Name, "k8s", &spec)
+	case kd.Local != nil:
+		spec := kd.Local.LocalSpec
+		return registerKindEntity(&merged.Local, kd.Local.Name, "host", &spec)
+	case kd.Android != nil:
+		spec := kd.Android.AndroidSpec
+		return registerKindEntity(&merged.Android, kd.Android.Name, "android", &spec)
+	case kd.Agent != nil:
+		spec := kd.Agent.AgentConfig
+		return registerKindEntity(&merged.Agent, kd.Agent.Name, "agent", &spec)
+	case kd.Group != nil:
+		spec := kd.Group.GroupSpec
+		return registerKindEntity(&merged.Group, kd.Group.Name, "group", &spec)
+	case kd.Target != nil:
+		spec := kd.Target.TargetSpec
+		return registerKindEntity(&merged.Target, kd.Target.Name, "target", &spec)
+	case kd.Module != nil:
+		spec := kd.Module.ModuleSpec
+		return registerKindEntity(&merged.Module, kd.Module.Name, "module", &spec)
+	}
+	return nil
+}
+
+// validateKindCount reports how many kind wrappers are set on a single
+// kind-keyed document. A well-formed document sets exactly one; the count
+// drives the ambiguity (>1) and empty-document (0) checks in mergeKindDoc.
+func validateKindCount(kd *kindKeyedDoc) int {
 	count := 0
 	if kd.Candy != nil {
 		count++
@@ -1964,188 +2026,23 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 	if kd.Module != nil {
 		count++
 	}
-	if count > 1 {
-		return fmt.Errorf("ambiguous kind-keyed document: multiple kind wrappers set")
+	return count
+}
+
+// registerKindEntity inserts a single named entity into the destination kind
+// map, applying the uniform rule shared by every kind: a missing name is an
+// error; the map is created lazily; and an entry already present is never
+// overwritten (explicit map entries win over discovered ones).
+func registerKindEntity[T any](dst *map[string]T, name, kind string, value T) error {
+	if name == "" {
+		return fmt.Errorf("%s: missing name", kind)
 	}
-	if count == 0 {
-		return nil
+	if *dst == nil {
+		*dst = map[string]T{}
 	}
-	switch {
-	case kd.Candy != nil:
-		if kd.Candy.Name == "" {
-			return fmt.Errorf("candy: missing name")
-		}
-		if merged.Candy == nil {
-			merged.Candy = map[string]*InlineCandy{}
-		}
-		if _, exists := merged.Candy[kd.Candy.Name]; !exists {
-			merged.Candy[kd.Candy.Name] = &InlineCandy{CandyYAML: kd.Candy.CandyYAML}
-		}
-	case kd.Image != nil:
-		if kd.Image.Name == "" {
-			return fmt.Errorf("box: missing name")
-		}
-		if merged.Box == nil {
-			merged.Box = map[string]BoxConfig{}
-		}
-		if _, exists := merged.Box[kd.Image.Name]; !exists {
-			merged.Box[kd.Image.Name] = kd.Image.BoxConfig
-		}
-	case kd.Deploy != nil:
-		if kd.Deploy.Name == "" {
-			return fmt.Errorf("deployment: missing name")
-		}
-		if merged.Deploy == nil {
-			merged.Deploy = map[string]DeploymentNode{}
-		}
-		if _, exists := merged.Deploy[kd.Deploy.Name]; !exists {
-			merged.Deploy[kd.Deploy.Name] = kd.Deploy.DeploymentNode
-		}
-	case kd.Builder != nil:
-		if kd.Builder.Name == "" {
-			return fmt.Errorf("builder: missing name")
-		}
-		if merged.Builder == nil {
-			merged.Builder = map[string]*BuilderDef{}
-		}
-		if _, exists := merged.Builder[kd.Builder.Name]; !exists {
-			builder := kd.Builder.BuilderDef
-			merged.Builder[kd.Builder.Name] = &builder
-		}
-	case kd.Distro != nil:
-		if kd.Distro.Name == "" {
-			return fmt.Errorf("distro: missing name")
-		}
-		if merged.Distro == nil {
-			merged.Distro = map[string]*DistroDef{}
-		}
-		if _, exists := merged.Distro[kd.Distro.Name]; !exists {
-			distro := kd.Distro.DistroDef
-			merged.Distro[kd.Distro.Name] = &distro
-		}
-	case kd.Init != nil:
-		if kd.Init.Name == "" {
-			return fmt.Errorf("init: missing name")
-		}
-		if merged.Init == nil {
-			merged.Init = map[string]*InitDef{}
-		}
-		if _, exists := merged.Init[kd.Init.Name]; !exists {
-			initDef := kd.Init.InitDef
-			merged.Init[kd.Init.Name] = &initDef
-		}
-	case kd.Resource != nil:
-		if kd.Resource.Name == "" {
-			return fmt.Errorf("resource: missing name")
-		}
-		if merged.Resource == nil {
-			merged.Resource = map[string]*ResourceDef{}
-		}
-		if _, exists := merged.Resource[kd.Resource.Name]; !exists {
-			resDef := kd.Resource.ResourceDef
-			merged.Resource[kd.Resource.Name] = &resDef
-		}
-	case kd.VM != nil:
-		if kd.VM.Name == "" {
-			return fmt.Errorf("vm: missing name")
-		}
-		if merged.VM == nil {
-			merged.VM = map[string]*VmSpec{}
-		}
-		if _, exists := merged.VM[kd.VM.Name]; !exists {
-			spec := kd.VM.Spec
-			merged.VM[kd.VM.Name] = &spec
-		}
-	case kd.Pod != nil:
-		if kd.Pod.Name == "" {
-			return fmt.Errorf("pod: missing name")
-		}
-		if merged.Pod == nil {
-			merged.Pod = map[string]*PodSpec{}
-		}
-		if _, exists := merged.Pod[kd.Pod.Name]; !exists {
-			spec := kd.Pod.PodSpec
-			merged.Pod[kd.Pod.Name] = &spec
-		}
-	case kd.K8s != nil:
-		if kd.K8s.Name == "" {
-			return fmt.Errorf("k8s: missing name")
-		}
-		if merged.K8s == nil {
-			merged.K8s = map[string]*K8sSpec{}
-		}
-		if _, exists := merged.K8s[kd.K8s.Name]; !exists {
-			spec := kd.K8s.K8sSpec
-			merged.K8s[kd.K8s.Name] = &spec
-		}
-	case kd.Local != nil:
-		if kd.Local.Name == "" {
-			return fmt.Errorf("host: missing name")
-		}
-		if merged.Local == nil {
-			merged.Local = map[string]*LocalSpec{}
-		}
-		if _, exists := merged.Local[kd.Local.Name]; !exists {
-			spec := kd.Local.LocalSpec
-			merged.Local[kd.Local.Name] = &spec
-		}
-	case kd.Android != nil:
-		if kd.Android.Name == "" {
-			return fmt.Errorf("android: missing name")
-		}
-		if merged.Android == nil {
-			merged.Android = map[string]*AndroidSpec{}
-		}
-		if _, exists := merged.Android[kd.Android.Name]; !exists {
-			spec := kd.Android.AndroidSpec
-			merged.Android[kd.Android.Name] = &spec
-		}
-	case kd.Agent != nil:
-		if kd.Agent.Name == "" {
-			return fmt.Errorf("agent: missing name")
-		}
-		if merged.Agent == nil {
-			merged.Agent = map[string]*AgentConfig{}
-		}
-		if _, exists := merged.Agent[kd.Agent.Name]; !exists {
-			spec := kd.Agent.AgentConfig
-			merged.Agent[kd.Agent.Name] = &spec
-		}
-	case kd.Group != nil:
-		if kd.Group.Name == "" {
-			return fmt.Errorf("group: missing name")
-		}
-		if merged.Group == nil {
-			merged.Group = map[string]*GroupSpec{}
-		}
-		if _, exists := merged.Group[kd.Group.Name]; !exists {
-			spec := kd.Group.GroupSpec
-			merged.Group[kd.Group.Name] = &spec
-		}
-	case kd.Target != nil:
-		if kd.Target.Name == "" {
-			return fmt.Errorf("target: missing name")
-		}
-		if merged.Target == nil {
-			merged.Target = map[string]*TargetSpec{}
-		}
-		if _, exists := merged.Target[kd.Target.Name]; !exists {
-			spec := kd.Target.TargetSpec
-			merged.Target[kd.Target.Name] = &spec
-		}
-	case kd.Module != nil:
-		if kd.Module.Name == "" {
-			return fmt.Errorf("module: missing name")
-		}
-		if merged.Module == nil {
-			merged.Module = map[string]*ModuleSpec{}
-		}
-		if _, exists := merged.Module[kd.Module.Name]; !exists {
-			spec := kd.Module.ModuleSpec
-			merged.Module[kd.Module.Name] = &spec
-		}
+	if _, exists := (*dst)[name]; !exists {
+		(*dst)[name] = value
 	}
-	_ = srcDir
 	return nil
 }
 

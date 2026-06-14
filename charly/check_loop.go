@@ -624,6 +624,30 @@ func runOneIteration(
 		return iter, nil
 	}
 
+	return dispatchRunnerAndScore(ctx, opts, layout, k, iterDir, substCtx, promptText, reportSoFar, benchmarkStart, iter, &iterMu)
+}
+
+// dispatchRunnerAndScore invokes the AI runner under an optional
+// per-iteration timeout + score-progress watchdog, then scores the result
+// (live-plan or image-test path) and classifies every step into the
+// iteration record. Split out of runOneIteration, which keeps the
+// pre-runner scope/prompt setup inline and hands the partially-built
+// IterationState here for completion.
+//
+//nolint:gocyclo // cohesive sequential pipeline (runner dispatch → watchdog → score → step classification) already split out of runOneIteration; further extraction would over-fragment the scoring flow
+func dispatchRunnerAndScore(
+	ctx context.Context,
+	opts HarnessOpts,
+	layout RunLayout,
+	k int,
+	iterDir string,
+	substCtx *SubstContext,
+	promptText string,
+	reportSoFar *FinalReport,
+	benchmarkStart time.Time,
+	iter IterationState,
+	iterMu *sync.Mutex,
+) (IterationState, error) {
 	// 3. Dispatch the runner.
 	runnerArgv, runnerEnv := renderRunnerInvocation(opts, substCtx, promptText, iterDir)
 	runnerLog := filepath.Join(iterDir, "runner.log")

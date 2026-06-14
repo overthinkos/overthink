@@ -1054,6 +1054,7 @@ func vmDisplayDeviceAbsent(verb, stderr string) bool {
 		strings.Contains(stderr, "graphics device declared in vm.yml")
 }
 
+//nolint:gocyclo // verb dispatch with bifurcated artifact validation (ai-artifact vs exec mode) sharing post-validation; cohesive
 func (r *Runner) runCharlyVerb(ctx context.Context, c *Op, verb, method string, allowlist map[string]methodSpec) CheckResult {
 	if r.Mode == RunModeBox {
 		return skipf(c, fmt.Sprintf("%s: %s requires a running container (skip under charly check box)", verb, method))
@@ -1381,6 +1382,8 @@ func checkRequiredFields(c *Op, required []string) error {
 // isZeroField checks whether the named Check field is at its zero value.
 // Enumerates the fields the new verbs use — grep-able at the allowlist site
 // so adding a new modifier means adding a case here too.
+//
+//nolint:gocyclo // canonical field-enumeration switch; grep-able required-field enforcement; extraction fragments validation
 func isZeroField(c *Op, name string) bool {
 	switch name {
 	case "Tab":

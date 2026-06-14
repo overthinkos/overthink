@@ -112,29 +112,9 @@ func (c *BuildCmd) Run() error {
 	// agrees that "no specific boxes" means "all enabled".
 	c.Boxes = normalizeBoxArgs(c.Boxes)
 
-	// Check if any image arg is a remote ref
-	for _, img := range c.Boxes {
-		ref := StripURLScheme(img)
-		if IsRemoteImageRef(ref) {
-			return c.buildRemote(ref)
-		}
-	}
-
-	dir, err := os.Getwd()
-	if err != nil {
+	handled, dir, err := c.checkRemoteRefsAndPivot()
+	if handled {
 		return err
-	}
-
-	// Auto-pivot: when cwd's charly.yml has a single remote include
-	// (`include: ['@github.com/owner/repo/charly.yml:ref']`) and the
-	// requested image isn't declared locally, delegate to buildRemote
-	// against `@github.com/owner/repo/<image>:ref`. This lets a
-	// downstream workspace `cd ~/Atrapub/ecovoyage && charly box build versa`
-	// transparently rebuild from upstream source without any flags. The
-	// workspace's deploy/check overlays are picked up later by deploy-mode
-	// commands; image build doesn't need them.
-	if remoteRef, ok := detectRemoteIncludePassthrough(dir, c.Boxes); ok {
-		return c.buildRemote(remoteRef)
 	}
 
 	// Generate Containerfiles via the shared box-selection rule. An empty
@@ -163,106 +143,19 @@ func (c *BuildCmd) Run() error {
 	// already populated these BuildCmd fields when set; fill the gaps from
 	// project config — a named fallback applies later if config is silent too).
 	def := gen.Config.Defaults
-	if c.Jobs == 0 {
-		c.Jobs = resolveIntPtr(def.Jobs, nil, 0)
-	}
-	if c.PodmanJobs == 0 {
-		c.PodmanJobs = resolveIntPtr(def.PodmanJobs, nil, 0)
-	}
-	c.podmanJobsCap = resolveIntPtr(def.PodmanJobsCap, nil, 0)
-	if c.Cache == "" {
-		c.Cache = def.Cache
-	}
+	c.resolveBuildTunables(def)
 
 	if err := ensureCharlyBinaryFresh(dir, gen.Boxes, c.Boxes); err != nil {
 		return fmt.Errorf("refreshing charly binary: %w", err)
 	}
 
-	// Resolve runtime config for build engine
-	rt, err := ResolveRuntime()
+	engine, buildEngine, err := c.buildImages(dir, gen)
 	if err != nil {
 		return err
 	}
 
-	engine := EngineBinary(rt.BuildEngine)
-
-	// Determine platform
-	platform := c.Platform
-	if platform == "" && !c.Push {
-		platform = hostPlatform()
-	}
-
-	if len(c.Boxes) > 0 {
-		// Filtered build: use sequential order
-		order, err := ResolveBoxOrder(gen.Boxes, gen.Candies)
-		if err != nil {
-			return err
-		}
-		order, err = filterBox(order, c.Boxes, gen.Boxes)
-		if err != nil {
-			return err
-		}
-		for _, name := range order {
-			img := gen.Boxes[name]
-			content := gen.Containerfiles[name]
-			if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
-				return fmt.Errorf("building %s: %w", name, err)
-			}
-			mergeAfterBuild(name, img)
-		}
-	} else {
-		// Full build: use level-based parallelism
-		levels, err := ResolveBoxLevels(gen.Boxes, gen.Candies)
-		if err != nil {
-			return err
-		}
-
-		jobs := c.Jobs
-		if jobs < 1 {
-			jobs = jobsFallback
-		}
-
-		for i, level := range levels {
-			fmt.Fprintf(os.Stderr, "\n=== Build level %d/%d (%d images) ===\n", i+1, len(levels), len(level))
-
-			if len(level) == 1 {
-				// Single image, no need for goroutine overhead
-				name := level[0]
-				img := gen.Boxes[name]
-				content := gen.Containerfiles[name]
-				if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
-					return fmt.Errorf("building %s: %w", name, err)
-				}
-			} else {
-				g, _ := errgroup.WithContext(context.Background())
-				g.SetLimit(jobs)
-
-				for _, name := range level {
-					img := gen.Boxes[name]
-					content := gen.Containerfiles[name]
-					g.Go(func() error {
-						if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
-							return fmt.Errorf("building %s: %w", name, err)
-						}
-						return nil
-					})
-				}
-
-				if err := g.Wait(); err != nil {
-					return err
-				}
-			}
-
-			// Merge this level before building the next so children
-			// start from a merged (fewer-layer) base image.
-			for _, name := range level {
-				mergeAfterBuild(name, gen.Boxes[name])
-			}
-		}
-	}
-
 	// Push after merge (Podman only; Docker buildx pushes during build)
-	if c.Push && rt.BuildEngine == "podman" {
+	if c.Push && buildEngine == "podman" {
 		order, err := ResolveBoxOrder(gen.Boxes, gen.Candies)
 		if err != nil {
 			return err
@@ -297,6 +190,142 @@ func (c *BuildCmd) Run() error {
 	}
 
 	return nil
+}
+
+// checkRemoteRefsAndPivot dispatches to a remote build when any image arg is a
+// remote ref, or when cwd's charly.yml auto-pivots a locally-undeclared image to
+// its single remote include (so `cd ~/Atrapub/ecovoyage && charly box build
+// versa` transparently rebuilds from upstream source without any flags; the
+// workspace's deploy/check overlays are picked up later by deploy-mode commands,
+// image build doesn't need them). Returns (handled=true, "", err) when Run
+// should return immediately — err carries the buildRemote result or an os.Getwd
+// failure — and (false, dir, nil) when the build should proceed locally from dir.
+func (c *BuildCmd) checkRemoteRefsAndPivot() (bool, string, error) {
+	// Check if any image arg is a remote ref
+	for _, img := range c.Boxes {
+		ref := StripURLScheme(img)
+		if IsRemoteImageRef(ref) {
+			return true, "", c.buildRemote(ref)
+		}
+	}
+
+	dir, err := os.Getwd()
+	if err != nil {
+		return true, "", err
+	}
+
+	if remoteRef, ok := detectRemoteIncludePassthrough(dir, c.Boxes); ok {
+		return true, "", c.buildRemote(remoteRef)
+	}
+	return false, dir, nil
+}
+
+// resolveBuildTunables fills the build-speed knobs (Jobs / PodmanJobs /
+// PodmanJobsCap / Cache) from project defaults: when the CLI flag / env layer
+// left them unset. A named fallback applies later if config is silent too.
+func (c *BuildCmd) resolveBuildTunables(def BoxConfig) {
+	if c.Jobs == 0 {
+		c.Jobs = resolveIntPtr(def.Jobs, nil, 0)
+	}
+	if c.PodmanJobs == 0 {
+		c.PodmanJobs = resolveIntPtr(def.PodmanJobs, nil, 0)
+	}
+	c.podmanJobsCap = resolveIntPtr(def.PodmanJobsCap, nil, 0)
+	if c.Cache == "" {
+		c.Cache = def.Cache
+	}
+}
+
+// buildImages resolves the runtime build engine + target platform, then builds
+// every selected image. A filtered (named) selection builds sequentially in
+// dependency order; a full build uses level-based parallelism bounded by c.Jobs,
+// merging each level before the next so children start from a merged
+// (fewer-layer) base image. Returns the engine binary and the runtime
+// build-engine name for the caller's push + retention steps.
+func (c *BuildCmd) buildImages(dir string, gen *Generator) (string, string, error) {
+	// Resolve runtime config for build engine
+	rt, err := ResolveRuntime()
+	if err != nil {
+		return "", "", err
+	}
+
+	engine := EngineBinary(rt.BuildEngine)
+
+	// Determine platform
+	platform := c.Platform
+	if platform == "" && !c.Push {
+		platform = hostPlatform()
+	}
+
+	if len(c.Boxes) > 0 {
+		// Filtered build: use sequential order
+		order, err := ResolveBoxOrder(gen.Boxes, gen.Candies)
+		if err != nil {
+			return "", "", err
+		}
+		order, err = filterBox(order, c.Boxes, gen.Boxes)
+		if err != nil {
+			return "", "", err
+		}
+		for _, name := range order {
+			img := gen.Boxes[name]
+			content := gen.Containerfiles[name]
+			if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
+				return "", "", fmt.Errorf("building %s: %w", name, err)
+			}
+			mergeAfterBuild(name, img)
+		}
+	} else {
+		// Full build: use level-based parallelism
+		levels, err := ResolveBoxLevels(gen.Boxes, gen.Candies)
+		if err != nil {
+			return "", "", err
+		}
+
+		jobs := c.Jobs
+		if jobs < 1 {
+			jobs = jobsFallback
+		}
+
+		for i, level := range levels {
+			fmt.Fprintf(os.Stderr, "\n=== Build level %d/%d (%d images) ===\n", i+1, len(levels), len(level))
+
+			if len(level) == 1 {
+				// Single image, no need for goroutine overhead
+				name := level[0]
+				img := gen.Boxes[name]
+				content := gen.Containerfiles[name]
+				if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
+					return "", "", fmt.Errorf("building %s: %w", name, err)
+				}
+			} else {
+				g, _ := errgroup.WithContext(context.Background())
+				g.SetLimit(jobs)
+
+				for _, name := range level {
+					img := gen.Boxes[name]
+					content := gen.Containerfiles[name]
+					g.Go(func() error {
+						if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
+							return fmt.Errorf("building %s: %w", name, err)
+						}
+						return nil
+					})
+				}
+
+				if err := g.Wait(); err != nil {
+					return "", "", err
+				}
+			}
+
+			// Merge this level before building the next so children
+			// start from a merged (fewer-layer) base image.
+			for _, name := range level {
+				mergeAfterBuild(name, gen.Boxes[name])
+			}
+		}
+	}
+	return engine, rt.BuildEngine, nil
 }
 
 // imageTags computes the tags for an image. charly is CalVer-only — it never

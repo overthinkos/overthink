@@ -27,6 +27,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -617,51 +618,61 @@ func runCapture(exe string, args []string) ([]byte, error) {
 	return buf.Bytes(), err
 }
 
-// waitForVmSshReady polls the VM's managed ssh-config alias until ssh accepts
-// a connection (or timeout). `charly vm create` returns when the domain is first
-// started, but a snippet-injection post-step can stop+restart it; the second
-// start can take 5-30s on slow hosts. vmName is the kind:vm entity name; the
-// SSH alias is "charly-" + vmName (matching publishVmSshAlias). Best-effort:
-// silent on timeout — the downstream deploy-add surfaces the real error.
+// waitForVmSshReady gates on the VM being SSH-reachable AND cloud-init having
+// settled, using the SAME deterministic SSHExecutor preflight the VM check-live
+// path (check_cmd.go) and VmDeployTarget.Emit run — NOT a fixed sleep. WaitForSSH
+// polls until sshd answers; WaitForCloudInit retries until an ssh connection
+// survives `cloud-init status --wait` (the deterministic cloud-init-settled
+// signal — so deploy-add never races a still-running first-boot pacman). vmName
+// is the kind:vm entity name. Best-effort: silent on timeout — the downstream
+// deploy-add surfaces the real error.
 func waitForVmSshReady(vmName string, timeout time.Duration) {
-	alias := "charly-" + vmName
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		cmd := exec.Command("ssh",
-			"-o", "BatchMode=yes",
-			"-o", "ConnectTimeout=2",
-			"-o", "LogLevel=ERROR",
-			alias, "true")
-		if err := cmd.Run(); err == nil {
-			// Brief settle so cloud-init can finish any first-boot package
-			// install before deploy-add fires another pacman invocation.
-			time.Sleep(2 * time.Second)
-			return
-		}
-		time.Sleep(1 * time.Second)
+	gate := &SSHExecutor{Host: VmSshAlias(vmName), ConnectTimeout: 5}
+	ctx := context.Background()
+	if err := gate.WaitForSSH(ctx, int(timeout.Seconds())); err != nil {
+		return
 	}
+	_ = gate.WaitForCloudInit(ctx)
 }
 
-// waitForContainerReady polls until the container is exec-able, then waits a
-// beat for supervisord-managed services to bind. `charly start` returns when
-// systemd reports the service active, but supervisord + child programs may
-// not have bound listening ports yet. Best-effort: silent on timeout (the
-// next check-live step surfaces the real failure with full context).
+// waitForContainerReady gates on the container being exec-able AND its
+// supervisord-managed children having left their transitional states, so a
+// one-shot check-live port/service probe never races a child that has not yet
+// bound. `charly start` returns when systemd reports the service active, but
+// supervisord's autostart children are still STARTING for a moment after. This
+// polls `supervisorctl status` until no child is STARTING/BACKOFF (a child binds
+// its port the instant it reaches RUNNING) instead of sleeping a fixed,
+// host-tuned interval. Images without supervisord settle immediately. Best-effort:
+// silent on timeout (the next check-live step surfaces the real failure).
 func waitForContainerReady(bed string) {
 	const readyTimeout = 30 * time.Second
+	const readyPoll = 250 * time.Millisecond
 	containerName := "charly-" + bed
+	// supervisorStatus reports __NOSUP__ when the image has no supervisorctl, so
+	// "no supervisord" is distinguishable from "socket not up yet".
+	const supervisorStatus = `command -v supervisorctl >/dev/null 2>&1 || { echo __NOSUP__; exit 0; }; supervisorctl status 2>&1`
 	deadline := time.Now().Add(readyTimeout)
 	for time.Now().Before(deadline) {
-		cmd := exec.Command("podman", "exec", containerName, "true")
-		if err := cmd.Run(); err == nil {
-			break
+		if exec.Command("podman", "exec", containerName, "true").Run() != nil {
+			time.Sleep(readyPoll) // container not exec-able yet
+			continue
 		}
-		time.Sleep(250 * time.Millisecond)
+		out, _ := exec.Command("podman", "exec", containerName, "sh", "-c", supervisorStatus).CombinedOutput()
+		if bytes.Contains(out, []byte("__NOSUP__")) {
+			return // no supervisord — nothing to settle
+		}
+		if bytes.Contains(out, []byte("STARTING")) || bytes.Contains(out, []byte("BACKOFF")) {
+			time.Sleep(readyPoll) // children still coming up
+			continue
+		}
+		// Settle only once supervisord answered with real program-state lines
+		// (guards the brief window before its control socket is up).
+		if bytes.Contains(out, []byte("RUNNING")) || bytes.Contains(out, []byte("STOPPED")) ||
+			bytes.Contains(out, []byte("EXITED")) || bytes.Contains(out, []byte("FATAL")) {
+			return
+		}
+		time.Sleep(readyPoll) // supervisord socket not up yet
 	}
-	// Supervisord-settle: programs with autostart=true bind a moment after
-	// supervisord itself comes up. 1.5s is empirically enough on dev
-	// hardware for nc/sleep services on fedora-minimal.
-	time.Sleep(1500 * time.Millisecond)
 }
 
 // writeBedSummary emits a YAML summary alongside the per-step logs.

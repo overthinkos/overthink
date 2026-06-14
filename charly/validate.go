@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"cuelang.org/go/cue"
 )
 
 // ValidationError collects multiple validation errors
@@ -32,6 +34,89 @@ func (e *ValidationError) Add(format string, args ...any) {
 // HasErrors returns true if there are any errors
 func (e *ValidationError) HasErrors() bool {
 	return len(e.Errors) > 0
+}
+
+// validateCandyCUESchemas validates each loaded candy's on-disk manifest against
+// the #Candy CUE schema. Additive/transitional during the CUE cutover — it runs
+// ALONGSIDE the hand-written candy validators; the Go validators are removed only
+// once the CUE schemas reach parity. Inline/synthesized candies with no manifest
+// file on disk are skipped.
+func validateCandyCUESchemas(layers map[string]*Candy, errs *ValidationError) {
+	for name, c := range layers {
+		if c == nil || c.Path == "" {
+			continue
+		}
+		f := filepath.Join(c.Path, UnifiedFileName)
+		data, err := os.ReadFile(f)
+		if err != nil {
+			continue // remote/inline candy without a local manifest — skip
+		}
+		if verr := validateCandyManifestCUE(f, data); verr != nil {
+			errs.Add("candy %q: CUE schema: %v", name, verr)
+		}
+	}
+}
+
+// validateProjectCUESchemas validates the project's non-candy entities against
+// the CUE schemas (additive/transitional during the cutover). Collection kinds
+// come from the root-shape files (project root + box submodules); box entities
+// from the discovered box/<distro>/box/<name>/charly.yml files. Candies are
+// handled by validateCandyCUESchemas.
+func validateProjectCUESchemas(dir string, errs *ValidationError) {
+	collectionKinds := []string{
+		"pod", "local", "android", "k8s", "sidecar", "distro", "builder",
+		"init", "agent", "resource", "group", "target", "module",
+		"deploy", "check", "vm",
+	}
+	rootFiles := []string{filepath.Join(dir, UnifiedFileName)}
+	if boxRoots, _ := filepath.Glob(filepath.Join(dir, "box", "*", UnifiedFileName)); len(boxRoots) > 0 {
+		rootFiles = append(rootFiles, boxRoots...)
+	}
+	for _, f := range rootFiles {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		doc, derr := cueDocFromYAML(f, data)
+		if derr != nil {
+			errs.Add("%s: CUE ingest: %v", f, derr)
+			continue
+		}
+		for _, kind := range collectionKinds {
+			m := doc.LookupPath(cue.ParsePath(kind))
+			if !m.Exists() {
+				continue
+			}
+			it, ferr := m.Fields()
+			if ferr != nil {
+				continue
+			}
+			for it.Next() {
+				label := fmt.Sprintf("%s:%s.%s", f, kind, it.Selector().String())
+				if verr := validateEntityCUE(kind, label, it.Value()); verr != nil {
+					errs.Add("%v", verr)
+				}
+			}
+		}
+	}
+	if boxFiles, _ := filepath.Glob(filepath.Join(dir, "box", "*", "box", "*", UnifiedFileName)); len(boxFiles) > 0 {
+		for _, f := range boxFiles {
+			data, err := os.ReadFile(f)
+			if err != nil {
+				continue
+			}
+			doc, derr := cueDocFromYAML(f, data)
+			if derr != nil {
+				errs.Add("%s: CUE ingest: %v", f, derr)
+				continue
+			}
+			if box := doc.LookupPath(cue.ParsePath("box")); box.Exists() {
+				if verr := validateEntityCUE("box", f, box); verr != nil {
+					errs.Add("%v", verr)
+				}
+			}
+		}
+	}
 }
 
 // Validate validates the configuration and candies. opts.IncludeDisabled
@@ -68,6 +153,12 @@ func Validate(cfg *Config, layers map[string]*Candy, dir string, opts ResolveOpt
 
 	// Validate candy contents
 	validateCandyContents(layers, errs)
+
+	// Validate candy manifests against the CUE schema (additive during the cutover)
+	validateCandyCUESchemas(layers, errs)
+
+	// Validate non-candy entities (box/deploy/check/vm/pod/...) against CUE
+	validateProjectCUESchemas(dir, errs)
 
 	// Validate tasks: field (replaces root.yml/user.yml)
 	validateCandyTasks(layers, errs)

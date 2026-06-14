@@ -22,6 +22,33 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-14 — feat(schema): CUE schema validation for all config kinds (additive)
+
+The first phase of the CUE migration: a CUE-based validation layer over the
+existing YAML config, with the **wire format unchanged** (YAML stays on disk;
+CUE validates it). Each of the 18 config kinds — candy, box, pod, vm, k8s,
+local, android, deploy, check, agent, distro, builder, init, group, target,
+module, resource, sidecar — gains a hand-authored CUE schema in
+`charly/schema/<kind>.cue`, embedded into the binary and compiled into ONE
+shared instance (shared `#Step` / `#CacheMount` / `#PhaseSet` / `#Security` defs
+live once in `_common.cue`, R3). A registry (`charly/cue_schema.go` + a per-kind
+`charly/cue_kind_<name>.go` `init()` registration) maps each kind to its
+`#<Kind>` definition; `Validate()` ingests each on-disk entity via
+`cuelang.org/go/encoding/yaml` (`Extract` → `BuildFile` → `Unify` →
+`Validate(Concrete(true))`) and unifies it against that schema.
+
+This step is **purely additive**: it runs alongside the existing hand-written Go
+validators and removes none of them, so it is not a hard cutover. Proven against
+the full real corpus (~343 entities across the superproject + all five `box/`
+submodules) with rejection tests, the full `go test` suite, a live
+`charly box validate` (exit 0) on the real project, and the `check-pod` R10 bed
+(PASS, 10 steps). Making CUE authoritative — tightening the schemas to parity
+and deleting the declarative Go validators + shape-routing + the `yaml.v3` Node
+authoring — plus the explicit-`kind:` normalization migration is the follow-on
+CUE-authoritative cutover, tracked separately. NB: `cue_kind_<name>.go` files
+must not end in a `GOOS` suffix (e.g. `_android.go` would scope the file to
+`GOOS=android`); the android registration lives in `cue_kind_android_reg.go`.
+
 ### 2026-06-14 — feat(schema)!: one embedded `charly.yml`, parsed by the same loader (sidecar-root)
 
 `charly.yml` was already the one-and-only config filename project-wide — except

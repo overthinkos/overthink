@@ -1,5 +1,5 @@
 candy:
-    version: 2026.159.1803
+    version: 2026.165.0843
     name: dev-tools
     description: |
         Cross-distro developer CLI toolkit (search, edit, monitor, archive, FUSE) with a normalized bat binary path
@@ -40,6 +40,7 @@ candy:
                 - fd
                 - fuse2
                 - fuse3
+                - golangci-lint
                 - gopls
                 - qemu-desktop
                 - shellcheck
@@ -144,6 +145,14 @@ candy:
         - check: file=/usr/bin/gopls
           id: gopls-binary
           file: /usr/bin/gopls
+          exists: true
+          exclude_distro:
+            - debian
+            - ubuntu
+            - fedora
+        - check: the golangci-lint Go meta-linter binary is on PATH (Arch/CachyOS only)
+          id: golangci-lint-binary
+          file: /usr/bin/golangci-lint
           exists: true
           exclude_distro:
             - debian

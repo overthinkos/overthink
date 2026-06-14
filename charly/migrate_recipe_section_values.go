@@ -20,11 +20,7 @@ package main
 // fetched repos too. See CHANGELOG.md.
 
 import (
-	"bytes"
-	"fmt"
-	"os"
 	"path/filepath"
-	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -35,7 +31,7 @@ import (
 func MigrateRecipeSectionValues(dir string, dryRun bool) ([]string, error) {
 	var changed []string
 	for _, f := range []string{UnifiedFileName, "eval.yml"} {
-		mod, err := rewriteRecipeSectionFile(filepath.Join(dir, f), dryRun)
+		mod, err := rewriteDocFile(filepath.Join(dir, f), dryRun, rewriteRecipeFromValues)
 		if err != nil {
 			return changed, err
 		}
@@ -44,36 +40,6 @@ func MigrateRecipeSectionValues(dir string, dryRun bool) ([]string, error) {
 		}
 	}
 	return changed, nil
-}
-
-func rewriteRecipeSectionFile(path string, dryRun bool) (bool, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return false, nil
-	}
-	var doc yaml.Node
-	if err := yaml.Unmarshal(data, &doc); err != nil {
-		return false, nil
-	}
-	if !rewriteRecipeFromValues(&doc) {
-		return false, nil
-	}
-	var out bytes.Buffer
-	enc := yaml.NewEncoder(&out)
-	enc.SetIndent(4)
-	if err := enc.Encode(&doc); err != nil {
-		return false, err
-	}
-	_ = enc.Close()
-	if dryRun {
-		return true, nil
-	}
-	bak := fmt.Sprintf("%s.bak.%d", path, time.Now().Unix())
-	_ = os.WriteFile(bak, data, 0644)
-	if err := os.WriteFile(path, out.Bytes(), 0644); err != nil {
-		return false, err
-	}
-	return true, nil
 }
 
 // rewriteRecipeFromValues walks the node tree; for every `from:` SEQUENCE it

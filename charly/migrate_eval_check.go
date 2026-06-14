@@ -19,10 +19,6 @@ package main
 // false → remote-cache auto-migration applies it to fetched candy manifests.
 
 import (
-	"bytes"
-	"fmt"
-	"os"
-
 	"gopkg.in/yaml.v3"
 )
 
@@ -30,46 +26,7 @@ import (
 // project's candy/ + box/ dirs and root YAML siblings. Returns the rewritten
 // file paths. Idempotent.
 func MigrateEvalCheck(dir string, dryRun bool) ([]string, error) {
-	var rewritten []string
-	for _, path := range opUnifyCandidateFiles(dir) {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		dec := yaml.NewDecoder(bytes.NewReader(data))
-		var docs []*yaml.Node
-		changed := false
-		for {
-			var doc yaml.Node
-			if derr := dec.Decode(&doc); derr != nil {
-				break
-			}
-			d := doc
-			if evalCheckDoc(&d) {
-				changed = true
-			}
-			docs = append(docs, &d)
-		}
-		if !changed {
-			continue
-		}
-		var out bytes.Buffer
-		enc := yaml.NewEncoder(&out)
-		enc.SetIndent(4)
-		for _, d := range docs {
-			if eerr := enc.Encode(d); eerr != nil {
-				return rewritten, fmt.Errorf("encoding %s: %w", path, eerr)
-			}
-		}
-		enc.Close()
-		if !dryRun {
-			if werr := os.WriteFile(path, out.Bytes(), 0o644); werr != nil {
-				return rewritten, fmt.Errorf("writing %s: %w", path, werr)
-			}
-		}
-		rewritten = append(rewritten, path)
-	}
-	return rewritten, nil
+	return runDocMigration(dir, dryRun, opUnifyCandidateFiles, evalCheckDoc)
 }
 
 // evalCheckDoc renames the eval→check schema tokens in one document: the root

@@ -305,48 +305,57 @@ func TestResolveValue(t *testing.T) {
 	}
 }
 
-func TestAutoEnable_SetGetReset(t *testing.T) {
+// assertConfigKeySetGetReset points RuntimeConfigPath at a fresh temp config and
+// exercises one config key's set/get/invalid/reset lifecycle: set valid1 + read
+// it back, set valid2 + read it back, reject invalid, then reset to empty.
+// Shared by the per-key *_SetGetReset tests (R3).
+func assertConfigKeySetGetReset(t *testing.T, key, valid1, valid2, invalid string) {
+	t.Helper()
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yml")
 
 	orig := RuntimeConfigPath
-	defer func() { RuntimeConfigPath = orig }()
+	t.Cleanup(func() { RuntimeConfigPath = orig })
 	RuntimeConfigPath = func() (string, error) { return configPath, nil }
 
-	// Set to true
-	if err := SetConfigValue("auto_enable", "true"); err != nil {
-		t.Fatalf("SetConfigValue(auto_enable, true) error: %v", err)
+	// First valid value.
+	if err := SetConfigValue(key, valid1); err != nil {
+		t.Fatalf("SetConfigValue(%s, %s) error: %v", key, valid1, err)
 	}
-	val, err := GetConfigValue("auto_enable")
+	val, err := GetConfigValue(key)
 	if err != nil {
-		t.Fatalf("GetConfigValue(auto_enable) error: %v", err)
+		t.Fatalf("GetConfigValue(%s) error: %v", key, err)
 	}
-	if val != "true" {
-		t.Errorf("GetConfigValue(auto_enable) = %q, want %q", val, "true")
-	}
-
-	// Set to false
-	if err := SetConfigValue("auto_enable", "false"); err != nil {
-		t.Fatalf("SetConfigValue(auto_enable, false) error: %v", err)
-	}
-	val, _ = GetConfigValue("auto_enable")
-	if val != "false" {
-		t.Errorf("GetConfigValue(auto_enable) = %q, want %q", val, "false")
+	if val != valid1 {
+		t.Errorf("GetConfigValue(%s) = %q, want %q", key, val, valid1)
 	}
 
-	// Invalid value
-	if err := SetConfigValue("auto_enable", "yes"); err == nil {
-		t.Error("expected error for invalid auto_enable value")
+	// Second valid value.
+	if err := SetConfigValue(key, valid2); err != nil {
+		t.Fatalf("SetConfigValue(%s, %s) error: %v", key, valid2, err)
+	}
+	val, _ = GetConfigValue(key)
+	if val != valid2 {
+		t.Errorf("GetConfigValue(%s) = %q, want %q", key, val, valid2)
 	}
 
-	// Reset
-	if err := ResetConfigValue("auto_enable"); err != nil {
-		t.Fatalf("ResetConfigValue(auto_enable) error: %v", err)
+	// Invalid value is rejected.
+	if err := SetConfigValue(key, invalid); err == nil {
+		t.Errorf("expected error for invalid %s value", key)
 	}
-	val, _ = GetConfigValue("auto_enable")
+
+	// Reset clears it.
+	if err := ResetConfigValue(key); err != nil {
+		t.Fatalf("ResetConfigValue(%s) error: %v", key, err)
+	}
+	val, _ = GetConfigValue(key)
 	if val != "" {
-		t.Errorf("after reset, GetConfigValue(auto_enable) = %q, want empty", val)
+		t.Errorf("after reset, GetConfigValue(%s) = %q, want empty", key, val)
 	}
+}
+
+func TestAutoEnable_SetGetReset(t *testing.T) {
+	assertConfigKeySetGetReset(t, "auto_enable", "true", "false", "yes")
 }
 
 func TestAutoEnable_EnvOverridesConfig(t *testing.T) {
@@ -439,47 +448,7 @@ func TestAutoEnable_ListConfigValues(t *testing.T) {
 }
 
 func TestBindAddress_SetGetReset(t *testing.T) {
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.yml")
-
-	orig := RuntimeConfigPath
-	defer func() { RuntimeConfigPath = orig }()
-	RuntimeConfigPath = func() (string, error) { return configPath, nil }
-
-	// Set to 0.0.0.0
-	if err := SetConfigValue("bind_address", "0.0.0.0"); err != nil {
-		t.Fatalf("SetConfigValue(bind_address, 0.0.0.0) error: %v", err)
-	}
-	val, err := GetConfigValue("bind_address")
-	if err != nil {
-		t.Fatalf("GetConfigValue(bind_address) error: %v", err)
-	}
-	if val != "0.0.0.0" {
-		t.Errorf("GetConfigValue(bind_address) = %q, want %q", val, "0.0.0.0")
-	}
-
-	// Set to 127.0.0.1
-	if err := SetConfigValue("bind_address", "127.0.0.1"); err != nil {
-		t.Fatalf("SetConfigValue(bind_address, 127.0.0.1) error: %v", err)
-	}
-	val, _ = GetConfigValue("bind_address")
-	if val != "127.0.0.1" {
-		t.Errorf("GetConfigValue(bind_address) = %q, want %q", val, "127.0.0.1")
-	}
-
-	// Invalid value
-	if err := SetConfigValue("bind_address", "192.168.1.1"); err == nil {
-		t.Error("expected error for invalid bind_address value")
-	}
-
-	// Reset
-	if err := ResetConfigValue("bind_address"); err != nil {
-		t.Fatalf("ResetConfigValue(bind_address) error: %v", err)
-	}
-	val, _ = GetConfigValue("bind_address")
-	if val != "" {
-		t.Errorf("after reset, GetConfigValue(bind_address) = %q, want empty", val)
-	}
+	assertConfigKeySetGetReset(t, "bind_address", "0.0.0.0", "127.0.0.1", "192.168.1.1")
 }
 
 func TestBindAddress_EnvOverridesConfig(t *testing.T) {

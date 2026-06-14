@@ -21,9 +21,56 @@ package main
 // switch — they build the DeployContext and call target.Add / target.Del.
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"os"
 )
+
+// runUnifiedTargetChecks runs a deploy-scope check list via a live-mode Runner
+// over exec, filtering to opts.OnlyIDs when set and reporting per-check failures
+// to stderr. kind ("pod"/"vm"/"host", from the adapter's Kind()) labels both the
+// no-executor and the summary errors; nodeName is the deploy identifier. Shared
+// by Pod/Vm/LocalUnifiedTarget.Test — the three were byte-identical bar the
+// kind/name labels (R3).
+func runUnifiedTargetChecks(ctx context.Context, exec DeployExecutor, kind, nodeName string, checks []Op, opts TestOpts) error {
+	onlyIDs := make(map[string]bool, len(opts.OnlyIDs))
+	for _, id := range opts.OnlyIDs {
+		onlyIDs[id] = true
+	}
+	filtered := checks
+	if len(onlyIDs) > 0 {
+		filtered = filtered[:0]
+		for _, c := range checks {
+			if onlyIDs[c.ID] {
+				filtered = append(filtered, c)
+			}
+		}
+	}
+	if exec == nil {
+		return fmt.Errorf("%s %q: no executor configured", kind, nodeName)
+	}
+	runner := NewRunner(exec, nil, RunModeLive)
+	results := runner.Run(ctx, filtered)
+	failed := 0
+	for _, r := range results {
+		if r.Status == TestFail {
+			failed++
+			id := ""
+			if r.Op != nil {
+				id = r.Op.ID
+			}
+			fmt.Fprintf(os.Stderr, "FAIL %s: %s\n", id, r.Message)
+			if opts.StopOnFail {
+				return fmt.Errorf("test stopped at first failure: %s", id)
+			}
+		}
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d %s check(s) failed", failed, kind)
+	}
+	return nil
+}
 
 // ErrNotSupportedOnK8s is returned by lifecycle methods on the K8s
 // target. K8s cluster lifecycle is kubectl-managed outside charly; charly

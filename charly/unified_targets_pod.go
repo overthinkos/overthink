@@ -96,43 +96,7 @@ func (t *PodUnifiedTarget) engine() string {
 // executor (podman-exec wrapper). Mirrors LocalUnifiedTarget.Test +
 // VmUnifiedTarget.Test — only the executor differs.
 func (t *PodUnifiedTarget) Test(ctx context.Context, checks []Op, opts TestOpts) error {
-	onlyIDs := make(map[string]bool, len(opts.OnlyIDs))
-	for _, id := range opts.OnlyIDs {
-		onlyIDs[id] = true
-	}
-	filtered := checks
-	if len(onlyIDs) > 0 {
-		filtered = filtered[:0]
-		for _, c := range checks {
-			if onlyIDs[c.ID] {
-				filtered = append(filtered, c)
-			}
-		}
-	}
-	exec := t.Executor()
-	if exec == nil {
-		return fmt.Errorf("pod %q: no executor configured", t.NodeName)
-	}
-	runner := NewRunner(exec, nil, RunModeLive)
-	results := runner.Run(ctx, filtered)
-	failed := 0
-	for _, r := range results {
-		if r.Status == TestFail {
-			failed++
-			id := ""
-			if r.Op != nil {
-				id = r.Op.ID
-			}
-			fmt.Fprintf(os.Stderr, "FAIL %s: %s\n", id, r.Message)
-			if opts.StopOnFail {
-				return fmt.Errorf("test stopped at first failure: %s", id)
-			}
-		}
-	}
-	if failed > 0 {
-		return fmt.Errorf("%d pod check(s) failed", failed)
-	}
-	return nil
+	return runUnifiedTargetChecks(ctx, t.Executor(), t.Kind(), t.NodeName, checks, opts)
 }
 
 // Update shells out to `charly update <name>`. charly update handles the

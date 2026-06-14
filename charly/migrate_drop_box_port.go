@@ -19,8 +19,6 @@ package main
 // yaml.v3 node API, idempotent.
 
 import (
-	"bytes"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -35,46 +33,7 @@ import (
 // (candies keep their ports) and does NOT recurse into box/<distro> submodules
 // (separate repos, migrated on their own). Idempotent.
 func MigrateDropBoxPort(dir string, dryRun bool) ([]string, error) {
-	var rewritten []string
-	for _, path := range dropBoxPortCandidateFiles(dir) {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue // skip unreadable siblings; don't abort the chain
-		}
-		dec := yaml.NewDecoder(bytes.NewReader(data))
-		var docs []*yaml.Node
-		changed := false
-		for {
-			var doc yaml.Node
-			if derr := dec.Decode(&doc); derr != nil {
-				break
-			}
-			d := doc
-			if dropBoxPortFromDoc(&d) {
-				changed = true
-			}
-			docs = append(docs, &d)
-		}
-		if !changed {
-			continue
-		}
-		var out bytes.Buffer
-		enc := yaml.NewEncoder(&out)
-		enc.SetIndent(4)
-		for _, d := range docs {
-			if eerr := enc.Encode(d); eerr != nil {
-				return rewritten, fmt.Errorf("encoding %s: %w", path, eerr)
-			}
-		}
-		enc.Close()
-		if !dryRun {
-			if werr := os.WriteFile(path, out.Bytes(), 0o644); werr != nil {
-				return rewritten, fmt.Errorf("writing %s: %w", path, werr)
-			}
-		}
-		rewritten = append(rewritten, path)
-	}
-	return rewritten, nil
+	return runDocMigration(dir, dryRun, dropBoxPortCandidateFiles, dropBoxPortFromDoc)
 }
 
 // dropBoxPortFromDoc removes box.port + defaults.port (unconditional) and the

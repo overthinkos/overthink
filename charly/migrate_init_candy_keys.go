@@ -17,11 +17,7 @@ package main
 // override `init:`. See CHANGELOG.md.
 
 import (
-	"bytes"
-	"fmt"
-	"os"
 	"path/filepath"
-	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -38,7 +34,7 @@ var initCandyKeyRenames = map[string]string{
 func MigrateInitCandyKeys(dir string, dryRun bool) ([]string, error) {
 	var changed []string
 	for _, f := range []string{UnifiedFileName, "build.yml", "base.yml"} {
-		mod, err := rewriteInitCandyKeysFile(filepath.Join(dir, f), dryRun)
+		mod, err := rewriteDocFile(filepath.Join(dir, f), dryRun, rewriteInitSubtrees)
 		if err != nil {
 			return changed, err
 		}
@@ -47,36 +43,6 @@ func MigrateInitCandyKeys(dir string, dryRun bool) ([]string, error) {
 		}
 	}
 	return changed, nil
-}
-
-func rewriteInitCandyKeysFile(path string, dryRun bool) (bool, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return false, nil
-	}
-	var doc yaml.Node
-	if err := yaml.Unmarshal(data, &doc); err != nil {
-		return false, nil
-	}
-	if !rewriteInitSubtrees(&doc) {
-		return false, nil
-	}
-	var out bytes.Buffer
-	enc := yaml.NewEncoder(&out)
-	enc.SetIndent(4)
-	if err := enc.Encode(&doc); err != nil {
-		return false, err
-	}
-	_ = enc.Close()
-	if dryRun {
-		return true, nil
-	}
-	bak := fmt.Sprintf("%s.bak.%d", path, time.Now().Unix())
-	_ = os.WriteFile(bak, data, 0644)
-	if err := os.WriteFile(path, out.Bytes(), 0644); err != nil {
-		return false, err
-	}
-	return true, nil
 }
 
 // rewriteInitSubtrees walks the node tree; for every top-level `init:` mapping it

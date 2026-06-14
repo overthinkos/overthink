@@ -141,39 +141,7 @@ func teardownHostDeploy(paths *LedgerPaths, rec *DeployRecord, hostHome string, 
 // semantics; the runner-level matching for verb dispatch is shared with
 // `charly check live`.
 func (t *LocalUnifiedTarget) Test(ctx context.Context, checks []Op, opts TestOpts) error {
-	onlyIDs := make(map[string]bool, len(opts.OnlyIDs))
-	for _, id := range opts.OnlyIDs {
-		onlyIDs[id] = true
-	}
-	filtered := checks
-	if len(onlyIDs) > 0 {
-		filtered = filtered[:0]
-		for _, c := range checks {
-			if onlyIDs[c.ID] {
-				filtered = append(filtered, c)
-			}
-		}
-	}
-	runner := NewRunner(t.Executor(), nil, RunModeLive)
-	results := runner.Run(ctx, filtered)
-	failed := 0
-	for _, r := range results {
-		if r.Status == TestFail {
-			failed++
-			id := ""
-			if r.Op != nil {
-				id = r.Op.ID
-			}
-			fmt.Fprintf(os.Stderr, "FAIL %s: %s\n", id, r.Message)
-			if opts.StopOnFail {
-				return fmt.Errorf("test stopped at first failure: %s", id)
-			}
-		}
-	}
-	if failed > 0 {
-		return fmt.Errorf("%d host check(s) failed", failed)
-	}
-	return nil
+	return runUnifiedTargetChecks(ctx, t.Executor(), t.Kind(), t.NodeName, checks, opts)
 }
 
 // Update re-applies plans against the host target. Idempotent re-apply

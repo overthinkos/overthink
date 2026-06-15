@@ -1,5 +1,5 @@
 candy:
-    version: 2026.144.1443
+    version: 2026.166.1750
     name: pixi
     description: |
         pixi package-manager binary installed and runnable
@@ -16,20 +16,25 @@ candy:
     shell:
         path_append:
             - "~/.pixi/bin"
+    var:
+        # Pinned to the latest pixi release. Was an unpinned `releases/latest`
+        # URL, which made the SAME candy version install a different pixi over
+        # time (non-reproducible). Bump deliberately to adopt a newer pixi.
+        PIXI_VERSION: v0.70.2
     plan:
-        - run: download=https://github.com/prefix-dev/pixi/releases/latest/download/pixi-${BUILD_ARCH}-unknown-linux-musl.tar.gz
-          download: "https://github.com/prefix-dev/pixi/releases/latest/download/pixi-${BUILD_ARCH}-unknown-linux-musl.tar.gz"
+        - run: download=https://github.com/prefix-dev/pixi/releases/download/${PIXI_VERSION}/pixi-${BUILD_ARCH}-unknown-linux-musl.tar.gz
+          download: "https://github.com/prefix-dev/pixi/releases/download/${PIXI_VERSION}/pixi-${BUILD_ARCH}-unknown-linux-musl.tar.gz"
           extract: tar.gz
           to: /usr/local/bin
           run_as: root
         - check: the pixi binary is installed at /usr/local/bin/pixi
           file: /usr/local/bin/pixi
           exists: true
-        - check: running pixi --version exits cleanly and prints a version string
+        - check: running pixi --version reports the pinned v0.70.2 release
           command: /usr/local/bin/pixi --version
           exit_status: 0
           stdout:
-            - matches: "[0-9]+\\.[0-9]+"
+            - matches: "0\\.70\\.2"
         - check: command=/usr/local/bin/pixi --version
           id: pixi-version
           command: /usr/local/bin/pixi --version

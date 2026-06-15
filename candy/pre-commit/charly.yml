@@ -1,5 +1,5 @@
 candy:
-    version: 2026.144.1443
+    version: 2026.166.1751
     name: pre-commit
     description: |
         A pre-commit git-hooks toolchain — the pre-commit orchestrator plus the taplo TOML and markdownlint Markdown linters its hooks invoke.

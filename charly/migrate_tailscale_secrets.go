@@ -84,12 +84,12 @@ func scanTailscaleDeployYAML() {
 	var doc struct {
 		Deploy map[string]struct {
 			Sidecar map[string]struct {
-				Parameter map[string]string `yaml:"parameter"`
-			} `yaml:"sidecar"`
+				Parameter map[string]string `yaml:"parameter" json:"parameter"`
+			} `yaml:"sidecar" json:"sidecar"`
 			Sidecars map[string]struct {
-				Parameter map[string]string `yaml:"parameter"`
-			} `yaml:"sidecars"`
-		} `yaml:"deploy"`
+				Parameter map[string]string `yaml:"parameter" json:"parameter"`
+			} `yaml:"sidecars" json:"sidecars"`
+		} `yaml:"deploy" json:"deploy"`
 	}
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		return // tolerant — schema warnings live elsewhere
@@ -99,7 +99,7 @@ func scanTailscaleDeployYAML() {
 		// `sidecar:` is the canonical YAML key per 2026-05 field-singular cutover.
 		// Also check `sidecars:` for legacy entries.
 		for _, sm := range []map[string]struct {
-			Parameter map[string]string `yaml:"parameter"`
+			Parameter map[string]string `yaml:"parameter" json:"parameter"`
 		}{entry.Sidecar, entry.Sidecars} {
 			if ts, ok := sm["tailscale"]; ok {
 				if v := strings.TrimSpace(ts.Parameter["tailnet"]); v == "" {

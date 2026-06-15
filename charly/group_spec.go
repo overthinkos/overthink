@@ -45,6 +45,6 @@ type GroupSpec struct {
 // `kind: group` form. Bundles concatenated via YAML --- separators are
 // supported the same way as CandyDoc / VmDoc.
 type GroupDoc struct {
-	Name      string `yaml:"name"`
+	Name      string `yaml:"name" json:"name"`
 	GroupSpec `yaml:",inline"`
 }

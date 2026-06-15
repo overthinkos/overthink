@@ -8,12 +8,23 @@ import (
 )
 
 // deriveCandy parses a candy YAML body and runs the Calamares bridge, returning
-// the populated Candy (tagSections / formatSections / topPackages).
+// the populated Candy (tagSections / formatSections / topPackages). It decodes
+// through the same CUE path the loader uses (normalize shorthand → CUE Decode),
+// so shorthand bodies (bare-string packages, scalar ports) work without the
+// deleted custom unmarshalers.
 func deriveCandy(t *testing.T, body string) *Candy {
 	t.Helper()
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(body), &doc); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	root := mappingRoot(&doc)
+	if root == nil {
+		t.Fatalf("test candy body is not a mapping")
+	}
 	var ly CandyYAML
-	if err := yaml.Unmarshal([]byte(body), &ly); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+	if err := decodeEntityViaCUE(root, reflect.TypeOf(CandyYAML{}), &ly, "test-candy"); err != nil {
+		t.Fatalf("decode: %v", err)
 	}
 	layer := &Candy{Name: "t"}
 	derivePackageSectionsFromCalamares(layer, &ly)

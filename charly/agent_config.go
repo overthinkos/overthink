@@ -40,14 +40,14 @@ import (
 //	    credential:
 //	      - {src: ~/.claude/.credentials.json, dst: ~/.claude/.credentials.json}
 type AgentConfig struct {
-	Description    string            `yaml:"description,omitempty"`
-	Command        []string          `yaml:"command"`
-	PromptVia      string            `yaml:"prompt_via,omitempty"`
-	VersionCommand []string          `yaml:"version_command,omitempty"`
-	Timeout        string            `yaml:"timeout,omitempty"`
-	Env            map[string]string `yaml:"env,omitempty"`
-	WorkingDir     string            `yaml:"working_dir,omitempty"`
-	Credential     []CredentialMount `yaml:"credential,omitempty"`
+	Description    string            `yaml:"description,omitempty" json:"description,omitempty"`
+	Command        []string          `yaml:"command" json:"command"`
+	PromptVia      string            `yaml:"prompt_via,omitempty" json:"prompt_via,omitempty"`
+	VersionCommand []string          `yaml:"version_command,omitempty" json:"version_command,omitempty"`
+	Timeout        string            `yaml:"timeout,omitempty" json:"timeout,omitempty"`
+	Env            map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
+	WorkingDir     string            `yaml:"working_dir,omitempty" json:"working_dir,omitempty"`
+	Credential     []CredentialMount `yaml:"credential,omitempty" json:"credential,omitempty"`
 
 	// ProgressCheckInterval / ProgressNoImprovementTimeout drive the
 	// score-progress watchdog. Hidden from the AI by construction — they
@@ -56,8 +56,8 @@ type AgentConfig struct {
 	// termination (e.g. for fully-unbounded development sessions); set
 	// ProgressCheckInterval to "0s" to disable periodic logging too.
 	// See plugins/charly/skills/harness/SKILL.md "Score-progress watchdog".
-	ProgressCheckInterval        string `yaml:"progress_check_interval,omitempty"`
-	ProgressNoImprovementTimeout string `yaml:"progress_no_improvement_timeout,omitempty"`
+	ProgressCheckInterval        string `yaml:"progress_check_interval,omitempty" json:"progress_check_interval,omitempty"`
+	ProgressNoImprovementTimeout string `yaml:"progress_no_improvement_timeout,omitempty" json:"progress_no_improvement_timeout,omitempty"`
 
 	// OutputFormat declares the structured-output mode the AI's stdout
 	// emits. Empty means plain text (stdout+stderr merged into runner.log
@@ -67,7 +67,7 @@ type AgentConfig struct {
 	// into a RunnerEvent, and embeds the event timeline into the
 	// per-iteration record in result-{calver}.yml. Validated in
 	// validateHarnessSemantics; only "" and "stream-json" are accepted.
-	OutputFormat string `yaml:"output_format,omitempty"`
+	OutputFormat string `yaml:"output_format,omitempty" json:"output_format,omitempty"`
 }
 
 // AIOutputFormat* constants enumerate the legal values of
@@ -95,10 +95,10 @@ const (
 // Defined here (not in benchmark_config.go any more) — this is the
 // canonical location going forward.
 type CredentialMount struct {
-	Src      string `yaml:"src"`
-	Dst      string `yaml:"dst"`
-	Mode     string `yaml:"mode,omitempty"`     // "copy" (default) | "bind"
-	Optional bool   `yaml:"optional,omitempty"` // missing src: warn, don't fail
+	Src      string `yaml:"src" json:"src"`
+	Dst      string `yaml:"dst" json:"dst"`
+	Mode     string `yaml:"mode,omitempty" json:"mode,omitempty"`         // "copy" (default) | "bind"
+	Optional bool   `yaml:"optional,omitempty" json:"optional,omitempty"` // missing src: warn, don't fail
 }
 
 // DefaultAgentTimeout is the Go-level default applied by ResolveAgent when an

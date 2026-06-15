@@ -838,8 +838,8 @@ func detectRemoteIncludePassthrough(dir string, boxes []string) (string, bool) {
 	var peek struct {
 		// Read the `import:` list generically (items are either bare strings —
 		// flat imports — or single-key `alias: ref` maps — namespaced imports).
-		Import []any                      `yaml:"import"`
-		Box    map[string]json.RawMessage `yaml:"box"`
+		Import []any                      `yaml:"import" json:"import"`
+		Box    map[string]json.RawMessage `yaml:"box" json:"box"`
 	}
 	if err := yaml.Unmarshal(data, &peek); err != nil {
 		return "", false

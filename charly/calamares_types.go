@@ -1,11 +1,5 @@
 package main
 
-import (
-	"fmt"
-
-	"gopkg.in/yaml.v3"
-)
-
 // PackageItem is a single package entry. Polymorphic between bare scalar
 // (`- nginx`) and object form (`- {name: nginx, description: open-source build}`).
 // Calamares-shaped: matches the package entries in `netinstall.yaml`.
@@ -18,40 +12,9 @@ type PackageItem struct {
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 }
 
-// UnmarshalYAML accepts both scalar and mapping forms.
-func (p *PackageItem) UnmarshalYAML(node *yaml.Node) error {
-	if node.Kind == yaml.ScalarNode {
-		p.Name = node.Value
-		p.Description = ""
-		return nil
-	}
-	if node.Kind == yaml.MappingNode {
-		var raw struct {
-			Name        string `yaml:"name"`
-			Description string `yaml:"description"`
-		}
-		if err := node.Decode(&raw); err != nil {
-			return err
-		}
-		p.Name = raw.Name
-		p.Description = raw.Description
-		return nil
-	}
-	return fmt.Errorf("invalid package entry: expected scalar or mapping, got %v", node.Kind)
-}
-
-// MarshalYAML emits the bare-scalar shorthand when only Name is set, otherwise
-// the object form. Keeps migrated candy manifest files concise where the long form
-// adds no value.
-func (p PackageItem) MarshalYAML() (any, error) { //nolint:unparam // error return kept for interface/API stability
-	if p.Description == "" {
-		return p.Name, nil
-	}
-	return struct {
-		Name        string `yaml:"name"`
-		Description string `yaml:"description,omitempty"`
-	}{p.Name, p.Description}, nil
-}
+// PackageItem shorthand (bare scalar `nginx`) is canonicalized to {name: nginx}
+// by the CUE loader's normalizer (cue_normalize.go, expandPackageItemNode); the
+// custom (Un)MarshalYAML were deleted in the CUE loader switch (Cutover 1).
 
 // AURPackages is the per-distro AUR sub-block under `distros.arch.aur`.
 // One charly-specific extension to the otherwise-flat Calamares package shape:
@@ -59,7 +22,7 @@ func (p PackageItem) MarshalYAML() (any, error) { //nolint:unparam // error retu
 // builder stage (not pacman directly).
 type AURPackages struct {
 	Package []PackageItem `yaml:"package,omitempty" json:"package,omitempty"`
-	Options []string      `yaml:"option,omitempty" json:"options,omitempty"`
+	Options []string      `yaml:"option,omitempty" json:"option,omitempty"`
 	// Replaces lists distro-repo packages whose file paths conflict
 	// with the AUR build artifact. Each entry is removed via
 	// `pacman -Rs --noconfirm <pkg>` BEFORE the AUR `pacman -U`
@@ -69,7 +32,7 @@ type AURPackages struct {
 	// `visual-studio-code-bin` and `code` both own /usr/bin/code).
 	// OCI image builds ignore this field — fresh rootfs has no
 	// conflicting package.
-	Replaces []string `yaml:"replace,omitempty" json:"replaces,omitempty"`
+	Replaces []string `yaml:"replace,omitempty" json:"replace,omitempty"`
 }
 
 // DistroPackages carries per-distro package overrides plus format-specific
@@ -84,7 +47,7 @@ type DistroPackages struct {
 	Copr    []string         `yaml:"copr,omitempty" json:"copr,omitempty"`       // fedora-only
 	Repo    []map[string]any `yaml:"repo,omitempty" json:"repo,omitempty"`       // free-form per-distro repo blocks
 	Exclude []string         `yaml:"exclude,omitempty" json:"exclude,omitempty"` // package excludes
-	Options []string         `yaml:"option,omitempty" json:"options,omitempty"`  // extra installer flags
+	Options []string         `yaml:"option,omitempty" json:"option,omitempty"`   // extra installer flags
 	Module  []string         `yaml:"module,omitempty" json:"module,omitempty"`   // dnf module enable
 	AUR     *AURPackages     `yaml:"aur,omitempty" json:"aur,omitempty"`         // arch-only
 

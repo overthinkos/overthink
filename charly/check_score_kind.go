@@ -16,36 +16,36 @@ package main
 // IterateConfig is the AI-loop orchestration block.
 type IterateConfig struct {
 	// Eligible agent names (must reference entries in the `agent:` map).
-	Agent []string `yaml:"agent,omitempty"`
+	Agent []string `yaml:"agent,omitempty" json:"agent,omitempty"`
 
 	// Sandbox names the deployment (pod | vm | host) where the AGENT + charly
 	// run — the former score `pod:`/`vm:`/`host:` discriminator collapsed to a
 	// single deploy-ref name. Its target kind is resolved from the named
 	// deployment entry.
-	Sandbox string `yaml:"sandbox,omitempty"`
+	Sandbox string `yaml:"sandbox,omitempty" json:"sandbox,omitempty"`
 
 	// PlateauIteration is the only loop bound. The loop exits after this many
 	// consecutive non-improving iterations. 0 disables plateau detection.
-	PlateauIteration int `yaml:"plateau_iteration,omitempty"`
+	PlateauIteration int `yaml:"plateau_iteration,omitempty" json:"plateau_iteration,omitempty"`
 
 	// Prompt template. Standard ${TOKEN} substitution applied per iter.
-	Prompt string `yaml:"prompt,omitempty"`
+	Prompt string `yaml:"prompt,omitempty" json:"prompt,omitempty"`
 
 	// Note controls the persistent NOTES.md memory subsystem. Pointer so the
 	// default (true) and an explicit `false` are distinguishable.
-	Note *bool `yaml:"note,omitempty"`
+	Note *bool `yaml:"note,omitempty" json:"note,omitempty"`
 
 	// Env is free-form substitution env — each KEY becomes a ${KEY} token.
-	Env map[string]string `yaml:"env,omitempty"`
+	Env map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
 
 	// MCPEndpoint drives the canonical ${MCP_ENDPOINT} substitution. Pointer
 	// so unset (use default) and set-to-"" (disable) differ on the wire.
-	MCPEndpoint *string `yaml:"mcp_endpoint,omitempty"`
+	MCPEndpoint *string `yaml:"mcp_endpoint,omitempty" json:"mcp_endpoint,omitempty"`
 
 	// ValidateAiArtifacts narrows artifact-producing state-dependent probes to
 	// validate the AI's iteration artifact instead of re-running the capture.
 	// See the runner's runCharlyVerb artifact branch. Default false.
-	ValidateAiArtifacts bool `yaml:"validate_ai_artifacts,omitempty"`
+	ValidateAiArtifacts bool `yaml:"validate_ai_artifacts,omitempty" json:"validate_ai_artifacts,omitempty"`
 }
 
 // NotesEnabled returns true unless the iterate block explicitly opts out.

@@ -17,27 +17,27 @@ package main
 // to add pod-specific extras that are reused across multiple deployments.
 type PodSpec struct {
 	// Box is the kind:image name this pod template wraps. Required.
-	Box string `yaml:"box"`
+	Box string `yaml:"box" json:"box"`
 
 	// Sidecars are additional containers that accompany the main pod
 	// container. Genuinely pod-specific: only meaningful at pod deployment
 	// time, not declared by the image itself.
-	Sidecar []SidecarConfig `yaml:"sidecar,omitempty"`
+	Sidecar []SidecarConfig `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
 
 	// Secret entries are secret requirements that apply to any deployment
 	// using this template. Same type as DeploymentNode.Secret — deployment
 	// entries can add additional secrets on top.
-	Secret []DeploySecretConfig `yaml:"secret,omitempty"`
+	Secret []DeploySecretConfig `yaml:"secret,omitempty" json:"secret,omitempty"`
 
 	// EnvDefaults supplies default VALUES for env vars the IMAGE already
 	// declares via LabelEnv. Use only when multiple deployments share the
 	// same default (e.g., WEBUI_ADMIN_EMAIL=admin@example.com). The image
 	// declares WHICH env vars exist; this field provides OPTIONAL default
 	// values. Deployment overrides any of them.
-	EnvDefaults []string `yaml:"env_default,omitempty"`
+	EnvDefaults []string `yaml:"env_default,omitempty" json:"env_default,omitempty"`
 
 	// Plan carries optional target-specific plan steps that run for every
 	// deployment using this template. Candy and box plans propagate
 	// automatically via the composition machinery.
-	Plan []Step `yaml:"plan,omitempty"`
+	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
 }

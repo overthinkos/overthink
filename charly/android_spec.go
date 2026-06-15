@@ -24,46 +24,46 @@ type AndroidSpec struct {
 	// Box names the kind:box that bakes the emulator (Android SDK +
 	// system image + adb + apkeep). In-pod source: apkeep runs inside the
 	// running pod and adb reaches the emulator via the pod. XOR Adb.
-	Box string `yaml:"box,omitempty"`
+	Box string `yaml:"box,omitempty" json:"box,omitempty"`
 
 	// Adb names a remote/physical adb endpoint (network host:port served by
 	// an adb server). Endpoint source: apkeep runs on the host and the APK
 	// is pushed via goadb to the endpoint. XOR Box.
-	Adb *AndroidAdbEndpoint `yaml:"adb,omitempty"`
+	Adb *AndroidAdbEndpoint `yaml:"adb,omitempty" json:"adb,omitempty"`
 
 	// Serial selects the device the adb server manages. Default
 	// "emulator-5554" (the first emulator).
-	Serial string `yaml:"serial,omitempty"`
+	Serial string `yaml:"serial,omitempty" json:"serial,omitempty"`
 
 	// GoogleAccount names the credential-store secret keys feeding apkeep's
 	// google-play source (an AAS token, NOT a password). Optional — only the
 	// `source: google-play` apk path consults it.
-	GoogleAccount *AndroidGoogleAccount `yaml:"google_account,omitempty"`
+	GoogleAccount *AndroidGoogleAccount `yaml:"google_account,omitempty" json:"google_account,omitempty"`
 
 	// --- Informational (documents the referenced box's baked profile) ---
 	// Neither asserted nor used to reconfigure a running emulator (the live
 	// device profile lives in the box/candy env; overrides apply at the
 	// next pod `charly update`). Present so a kind:android entity is
 	// self-describing.
-	Device   string `yaml:"device,omitempty"`    // e.g. "pixel_9a"
-	ApiLevel int    `yaml:"api_level,omitempty"` // e.g. 36
+	Device   string `yaml:"device,omitempty" json:"device,omitempty"`       // e.g. "pixel_9a"
+	ApiLevel int    `yaml:"api_level,omitempty" json:"api_level,omitempty"` // e.g. 36
 
 	// --- Target-specific plan steps (parity with K8sSpec) ---
-	Plan []Step `yaml:"plan,omitempty"`
+	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
 }
 
 // AndroidAdbEndpoint addresses a remote/physical device's adb server.
 type AndroidAdbEndpoint struct {
 	// Host is the "host:port" of an adb server (the published 5037 of an
 	// emulator pod, or a host running `adb connect`-ed to a network device).
-	Host string `yaml:"host,omitempty"`
+	Host string `yaml:"host,omitempty" json:"host,omitempty"`
 }
 
 // AndroidGoogleAccount selects the credential-store keys the apkeep
 // google-play source reads (resolved from the secret store, never inlined).
 type AndroidGoogleAccount struct {
-	EmailSecret string `yaml:"email_secret,omitempty"` // default GOOGLE_ACCOUNT_EMAIL
-	TokenSecret string `yaml:"token_secret,omitempty"` // default GOOGLE_AAS_TOKEN
+	EmailSecret string `yaml:"email_secret,omitempty" json:"email_secret,omitempty"` // default GOOGLE_ACCOUNT_EMAIL
+	TokenSecret string `yaml:"token_secret,omitempty" json:"token_secret,omitempty"` // default GOOGLE_AAS_TOKEN
 }
 
 // IsEndpoint reports whether the device is a remote/physical adb endpoint

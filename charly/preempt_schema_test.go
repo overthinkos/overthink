@@ -3,8 +3,6 @@ package main
 import (
 	"strings"
 	"testing"
-
-	"gopkg.in/yaml.v3"
 )
 
 // IsPreemptible is independent of disposable/ephemeral: a node may be both, and
@@ -49,7 +47,7 @@ func TestDeploymentNode_PreemptibleOrthogonal(t *testing.T) {
 func TestPreemptibleConfig_UnmarshalYAML(t *testing.T) {
 	// List shorthand → Holds, default stop/restore.
 	var listForm DeploymentNode
-	if err := yaml.Unmarshal([]byte("preemptible: [gpu, tpu]\n"), &listForm); err != nil {
+	if err := decodeViaCUEForTest(t, "preemptible: [gpu, tpu]\n", &listForm); err != nil {
 		t.Fatalf("list-shorthand unmarshal: %v", err)
 	}
 	if got := listForm.PreemptionHolds(); len(got) != 2 || got[0] != "gpu" || got[1] != "tpu" {
@@ -65,7 +63,7 @@ func TestPreemptibleConfig_UnmarshalYAML(t *testing.T) {
 	// Block form.
 	var blockForm DeploymentNode
 	blockYAML := "preemptible:\n  holds: [gpu]\n  stop: shutdown\n  restore: on-success\n"
-	if err := yaml.Unmarshal([]byte(blockYAML), &blockForm); err != nil {
+	if err := decodeViaCUEForTest(t, blockYAML, &blockForm); err != nil {
 		t.Fatalf("block unmarshal: %v", err)
 	}
 	if blockForm.Preemptible.EffectiveRestore() != PreemptRestoreSuccess {
@@ -73,9 +71,10 @@ func TestPreemptibleConfig_UnmarshalYAML(t *testing.T) {
 	}
 
 	// Scalar (e.g. `preemptible: true`) is rejected — a holder must name what
-	// it holds.
+	// it holds. The normalizer leaves a scalar unchanged, so CUE Decode of a
+	// scalar into the PreemptibleConfig struct fails.
 	var scalarForm DeploymentNode
-	if err := yaml.Unmarshal([]byte("preemptible: true\n"), &scalarForm); err == nil {
+	if err := decodeViaCUEForTest(t, "preemptible: true\n", &scalarForm); err == nil {
 		t.Fatal("scalar preemptible should be rejected")
 	}
 }

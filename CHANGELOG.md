@@ -22,6 +22,48 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-15 — feat(loader)!: CUE-decode loader switch — eliminate the custom YAML unmarshalers
+
+The full loader switch (Cutover 1 of the CUE migration). The unified loader now
+ingests YAML through CUE and decodes the data model via `cue.Value.Decode`
+universally — every entity, every load path (root-shape docs, candy manifests,
+kind-keyed docs). The 15 custom data-model `UnmarshalYAML` shorthand decoders are
+DELETED; their wire-shape canonicalization moves to a generic reflection-guided
+normalizer (`charly/cue_normalize.go`, `NormalizeEntityNode`) that walks a YAML
+node in parallel with the Go type graph and runs at load.
+
+Mechanism (Option C): per-entity decode = clone YAML node → normalize shorthand
+to canonical struct form → CUE ingest → `Decode` (`charly/cue_loader.go`). Three
+pillars: (1) json tags added across the data model (1032, matching the yaml tags)
+so `cue.Value.Decode` maps snake_case keys; (2) the normalizer's per-type
+expanders port each deleted unmarshaler's canonical mapping byte-for-byte —
+`PackageItem`, `PortSpec`, `ContainsList`, `ShellConfig`, `LibvirtGraphicsListeners`,
+`PreemptibleConfig`, `TunnelYAML`, `DeployShellOverlay`; `EphemeralLifetime` gets
+an `UnmarshalJSON` instead (its unexported `boolForm` defeats reflection); (3)
+`Matcher`/`MatcherList`/`PortScope` keep `UnmarshalJSON` (the OCI-label JSON
+transport) and lose only their dead `UnmarshalYAML`. Loader-envelope `ImportList`/
+`ScanSpec` stay Go — the import/discover graph resolution is unchanged.
+
+CUE owns schema + validation universally (`validateProjectCUESchemas` /
+`validateCandyCUESchemas` validate every kind against `#<Kind>` at
+`charly box validate`). Decode parity was proven on the whole corpus (340
+entities across all repos) before the switch. Because load-time normalize keeps
+shorthand AUTHORING working, the originally-planned 639-file on-disk
+normalization migration and the canonical-schema-tightening were unnecessary and
+dropped (a net simplification; authors keep `port: 8080` shorthand). Load-time
+candy typo-detection (unknown top-level key) is preserved by a Go guard
+(`rejectUnknownCandyTopLevelKeys`); `keylint` suppresses the self-decoding
+operator-map / shell types that no longer opt out of `KnownFields` via a custom
+`UnmarshalYAML`.
+
+R10: `go test ./...` + `task build:charly` + four disposable **fresh-rebuild**
+beds — `check-pod` (pod), `check-fedora-vm` (vm), `check-k3s-vm` (k8s-on-vm),
+`check-arch-vm` (vm + nested host deploys) — all PASS with zero charly-emitted
+warnings; `charly box validate` clean on every box submodule. The redundant Go
+per-entity validators (now duplicated by the universal CUE validation) are
+removed in the immediate-next cutover (R2-separable: this cutover's R10 passes
+without it).
+
 ### 2026-06-14 — feat(schema)!: tighten all CUE schemas to closed Go-struct parity
 
 The follow-on to the additive CUE-validation layer (below): the deliberately

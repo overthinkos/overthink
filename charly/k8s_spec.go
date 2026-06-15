@@ -13,158 +13,158 @@ package main
 // template from multiple deployments).
 type K8sSpec struct {
 	// Box is the kind:box name this workload runs. Required.
-	Box string `yaml:"box"`
+	Box string `yaml:"box" json:"box"`
 
 	// --- Workload-level defaults ---
 
 	// Replicas default for deployments using this template. Nil means
 	// "use generator default" (typically 1 for Deployment, N for
 	// StatefulSet). Deployment `replicas:` overrides.
-	Replica *int `yaml:"replica,omitempty"`
+	Replica *int `yaml:"replica,omitempty" json:"replica,omitempty"`
 
 	// Resources declares per-container CPU / memory requests and limits.
 	// Deployment `resources:` deep-merges on top (see override semantics
 	// in the plan).
-	Resources *K8sResources `yaml:"resources,omitempty"`
+	Resources *K8sResources `yaml:"resources,omitempty" json:"resources,omitempty"`
 
 	// Hostnames lists workload-specific ingress entries (hostname + tls
 	// bool + optional path). Cluster-wide ingress class / cert-issuer
 	// live in IngressDefaults (below). Deployment `hostnames:` replaces.
-	Hostnames []K8sHostname `yaml:"hostnames,omitempty"`
+	Hostnames []K8sHostname `yaml:"hostnames,omitempty" json:"hostnames,omitempty"`
 
 	// --- Cluster-wide policy (absorbed from the former ClusterProfile) ---
 
 	// KubeconfigContext names the kubectl context to target. Required if
 	// the deployment is to reach a real cluster. Can be overridden
 	// per-command via --context.
-	KubeconfigContext string `yaml:"kubeconfig_context,omitempty"`
+	KubeconfigContext string `yaml:"kubeconfig_context,omitempty" json:"kubeconfig_context,omitempty"`
 
 	// AdmissionPolicy is the Pod Security Admission level for emitted
 	// manifests: restricted | baseline | privileged.
-	AdmissionPolicy string `yaml:"admission_policy,omitempty"`
+	AdmissionPolicy string `yaml:"admission_policy,omitempty" json:"admission_policy,omitempty"`
 
 	// DefaultNamespace places the workload in a K8s namespace when the
 	// deployment's namespace is unset. Defaults to "default".
-	DefaultNamespace string `yaml:"default_namespace,omitempty"`
+	DefaultNamespace string `yaml:"default_namespace,omitempty" json:"default_namespace,omitempty"`
 
 	// Storage carries cluster-wide storage class defaults.
-	Storage K8sStorage `yaml:"storage,omitempty"`
+	Storage K8sStorage `yaml:"storage,omitempty" json:"storage,omitempty"`
 
 	// Ingress carries cluster-wide ingress policy (class, cert-issuer).
 	// Distinct from workload Hostnames (above). Renamed to keep
 	// consumer sites stable.
-	Ingress K8sIngressDefaults `yaml:"ingress,omitempty"`
+	Ingress K8sIngressDefaults `yaml:"ingress,omitempty" json:"ingress,omitempty"`
 
 	// GatewayAPI toggles HTTPRoute emission instead of Ingress when
 	// enabled.
-	GatewayAPI K8sGatewayAPI `yaml:"gateway_api,omitempty"`
+	GatewayAPI K8sGatewayAPI `yaml:"gateway_api,omitempty" json:"gateway_api,omitempty"`
 
 	// Secret picks a secret backend: external-secrets | sealed-secrets
 	// | raw.
-	Secret K8sSecretsBackend `yaml:"secret,omitempty"`
+	Secret K8sSecretsBackend `yaml:"secret,omitempty" json:"secret,omitempty"`
 
 	// ImageDefault carries cluster-wide image pull defaults. Renamed
 	// from `images:` (plural) to `image_default:` (singular, semantic)
 	// to avoid yaml-tag collision with the workload's `image:` field
 	// above (field-singular cutover, 2026-05).
-	ImageDefault K8sImagesDefaults `yaml:"image_default,omitempty"`
+	ImageDefault K8sImagesDefaults `yaml:"image_default,omitempty" json:"image_default,omitempty"`
 
 	// PodDefault are cluster-wide tolerations / nodeSelector / priority
 	// class defaults applied to every generated pod spec.
-	PodDefault K8sPodDefaults `yaml:"pod_default,omitempty"`
+	PodDefault K8sPodDefaults `yaml:"pod_default,omitempty" json:"pod_default,omitempty"`
 
 	// Observability toggles ServiceMonitor emission for prometheus-
 	// tagged ports.
-	Observability K8sObservability `yaml:"observability,omitempty"`
+	Observability K8sObservability `yaml:"observability,omitempty" json:"observability,omitempty"`
 
 	// NetworkPolicy selects emission mode: auto | strict | none.
-	NetworkPolicy string `yaml:"network_policy,omitempty"`
+	NetworkPolicy string `yaml:"network_policy,omitempty" json:"network_policy,omitempty"`
 
 	// Defaults are cluster-wide labels + annotations applied to every
 	// generated resource.
-	Defaults K8sResourceDefaults `yaml:"defaults,omitempty"`
+	Defaults K8sResourceDefaults `yaml:"defaults,omitempty" json:"defaults,omitempty"`
 
 	// --- Target-specific plan steps (optional) ---
 
-	Plan []Step `yaml:"plan,omitempty"`
+	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
 }
 
 // K8sResources is per-container CPU / memory requests + limits.
 type K8sResources struct {
-	Requests K8sResourceValues `yaml:"requests,omitempty"`
-	Limits   K8sResourceValues `yaml:"limits,omitempty"`
+	Requests K8sResourceValues `yaml:"requests,omitempty" json:"requests,omitempty"`
+	Limits   K8sResourceValues `yaml:"limits,omitempty" json:"limits,omitempty"`
 }
 
 // K8sResourceValues names the two resource axes K8s tracks natively.
 type K8sResourceValues struct {
-	CPU    string `yaml:"cpu,omitempty"`    // e.g. "500m", "2"
-	Memory string `yaml:"memory,omitempty"` // e.g. "512Mi", "4Gi"
+	CPU    string `yaml:"cpu,omitempty" json:"cpu,omitempty"`       // e.g. "500m", "2"
+	Memory string `yaml:"memory,omitempty" json:"memory,omitempty"` // e.g. "512Mi", "4Gi"
 }
 
 // K8sHostname is one workload ingress entry.
 type K8sHostname struct {
-	Host string `yaml:"host"`           // e.g. "app.example.com"
-	TLS  bool   `yaml:"tls,omitempty"`  // emit TLS block
-	Path string `yaml:"path,omitempty"` // default "/"
+	Host string `yaml:"host" json:"host"`                     // e.g. "app.example.com"
+	TLS  bool   `yaml:"tls,omitempty" json:"tls,omitempty"`   // emit TLS block
+	Path string `yaml:"path,omitempty" json:"path,omitempty"` // default "/"
 }
 
 // K8sStorage carries cluster-wide storage class defaults (formerly
 // ClusterStorage).
 type K8sStorage struct {
-	ClassDefault      string `yaml:"class_default,omitempty"`
-	ClassCheap        string `yaml:"class_cheap,omitempty"`
-	ClassEncrypted    string `yaml:"class_encrypted,omitempty"`
-	ClassFast         string `yaml:"class_fast,omitempty"`
-	AccessModeDefault string `yaml:"access_mode_default,omitempty"`
+	ClassDefault      string `yaml:"class_default,omitempty" json:"class_default,omitempty"`
+	ClassCheap        string `yaml:"class_cheap,omitempty" json:"class_cheap,omitempty"`
+	ClassEncrypted    string `yaml:"class_encrypted,omitempty" json:"class_encrypted,omitempty"`
+	ClassFast         string `yaml:"class_fast,omitempty" json:"class_fast,omitempty"`
+	AccessModeDefault string `yaml:"access_mode_default,omitempty" json:"access_mode_default,omitempty"`
 }
 
 // K8sIngressDefaults carries cluster-wide ingress policy (formerly
 // ClusterIngress).
 type K8sIngressDefaults struct {
-	Enabled         bool   `yaml:"enabled,omitempty"`
-	Class           string `yaml:"class,omitempty"`
-	CertIssuer      string `yaml:"cert_issuer,omitempty"`
-	PathTypeDefault string `yaml:"path_type_default,omitempty"`
+	Enabled         bool   `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	Class           string `yaml:"class,omitempty" json:"class,omitempty"`
+	CertIssuer      string `yaml:"cert_issuer,omitempty" json:"cert_issuer,omitempty"`
+	PathTypeDefault string `yaml:"path_type_default,omitempty" json:"path_type_default,omitempty"`
 }
 
 // K8sGatewayAPI toggles HTTPRoute emission (formerly ClusterGatewayAPI).
 type K8sGatewayAPI struct {
-	Enabled      bool   `yaml:"enabled,omitempty"`
-	GatewayClass string `yaml:"gateway_class,omitempty"`
+	Enabled      bool   `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	GatewayClass string `yaml:"gateway_class,omitempty" json:"gateway_class,omitempty"`
 }
 
 // K8sSecretsBackend picks a secret backend (formerly ClusterSecrets).
 type K8sSecretsBackend struct {
-	Backend string `yaml:"backend,omitempty"` // external-secrets | sealed-secrets | raw
-	Store   string `yaml:"store,omitempty"`   // ExternalSecret SecretStore name
-	Prefix  string `yaml:"prefix,omitempty"`  // prepended to secret keys
+	Backend string `yaml:"backend,omitempty" json:"backend,omitempty"` // external-secrets | sealed-secrets | raw
+	Store   string `yaml:"store,omitempty" json:"store,omitempty"`     // ExternalSecret SecretStore name
+	Prefix  string `yaml:"prefix,omitempty" json:"prefix,omitempty"`   // prepended to secret keys
 }
 
 // K8sImagesDefaults carries cluster-wide image pull defaults (formerly
 // ClusterImages).
 type K8sImagesDefaults struct {
-	PullPolicy  string   `yaml:"pull_policy,omitempty"`  // IfNotPresent | Always | Never
-	PullSecrets []string `yaml:"pull_secrets,omitempty"` // imagePullSecrets names
+	PullPolicy  string   `yaml:"pull_policy,omitempty" json:"pull_policy,omitempty"`   // IfNotPresent | Always | Never
+	PullSecrets []string `yaml:"pull_secrets,omitempty" json:"pull_secrets,omitempty"` // imagePullSecrets names
 }
 
 // K8sPodDefaults carries cluster-wide pod defaults (formerly
 // ClusterPodDefaults).
 type K8sPodDefaults struct {
-	PriorityClass string            `yaml:"priority_class,omitempty"`
-	Tolerations   []map[string]any  `yaml:"tolerations,omitempty"`
-	NodeSelector  map[string]string `yaml:"node_selector,omitempty"`
+	PriorityClass string            `yaml:"priority_class,omitempty" json:"priority_class,omitempty"`
+	Tolerations   []map[string]any  `yaml:"tolerations,omitempty" json:"tolerations,omitempty"`
+	NodeSelector  map[string]string `yaml:"node_selector,omitempty" json:"node_selector,omitempty"`
 }
 
 // K8sObservability toggles ServiceMonitor emission (formerly
 // ClusterObservability).
 type K8sObservability struct {
-	ServiceMonitor         bool   `yaml:"service_monitor,omitempty"`
-	ServiceMonitorInterval string `yaml:"service_monitor_interval,omitempty"`
+	ServiceMonitor         bool   `yaml:"service_monitor,omitempty" json:"service_monitor,omitempty"`
+	ServiceMonitorInterval string `yaml:"service_monitor_interval,omitempty" json:"service_monitor_interval,omitempty"`
 }
 
 // K8sResourceDefaults carries cluster-wide labels + annotations
 // (formerly ClusterResourceDefaults).
 type K8sResourceDefaults struct {
-	Labels      map[string]string `yaml:"labels,omitempty"`
-	Annotations map[string]string `yaml:"annotations,omitempty"`
+	Labels      map[string]string `yaml:"labels,omitempty" json:"labels,omitempty"`
+	Annotations map[string]string `yaml:"annotations,omitempty" json:"annotations,omitempty"`
 }

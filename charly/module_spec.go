@@ -30,6 +30,6 @@ type ModuleSpec struct {
 // ModuleDoc wraps a single ModuleSpec with an explicit Name — the standalone
 // `kind: module` form.
 type ModuleDoc struct {
-	Name       string `yaml:"name"`
+	Name       string `yaml:"name" json:"name"`
 	ModuleSpec `yaml:",inline"`
 }

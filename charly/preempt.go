@@ -40,34 +40,34 @@ import (
 // claimant) — enough to probe/stop/start it WITHOUT re-reading config, so a
 // lease loaded after a crash can act on it.
 type holderAddr struct {
-	Name     string `yaml:"name"`               // full deploy key (for messages)
-	Target   string `yaml:"target"`             // "vm" | "pod"
-	Base     string `yaml:"base"`               // parseDeployKey base (pod container basis / vm fallback)
-	Instance string `yaml:"instance,omitempty"` // parseDeployKey instance
-	Vm       string `yaml:"vm,omitempty"`       // vm entity (target:vm)
+	Name     string `yaml:"name" json:"name"`                             // full deploy key (for messages)
+	Target   string `yaml:"target" json:"target"`                         // "vm" | "pod"
+	Base     string `yaml:"base" json:"base"`                             // parseDeployKey base (pod container basis / vm fallback)
+	Instance string `yaml:"instance,omitempty" json:"instance,omitempty"` // parseDeployKey instance
+	Vm       string `yaml:"vm,omitempty" json:"vm,omitempty"`             // vm entity (target:vm)
 }
 
 // preemptedHolder records one holder a lease stopped, its declared exclusive
 // tokens, and its restore policy — so ReleaseClaimant/reconcile restart
 // exactly what was stopped.
 type preemptedHolder struct {
-	Addr    holderAddr `yaml:"addr"`
-	Holds   []string   `yaml:"holds"`
-	Restore string     `yaml:"restore"` // always | on-success
+	Addr    holderAddr `yaml:"addr" json:"addr"`
+	Holds   []string   `yaml:"holds" json:"holds"`
+	Restore string     `yaml:"restore" json:"restore"` // always | on-success
 }
 
 // preemptLease is one active exclusive claim.
 type preemptLease struct {
-	Claimant  string            `yaml:"claimant"`
-	Claim     holderAddr        `yaml:"claim"` // probe whether the claimant is still alive (reconcile)
-	Tokens    []string          `yaml:"tokens"`
-	Transient bool              `yaml:"transient"` // check-bed claims auto-release; persistent claims (vm create/start) don't
-	Preempted []preemptedHolder `yaml:"preempted"`
-	Created   string            `yaml:"created"` // RFC3339 UTC
+	Claimant  string            `yaml:"claimant" json:"claimant"`
+	Claim     holderAddr        `yaml:"claim" json:"claim"` // probe whether the claimant is still alive (reconcile)
+	Tokens    []string          `yaml:"tokens" json:"tokens"`
+	Transient bool              `yaml:"transient" json:"transient"` // check-bed claims auto-release; persistent claims (vm create/start) don't
+	Preempted []preemptedHolder `yaml:"preempted" json:"preempted"`
+	Created   string            `yaml:"created" json:"created"` // RFC3339 UTC
 }
 
 type preemptLedger struct {
-	Leases []preemptLease `yaml:"leases"`
+	Leases []preemptLease `yaml:"leases" json:"leases"`
 }
 
 // Lease is the handle returned by AcquireExclusive. Release() restores

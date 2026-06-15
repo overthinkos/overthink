@@ -190,7 +190,7 @@ devices:
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var lv LibvirtDomain
-			if err := yaml.Unmarshal([]byte(tc.yamlStr), &lv); err != nil {
+			if err := decodeViaCUEForTest(t, tc.yamlStr, &lv); err != nil {
 				t.Fatalf("yaml unmarshal: %v", err)
 			}
 			out, err := RenderDomainXML(&VmSpec{Libvirt: &lv},

@@ -50,75 +50,75 @@ import (
 //	    enable: true
 type ServiceEntry struct {
 	// Identity
-	Name string `yaml:"name"`
+	Name string `yaml:"name" json:"name"`
 
 	// Packaged-unit reuse path — when non-empty, this entry enables an
 	// existing systemd unit shipped by a distro package. The Exec/Env/
 	// Restart/etc. fields are ignored; Overrides get rendered as a
 	// drop-in instead.
-	UsePackaged string `yaml:"use_packaged,omitempty"`
+	UsePackaged string `yaml:"use_packaged,omitempty" json:"use_packaged,omitempty"`
 
 	// Custom-unit path — mutually exclusive with UsePackaged. The
 	// init-system's service_template (in build.yml) renders these into
 	// the native unit format (supervisord INI or systemd unit file).
-	Exec             string            `yaml:"exec,omitempty"`
-	Env              map[string]string `yaml:"env,omitempty"`
-	Restart          string            `yaml:"restart,omitempty"` // no | on-failure | always | unless-stopped
-	WorkingDirectory string            `yaml:"working_directory,omitempty"`
-	User             string            `yaml:"user,omitempty"`
-	After            []string          `yaml:"after,omitempty"`
-	Before           []string          `yaml:"before,omitempty"`
+	Exec             string            `yaml:"exec,omitempty" json:"exec,omitempty"`
+	Env              map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
+	Restart          string            `yaml:"restart,omitempty" json:"restart,omitempty"` // no | on-failure | always | unless-stopped
+	WorkingDirectory string            `yaml:"working_directory,omitempty" json:"working_directory,omitempty"`
+	User             string            `yaml:"user,omitempty" json:"user,omitempty"`
+	After            []string          `yaml:"after,omitempty" json:"after,omitempty"`
+	Before           []string          `yaml:"before,omitempty" json:"before,omitempty"`
 	// WantedBy overrides the [Install] target the unit is enabled into.
 	// Default (empty) → the scope default (user→default.target,
 	// system→multi-user.target). Set to e.g. [graphical-session.target] for a
 	// user service that must start WITH the logged-in graphical session (so it
 	// is NOT pulled at early user-manager start, before the session/portal
 	// exist). systemd-only; supervisord ignores it.
-	WantedBy    []string `yaml:"wanted_by,omitempty"`
-	Stdout      string   `yaml:"stdout,omitempty"` // journal | file:<path> | none
-	StopTimeout string   `yaml:"stop_timeout,omitempty"`
+	WantedBy    []string `yaml:"wanted_by,omitempty" json:"wanted_by,omitempty"`
+	Stdout      string   `yaml:"stdout,omitempty" json:"stdout,omitempty"` // journal | file:<path> | none
+	StopTimeout string   `yaml:"stop_timeout,omitempty" json:"stop_timeout,omitempty"`
 
 	// Common to both paths
-	Scope     string            `yaml:"scope,omitempty"` // system | user; default system
-	Enable    bool              `yaml:"enable,omitempty"`
-	Overrides *ServiceOverrides `yaml:"overrides,omitempty"`
+	Scope     string            `yaml:"scope,omitempty" json:"scope,omitempty"` // system | user; default system
+	Enable    bool              `yaml:"enable,omitempty" json:"enable,omitempty"`
+	Overrides *ServiceOverrides `yaml:"overrides,omitempty" json:"overrides,omitempty"`
 
 	// --- supervisord/systemd lifecycle directives ---
 
 	// Kind discriminates supervisord [program:X] vs [eventlistener:X].
 	// Default "" == "program". systemd ignores this (renders as Service unit).
-	Kind string `yaml:"kind,omitempty"`
+	Kind string `yaml:"kind,omitempty" json:"kind,omitempty"`
 
 	// Events — supervisord eventlistener trigger list (comma-separated),
 	// e.g. "PROCESS_STATE_FATAL". Required when kind: eventlistener.
-	Events string `yaml:"event,omitempty"`
+	Events string `yaml:"event,omitempty" json:"event,omitempty"`
 
 	// AutoStart is tri-state: nil → template default (true for program,
 	// true for eventlistener); *false → autostart=false; *true → autostart=true.
 	// Use `auto_start: false` for services started manually (e.g., chrome
 	// started by the compositor once Wayland is up).
-	AutoStart *bool `yaml:"auto_start,omitempty"`
+	AutoStart *bool `yaml:"auto_start,omitempty" json:"auto_start,omitempty"`
 
 	// StartRetries — max (re)start attempts before the program enters FATAL.
 	// Supervisord default is 3. Set explicitly to override.
-	StartRetries int `yaml:"start_retry,omitempty"`
+	StartRetries int `yaml:"start_retry,omitempty" json:"start_retry,omitempty"`
 
 	// StartSecs — seconds the process must stay up to count as "started."
 	// Default 1; longer values are needed for services like Wayland
 	// compositors that take time to reach steady state.
-	StartSecs int `yaml:"start_sec,omitempty"`
+	StartSecs int `yaml:"start_sec,omitempty" json:"start_sec,omitempty"`
 
 	// StopSignal — signal sent on graceful stop. Default TERM; some
 	// programs need INT or HUP. Case-insensitive.
-	StopSignal string `yaml:"stop_signal,omitempty"`
+	StopSignal string `yaml:"stop_signal,omitempty" json:"stop_signal,omitempty"`
 
 	// ExitCodes — comma-separated "successful" exit codes. Supervisord
 	// default is "0,2". Relevant only when Restart == "no" or "on-failure".
-	ExitCode string `yaml:"exit_code,omitempty"`
+	ExitCode string `yaml:"exit_code,omitempty" json:"exit_code,omitempty"`
 
 	// Priority — startup / shutdown order. Lower = earlier to start,
 	// later to stop. Supervisord default 999.
-	Priority int `yaml:"priority,omitempty"`
+	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
 }
 
 // ServiceOverrides describes drop-in modifications to a packaged unit.
@@ -126,9 +126,9 @@ type ServiceEntry struct {
 // means "preserve the packaged unit's value." Future fields (WantedBy,
 // RequiredBy, …) can be added here without schema changes elsewhere.
 type ServiceOverrides struct {
-	Env   map[string]string `yaml:"env,omitempty"`
-	After []string          `yaml:"after,omitempty"`
-	Exec  string            `yaml:"exec,omitempty"` // override ExecStart
+	Env   map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
+	After []string          `yaml:"after,omitempty" json:"after,omitempty"`
+	Exec  string            `yaml:"exec,omitempty" json:"exec,omitempty"` // override ExecStart
 }
 
 // IsPackaged returns true for entries that reuse a distro-shipped unit.

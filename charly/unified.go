@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -61,7 +62,7 @@ const MaxIncludeDepth = 8
 // root. The top-level `vm:` key replaces the legacy `vms:` (plural). See
 // `charly migrate` for the one-shot migration from v1.
 type UnifiedFile struct {
-	Version string `yaml:"version,omitempty"`
+	Version string `yaml:"version,omitempty" json:"version,omitempty"`
 	// Repo is this project's canonical repo identity (e.g.
 	// "github.com/overthinkos/overthink"). Optional; only meaningful on the ROOT
 	// file. It lets the import-namespace loader break mutual-import cycles by
@@ -69,45 +70,45 @@ type UnifiedFile struct {
 	// resolves to the local working tree instead of fetching a divergent pinned
 	// snapshot, so the root's namespace pins win. When unset, the loader falls
 	// back to `git remote origin` inference (see ns_identity.go).
-	Repo string `yaml:"repo,omitempty"`
+	Repo string `yaml:"repo,omitempty" json:"repo,omitempty"`
 	// Import is the SINGLE composition statement (the legacy `include:` key
 	// was deleted in the 2026-05 import-namespace cutover). A list whose
 	// items are either a bare string (flat import into THIS root namespace —
 	// same-repo file splits + shared build.yml vocabulary) or a single-key
 	// map `alias: ref` (a namespaced child import — cross-repo entity
 	// cherry-pick, referenced qualified as `alias.entry`). See ImportList.
-	Import   ImportList             `yaml:"import,omitempty"`
-	Discover DiscoverConfig         `yaml:"discover,omitempty"`
-	Distro   map[string]*DistroDef  `yaml:"distro,omitempty"`
-	Builder  map[string]*BuilderDef `yaml:"builder,omitempty"`
-	Init     map[string]*InitDef    `yaml:"init,omitempty"`
-	Defaults BoxConfig              `yaml:"defaults,omitempty"`
+	Import   ImportList             `yaml:"import,omitempty" json:"import,omitempty"`
+	Discover DiscoverConfig         `yaml:"discover,omitempty" json:"discover,omitempty"`
+	Distro   map[string]*DistroDef  `yaml:"distro,omitempty" json:"distro,omitempty"`
+	Builder  map[string]*BuilderDef `yaml:"builder,omitempty" json:"builder,omitempty"`
+	Init     map[string]*InitDef    `yaml:"init,omitempty" json:"init,omitempty"`
+	Defaults BoxConfig              `yaml:"defaults,omitempty" json:"defaults,omitempty"`
 	// Field-singular cutover (2026-05): legacy plural `Images yaml:"images"`
 	// deleted; the singular `Box yaml:"box"` is the canonical surface.
-	Box   map[string]BoxConfig    `yaml:"box,omitempty"`
-	Candy map[string]*InlineCandy `yaml:"candy,omitempty"`
-	VM    map[string]*VmSpec      `yaml:"vm,omitempty"`
+	Box   map[string]BoxConfig    `yaml:"box,omitempty" json:"box,omitempty"`
+	Candy map[string]*InlineCandy `yaml:"candy,omitempty" json:"candy,omitempty"`
+	VM    map[string]*VmSpec      `yaml:"vm,omitempty" json:"vm,omitempty"`
 	// Field-singular cutover: legacy `Deploys *DeploymentsSection
 	// yaml:"deployments"` deleted. The flat `Deploy yaml:"deploy"` map is
 	// the canonical singular surface; the wrapper's `Provides` migrates
 	// to UnifiedFile root (next field).
-	Deploy   map[string]DeploymentNode `yaml:"deploy,omitempty"`
-	Provides *ProvidesConfig           `yaml:"provides,omitempty"`
+	Deploy   map[string]DeploymentNode `yaml:"deploy,omitempty" json:"deploy,omitempty"`
+	Provides *ProvidesConfig           `yaml:"provides,omitempty" json:"provides,omitempty"`
 
 	// Schema v4: first-class target template maps (singular keys).
-	Pod   map[string]*PodSpec   `yaml:"pod,omitempty"`
-	K8s   map[string]*K8sSpec   `yaml:"k8s,omitempty"`
-	Local map[string]*LocalSpec `yaml:"local,omitempty"`
+	Pod   map[string]*PodSpec   `yaml:"pod,omitempty" json:"pod,omitempty"`
+	K8s   map[string]*K8sSpec   `yaml:"k8s,omitempty" json:"k8s,omitempty"`
+	Local map[string]*LocalSpec `yaml:"local,omitempty" json:"local,omitempty"`
 
 	// Android (kind:android) — Android device substrates (an in-pod emulator
 	// or a remote/physical adb endpoint) onto which `apk:` packages install
 	// via a `target: android` deploy. Modeled on K8s (the device is the
 	// substrate; the apps ride in on the deploy's candies). See android_spec.go.
-	Android map[string]*AndroidSpec `yaml:"android,omitempty"`
+	Android map[string]*AndroidSpec `yaml:"android,omitempty" json:"android,omitempty"`
 
 	// Agent catalog (kind:agent) — the AI-CLI graders the iterate loop drives.
 	// See agent_config.go.
-	Agent map[string]*AgentConfig `yaml:"agent,omitempty"`
+	Agent map[string]*AgentConfig `yaml:"agent,omitempty" json:"agent,omitempty"`
 
 	// Check (kind:check) — disposable R10 test beds. A deploy-shaped map
 	// (bed-name → DeploymentNode) authored in check.yml. foldCheckBeds()
@@ -115,7 +116,7 @@ type UnifiedFile struct {
 	// Deploy map (CheckBed=true) at load time so every deploy verb resolves
 	// a bed by name through the SAME path as any deploy; `charly check run <bed>`
 	// drives the full R10 sequence. CheckBeds() enumerates them.
-	Check map[string]DeploymentNode `yaml:"check,omitempty"`
+	Check map[string]DeploymentNode `yaml:"check,omitempty" json:"check,omitempty"`
 
 	// Calamares-aligned kinds (2026-05 cutover). `group:` ↔ Calamares
 	// netinstall package group; `target:` ↔ Calamares settings.conf
@@ -123,16 +124,16 @@ type UnifiedFile struct {
 	// Convention files: groups.yml / targets.yml / modules.yml — or
 	// inlined in charly.yml. Importers/emitters are deferred to a
 	// follow-up additive PR; this cutover lands the schema.
-	Group  map[string]*GroupSpec  `yaml:"group,omitempty"`
-	Target map[string]*TargetSpec `yaml:"target,omitempty"`
-	Module map[string]*ModuleSpec `yaml:"module,omitempty"`
+	Group  map[string]*GroupSpec  `yaml:"group,omitempty" json:"group,omitempty"`
+	Target map[string]*TargetSpec `yaml:"target,omitempty" json:"target,omitempty"`
+	Module map[string]*ModuleSpec `yaml:"module,omitempty" json:"module,omitempty"`
 
 	// Resource (kind:resource) — exclusive host-resource definitions: a token
 	// name (matching requires_exclusive: / preemptible.holds:) → an optional
 	// hardware selector (e.g. gpu.vendor) that drives GPU auto-allocation at
 	// `charly vm create`. Build-vocab VALUE map; the binary-embedded default
 	// set lives in the embedded charly.yml (embed_defaults.go).
-	Resource map[string]*ResourceDef `yaml:"resource,omitempty"`
+	Resource map[string]*ResourceDef `yaml:"resource,omitempty" json:"resource,omitempty"`
 
 	// Sidecar — the reusable sidecar-container template library (sidecar name
 	// → SidecarDef). The binary-embedded default set (e.g. `tailscale`) lives
@@ -140,7 +141,7 @@ type UnifiedFile struct {
 	// project's own entries by applyEmbeddedDefaults (project-wins). A deploy
 	// references a template by name under `deploy.<name>.sidecar:` and overrides
 	// per-instance. See /charly-automation:sidecar.
-	Sidecar map[string]SidecarDef `yaml:"sidecar,omitempty"`
+	Sidecar map[string]SidecarDef `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
 
 	// Namespaces holds child namespaces mounted by namespaced `import:`
 	// entries (alias → fully-resolved isolated UnifiedFile). NOT authored
@@ -229,11 +230,11 @@ type DiscoverConfig []ScanSpec
 // ("candy" → {Path: "candy", Recursive: true}) or the explicit object form
 // ({path: X, recursive: false}). Empty Path is invalid.
 type ScanSpec struct {
-	Path      string `yaml:"path"`
-	Recursive bool   `yaml:"recursive"`
+	Path      string `yaml:"path" json:"path"`
+	Recursive bool   `yaml:"recursive" json:"recursive"`
 	// Manifest is the per-directory manifest filename to look for. Empty
 	// defaults to UnifiedFileName; configurable per spec in charly.yml.
-	Manifest string `yaml:"manifest,omitempty"`
+	Manifest string `yaml:"manifest,omitempty" json:"manifest,omitempty"`
 }
 
 // UnmarshalYAML accepts the string shorthand where Recursive defaults to true,
@@ -250,9 +251,9 @@ func (s *ScanSpec) UnmarshalYAML(node *yaml.Node) error {
 	// looking at the raw node and only clearing Recursive when the field is
 	// explicitly set to false.
 	var raw struct {
-		Path      string `yaml:"path"`
-		Recursive *bool  `yaml:"recursive"`
-		Manifest  string `yaml:"manifest"`
+		Path      string `yaml:"path" json:"path"`
+		Recursive *bool  `yaml:"recursive" json:"recursive"`
+		Manifest  string `yaml:"manifest" json:"manifest"`
 	}
 	if err := node.Decode(&raw); err != nil {
 		return err
@@ -275,28 +276,11 @@ func (s *ScanSpec) UnmarshalYAML(node *yaml.Node) error {
 // existing scanCandy (no schema change), OR the inline body defines the candy
 // (same fields as the candy manifest, flattened via yaml:",inline").
 type InlineCandy struct {
-	From      string `yaml:"from,omitempty"`
+	From      string `yaml:"from,omitempty" json:"from,omitempty"`
 	CandyYAML `yaml:",inline"`
 	// manifest carries the discovery manifest filename for a `From:` directory
 	// so ProjectCandies→scanCandy reads the right file. Not serialized.
 	manifest string
-}
-
-// UnmarshalYAML is required because CandyYAML has its own UnmarshalYAML —
-// yaml.v3's default ",inline" handling doesn't compose with a custom
-// unmarshaler on the embedded type. We read `from:` explicitly, then delegate
-// to CandyYAML for the body.
-func (il *InlineCandy) UnmarshalYAML(node *yaml.Node) error {
-	var own struct {
-		From string `yaml:"from"`
-	}
-	_ = node.Decode(&own)
-	il.From = own.From
-	if il.From != "" {
-		// `from:` entries reference an external directory — no body decode.
-		return nil
-	}
-	return il.CandyYAML.UnmarshalYAML(node)
 }
 
 // DeploymentsSection carries repo-shipped deployment defaults plus per-image
@@ -307,9 +291,9 @@ func (il *InlineCandy) UnmarshalYAML(node *yaml.Node) error {
 // root level. The type definition is kept (not deleted) because
 // migrate_unified.go still references it for legacy migration history.
 type DeploymentsSection struct {
-	Defaults *DeploymentNode           `yaml:"defaults,omitempty"`
-	Provides *ProvidesConfig           `yaml:"provides,omitempty"`
-	Box      map[string]DeploymentNode `yaml:"box,omitempty"`
+	Defaults *DeploymentNode           `yaml:"defaults,omitempty" json:"defaults,omitempty"`
+	Provides *ProvidesConfig           `yaml:"provides,omitempty" json:"provides,omitempty"`
+	Box      map[string]DeploymentNode `yaml:"box,omitempty" json:"box,omitempty"`
 }
 
 // -----------------------------------------------------------------------------
@@ -322,111 +306,99 @@ type DeploymentsSection struct {
 // -----------------------------------------------------------------------------
 
 type kindKeyedDoc struct {
-	Candy   *CandyDoc   `yaml:"candy,omitempty"`
-	Image   *BoxDoc     `yaml:"box,omitempty"`
-	Deploy  *DeployDoc  `yaml:"deploy,omitempty"`
-	Builder *BuilderDoc `yaml:"builder,omitempty"`
-	Distro  *DistroDoc  `yaml:"distro,omitempty"`
-	Init    *InitDoc    `yaml:"init,omitempty"`
-	VM      *VmDoc      `yaml:"vm,omitempty"`
+	Candy   *CandyDoc   `yaml:"candy,omitempty" json:"candy,omitempty"`
+	Image   *BoxDoc     `yaml:"box,omitempty" json:"box,omitempty"`
+	Deploy  *DeployDoc  `yaml:"deploy,omitempty" json:"deploy,omitempty"`
+	Builder *BuilderDoc `yaml:"builder,omitempty" json:"builder,omitempty"`
+	Distro  *DistroDoc  `yaml:"distro,omitempty" json:"distro,omitempty"`
+	Init    *InitDoc    `yaml:"init,omitempty" json:"init,omitempty"`
+	VM      *VmDoc      `yaml:"vm,omitempty" json:"vm,omitempty"`
 	// Schema v4 first-class target templates.
-	Pod     *PodDoc     `yaml:"pod,omitempty"`
-	K8s     *K8sDoc     `yaml:"k8s,omitempty"`
-	Local   *LocalDoc   `yaml:"local,omitempty"`
-	Android *AndroidDoc `yaml:"android,omitempty"`
+	Pod     *PodDoc     `yaml:"pod,omitempty" json:"pod,omitempty"`
+	K8s     *K8sDoc     `yaml:"k8s,omitempty" json:"k8s,omitempty"`
+	Local   *LocalDoc   `yaml:"local,omitempty" json:"local,omitempty"`
+	Android *AndroidDoc `yaml:"android,omitempty" json:"android,omitempty"`
 	// AI-CLI catalog (the iterate-loop graders).
-	Agent *AgentDoc `yaml:"agent,omitempty"`
+	Agent *AgentDoc `yaml:"agent,omitempty" json:"agent,omitempty"`
 	// 2026-05 Calamares cutover.
-	Group  *GroupDoc  `yaml:"group,omitempty"`
-	Target *TargetDoc `yaml:"target,omitempty"`
-	Module *ModuleDoc `yaml:"module,omitempty"`
+	Group  *GroupDoc  `yaml:"group,omitempty" json:"group,omitempty"`
+	Target *TargetDoc `yaml:"target,omitempty" json:"target,omitempty"`
+	Module *ModuleDoc `yaml:"module,omitempty" json:"module,omitempty"`
 	// Exclusive host-resource definition (GPU auto-allocation vocabulary).
-	Resource *ResourceDoc `yaml:"resource,omitempty"`
+	Resource *ResourceDoc `yaml:"resource,omitempty" json:"resource,omitempty"`
 }
 
 // AgentDoc wraps a single AgentConfig with an explicit Name — the kind:agent
 // standalone form. Bundles of `kind: agent` + `name: <name>` documents
 // can be concatenated via YAML --- separators in check.yml.
 type AgentDoc struct {
-	Name        string `yaml:"name"`
+	Name        string `yaml:"name" json:"name"`
 	AgentConfig `yaml:",inline"`
 }
 
 // PodDoc wraps a single PodSpec with an explicit Name — the kind:pod
 // standalone form.
 type PodDoc struct {
-	Name    string `yaml:"name"`
+	Name    string `yaml:"name" json:"name"`
 	PodSpec `yaml:",inline"`
 }
 
 // K8sDoc wraps a single K8sSpec with an explicit Name — the kind:k8s
 // standalone form.
 type K8sDoc struct {
-	Name    string `yaml:"name"`
+	Name    string `yaml:"name" json:"name"`
 	K8sSpec `yaml:",inline"`
 }
 
 // LocalDoc wraps a single LocalSpec with an explicit Name — the kind:host
 // standalone form.
 type LocalDoc struct {
-	Name      string `yaml:"name"`
+	Name      string `yaml:"name" json:"name"`
 	LocalSpec `yaml:",inline"`
 }
 
 // AndroidDoc wraps a single AndroidSpec with an explicit Name — the
 // kind:android standalone form (authored in android.yml or inline).
 type AndroidDoc struct {
-	Name        string `yaml:"name"`
+	Name        string `yaml:"name" json:"name"`
 	AndroidSpec `yaml:",inline"`
 }
 
 // CandyDoc wraps a CandyYAML body with an explicit Name — the standalone form
 // authored as a standalone candy manifest post-migration.
 type CandyDoc struct {
-	Name      string `yaml:"name"`
+	Name      string `yaml:"name" json:"name"`
 	CandyYAML `yaml:",inline"`
-}
-
-// UnmarshalYAML — same rationale as InlineCandy.UnmarshalYAML. The custom
-// unmarshaler on the embedded CandyYAML doesn't compose with ",inline", so we
-// extract Name ourselves and delegate the body to CandyYAML.
-func (ld *CandyDoc) UnmarshalYAML(node *yaml.Node) error {
-	var own struct {
-		Name string `yaml:"name"`
-	}
-	_ = node.Decode(&own)
-	ld.Name = own.Name
-	return ld.CandyYAML.UnmarshalYAML(node)
 }
 
 // BoxDoc wraps a single BoxConfig with an explicit Name — the standalone
 // form authored as a standalone box doc post-migration.
 type BoxDoc struct {
-	Name      string `yaml:"name"`
+	Name      string `yaml:"name" json:"name"`
 	BoxConfig `yaml:",inline"`
 }
 
 // DeployDoc wraps a single DeploymentNode.
 type DeployDoc struct {
-	Name           string `yaml:"name"`
+	Name           string `yaml:"name" json:"name"`
 	DeploymentNode `yaml:",inline"`
 }
 
 // BuilderDoc wraps a single BuilderDef.
 type BuilderDoc struct {
-	Name       string `yaml:"name"`
+	Name       string `yaml:"name" json:"name"`
 	BuilderDef `yaml:",inline"`
 }
 
 // DistroDoc wraps a single DistroDef.
 type DistroDoc struct {
-	Name      string `yaml:"name"`
+	Name      string `yaml:"name" json:"name"`
 	DistroDef `yaml:",inline"`
 }
 
 // InitDoc wraps a single InitDef.
 type InitDoc struct {
-	Name    string `yaml:"name"`
+	Name    string `yaml:"name" json:"name"`
 	InitDef `yaml:",inline"`
 }
 
@@ -435,10 +407,10 @@ type InitDoc struct {
 // (often as a paired entry in the same file as a kind:box entry for
 // bootc images — see migrate vm-spec).
 type VmDoc struct {
-	Name        string `yaml:"name"`
-	Version     string `yaml:"version,omitempty"`
-	Description string `yaml:"description,omitempty"` // plain-string self-description; first line = summary
-	Spec        VmSpec `yaml:"spec"`
+	Name        string `yaml:"name" json:"name"`
+	Version     string `yaml:"version,omitempty" json:"version,omitempty"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"` // plain-string self-description; first line = summary
+	Spec        VmSpec `yaml:"spec" json:"spec"`
 }
 
 // -----------------------------------------------------------------------------
@@ -1137,10 +1109,11 @@ func mergeUnifiedDocs(merged *UnifiedFile, data []byte, srcLabel, srcDir string)
 		warnUnknownYAMLKeys(&node, shape, fmt.Sprintf("%s:doc%d", srcLabel, docIdx))
 		switch shape {
 		case docShapeRoot:
-			var uf UnifiedFile
-			if err := node.Decode(&uf); err != nil {
-				return nil, fmt.Errorf("%s:doc%d: decoding root-shape document: %w", srcLabel, docIdx, err)
+			ufp, err := decodeRootDocViaCUE(&node, fmt.Sprintf("%s:doc%d", srcLabel, docIdx))
+			if err != nil {
+				return nil, err
 			}
+			uf := *ufp
 			// Queue imports for processing after current-file merging.
 			importQueue = append(importQueue, uf.Import...)
 			// Clear before merge so they don't leak into the merged struct.
@@ -1151,8 +1124,8 @@ func mergeUnifiedDocs(merged *UnifiedFile, data []byte, srcLabel, srcDir string)
 			mergeUnified(merged, &uf, srcDir)
 		case docShapeKind:
 			var kd kindKeyedDoc
-			if err := node.Decode(&kd); err != nil {
-				return nil, fmt.Errorf("%s:doc%d: decoding kind-keyed document: %w", srcLabel, docIdx, err)
+			if err := decodeEntityViaCUE(&node, reflect.TypeOf(kindKeyedDoc{}), &kd, fmt.Sprintf("%s:doc%d", srcLabel, docIdx)); err != nil {
+				return nil, err
 			}
 			if err := mergeKindDoc(merged, &kd, srcDir); err != nil {
 				return nil, fmt.Errorf("%s:doc%d: %w", srcLabel, docIdx, err)
@@ -2226,8 +2199,8 @@ func (uf *UnifiedFile) applyDiscoveredManifest(dir, manifest, rootDir string) er
 			// Any other kind: decode + merge inline, defaulting an empty entity
 			// name to the discovered directory's base.
 			var kd kindKeyedDoc
-			if err := node.Decode(&kd); err != nil {
-				return fmt.Errorf("%s: %w", target, err)
+			if err := decodeEntityViaCUE(&node, reflect.TypeOf(kindKeyedDoc{}), &kd, target); err != nil {
+				return err
 			}
 			defaultKindDocName(&kd, filepath.Base(dir))
 			if err := mergeKindDoc(uf, &kd, dir); err != nil {

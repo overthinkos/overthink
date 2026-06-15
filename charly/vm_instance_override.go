@@ -53,9 +53,9 @@ type VmInstanceOverride struct {
 	// Disposable, when non-nil, overrides the upstream classification
 	// for the libvirt domain at this path. Pointer-typed to
 	// distinguish "absent" from "explicit false".
-	Disposable *bool `yaml:"disposable,omitempty"`
+	Disposable *bool `yaml:"disposable,omitempty" json:"disposable,omitempty"`
 	// Lifecycle, when non-empty, overrides the upstream lifecycle tag.
-	Lifecycle string `yaml:"lifecycle,omitempty"`
+	Lifecycle string `yaml:"lifecycle,omitempty" json:"lifecycle,omitempty"`
 	// Libvirt, when non-nil, is a per-host device overlay merged into the
 	// VmSpec at create time (ApplyToVmSpec). Uses the SAME schema as a
 	// `kind: vm` entity's `libvirt:` block, but only the host-specific
@@ -64,7 +64,7 @@ type VmInstanceOverride struct {
 	// shares rooted at an absolute host path). Both APPEND to whatever the
 	// portable repo `vm.yml` already declares, so the committed entity
 	// carries no host-specific identity.
-	Libvirt *LibvirtDomain `yaml:"libvirt,omitempty"`
+	Libvirt *LibvirtDomain `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
 }
 
 // VmInstanceOverridePath returns the canonical path for a domain's

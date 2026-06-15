@@ -16,28 +16,28 @@ type K8sDeployConfig struct {
 	// Namespace places the workload in a K8s namespace. Optional — when
 	// empty, the kind:k8s template's DefaultNamespace (or "default") is
 	// used.
-	Namespace string `yaml:"namespace,omitempty"`
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
 
 	// Workload is an explicit override of the kind heuristic. Accepts:
 	// Deployment, StatefulSet, DaemonSet, Pod, Job, CronJob.
-	Workload string `yaml:"workload,omitempty"`
+	Workload string `yaml:"workload,omitempty" json:"workload,omitempty"`
 
 	// Escape hatches — applied verbatim during Kustomize emission.
-	Patches []K8sPatch `yaml:"patches,omitempty"`
-	Raw     []string   `yaml:"raw,omitempty"`
+	Patches []K8sPatch `yaml:"patches,omitempty" json:"patches,omitempty"`
+	Raw     []string   `yaml:"raw,omitempty" json:"raw,omitempty"`
 }
 
 // K8sPatch is one Kustomize patch entry.
 type K8sPatch struct {
-	Target K8sPatchTarget `yaml:"target"`
-	Patch  string         `yaml:"patch"`
+	Target K8sPatchTarget `yaml:"target" json:"target"`
+	Patch  string         `yaml:"patch" json:"patch"`
 }
 
 // K8sPatchTarget identifies which generated resource a patch applies to.
 type K8sPatchTarget struct {
-	Kind      string `yaml:"kind,omitempty"`
-	Name      string `yaml:"name,omitempty"`
-	Namespace string `yaml:"namespace,omitempty"`
+	Kind      string `yaml:"kind,omitempty" json:"kind,omitempty"`
+	Name      string `yaml:"name,omitempty" json:"name,omitempty"`
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
 }
 
 // Schema v4: ClusterProfile / LoadClusterProfile / clusters/*.yaml loaders

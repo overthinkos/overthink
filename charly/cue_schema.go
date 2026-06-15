@@ -95,6 +95,22 @@ func validateEntityCUE(kind, label string, entity cue.Value) error {
 	return nil
 }
 
+// validateEntityClosedCUE unifies a single entity with #<Kind> and validates it
+// WITHOUT requiring concreteness — it catches closedness violations (unknown
+// keys) and type/enum/regex conflicts, but not missing-required fields. This is
+// the LOAD-time check (restores the deleted unmarshalers' typo-detection); full
+// concrete validation stays in `charly box validate` via validateEntityCUE.
+func validateEntityClosedCUE(kind, label string, entity cue.Value) error {
+	def, ok := cueKindDef(kind)
+	if !ok {
+		return fmt.Errorf("%s: no CUE schema registered for kind %q", label, kind)
+	}
+	if err := entity.Unify(def).Validate(); err != nil {
+		return fmt.Errorf("%s: %s", label, errors.Details(err, nil))
+	}
+	return nil
+}
+
 // validateCandyManifestCUE extracts the `candy:` entity from a kind-keyed candy
 // manifest and validates it against #Candy (per-entity model).
 func validateCandyManifestCUE(path string, data []byte) error {

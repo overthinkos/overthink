@@ -20,14 +20,14 @@ package main
 // the arbiter contends over (preempt.go) with no auto-allocation. A resource
 // WITH a `gpu:` selector drives auto-allocation + fail-hard at vm create.
 type ResourceDef struct {
-	Gpu *GpuSelector `yaml:"gpu,omitempty"`
+	Gpu *GpuSelector `yaml:"gpu,omitempty" json:"gpu,omitempty"`
 }
 
 // GpuSelector matches a passthrough-capable GPU by PCI vendor (e.g. "0x10de"
 // = NVIDIA). DetectVFIO reports each GPU's VendorID in the same 0x-prefixed
 // lowercase hex form. Vendor is REQUIRED on a gpu selector (validated).
 type GpuSelector struct {
-	Vendor string `yaml:"vendor"`
+	Vendor string `yaml:"vendor" json:"vendor"`
 }
 
 // HasSelector reports whether this resource carries a hardware selector that
@@ -39,6 +39,6 @@ func (r *ResourceDef) HasSelector() bool {
 // ResourceDoc wraps a single ResourceDef with an explicit Name — the
 // `kind: resource` + `name: <token>` standalone form. Mirrors DistroDoc.
 type ResourceDoc struct {
-	Name        string `yaml:"name"`
+	Name        string `yaml:"name" json:"name"`
 	ResourceDef `yaml:",inline"`
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,13 +21,13 @@ import (
 // legacy `images:` / `deployments.images.*` nesting is gone — all target
 // kinds (host / vm / pod / k8s) live under the single `deployment:` map.
 type DeployConfig struct {
-	Provides *ProvidesConfig           `yaml:"provides,omitempty"`
-	Deploy   map[string]DeploymentNode `yaml:"deploy"`
+	Provides *ProvidesConfig           `yaml:"provides,omitempty" json:"provides,omitempty"`
+	Deploy   map[string]DeploymentNode `yaml:"deploy" json:"deploy"`
 	// Sidecar carries the project's sidecar-template library (the embedded
 	// default set merged with any project-declared root sidecar: entries).
 	// Projected from UnifiedFile.Sidecar by ProjectDeployConfig(); deploy-time
 	// resolution merges these UNDER each deploy node's own sidecar overrides.
-	Sidecar map[string]SidecarDef `yaml:"sidecar,omitempty"`
+	Sidecar map[string]SidecarDef `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
 }
 
 // DeploymentNode is one node in the deployments tree declared in
@@ -57,42 +58,42 @@ type DeployConfig struct {
 // disposable: true does not authorize destroying its children unattended —
 // each child's flag stands on its own (see /charly-internals:disposable).
 type DeploymentNode struct {
-	Version     string               `yaml:"version,omitempty"`
-	Description string               `yaml:"description,omitempty"` // plain-string self-description; first line = summary
-	Tunnel      *TunnelYAML          `yaml:"tunnel,omitempty"`
-	DNS         string               `yaml:"dns,omitempty"`
-	AcmeEmail   string               `yaml:"acme_email,omitempty"`
-	Volume      []DeployVolumeConfig `yaml:"volume,omitempty"`
-	Port        []string             `yaml:"port,omitempty"`
+	Version     string               `yaml:"version,omitempty" json:"version,omitempty"`
+	Description string               `yaml:"description,omitempty" json:"description,omitempty"` // plain-string self-description; first line = summary
+	Tunnel      *TunnelYAML          `yaml:"tunnel,omitempty" json:"tunnel,omitempty"`
+	DNS         string               `yaml:"dns,omitempty" json:"dns,omitempty"`
+	AcmeEmail   string               `yaml:"acme_email,omitempty" json:"acme_email,omitempty"`
+	Volume      []DeployVolumeConfig `yaml:"volume,omitempty" json:"volume,omitempty"`
+	Port        []string             `yaml:"port,omitempty" json:"port,omitempty"`
 	// ResolvedPort is the concrete host:container expansion of an "auto"
 	// sentinel in Port. Persisted by charly config / charly update — read by
 	// MergeDeployOntoMetadata in preference to Port when present, so
 	// charly start / charly logs / charly status see the same allocations between
 	// rebuilds. Re-allocation happens on the next charly config / charly update
 	// where Port still contains "auto" (operator-acknowledged churn).
-	ResolvedPort    []string              `yaml:"resolved_port,omitempty"`
-	Env             []string              `yaml:"env,omitempty"`
-	EnvFile         string                `yaml:"env_file,omitempty"`
-	Security        *SecurityConfig       `yaml:"security,omitempty"`
-	Network         string                `yaml:"network,omitempty"`
-	Engine          string                `yaml:"engine,omitempty"`
-	Secret          []DeploySecretConfig  `yaml:"secret,omitempty"`
-	ForwardGpgAgent *bool                 `yaml:"forward_gpg_agent,omitempty"`
-	ForwardSshAgent *bool                 `yaml:"forward_ssh_agent,omitempty"`
-	Sidecar         map[string]SidecarDef `yaml:"sidecar,omitempty"` // Sidecar container overrides
+	ResolvedPort    []string              `yaml:"resolved_port,omitempty" json:"resolved_port,omitempty"`
+	Env             []string              `yaml:"env,omitempty" json:"env,omitempty"`
+	EnvFile         string                `yaml:"env_file,omitempty" json:"env_file,omitempty"`
+	Security        *SecurityConfig       `yaml:"security,omitempty" json:"security,omitempty"`
+	Network         string                `yaml:"network,omitempty" json:"network,omitempty"`
+	Engine          string                `yaml:"engine,omitempty" json:"engine,omitempty"`
+	Secret          []DeploySecretConfig  `yaml:"secret,omitempty" json:"secret,omitempty"`
+	ForwardGpgAgent *bool                 `yaml:"forward_gpg_agent,omitempty" json:"forward_gpg_agent,omitempty"`
+	ForwardSshAgent *bool                 `yaml:"forward_ssh_agent,omitempty" json:"forward_ssh_agent,omitempty"`
+	Sidecar         map[string]SidecarDef `yaml:"sidecar,omitempty" json:"sidecar,omitempty"` // Sidecar container overrides
 
 	// Plan carries local deploy-level acceptance + provisioning overlays
 	// (Steps). They merge onto the image's label-baked plan at runtime by
 	// step id (MergeDeployDescriptions); a step with skip:true disables the
 	// baked step.
-	Plan []Step `yaml:"plan,omitempty"`
+	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
 
 	// Iterate carries the AI-loop orchestration (the former kind:score). When
 	// set on a deploy / kind:check bed, `charly check run <name>` drives the
 	// iterate loop scoring this entity's plan check:/agent-check: steps;
 	// absent → the deterministic R10 bed sequence. Never baked into the image
 	// (deploy/runtime state).
-	Iterate *IterateConfig `yaml:"iterate,omitempty"`
+	Iterate *IterateConfig `yaml:"iterate,omitempty" json:"iterate,omitempty"`
 
 	// CheckBed marks this entry as a `kind: check` disposable R10 bed,
 	// folded into the Deploy map by foldCheckBeds() at load time so every
@@ -110,7 +111,7 @@ type DeploymentNode struct {
 	// per-shell sub-blocks (replaces the baked entry) or `skip: true`
 	// (drops the baked entry). Entries without a matching id append
 	// to the deploy bucket with origin="deploy" if not set.
-	Shell []DeployShellOverlay `yaml:"shell,omitempty"`
+	Shell []DeployShellOverlay `yaml:"shell,omitempty" json:"shell,omitempty"`
 
 	// --- BuildTarget refactor fields (Task 13) ---
 	//
@@ -121,13 +122,13 @@ type DeploymentNode struct {
 	// Only honored when this entry's map key matches (host/kubernetes)
 	// or when --target=... is passed on the CLI; a container-named
 	// entry with target:host is a config error.
-	Target string `yaml:"target,omitempty"`
+	Target string `yaml:"target,omitempty" json:"target,omitempty"`
 
 	// Kubernetes carries the `kubernetes:` sub-block. Only consulted when
 	// Target == "kubernetes". All cluster-wide K8s knobs (storage class,
 	// ingress class, cert issuer) live in ClusterProfile, selected via
 	// Kubernetes.Cluster — not here.
-	Kubernetes *K8sDeployConfig `yaml:"kubernetes,omitempty"`
+	Kubernetes *K8sDeployConfig `yaml:"kubernetes,omitempty" json:"kubernetes,omitempty"`
 
 	// --- Generic target-agnostic intent fields (Part F.4).
 	// Each is optional; empty defaults preserve today's behavior.
@@ -136,69 +137,69 @@ type DeploymentNode struct {
 	// workload-kind heuristic (service + storage → StatefulSet, etc.) and
 	// can inform systemd unit type or CronJob generation on other targets.
 	// Empty → assumed "service" when target is kubernetes.
-	Kind string `yaml:"kind,omitempty"` // service | daemon | batch | scheduled | oneshot
+	Kind string `yaml:"kind,omitempty" json:"kind,omitempty"` // service | daemon | batch | scheduled | oneshot
 
 	// Replica — number of instances. Ignored for single-instance workloads
 	// (daemon/batch/oneshot) or non-K8s targets that don't support scaling.
-	Replica int `yaml:"replica,omitempty"`
+	Replica int `yaml:"replica,omitempty" json:"replica,omitempty"`
 
 	// Restart policy — always | on-failure | never. K8s interprets this on
 	// Pod/Job/CronJob; Deployment/StatefulSet/DaemonSet always use "Always"
 	// per K8s semantics regardless of this value.
-	Restart string `yaml:"restart,omitempty"`
+	Restart string `yaml:"restart,omitempty" json:"restart,omitempty"`
 
 	// Schedule — cron expression for kind: scheduled.
-	Schedule string `yaml:"schedule,omitempty"`
+	Schedule string `yaml:"schedule,omitempty" json:"schedule,omitempty"`
 
 	// Resources — CPU + memory requests. Limits come from the existing
 	// Security.MemoryMax / .Cpus fields (preserves today's meaning).
-	Resources *DeployResources `yaml:"resources,omitempty"`
+	Resources *DeployResources `yaml:"resources,omitempty" json:"resources,omitempty"`
 
 	// Expose — external exposure intent. Target-agnostic: maps to Ingress
 	// on K8s, Traefik router on container target, etc.
-	Expose *DeployExpose `yaml:"expose,omitempty"`
+	Expose *DeployExpose `yaml:"expose,omitempty" json:"expose,omitempty"`
 
 	// Storage — declarative PVC/volume requests. Augments (does not replace)
 	// the existing Volume list which covers container-target volume backing.
-	Storage []DeployStorage `yaml:"storage,omitempty"`
+	Storage []DeployStorage `yaml:"storage,omitempty" json:"storage,omitempty"`
 
 	// Probes — target-agnostic liveness/readiness/startup specs.
-	Probes *DeployProbes `yaml:"probes,omitempty"`
+	Probes *DeployProbes `yaml:"probes,omitempty" json:"probes,omitempty"`
 
 	// AddCandies are overlay candy refs applied on top of the image.
 	// Each entry is a DeployRef (local name / local YAML path /
 	// remote github ref). Same syntax as the command-line --add-candy
 	// flag.
-	AddCandy []string `yaml:"add_candy,omitempty"`
+	AddCandy []string `yaml:"add_candy,omitempty" json:"add_candy,omitempty"`
 
 	// InstallOpts carries host-target-specific flags that would
 	// otherwise have to be passed on every command invocation.
-	InstallOpts *InstallOptsConfig `yaml:"install_opts,omitempty"`
+	InstallOpts *InstallOptsConfig `yaml:"install_opts,omitempty" json:"install_opts,omitempty"`
 
 	// --- Schema-v4 template references (exactly one matching Target) ---
 
 	// Box names a kind:box directly. Used for target: pod when no
 	// kind:pod template is needed (the common case), or as a legacy
 	// fallback for other targets during migration.
-	Box string `yaml:"box,omitempty"`
+	Box string `yaml:"box,omitempty" json:"box,omitempty"`
 
 	// Pod names a kind:pod template (image ref + sidecars + optional
 	// tests + shared env defaults). Only meaningful for target: pod.
-	Pod string `yaml:"pod,omitempty"`
+	Pod string `yaml:"pod,omitempty" json:"pod,omitempty"`
 
 	// Vm names a kind:vm entity. Only meaningful for target: vm.
 	// Schema v4 rename of the legacy `vm_source:` field.
-	Vm string `yaml:"vm,omitempty"`
+	Vm string `yaml:"vm,omitempty" json:"vm,omitempty"`
 
 	// K8s names a kind:k8s template (workload defaults + cluster config;
 	// absorbs former ClusterProfile fields). Only meaningful for
 	// target: k8s. Replaces the legacy `cluster:` field.
-	K8s string `yaml:"k8s,omitempty"`
+	K8s string `yaml:"k8s,omitempty" json:"k8s,omitempty"`
 
 	// Local names a kind:local template (candy stack + install_opts + env).
 	// Optional — a target:local deployment MAY inline add_candy: directly
 	// without a template.
-	Local string `yaml:"local,omitempty"`
+	Local string `yaml:"local,omitempty" json:"local,omitempty"`
 
 	// Android names a kind:android device (an in-pod emulator or a
 	// remote/physical adb endpoint). Only meaningful for target: android —
@@ -206,7 +207,7 @@ type DeploymentNode struct {
 	// device via AndroidDeployTarget. The apps ride in on add_candy: (the
 	// same overlay mechanism every other target uses), so there is no
 	// dedicated apk-list field here.
-	Android string `yaml:"android,omitempty"`
+	Android string `yaml:"android,omitempty" json:"android,omitempty"`
 
 	// Host is the destination machine for target:local deployments
 	// (Ansible-style). The literal string "local" (or empty/absent) means
@@ -216,7 +217,7 @@ type DeploymentNode struct {
 	// ssh-agent for keys, host-key checking, and any other connection
 	// parameters. There is no `ssh:` block — your ssh-config IS the
 	// configuration.
-	Host string `yaml:"host,omitempty"`
+	Host string `yaml:"host,omitempty" json:"host,omitempty"`
 
 	// User overrides the SSH user for this deployment (Ansible's
 	// ansible_user). Only consulted when Host is non-"local" and Host
@@ -224,27 +225,27 @@ type DeploymentNode struct {
 	// ("alice@server"), that wins and User is redundant — the validator
 	// warns. When neither is set, ssh(1) reads the User directive from
 	// ~/.ssh/config or falls back to $USER.
-	User string `yaml:"user,omitempty"`
+	User string `yaml:"user,omitempty" json:"user,omitempty"`
 
 	// SSHArgs are extra arguments appended to every ssh/scp invocation
 	// for this deployment (Ansible's ansible_ssh_extra_args). Pass-through:
 	// we do NOT parse, validate, or interpret these args. Use sparingly —
 	// ssh-config Host stanzas are the right home for persistent options.
 	// Common cases: "-o ProxyJump=bastion", "-o ServerAliveInterval=30".
-	SSHArgs []string `yaml:"ssh_arg,omitempty"`
+	SSHArgs []string `yaml:"ssh_arg,omitempty" json:"ssh_arg,omitempty"`
 
 	// --- Scalar overrides of target-template defaults ---
 
 	// Cpus overrides kind:vm.cpus for this deployment instance.
-	Cpus int `yaml:"cpus,omitempty"`
+	Cpus int `yaml:"cpus,omitempty" json:"cpus,omitempty"`
 
 	// Ram overrides kind:vm.ram for this deployment instance
 	// (format: "16G", "32Gi", etc.).
-	Ram string `yaml:"ram,omitempty"`
+	Ram string `yaml:"ram,omitempty" json:"ram,omitempty"`
 
 	// DiskSize overrides kind:vm.disk_size for this deployment instance
 	// (format: "40G", "80GiB", etc.).
-	DiskSize string `yaml:"disk_size,omitempty"`
+	DiskSize string `yaml:"disk_size,omitempty" json:"disk_size,omitempty"`
 
 	// --- Derived nesting fields (authored via `nested:`, not these) ---
 
@@ -258,7 +259,7 @@ type DeploymentNode struct {
 	// apply. Preserved across reboots so charly deploy del can reverse the
 	// deploy, and so re-apply is idempotent (instance-id stays stable,
 	// disk path points at the same qcow2, etc.).
-	VmState *VmDeployState `yaml:"vm_state,omitempty"`
+	VmState *VmDeployState `yaml:"vm_state,omitempty" json:"vm_state,omitempty"`
 
 	// --- Disposable / lifecycle / ephemeral classification (see /charly-internals:disposable) ---
 
@@ -278,13 +279,13 @@ type DeploymentNode struct {
 	// operator's explicit lockdown intent on the next saveDeployState
 	// call. nil = absent (default false behavior); &false = explicit
 	// lockdown (preserved on write); &true = explicit authorization.
-	Disposable *bool `yaml:"disposable,omitempty"`
+	Disposable *bool `yaml:"disposable,omitempty" json:"disposable,omitempty"`
 
 	// Lifecycle is a free-form human-facing tier tag (scratch | dev |
 	// test | qa | staging | prod | custom). Informational only — has
 	// ZERO effect on disposability. Consumed by `charly status
 	// --lifecycle <tier>` filters and display columns.
-	Lifecycle string `yaml:"lifecycle,omitempty"`
+	Lifecycle string `yaml:"lifecycle,omitempty" json:"lifecycle,omitempty"`
 
 	// Ephemeral is the operational-mandate counterpart to Disposable's
 	// authorization: presence indicates the deploy MUST be destroyed as
@@ -293,7 +294,7 @@ type DeploymentNode struct {
 	// `ephemeral: true` (boolean shorthand → defaults) and
 	// `ephemeral: { ttl: ..., keep_on_failure: ..., naming_pattern:
 	// ... }` (full block). nil means non-ephemeral.
-	Ephemeral *EphemeralLifetime `yaml:"ephemeral,omitempty"`
+	Ephemeral *EphemeralLifetime `yaml:"ephemeral,omitempty" json:"ephemeral,omitempty"`
 
 	// Preemptible is the HOLDER side of the resource-arbitration axis: a
 	// fourth, ORTHOGONAL classification alongside disposable / ephemeral /
@@ -310,7 +311,7 @@ type DeploymentNode struct {
 	// it). nil means not preemptible. Authored as a token list shorthand
 	// (`preemptible: [nvidia-gpu]`) or a block (`preemptible: {holds: [...],
 	// stop: shutdown, restore: always}`).
-	Preemptible *PreemptibleConfig `yaml:"preemptible,omitempty"`
+	Preemptible *PreemptibleConfig `yaml:"preemptible,omitempty" json:"preemptible,omitempty"`
 
 	// RequiresExclusive is the CLAIMANT side: the named exclusive
 	// host-resource token(s) this deploy needs sole use of while it runs.
@@ -323,7 +324,7 @@ type DeploymentNode struct {
 	// deliberately decoupled from the access mechanism (PCI hostdev for a
 	// VM, --device/CDI for a pod) so it unifies pod-vs-VM contention. nil/
 	// empty means this deploy claims nothing exclusive.
-	RequiresExclusive []string `yaml:"requires_exclusive,omitempty"`
+	RequiresExclusive []string `yaml:"requires_exclusive,omitempty" json:"requires_exclusive,omitempty"`
 
 	// FromSnapshot, on a target=vm deploy, names the snapshot on the
 	// referenced kind:vm to use as the cloned overlay's backing disk.
@@ -332,7 +333,7 @@ type DeploymentNode struct {
 	// chain to materialize a fresh per-deploy disk from the snapshot.
 	// Required for ephemeral deploys against a VM that has snapshots;
 	// optional for persistent deploys (rare but supported).
-	FromSnapshot string `yaml:"from_snapshot,omitempty"`
+	FromSnapshot string `yaml:"from_snapshot,omitempty" json:"from_snapshot,omitempty"`
 
 	// CloudInitClean, on a target=vm deploy, injects a `runcmd:
 	// cloud-init clean --machine-id --logs` entry into the clone's
@@ -340,7 +341,7 @@ type DeploymentNode struct {
 	// guest on first boot. Default false. Mirrors the
 	// VmSource.CloudInitClean field for clone-source templates;
 	// applies only to deploy-level cloning via FromSnapshot.
-	CloudInitClean bool `yaml:"cloud_init_clean,omitempty"`
+	CloudInitClean bool `yaml:"cloud_init_clean,omitempty" json:"cloud_init_clean,omitempty"`
 
 	// --- Recursive tree: nested deployments (schema v4) ---
 	//
@@ -358,7 +359,7 @@ type DeploymentNode struct {
 	// Schema v4 rename: `children:` → `nested:`. The parent-reverse-
 	// reference Inside is DERIVED from this tree at load time; authored
 	// `inside:` entries are rejected.
-	Nested map[string]*DeploymentNode `yaml:"nested,omitempty"`
+	Nested map[string]*DeploymentNode `yaml:"nested,omitempty" json:"nested,omitempty"`
 
 	// --- Sibling peers: companion deployments brought up alongside ---
 	//
@@ -377,7 +378,7 @@ type DeploymentNode struct {
 	// Used identically by kind:check beds and kind:deploy deployments (one
 	// codebase). Peer keys MUST be globally unique + carry no `.` (same rule
 	// as Nested + bed names); the AUTHOR keeps peer host ports disjoint.
-	Peer map[string]*DeploymentNode `yaml:"peer,omitempty"`
+	Peer map[string]*DeploymentNode `yaml:"peer,omitempty" json:"peer,omitempty"`
 
 	// PeerOf, when set, names the deployment whose `peer:` block defined this
 	// (folded) entry. DERIVED by foldPeers — never authored. Marks the entry
@@ -393,53 +394,14 @@ type DeploymentNode struct {
 // ByShell) mirror ShellSpec — when populated, they replace the baked
 // entry's body wholesale.
 type DeployShellOverlay struct {
-	ID         string                `yaml:"id,omitempty"`
-	Origin     string                `yaml:"origin,omitempty"`
-	Skip       bool                  `yaml:"skip,omitempty"`
-	Init       string                `yaml:"init,omitempty"`
-	PathAppend []string              `yaml:"path_append,omitempty"`
-	Path       string                `yaml:"path,omitempty"`
-	Priority   int                   `yaml:"priority,omitempty"`
-	ByShell    map[string]*ShellSpec `yaml:"-"` // populated by UnmarshalYAML for bash/zsh/fish/sh keys
-}
-
-// UnmarshalYAML two-pass parses a charly.yml shell-overlay entry,
-// recognising both the intrinsic fields and the per-shell allowlist
-// keys (bash/zsh/fish/sh) — same pattern as ShellConfig.UnmarshalYAML.
-// Unknown non-allowlist keys raise a hard error so authors don't
-// silently typo a shell name.
-func (o *DeployShellOverlay) UnmarshalYAML(value *yaml.Node) error {
-	type overlayAlias DeployShellOverlay
-	var alias overlayAlias
-	if err := value.Decode(&alias); err != nil {
-		return err
-	}
-	*o = DeployShellOverlay(alias)
-	if value.Kind != yaml.MappingNode {
-		return nil
-	}
-	known := map[string]bool{
-		"id": true, "origin": true, "skip": true,
-		"init": true, "path_append": true, "path": true, "priority": true,
-	}
-	for i := 0; i < len(value.Content)-1; i += 2 {
-		key := value.Content[i].Value
-		if known[key] {
-			continue
-		}
-		if !ShellAllowlist[key] {
-			return fmt.Errorf("deploy.shell: unknown key %q (expected id/origin/skip/init/path_append/path/priority or bash/zsh/fish/sh)", key)
-		}
-		var spec ShellSpec
-		if err := value.Content[i+1].Decode(&spec); err != nil {
-			return fmt.Errorf("deploy.shell.%s: %w", key, err)
-		}
-		if o.ByShell == nil {
-			o.ByShell = make(map[string]*ShellSpec)
-		}
-		o.ByShell[key] = &spec
-	}
-	return nil
+	ID         string                `yaml:"id,omitempty" json:"id,omitempty"`
+	Origin     string                `yaml:"origin,omitempty" json:"origin,omitempty"`
+	Skip       bool                  `yaml:"skip,omitempty" json:"skip,omitempty"`
+	Init       string                `yaml:"init,omitempty" json:"init,omitempty"`
+	PathAppend []string              `yaml:"path_append,omitempty" json:"path_append,omitempty"`
+	Path       string                `yaml:"path,omitempty" json:"path,omitempty"`
+	Priority   int                   `yaml:"priority,omitempty" json:"priority,omitempty"`
+	ByShell    map[string]*ShellSpec `yaml:"-" json:"by_shell,omitempty"` // per-shell sub-blocks (bash/zsh/fish/sh), canonicalized by the CUE normalizer
 }
 
 // ToShellEntry converts a charly.yml overlay into the LabelShell
@@ -679,19 +641,19 @@ type EphemeralLifetime struct {
 	// The value is the safety floor: a systemd transient timer fires
 	// `charly deploy del <name> --assume-yes` after this duration if all
 	// higher-layer cleanup paths fail.
-	TTL string `yaml:"ttl,omitempty"`
+	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty"`
 
 	// KeepOnFailure, when true, instructs the check-runner integration
 	// to skip the post-run `charly deploy del` when assertions fail
 	// — leaves the instance alive (still subject to TTL) for operator
 	// inspection. Default false.
-	KeepOnFailure bool `yaml:"keep_on_failure,omitempty"`
+	KeepOnFailure bool `yaml:"keep_on_failure,omitempty" json:"keep_on_failure,omitempty"`
 
 	// NamingPattern is the template for ephemeral instance names.
 	// Available variables: {{.Source}} (the deploy name), {{.UUID6}}
 	// (six-char random hex), {{.Iter}} (check-iter counter when called
 	// from runner). Default: "{{.Source}}-eph-{{.UUID6}}".
-	NamingPattern string `yaml:"naming_pattern,omitempty"`
+	NamingPattern string `yaml:"naming_pattern,omitempty" json:"naming_pattern,omitempty"`
 
 	// boolForm captures whether YAML authored the field as a bare
 	// boolean (`ephemeral: true`) vs a block. Used for round-trip
@@ -700,44 +662,24 @@ type EphemeralLifetime struct {
 	boolForm bool
 }
 
-// UnmarshalYAML accepts either a bare boolean (`ephemeral: true|false`)
-// or a mapping (`ephemeral: { ttl: 30m, ... }`). Boolean-false is
-// equivalent to omitting the field entirely (handled at the
-// DeploymentNode-level by the loader; this method only fires when the
-// node has the key set). Boolean-true populates an empty
-// EphemeralLifetime — defaults apply at validation time.
-func (e *EphemeralLifetime) UnmarshalYAML(node *yaml.Node) error {
-	if node == nil {
+// UnmarshalJSON is the EphemeralLifetime decode path under the CUE loader
+// (cue.Value.Decode is JSON-based). It accepts the boolean shorthand
+// (`ephemeral: true`) — setting the unexported boolForm, which reflection-based
+// decoders cannot — and the block form ({ttl, keep_on_failure, naming_pattern}).
+// `ephemeral: false` is rejected (omit the field instead). Mirrors the deleted
+// UnmarshalYAML; this type is opaque to the normalizer (it self-decodes).
+func (e *EphemeralLifetime) UnmarshalJSON(data []byte) error {
+	s := strings.TrimSpace(string(data))
+	if s == "" || s == "null" {
 		return nil
 	}
-	switch node.Kind {
-	case yaml.ScalarNode:
-		// Boolean shorthand. Reject anything that isn't a recognizable
-		// bool to surface authoring mistakes early.
-		switch strings.ToLower(strings.TrimSpace(node.Value)) {
-		case "true", "yes", "on":
-			e.boolForm = true
-			return nil
-		case "false", "no", "off", "":
-			// "false" is equivalent to absence. The charly.yml
-			// loader's nil check still holds, but honor a literal
-			// `ephemeral: false` by leaving fields zero. The caller
-			// must check whether boolForm was set; in practice the
-			// load path interprets nil-or-zero as non-ephemeral.
-			return fmt.Errorf("ephemeral: false is not supported — omit the field instead (or set ephemeral: true / ephemeral: {block} to mark ephemeral)")
-		default:
-			return fmt.Errorf("ephemeral: scalar value %q is not a boolean", node.Value)
+	if s[0] == '{' {
+		var raw struct {
+			TTL           string `json:"ttl"`
+			KeepOnFailure bool   `json:"keep_on_failure"`
+			NamingPattern string `json:"naming_pattern"`
 		}
-	case yaml.MappingNode:
-		// Block form. Decode the underlying type without recursing
-		// through this UnmarshalYAML.
-		type rawEphemeral struct {
-			TTL           string `yaml:"ttl,omitempty"`
-			KeepOnFailure bool   `yaml:"keep_on_failure,omitempty"`
-			NamingPattern string `yaml:"naming_pattern,omitempty"`
-		}
-		var raw rawEphemeral
-		if err := node.Decode(&raw); err != nil {
+		if err := json.Unmarshal(data, &raw); err != nil {
 			return fmt.Errorf("ephemeral block: %w", err)
 		}
 		e.TTL = raw.TTL
@@ -745,9 +687,26 @@ func (e *EphemeralLifetime) UnmarshalYAML(node *yaml.Node) error {
 		e.NamingPattern = raw.NamingPattern
 		e.boolForm = false
 		return nil
-	default:
-		return fmt.Errorf("ephemeral: unsupported YAML node kind %d (expected boolean scalar or mapping)", node.Kind)
 	}
+	var b bool
+	if err := json.Unmarshal(data, &b); err == nil {
+		if !b {
+			return fmt.Errorf("ephemeral: false is not supported — omit the field instead (or set ephemeral: true / ephemeral: {block})")
+		}
+		e.boolForm = true
+		return nil
+	}
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		switch strings.ToLower(strings.TrimSpace(str)) {
+		case "true", "yes", "on":
+			e.boolForm = true
+			return nil
+		case "false", "no", "off", "":
+			return fmt.Errorf("ephemeral: false is not supported — omit the field instead")
+		}
+	}
+	return fmt.Errorf("ephemeral: value %s is not a boolean or block", s)
 }
 
 // EffectiveTTL returns the parsed TTL with sane default. Empty TTL
@@ -795,55 +754,20 @@ type PreemptibleConfig struct {
 	// occupies. REQUIRED, non-empty (validated): a preemptible holder that
 	// holds nothing is meaningless. Tokens are operator-chosen names matched
 	// by set-intersection against a claimant's requires_exclusive.
-	Holds []string `yaml:"holds,omitempty"`
+	Holds []string `yaml:"holds,omitempty" json:"holds,omitempty"`
 
 	// Stop is how the arbiter frees the resource. Only "shutdown" (graceful
 	// ACPI shutdown for a VM / podman stop for a pod, disk + definition
 	// preserved) is supported — the ONLY mechanism that releases a VFIO
 	// passthrough device (suspend/pause keep the device assigned;
 	// managedsave is unsupported with passthrough). Empty → "shutdown".
-	Stop string `yaml:"stop,omitempty"`
+	Stop string `yaml:"stop,omitempty" json:"stop,omitempty"`
 
 	// Restore is when the arbiter restarts the holder after the claim is
 	// released: "always" (default — the holder MUST survive, so it returns
 	// regardless of the claim's outcome) or "on-success" (leave it stopped
 	// on a failed claim, for operator inspection). Empty → "always".
-	Restore string `yaml:"restore,omitempty"`
-}
-
-// UnmarshalYAML accepts either a token-list shorthand (`preemptible:
-// [nvidia-gpu]` → Holds with default stop/restore) or a mapping block
-// (`preemptible: {holds: [...], stop: ..., restore: ...}`). A bare scalar
-// (e.g. `preemptible: true`) is rejected — a holder must name what it holds.
-func (p *PreemptibleConfig) UnmarshalYAML(node *yaml.Node) error {
-	if node == nil {
-		return nil
-	}
-	switch node.Kind {
-	case yaml.SequenceNode:
-		var holds []string
-		if err := node.Decode(&holds); err != nil {
-			return fmt.Errorf("preemptible list: %w", err)
-		}
-		p.Holds = holds
-		return nil
-	case yaml.MappingNode:
-		type rawPreemptible struct {
-			Holds   []string `yaml:"holds,omitempty"`
-			Stop    string   `yaml:"stop,omitempty"`
-			Restore string   `yaml:"restore,omitempty"`
-		}
-		var raw rawPreemptible
-		if err := node.Decode(&raw); err != nil {
-			return fmt.Errorf("preemptible block: %w", err)
-		}
-		p.Holds = raw.Holds
-		p.Stop = raw.Stop
-		p.Restore = raw.Restore
-		return nil
-	default:
-		return fmt.Errorf("preemptible: expected a token list (preemptible: [token, ...]) or a block (preemptible: {holds: [...]}), got YAML node kind %d", node.Kind)
-	}
+	Restore string `yaml:"restore,omitempty" json:"restore,omitempty"`
 }
 
 // EffectiveStop returns the configured stop mechanism with the default.
@@ -876,54 +800,54 @@ type VmDeployState struct {
 	// once on first apply and persisted; re-renders produce the same
 	// user-data (cloud-init treats an instance-id change as a new
 	// instance, which breaks idempotency — so we pin it).
-	InstanceID string `yaml:"instance_id,omitempty"`
+	InstanceID string `yaml:"instance_id,omitempty" json:"instance_id,omitempty"`
 
 	// DiskPath is the absolute path to the VM's qcow2 (may be a
 	// copy-on-write overlay on top of a cached base image for
 	// cloud_image sources).
-	DiskPath string `yaml:"disk_path,omitempty"`
+	DiskPath string `yaml:"disk_path,omitempty" json:"disk_path,omitempty"`
 
 	// SeedIso is the absolute path to the NoCloud cidata ISO. Empty
 	// when the source kind is bootc and cloud-init injection is
 	// disabled (no seed ISO emitted).
-	SeedIso string `yaml:"seed_iso,omitempty"`
+	SeedIso string `yaml:"seed_iso,omitempty" json:"seed_iso,omitempty"`
 
 	// SshPort is the host port forwarded to the guest's :22.
-	SshPort int `yaml:"ssh_port,omitempty"`
+	SshPort int `yaml:"ssh_port,omitempty" json:"ssh_port,omitempty"`
 
 	// SshUser is the guest account VmDeployTarget SSHes in as
 	// (distinct from the host user running charly).
-	SshUser string `yaml:"ssh_user,omitempty"`
+	SshUser string `yaml:"ssh_user,omitempty" json:"ssh_user,omitempty"`
 
 	// Backend is the VM backend used to boot this VM: "qemu" or
 	// "libvirt". Pinned at first apply so subsequent operations don't
 	// thrash between backends if the user's vm.backend setting
 	// changes underneath them.
-	Backend string `yaml:"backend,omitempty"`
+	Backend string `yaml:"backend,omitempty" json:"backend,omitempty"`
 
 	// KeyInjectionResolved is the effective D13 state after auto
 	// defaults + explicit overrides resolved. Two booleans (one per
 	// channel). Informational; used by charly deploy show and for audit
 	// purposes.
-	KeyInjectionResolved *VmKeyInjectionResolved `yaml:"key_injection_resolved,omitempty"`
+	KeyInjectionResolved *VmKeyInjectionResolved `yaml:"key_injection_resolved,omitempty" json:"key_injection_resolved,omitempty"`
 
 	// CharlyInstallStrategy is the VmCharlyInstall.Strategy chosen at first
 	// apply: "auto", "scp", "url", or "skip". Informational.
-	CharlyInstallStrategy string `yaml:"charly_install_strategy,omitempty"`
+	CharlyInstallStrategy string `yaml:"charly_install_strategy,omitempty" json:"charly_install_strategy,omitempty"`
 
 	// CloudInitRenderedDigest is the sha256 of the last rendered
 	// user-data (structured intent + applied defaults). Lets VmDeployTarget
 	// detect drift — if the current rendered user-data doesn't match
 	// the recorded digest, the user changed the kind:vm entity and
 	// the seed ISO needs to be regenerated before re-apply.
-	CloudInitRenderedDigest string `yaml:"cloud_init_rendered_digest,omitempty"`
+	CloudInitRenderedDigest string `yaml:"cloud_init_rendered_digest,omitempty" json:"cloud_init_rendered_digest,omitempty"`
 
 	// Snapshots is the set of snapshots known to charly for this VM (mode
 	// + libvirt name + disk path + creation time + refcount). Acts as
 	// a charly.yml-side mirror of the per-VM registry.json so other
 	// commands can interrogate snapshot state without filesystem
 	// access. Maintained by `charly vm snapshot create/delete/promote`.
-	Snapshots []VmSnapshotState `yaml:"snapshot,omitempty"`
+	Snapshots []VmSnapshotState `yaml:"snapshot,omitempty" json:"snapshot,omitempty"`
 
 	// Ephemeral, when non-nil, captures the live runtime state of an
 	// active ephemeral instantiation: the registered systemd transient
@@ -933,7 +857,7 @@ type VmDeployState struct {
 	// (orphan cleanup). Presence here means an instance is/was active;
 	// the underlying-resource check (libvirt domain alive) determines
 	// whether it's still healthy.
-	Ephemeral *EphemeralRuntime `yaml:"ephemeral,omitempty"`
+	Ephemeral *EphemeralRuntime `yaml:"ephemeral,omitempty" json:"ephemeral,omitempty"`
 }
 
 // VmSnapshotState records one snapshot in charly.yml's vm_state mirror.
@@ -942,34 +866,34 @@ type VmDeployState struct {
 // filesystem reads.
 type VmSnapshotState struct {
 	// Name uniquely identifies the snapshot within this VM.
-	Name string `yaml:"name"`
+	Name string `yaml:"name" json:"name"`
 
 	// Mode is "external" or "internal".
-	Mode string `yaml:"mode"`
+	Mode string `yaml:"mode" json:"mode"`
 
 	// LibvirtName is the snapshot's name as registered with libvirt
 	// (typically same as Name; recorded for explicitness so the libvirt
 	// snapshot APIs can be invoked without re-deriving).
-	LibvirtName string `yaml:"libvirt_name,omitempty"`
+	LibvirtName string `yaml:"libvirt_name,omitempty" json:"libvirt_name,omitempty"`
 
 	// DiskPath is the absolute path to the external snapshot file.
 	// Empty for internal-mode snapshots.
-	DiskPath string `yaml:"disk_path,omitempty"`
+	DiskPath string `yaml:"disk_path,omitempty" json:"disk_path,omitempty"`
 
 	// Description carries the operator-supplied note from --description
 	// at create-time.
-	Description string `yaml:"description,omitempty"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 
 	// Created is the ISO8601 creation timestamp.
-	Created string `yaml:"created,omitempty"`
+	Created string `yaml:"created,omitempty" json:"created,omitempty"`
 
 	// Parent is the prior snapshot in the chain at creation time
 	// (informational; V1 builds chains implicitly).
-	Parent string `yaml:"parent,omitempty"`
+	Parent string `yaml:"parent,omitempty" json:"parent,omitempty"`
 
 	// Refcount tracks active clones / ephemerals depending on this
 	// snapshot. `charly vm snapshot delete` refuses while > 0.
-	Refcount int `yaml:"refcount"`
+	Refcount int `yaml:"refcount" json:"refcount"`
 }
 
 // EphemeralRuntime captures the live runtime state of an active
@@ -978,64 +902,64 @@ type VmSnapshotState struct {
 type EphemeralRuntime struct {
 	// ID is a six-char random hex string uniquely identifying this
 	// ephemeral instantiation.
-	ID string `yaml:"id"`
+	ID string `yaml:"id" json:"id"`
 
 	// ParentVm names the kind:vm entity (or kind:box / kind:k8s for
 	// pod / k8s targets) the ephemeral was instantiated from.
-	ParentVm string `yaml:"parent_vm,omitempty"`
+	ParentVm string `yaml:"parent_vm,omitempty" json:"parent_vm,omitempty"`
 
 	// ParentSnapshot names the snapshot used as the cloned overlay's
 	// backing disk, when applicable. Empty for pod/k8s ephemerals
 	// (which don't have backing chains).
-	ParentSnapshot string `yaml:"parent_snapshot,omitempty"`
+	ParentSnapshot string `yaml:"parent_snapshot,omitempty" json:"parent_snapshot,omitempty"`
 
 	// ParentEphemeral, when non-empty, is the ID of the outer
 	// ephemeral whose lifecycle wraps this one (nested case). Set
 	// from CHARLY_EPHEMERAL_PARENT environment variable at Add time.
-	ParentEphemeral string `yaml:"parent_ephemeral,omitempty"`
+	ParentEphemeral string `yaml:"parent_ephemeral,omitempty" json:"parent_ephemeral,omitempty"`
 
 	// ChildRefcount tracks nested ephemerals that name this one as
 	// their parent. Recursive teardown decrements before destroying.
-	ChildRefcount int `yaml:"child_refcount,omitempty"`
+	ChildRefcount int `yaml:"child_refcount,omitempty" json:"child_refcount,omitempty"`
 
 	// TimerUnit is the systemd transient unit name the TTL safety
 	// timer is registered as. Empty if registration failed or was
 	// skipped (e.g., on systems without user systemd). On clean
 	// teardown, `charly deploy del` cancels this unit.
-	TimerUnit string `yaml:"timer_unit,omitempty"`
+	TimerUnit string `yaml:"timer_unit,omitempty" json:"timer_unit,omitempty"`
 
 	// TtlDeadline is the absolute time (ISO8601) when the TTL timer
 	// will fire. Computed at Add time as time.Now() + EffectiveTTL.
 	// `charly status` displays the remaining time.
-	TtlDeadline string `yaml:"ttl_deadline,omitempty"`
+	TtlDeadline string `yaml:"ttl_deadline,omitempty" json:"ttl_deadline,omitempty"`
 
 	// Status is one of "provisioning" | "active" | "tearing_down".
 	// Reset to nil parent on clean teardown.
-	Status string `yaml:"status,omitempty"`
+	Status string `yaml:"status,omitempty" json:"status,omitempty"`
 
 	// InstanceName is the rendered NamingPattern result, e.g.
 	// "arch-test-eph-a3f2c1" — the name as it appears to libvirt /
 	// podman / kubectl.
-	InstanceName string `yaml:"instance_name,omitempty"`
+	InstanceName string `yaml:"instance_name,omitempty" json:"instance_name,omitempty"`
 }
 
 // VmKeyInjectionResolved is the effective per-channel toggle state
 // after D13 auto-default resolution + explicit-wins merging.
 type VmKeyInjectionResolved struct {
-	SMBIOS    bool `yaml:"smbios"`
-	CloudInit bool `yaml:"cloud_init"`
+	SMBIOS    bool `yaml:"smbios" json:"smbios"`
+	CloudInit bool `yaml:"cloud_init" json:"cloud_init"`
 }
 
 // InstallOptsConfig holds charly.yml install_opts settings for a host
 // deploy. Mirrors the command-line flags on DeployAddCmd so a user can
 // pin their choices in charly.yml instead of repeating them.
 type InstallOptsConfig struct {
-	WithServices     bool   `yaml:"with_service,omitempty"`
-	AllowRepoChanges bool   `yaml:"allow_repo_changes,omitempty"`
-	AllowRootTasks   bool   `yaml:"allow_root_tasks,omitempty"`
-	SkipIncompatible bool   `yaml:"skip_incompatible,omitempty"`
-	Verify           bool   `yaml:"verify,omitempty"`
-	BuilderImage     string `yaml:"builder_image,omitempty"`
+	WithServices     bool   `yaml:"with_service,omitempty" json:"with_service,omitempty"`
+	AllowRepoChanges bool   `yaml:"allow_repo_changes,omitempty" json:"allow_repo_changes,omitempty"`
+	AllowRootTasks   bool   `yaml:"allow_root_tasks,omitempty" json:"allow_root_tasks,omitempty"`
+	SkipIncompatible bool   `yaml:"skip_incompatible,omitempty" json:"skip_incompatible,omitempty"`
+	Verify           bool   `yaml:"verify,omitempty" json:"verify,omitempty"`
+	BuilderImage     string `yaml:"builder_image,omitempty" json:"builder_image,omitempty"`
 }
 
 // ApplyTo merges install_opts settings into an EmitOpts. CLI flags
@@ -1068,18 +992,18 @@ func (o *InstallOptsConfig) ApplyTo(opts EmitOpts) EmitOpts {
 
 // DeployVolumeConfig overrides the backing for a candy-declared volume.
 type DeployVolumeConfig struct {
-	Name       string `yaml:"name"`                  // matches candy volume name
-	Type       string `yaml:"type,omitempty"`        // "volume" (default), "bind", "encrypted"
-	Host       string `yaml:"host,omitempty"`        // explicit host path (bind type only, optional)
-	Path       string `yaml:"path,omitempty"`        // container path (only for deploy-only volumes not in any candy)
-	DataSeeded bool   `yaml:"data_seeded,omitempty"` // tracks if data was provisioned from image
-	DataSource string `yaml:"data_source,omitempty"` // image:tag that provided the data
+	Name       string `yaml:"name" json:"name"`                                   // matches candy volume name
+	Type       string `yaml:"type,omitempty" json:"type,omitempty"`               // "volume" (default), "bind", "encrypted"
+	Host       string `yaml:"host,omitempty" json:"host,omitempty"`               // explicit host path (bind type only, optional)
+	Path       string `yaml:"path,omitempty" json:"path,omitempty"`               // container path (only for deploy-only volumes not in any candy)
+	DataSeeded bool   `yaml:"data_seeded,omitempty" json:"data_seeded,omitempty"` // tracks if data was provisioned from image
+	DataSource string `yaml:"data_source,omitempty" json:"data_source,omitempty"` // image:tag that provided the data
 }
 
 // DeploySecretConfig overrides or provides a secret for deployment.
 type DeploySecretConfig struct {
-	Name   string `yaml:"name"`             // matches candy secret name
-	Source string `yaml:"source,omitempty"` // "keyring" (default), "env:VAR", "file:/path"
+	Name   string `yaml:"name" json:"name"`                         // matches candy secret name
+	Source string `yaml:"source,omitempty" json:"source,omitempty"` // "keyring" (default), "env:VAR", "file:/path"
 }
 
 // DeployResources — target-agnostic resource requests. Upper bounds (limits)
@@ -1087,17 +1011,17 @@ type DeploySecretConfig struct {
 // quantity strings ("500m" cpu, "512Mi" memory) which podman/systemd can
 // interpret for container/host targets.
 type DeployResources struct {
-	CPURequest    string `yaml:"cpu_request,omitempty"`
-	MemoryRequest string `yaml:"memory_request,omitempty"`
+	CPURequest    string `yaml:"cpu_request,omitempty" json:"cpu_request,omitempty"`
+	MemoryRequest string `yaml:"memory_request,omitempty" json:"memory_request,omitempty"`
 }
 
 // DeployExpose — external exposure intent (URL host, path, TLS). Maps to
 // K8s Ingress/HTTPRoute, Traefik router on container target, etc.
 type DeployExpose struct {
-	Host string `yaml:"host,omitempty"` // public DNS name
-	Path string `yaml:"path,omitempty"` // URL path prefix, default "/"
-	TLS  bool   `yaml:"tls,omitempty"`
-	Port string `yaml:"port,omitempty"` // container port name or number
+	Host string `yaml:"host,omitempty" json:"host,omitempty"` // public DNS name
+	Path string `yaml:"path,omitempty" json:"path,omitempty"` // URL path prefix, default "/"
+	TLS  bool   `yaml:"tls,omitempty" json:"tls,omitempty"`
+	Port string `yaml:"port,omitempty" json:"port,omitempty"` // container port name or number
 }
 
 // DeployStorage — declarative storage request. class_hint is generic
@@ -1105,19 +1029,19 @@ type DeployExpose struct {
 // K8s StorageClass name. access is generic
 // (single-writer / many-readers / many-writers).
 type DeployStorage struct {
-	Name      string `yaml:"name"`
-	Size      string `yaml:"size,omitempty"`       // e.g. "20Gi"
-	ClassHint string `yaml:"class_hint,omitempty"` // fast | cheap | encrypted | default
-	Access    string `yaml:"access,omitempty"`     // single-writer | many-readers | many-writers
-	Path      string `yaml:"path,omitempty"`       // container mount path (optional — candy can declare)
+	Name      string `yaml:"name" json:"name"`
+	Size      string `yaml:"size,omitempty" json:"size,omitempty"`             // e.g. "20Gi"
+	ClassHint string `yaml:"class_hint,omitempty" json:"class_hint,omitempty"` // fast | cheap | encrypted | default
+	Access    string `yaml:"access,omitempty" json:"access,omitempty"`         // single-writer | many-readers | many-writers
+	Path      string `yaml:"path,omitempty" json:"path,omitempty"`             // container mount path (optional — candy can declare)
 }
 
 // DeployProbes — target-agnostic probes. Each entry is a Check (same shape
 // as the existing declarative test vocabulary: file, command, addr, http…).
 type DeployProbes struct {
-	Liveness  *Op `yaml:"liveness,omitempty"`
-	Readiness *Op `yaml:"readiness,omitempty"`
-	Startup   *Op `yaml:"startup,omitempty"`
+	Liveness  *Op `yaml:"liveness,omitempty" json:"liveness,omitempty"`
+	Readiness *Op `yaml:"readiness,omitempty" json:"readiness,omitempty"`
+	Startup   *Op `yaml:"startup,omitempty" json:"startup,omitempty"`
 }
 
 // deployKey returns the charly.yml map key for an image, optionally qualified by instance.
@@ -1755,9 +1679,9 @@ func SaveDeployConfig(dc *DeployConfig) error {
 	// a re-load through LoadUnified pass the schema gate, and `deploy:` /
 	// `provides:` route by shape exactly like a project charly.yml.
 	stamped := struct {
-		Version  string                    `yaml:"version"`
-		Provides *ProvidesConfig           `yaml:"provides,omitempty"`
-		Deploy   map[string]DeploymentNode `yaml:"deploy"`
+		Version  string                    `yaml:"version" json:"version"`
+		Provides *ProvidesConfig           `yaml:"provides,omitempty" json:"provides,omitempty"`
+		Deploy   map[string]DeploymentNode `yaml:"deploy" json:"deploy"`
 	}{
 		Version:  LatestSchemaVersion().String(),
 		Provides: dc.Provides,

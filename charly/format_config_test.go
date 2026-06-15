@@ -176,8 +176,7 @@ func TestLegacyTopLevelFormatKeyRejected(t *testing.T) {
 		{"colon-tag", "debian:13:\n  package:\n    - vim\n"},
 		{"compound-tag", "debian,ubuntu:\n  package:\n    - vim\n"},
 	} {
-		var ly CandyYAML
-		err := yaml.Unmarshal([]byte(tc.yaml), &ly)
+		err := candyBodyGuardErr(tc.yaml)
 		if err == nil {
 			t.Errorf("%s: expected an unknown-top-level-key error for legacy form, got nil", tc.name)
 			continue

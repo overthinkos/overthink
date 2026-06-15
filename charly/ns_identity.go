@@ -55,7 +55,7 @@ func nsRepoIdentity(ref, baseDir string) string {
 func rootRepoIdentity(dir string) string {
 	if data, err := os.ReadFile(filepath.Join(dir, UnifiedFileName)); err == nil {
 		var head struct {
-			Repo string `yaml:"repo"`
+			Repo string `yaml:"repo" json:"repo"`
 		}
 		if yaml.Unmarshal(data, &head) == nil && head.Repo != "" {
 			return normalizeRepoIdentity(head.Repo)

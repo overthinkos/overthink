@@ -26,34 +26,34 @@ import (
 // CheckRunResults is the structured result of one `charly check box` run, as
 // produced by `--format yaml`. The zero value is a usable empty result.
 type CheckRunResults struct {
-	Box     string         `yaml:"box,omitempty"`
-	Mode    string         `yaml:"mode,omitempty"` // "box" | "run"
-	Step    []StepScore    `yaml:"step,omitempty"`
-	Summary TestRunSummary `yaml:"summary"`
+	Box     string         `yaml:"box,omitempty" json:"box,omitempty"`
+	Mode    string         `yaml:"mode,omitempty" json:"mode,omitempty"` // "box" | "run"
+	Step    []StepScore    `yaml:"step,omitempty" json:"step,omitempty"`
+	Summary TestRunSummary `yaml:"summary" json:"summary"`
 }
 
 // StepScore is the scorer's verdict for a single check:/agent-check: step,
 // keyed by step id across iterations for plateau tracking.
 type StepScore struct {
-	ID      string   `yaml:"id"`
-	Origin  string   `yaml:"origin,omitempty"`
-	Text    string   `yaml:"text,omitempty"`
-	Tag     []string `yaml:"tag,omitempty"`
-	Keyword string   `yaml:"keyword,omitempty"`
-	Verb    string   `yaml:"verb,omitempty"`
-	Status  string   `yaml:"status"` // "pass" | "fail" | "skip" | "skipped"
+	ID      string   `yaml:"id" json:"id"`
+	Origin  string   `yaml:"origin,omitempty" json:"origin,omitempty"`
+	Text    string   `yaml:"text,omitempty" json:"text,omitempty"`
+	Tag     []string `yaml:"tag,omitempty" json:"tag,omitempty"`
+	Keyword string   `yaml:"keyword,omitempty" json:"keyword,omitempty"`
+	Verb    string   `yaml:"verb,omitempty" json:"verb,omitempty"`
+	Status  string   `yaml:"status" json:"status"` // "pass" | "fail" | "skip" | "skipped"
 	// SkippedReason is set when Status == "skipped" — the depends_on upstream
 	// that didn't pass. Format: "dep-unmet: <upstream-id>".
-	SkippedReason string `yaml:"skipped_reason,omitempty"`
+	SkippedReason string `yaml:"skipped_reason,omitempty" json:"skipped_reason,omitempty"`
 }
 
 // TestRunSummary mirrors the summary block emitted by `charly check box
 // --format yaml`.
 type TestRunSummary struct {
-	Total int `yaml:"total"`
-	Pass  int `yaml:"pass"`
-	Fail  int `yaml:"fail"`
-	Skip  int `yaml:"skip"`
+	Total int `yaml:"total" json:"total"`
+	Pass  int `yaml:"pass" json:"pass"`
+	Fail  int `yaml:"fail" json:"fail"`
+	Skip  int `yaml:"skip" json:"skip"`
 }
 
 // ParseCharlyTestOutput parses the byte slice emitted by `charly check box

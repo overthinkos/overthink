@@ -68,7 +68,7 @@ func TestCheck_UnmarshalYAMLList(t *testing.T) {
   in_container: false
 `
 	var got []Op
-	if err := yaml.Unmarshal([]byte(src), &got); err != nil {
+	if err := decodeViaCUEForTest(t, src, &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if len(got) != 5 {
@@ -144,7 +144,7 @@ m:
   - [1, 2, 3]
 `
 	var w wrap
-	if err := yaml.Unmarshal([]byte(src), &w); err != nil {
+	if err := decodeViaCUEForTest(t, src, &w); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if len(w.M) != 5 {
@@ -154,11 +154,13 @@ m:
 		op    string
 		value any
 	}{
+		// numeric matcher values decode as float64 via the CUE/JSON path
+		// (Matcher.UnmarshalJSON), the live loader's decode mechanism.
 		{"equals", "PONG"},
-		{"equals", 42},
+		{"equals", float64(42)},
 		{"contains", []any{"ok", "ready"}},
 		{"matches", "^[a-z]+$"},
-		{"equals", []any{1, 2, 3}},
+		{"equals", []any{float64(1), float64(2), float64(3)}},
 	}
 	for i, want := range cases {
 		if w.M[i].Op != want.op {
@@ -174,7 +176,7 @@ m:
 func TestMatcher_RejectsMultiKey(t *testing.T) {
 	src := `{equals: 1, contains: [2]}`
 	var m Matcher
-	if err := yaml.Unmarshal([]byte(src), &m); err == nil {
+	if err := decodeViaCUEForTest(t, src, &m); err == nil {
 		t.Fatal("expected error for multi-key matcher map, got nil")
 	}
 }
@@ -397,7 +399,7 @@ func TestContainsList_BareSequenceDefaultsToContains(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var c Op
-			if err := yaml.Unmarshal([]byte(tc.yaml), &c); err != nil {
+			if err := decodeViaCUEForTest(t, tc.yaml, &c); err != nil {
 				t.Fatalf("yaml unmarshal: %v", err)
 			}
 			if len(c.Contains) != tc.wantLen {
@@ -431,7 +433,7 @@ exists: true
 contains: ["charly-fixture-web-content-marker"]
 `
 	var c Op
-	if err := yaml.Unmarshal([]byte(yamlSrc), &c); err != nil {
+	if err := decodeViaCUEForTest(t, yamlSrc, &c); err != nil {
 		t.Fatalf("yaml unmarshal: %v", err)
 	}
 	if len(c.Contains) != 1 {
@@ -456,7 +458,7 @@ command: echo PONG
 stdout: PONG
 `
 	var c Op
-	if err := yaml.Unmarshal([]byte(yamlSrc), &c); err != nil {
+	if err := decodeViaCUEForTest(t, yamlSrc, &c); err != nil {
 		t.Fatalf("yaml unmarshal: %v", err)
 	}
 	if len(c.Stdout) != 1 {

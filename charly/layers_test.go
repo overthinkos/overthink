@@ -34,8 +34,7 @@ func TestCandyUnknownKeyRejected(t *testing.T) {
 	}
 	for key, body := range bad {
 		t.Run("reject_"+key, func(t *testing.T) {
-			var ly CandyYAML
-			err := yaml.Unmarshal([]byte(body), &ly)
+			err := candyBodyGuardErr(body)
 			if err == nil {
 				t.Fatalf("expected error for unknown plural key %q, got nil", key)
 			}
@@ -61,13 +60,14 @@ func TestCandyUnknownKeyRejected(t *testing.T) {
 	// Packages live ONLY under the `distro:` map — a top-level distro-tag key
 	// (`fedora:43:`) is no longer a package surface and is rejected as an unknown
 	// key (see TestLegacyTopLevelFormatKeyRejected for the full set).
-	var ly2 CandyYAML
-	if err := yaml.Unmarshal([]byte("name: t\nfedora:43:\n  package: [vim]\n"), &ly2); err == nil {
+	if err := candyBodyGuardErr("name: t\nfedora:43:\n  package: [vim]\n"); err == nil {
 		t.Fatal("top-level distro-tag key fedora:43: must be rejected (use the distro: map)")
 	}
-	// The distro: map form parses cleanly and routes to a tag section.
+	// The distro: map form parses cleanly and routes to a tag section. Decoded
+	// through the CUE normalize path (bare-string packages are canonicalized to
+	// {name: …} by the normalizer, replacing the deleted PackageItem.UnmarshalYAML).
 	var ly3 CandyYAML
-	if err := yaml.Unmarshal([]byte("name: t\ndistro:\n  fedora-43:\n    package: [vim]\n"), &ly3); err != nil {
+	if err := decodeViaCUEForTest(t, "name: t\ndistro:\n  fedora-43:\n    package: [vim]\n", &ly3); err != nil {
 		t.Fatalf("distro: map with fedora-43 must parse, got error: %v", err)
 	}
 	if ly3.Distro["fedora-43"] == nil || len(ly3.Distro["fedora-43"].Package) != 1 {

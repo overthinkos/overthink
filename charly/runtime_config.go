@@ -17,42 +17,42 @@ var configPermWarningOnce sync.Once
 
 // RuntimeConfig represents the user-level runtime configuration (~/.config/charly/config.yml)
 type RuntimeConfig struct {
-	Engine                 EngineConfig      `yaml:"engine"`
-	RunMode                string            `yaml:"run_mode,omitempty"`
-	AutoEnable             *bool             `yaml:"auto_enable,omitempty"`
-	BindAddress            string            `yaml:"bind_address,omitempty"`
-	EncryptedStoragePath   string            `yaml:"encrypted_storage_path,omitempty"`
-	VolumesPath            string            `yaml:"volumes_path,omitempty"`
-	SecretBackend          string            `yaml:"secret_backend,omitempty"`    // "auto", "keyring", "config"
-	ForwardGpgAgent        *bool             `yaml:"forward_gpg_agent,omitempty"` // Forward host GPG agent socket into containers (default: true)
-	ForwardSshAgent        *bool             `yaml:"forward_ssh_agent,omitempty"` // Forward host SSH agent socket into containers (default: true)
-	Vm                     RuntimeVmConfig   `yaml:"vm,omitempty"`
-	VncPasswords           map[string]string `yaml:"vnc_passwords,omitempty"`            // VNC passwords keyed by image[-instance]
-	KeyringKeys            []string          `yaml:"keyring_keys,omitempty"`             // Shadow index: names of keys stored in keyring (no values)
-	KeyringCollectionLabel string            `yaml:"keyring_collection_label,omitempty"` // Preferred Secret Service collection label; empty means use default alias then iterate.
+	Engine                 EngineConfig      `yaml:"engine" json:"engine"`
+	RunMode                string            `yaml:"run_mode,omitempty" json:"run_mode,omitempty"`
+	AutoEnable             *bool             `yaml:"auto_enable,omitempty" json:"auto_enable,omitempty"`
+	BindAddress            string            `yaml:"bind_address,omitempty" json:"bind_address,omitempty"`
+	EncryptedStoragePath   string            `yaml:"encrypted_storage_path,omitempty" json:"encrypted_storage_path,omitempty"`
+	VolumesPath            string            `yaml:"volumes_path,omitempty" json:"volumes_path,omitempty"`
+	SecretBackend          string            `yaml:"secret_backend,omitempty" json:"secret_backend,omitempty"`       // "auto", "keyring", "config"
+	ForwardGpgAgent        *bool             `yaml:"forward_gpg_agent,omitempty" json:"forward_gpg_agent,omitempty"` // Forward host GPG agent socket into containers (default: true)
+	ForwardSshAgent        *bool             `yaml:"forward_ssh_agent,omitempty" json:"forward_ssh_agent,omitempty"` // Forward host SSH agent socket into containers (default: true)
+	Vm                     RuntimeVmConfig   `yaml:"vm,omitempty" json:"vm,omitempty"`
+	VncPasswords           map[string]string `yaml:"vnc_passwords,omitempty" json:"vnc_passwords,omitempty"`                       // VNC passwords keyed by image[-instance]
+	KeyringKeys            []string          `yaml:"keyring_keys,omitempty" json:"keyring_keys,omitempty"`                         // Shadow index: names of keys stored in keyring (no values)
+	KeyringCollectionLabel string            `yaml:"keyring_collection_label,omitempty" json:"keyring_collection_label,omitempty"` // Preferred Secret Service collection label; empty means use default alias then iterate.
 	// HostAliases maps short names (e.g. "o") to SSH targets (e.g.
 	// "atrawog@o.atrawog.org"). Consulted by charly's --host flag when
 	// re-execing commands on remote machines. Set via
 	// `charly settings set hosts.<alias> <ssh-target>`.
-	HostAliases map[string]string `yaml:"host_aliases,omitempty"`
+	HostAliases map[string]string `yaml:"host_aliases,omitempty" json:"host_aliases,omitempty"`
 }
 
 // RuntimeVmConfig holds user-level VM defaults
 type RuntimeVmConfig struct {
-	Backend   string `yaml:"backend,omitempty"`   // "auto", "libvirt", "qemu"
-	DiskSize  string `yaml:"disk_size,omitempty"` // default disk size
-	RootSize  string `yaml:"root_size,omitempty"` // root partition size
-	Ram       string `yaml:"ram,omitempty"`       // default RAM
-	Cpus      int    `yaml:"cpus,omitempty"`      // default CPU count
-	Rootfs    string `yaml:"rootfs,omitempty"`    // root filesystem type
-	Transport string `yaml:"transport,omitempty"` // image transport (registry, containers-storage)
+	Backend   string `yaml:"backend,omitempty" json:"backend,omitempty"`     // "auto", "libvirt", "qemu"
+	DiskSize  string `yaml:"disk_size,omitempty" json:"disk_size,omitempty"` // default disk size
+	RootSize  string `yaml:"root_size,omitempty" json:"root_size,omitempty"` // root partition size
+	Ram       string `yaml:"ram,omitempty" json:"ram,omitempty"`             // default RAM
+	Cpus      int    `yaml:"cpus,omitempty" json:"cpus,omitempty"`           // default CPU count
+	Rootfs    string `yaml:"rootfs,omitempty" json:"rootfs,omitempty"`       // root filesystem type
+	Transport string `yaml:"transport,omitempty" json:"transport,omitempty"` // image transport (registry, containers-storage)
 }
 
 // EngineConfig specifies which container engine to use
 type EngineConfig struct {
-	Build   string `yaml:"build,omitempty"`
-	Run     string `yaml:"run,omitempty"`
-	Rootful string `yaml:"rootful,omitempty"` // "auto", "machine", "sudo", "native"
+	Build   string `yaml:"build,omitempty" json:"build,omitempty"`
+	Run     string `yaml:"run,omitempty" json:"run,omitempty"`
+	Rootful string `yaml:"rootful,omitempty" json:"rootful,omitempty"` // "auto", "machine", "sudo", "native"
 }
 
 // ResolvedRuntime holds the fully resolved runtime configuration

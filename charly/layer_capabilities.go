@@ -20,11 +20,11 @@ import (
 // introduce a parallel runtime contract type; we just change the source
 // of truth from BoxConfig flags to candy aggregation.
 type CandyCapabilities struct {
-	PreserveUser       bool              `yaml:"preserve_user,omitempty"`
-	NeedsRootAfterInit bool              `yaml:"needs_root_after_init,omitempty"`
-	InitSystemHint     string            `yaml:"init_system_hint,omitempty"`
-	DataOnly           bool              `yaml:"data_only,omitempty"`
-	OCILabels          map[string]string `yaml:"oci_label,omitempty"`
+	PreserveUser       bool              `yaml:"preserve_user,omitempty" json:"preserve_user,omitempty"`
+	NeedsRootAfterInit bool              `yaml:"needs_root_after_init,omitempty" json:"needs_root_after_init,omitempty"`
+	InitSystemHint     string            `yaml:"init_system_hint,omitempty" json:"init_system_hint,omitempty"`
+	DataOnly           bool              `yaml:"data_only,omitempty" json:"data_only,omitempty"`
+	OCILabels          map[string]string `yaml:"oci_label,omitempty" json:"oci_label,omitempty"`
 }
 
 // AggregatedCandyCaps is the output of walking all candies in resolution

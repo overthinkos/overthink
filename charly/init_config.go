@@ -12,59 +12,59 @@ import (
 // InitConfig represents the `init:` section of build.yml.
 // Each init system defines how to detect, build, assemble, and manage services.
 type InitConfig struct {
-	Init map[string]*InitDef `yaml:"init"`
+	Init map[string]*InitDef `yaml:"init" json:"init"`
 }
 
 // InitDef defines an init system (supervisord, systemd, s6, etc.).
 type InitDef struct {
 	// Detection: which candy manifest fields and file patterns trigger this init system
-	CandyFields  []string `yaml:"candy_field,omitempty"`
-	CandyFiles   []string `yaml:"candy_file,omitempty"`    // glob patterns (e.g., "*.service")
-	DependsCandy string   `yaml:"depends_candy,omitempty"` // candy name required in dependency chain
+	CandyFields  []string `yaml:"candy_field,omitempty" json:"candy_field,omitempty"`
+	CandyFiles   []string `yaml:"candy_file,omitempty" json:"candy_file,omitempty"`       // glob patterns (e.g., "*.service")
+	DependsCandy string   `yaml:"depends_candy,omitempty" json:"depends_candy,omitempty"` // candy name required in dependency chain
 	// RequiresCapabilities lists candy-aggregated capability names that
 	// must be present in the image composition for this init system to
 	// be selected. Replaces the previous RequiresBootc boolean — generic
 	// across any candy-contributed capability (preserve_user, data_only,
 	// gpu_required, ...). Empty means "no requirement, always eligible".
 	// Names match the keys used in AggregatedCandyCaps.Provided.
-	RequiresCapability []string `yaml:"requires_capability,omitempty"`
+	RequiresCapability []string `yaml:"requires_capability,omitempty" json:"requires_capability,omitempty"`
 
 	// Build model: "fragment_assembly" or "file_copy"
-	Model string `yaml:"model"`
+	Model string `yaml:"model" json:"model"`
 
 	// Fragment assembly model
-	HeaderFile  string `yaml:"header_file,omitempty"`
-	FragmentDir string `yaml:"fragment_dir,omitempty"` // subdir under .build/<image>/
+	HeaderFile  string `yaml:"header_file,omitempty" json:"header_file,omitempty"`
+	FragmentDir string `yaml:"fragment_dir,omitempty" json:"fragment_dir,omitempty"` // subdir under .build/<image>/
 	// FragmentTemplate removed — the unified service: schema uses
 	// ServiceSchema.ServiceTemplate, rendered per-entry via RenderService.
-	RelayTemplate string `yaml:"relay_template,omitempty"`
+	RelayTemplate string `yaml:"relay_template,omitempty" json:"relay_template,omitempty"`
 
 	// Containerfile stage
-	StageName         string `yaml:"stage_name,omitempty"`
-	StageHeaderCopy   string `yaml:"stage_header_copy,omitempty"`
-	StageFragmentCopy string `yaml:"stage_fragment_copy,omitempty"` // Go template
+	StageName         string `yaml:"stage_name,omitempty" json:"stage_name,omitempty"`
+	StageHeaderCopy   string `yaml:"stage_header_copy,omitempty" json:"stage_header_copy,omitempty"`
+	StageFragmentCopy string `yaml:"stage_fragment_copy,omitempty" json:"stage_fragment_copy,omitempty"` // Go template
 
 	// Containerfile assembly
-	AssemblyTemplate     string `yaml:"assembly_template,omitempty"`
-	SystemEnableTemplate string `yaml:"system_enable_template,omitempty"`
-	PostAssemblyTemplate string `yaml:"post_assembly_template,omitempty"`
+	AssemblyTemplate     string `yaml:"assembly_template,omitempty" json:"assembly_template,omitempty"`
+	SystemEnableTemplate string `yaml:"system_enable_template,omitempty" json:"system_enable_template,omitempty"`
+	PostAssemblyTemplate string `yaml:"post_assembly_template,omitempty" json:"post_assembly_template,omitempty"`
 
 	// Runtime
-	Entrypoint         []string `yaml:"entrypoint,omitempty"`
-	FallbackEntrypoint []string `yaml:"fallback_entrypoint,omitempty"`
+	Entrypoint         []string `yaml:"entrypoint,omitempty" json:"entrypoint,omitempty"`
+	FallbackEntrypoint []string `yaml:"fallback_entrypoint,omitempty" json:"fallback_entrypoint,omitempty"`
 
 	// Service management (charly service commands)
-	ManagementTool     string            `yaml:"management_tool,omitempty"`
-	ManagementCommands map[string]string `yaml:"management_command,omitempty"`
+	ManagementTool     string            `yaml:"management_tool,omitempty" json:"management_tool,omitempty"`
+	ManagementCommands map[string]string `yaml:"management_command,omitempty" json:"management_command,omitempty"`
 
 	// OCI label key for service list
-	LabelKey string `yaml:"label_key,omitempty"`
+	LabelKey string `yaml:"label_key,omitempty" json:"label_key,omitempty"`
 
 	// ServiceSchema: templates for the unified `services:` schema
 	// introduced in the BuildTarget refactor. Nil on init systems that
 	// only support the legacy `service:` (raw INI) path; populated for
 	// systemd and future init systems that consume the structured spec.
-	ServiceSchema *ServiceSchemaDef `yaml:"service_schema,omitempty"`
+	ServiceSchema *ServiceSchemaDef `yaml:"service_schema,omitempty" json:"service_schema,omitempty"`
 }
 
 // ServiceSchemaDef carries the templates that turn a ServiceEntry into
@@ -75,11 +75,11 @@ type InitDef struct {
 // says whether use_packaged is supported at all (supervisord isn't,
 // since it doesn't consume systemd units).
 type ServiceSchemaDef struct {
-	ServiceTemplate    string `yaml:"service_template,omitempty"`
-	UnitPathTemplate   string `yaml:"unit_path_template,omitempty"`
-	DropinTemplate     string `yaml:"dropin_template,omitempty"`
-	DropinPathTemplate string `yaml:"dropin_path_template,omitempty"`
-	SupportsPackaged   bool   `yaml:"supports_packaged,omitempty"`
+	ServiceTemplate    string `yaml:"service_template,omitempty" json:"service_template,omitempty"`
+	UnitPathTemplate   string `yaml:"unit_path_template,omitempty" json:"unit_path_template,omitempty"`
+	DropinTemplate     string `yaml:"dropin_template,omitempty" json:"dropin_template,omitempty"`
+	DropinPathTemplate string `yaml:"dropin_path_template,omitempty" json:"dropin_path_template,omitempty"`
+	SupportsPackaged   bool   `yaml:"supports_packaged,omitempty" json:"supports_packaged,omitempty"`
 }
 
 // FragmentContext is the template context for fragment_template rendering.

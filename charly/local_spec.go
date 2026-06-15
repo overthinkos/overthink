@@ -19,26 +19,26 @@ type LocalSpec struct {
 	// Required (use `candy: []` for an explicit stub placeholder; an
 	// empty list emits a load-time WARNING but is permitted to support
 	// staged template name reservation).
-	Candy []string `yaml:"candy"`
+	Candy []string `yaml:"candy" json:"candy"`
 
 	// InstallOpts are default install-time gates. CLI flags / deployment
 	// overrides merge on top via InstallOptsConfig.ApplyTo (3-tier
 	// precedence: CLI > deployment > template).
-	InstallOpts *InstallOptsConfig `yaml:"install_opts,omitempty"`
+	InstallOpts *InstallOptsConfig `yaml:"install_opts,omitempty" json:"install_opts,omitempty"`
 
 	// Env are environment variables set in the user's shell profile when
 	// the local install applies. Same format as BoxConfig.Env:
 	// []string{"KEY=VALUE", ...}. Deployment env adds to / overrides on
 	// key collision (deployment wins).
-	Env []string `yaml:"env,omitempty"`
+	Env []string `yaml:"env,omitempty" json:"env,omitempty"`
 
 	// Description carries the plain-string self-description; first line = the
 	// summary shown in listings.
-	Description string `yaml:"description,omitempty"`
+	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 
 	// Plan carries optional target-specific plan steps. Candy and box plans
 	// propagate automatically.
-	Plan []Step `yaml:"plan,omitempty"`
+	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
 
 	// Note: there is NO image-fetch surface on a kind:local template.
 	// Deploys apply candies (host packages + configs) only; container

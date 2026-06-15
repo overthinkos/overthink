@@ -111,29 +111,29 @@ type HarnessOpts struct {
 // score, total, last_improved_at). This is what answers "what score
 // did the AI reach when?" — cross-reference at_utc with StartedUTC.
 type IterationState struct {
-	K                   int              `yaml:"k"`
-	Phase               int              `yaml:"phase,omitempty"`
-	Score               int              `yaml:"score"`
-	ScoreDelta          int              `yaml:"score_delta"`
-	PlateauCounterAfter int              `yaml:"plateau_counter_after"`
-	BuildFailure        bool             `yaml:"build_failure,omitempty"`
-	StartedUTC          string           `yaml:"started_utc,omitempty"`
-	FinishedUTC         string           `yaml:"finished_utc,omitempty"`
-	IterationDuration   string           `yaml:"iteration_duration,omitempty"`
-	BuildDuration       string           `yaml:"build_duration,omitempty"`
-	TestDuration        string           `yaml:"test_duration,omitempty"`
-	RunnerDuration      string           `yaml:"runner_duration,omitempty"`
-	RunnerCommand       []string         `yaml:"runner_command,omitempty"`
-	RunnerOutput        string           `yaml:"runner_output,omitempty"`
-	RunnerLogPath       string           `yaml:"runner_log_path,omitempty"`
-	RunnerNdjsonPath    string           `yaml:"runner_ndjson_path,omitempty"`
-	RunnerStderrPath    string           `yaml:"runner_stderr_path,omitempty"`
-	RunnerEvent         []RunnerEvent    `yaml:"runner_event,omitempty"`
-	WatchdogSample      []WatchdogSample `yaml:"watchdog_sample,omitempty"`
-	BuildLogPath        string           `yaml:"build_log_path,omitempty"`
-	CommitSHA           string           `yaml:"commit_sha,omitempty"`
-	Step                []StepVerdict    `yaml:"step,omitempty"`
-	AddedStep           []string         `yaml:"added_step,omitempty"`
+	K                   int              `yaml:"k" json:"k"`
+	Phase               int              `yaml:"phase,omitempty" json:"phase,omitempty"`
+	Score               int              `yaml:"score" json:"score"`
+	ScoreDelta          int              `yaml:"score_delta" json:"score_delta"`
+	PlateauCounterAfter int              `yaml:"plateau_counter_after" json:"plateau_counter_after"`
+	BuildFailure        bool             `yaml:"build_failure,omitempty" json:"build_failure,omitempty"`
+	StartedUTC          string           `yaml:"started_utc,omitempty" json:"started_utc,omitempty"`
+	FinishedUTC         string           `yaml:"finished_utc,omitempty" json:"finished_utc,omitempty"`
+	IterationDuration   string           `yaml:"iteration_duration,omitempty" json:"iteration_duration,omitempty"`
+	BuildDuration       string           `yaml:"build_duration,omitempty" json:"build_duration,omitempty"`
+	TestDuration        string           `yaml:"test_duration,omitempty" json:"test_duration,omitempty"`
+	RunnerDuration      string           `yaml:"runner_duration,omitempty" json:"runner_duration,omitempty"`
+	RunnerCommand       []string         `yaml:"runner_command,omitempty" json:"runner_command,omitempty"`
+	RunnerOutput        string           `yaml:"runner_output,omitempty" json:"runner_output,omitempty"`
+	RunnerLogPath       string           `yaml:"runner_log_path,omitempty" json:"runner_log_path,omitempty"`
+	RunnerNdjsonPath    string           `yaml:"runner_ndjson_path,omitempty" json:"runner_ndjson_path,omitempty"`
+	RunnerStderrPath    string           `yaml:"runner_stderr_path,omitempty" json:"runner_stderr_path,omitempty"`
+	RunnerEvent         []RunnerEvent    `yaml:"runner_event,omitempty" json:"runner_event,omitempty"`
+	WatchdogSample      []WatchdogSample `yaml:"watchdog_sample,omitempty" json:"watchdog_sample,omitempty"`
+	BuildLogPath        string           `yaml:"build_log_path,omitempty" json:"build_log_path,omitempty"`
+	CommitSHA           string           `yaml:"commit_sha,omitempty" json:"commit_sha,omitempty"`
+	Step                []StepVerdict    `yaml:"step,omitempty" json:"step,omitempty"`
+	AddedStep           []string         `yaml:"added_step,omitempty" json:"added_step,omitempty"`
 }
 
 // RunnerEvent is one parsed line from a stream-json AI runner's stdout.
@@ -145,9 +145,9 @@ type IterationState struct {
 // `Raw: {"_parse_error": <msg>, "_line": <raw bytes>}` and leaves Type
 // empty — partial output survives rather than aborting the loop.
 type RunnerEvent struct {
-	AtUTC string         `yaml:"at_utc"`
-	Type  string         `yaml:"type,omitempty"`
-	Raw   map[string]any `yaml:"raw"`
+	AtUTC string         `yaml:"at_utc" json:"at_utc"`
+	Type  string         `yaml:"type,omitempty" json:"type,omitempty"`
+	Raw   map[string]any `yaml:"raw" json:"raw"`
 }
 
 // WatchdogSample is one tick of the score-progress watchdog (default
@@ -155,80 +155,80 @@ type RunnerEvent struct {
 // during a stream-json or plain iteration that scores a live plan.
 // LastImprovedAt is empty until the AI has scored at least once.
 type WatchdogSample struct {
-	AtUTC          string `yaml:"at_utc"`
-	Elapsed        string `yaml:"elapsed"`
-	Score          int    `yaml:"score"`
-	Total          int    `yaml:"total"`
-	LastImprovedAt string `yaml:"last_improved_at,omitempty"`
+	AtUTC          string `yaml:"at_utc" json:"at_utc"`
+	Elapsed        string `yaml:"elapsed" json:"elapsed"`
+	Score          int    `yaml:"score" json:"score"`
+	Total          int    `yaml:"total" json:"total"`
+	LastImprovedAt string `yaml:"last_improved_at,omitempty" json:"last_improved_at,omitempty"`
 }
 
 // StepVerdict is one scored step's post-iteration outcome.
 type StepVerdict struct {
-	ID              string  `yaml:"id"`
-	Origin          string  `yaml:"origin,omitempty"`
-	Verdict         Verdict `yaml:"verdict"`
-	Baseline        string  `yaml:"baseline,omitempty"`
-	Final           string  `yaml:"final,omitempty"`
-	FingerprintPre  string  `yaml:"fingerprint_pre,omitempty"`
-	FingerprintPost string  `yaml:"fingerprint_post,omitempty"`
+	ID              string  `yaml:"id" json:"id"`
+	Origin          string  `yaml:"origin,omitempty" json:"origin,omitempty"`
+	Verdict         Verdict `yaml:"verdict" json:"verdict"`
+	Baseline        string  `yaml:"baseline,omitempty" json:"baseline,omitempty"`
+	Final           string  `yaml:"final,omitempty" json:"final,omitempty"`
+	FingerprintPre  string  `yaml:"fingerprint_pre,omitempty" json:"fingerprint_pre,omitempty"`
+	FingerprintPost string  `yaml:"fingerprint_post,omitempty" json:"fingerprint_post,omitempty"`
 	// SkippedReason carries the dependency-cascade explanation when
 	// Verdict == VerdictSkipped. Format: "dep-unmet: <upstream-id>".
-	SkippedReason string `yaml:"skipped_reason,omitempty"`
+	SkippedReason string `yaml:"skipped_reason,omitempty" json:"skipped_reason,omitempty"`
 }
 
 // FinalReport is the aggregate persisted to result-{calver}.yml.
 type FinalReport struct {
-	Schema              int               `yaml:"schema"`
-	Score               string            `yaml:"score"`
-	Calver              string            `yaml:"calver"`
-	RunID               string            `yaml:"run_id"`
-	Agent               string            `yaml:"agent"`
-	AgentVersion        map[string]string `yaml:"agent_version,omitempty"`
-	Where               ReportWhere       `yaml:"where"`
-	TargetImage         string            `yaml:"target_image,omitempty"`
-	Tag                 string            `yaml:"tag,omitempty"`
-	PlateauIteration    int               `yaml:"plateau_iteration"`
-	MCPEndpoint         string            `yaml:"mcp_endpoint,omitempty"`
-	StartedUTC          string            `yaml:"started_utc"`
-	FinishedUTC         string            `yaml:"finished_utc"`
-	ExitReason          string            `yaml:"exit_reason"` // plateau | solved-all | interrupted | dry-run
-	IterationsRun       int               `yaml:"iterations_run"`
-	BestScore           int               `yaml:"best_score"`
-	BestIteration       int               `yaml:"best_iteration"`
-	CharlyharnessBranch string            `yaml:"ovharness_branch,omitempty"`
-	Summary             ReportSummary     `yaml:"summary"`
-	Phases              []PhaseReport     `yaml:"phase,omitempty"`
-	PhasesCompleted     int               `yaml:"phases_completed,omitempty"`
-	Iterations          []IterationState  `yaml:"iteration,omitempty"`
-	FinalStep           []StepVerdict     `yaml:"final_step,omitempty"`
+	Schema              int               `yaml:"schema" json:"schema"`
+	Score               string            `yaml:"score" json:"score"`
+	Calver              string            `yaml:"calver" json:"calver"`
+	RunID               string            `yaml:"run_id" json:"run_id"`
+	Agent               string            `yaml:"agent" json:"agent"`
+	AgentVersion        map[string]string `yaml:"agent_version,omitempty" json:"agent_version,omitempty"`
+	Where               ReportWhere       `yaml:"where" json:"where"`
+	TargetImage         string            `yaml:"target_image,omitempty" json:"target_image,omitempty"`
+	Tag                 string            `yaml:"tag,omitempty" json:"tag,omitempty"`
+	PlateauIteration    int               `yaml:"plateau_iteration" json:"plateau_iteration"`
+	MCPEndpoint         string            `yaml:"mcp_endpoint,omitempty" json:"mcp_endpoint,omitempty"`
+	StartedUTC          string            `yaml:"started_utc" json:"started_utc"`
+	FinishedUTC         string            `yaml:"finished_utc" json:"finished_utc"`
+	ExitReason          string            `yaml:"exit_reason" json:"exit_reason"` // plateau | solved-all | interrupted | dry-run
+	IterationsRun       int               `yaml:"iterations_run" json:"iterations_run"`
+	BestScore           int               `yaml:"best_score" json:"best_score"`
+	BestIteration       int               `yaml:"best_iteration" json:"best_iteration"`
+	CharlyharnessBranch string            `yaml:"ovharness_branch,omitempty" json:"ovharness_branch,omitempty"`
+	Summary             ReportSummary     `yaml:"summary" json:"summary"`
+	Phases              []PhaseReport     `yaml:"phase,omitempty" json:"phase,omitempty"`
+	PhasesCompleted     int               `yaml:"phases_completed,omitempty" json:"phases_completed,omitempty"`
+	Iterations          []IterationState  `yaml:"iteration,omitempty" json:"iteration,omitempty"`
+	FinalStep           []StepVerdict     `yaml:"final_step,omitempty" json:"final_step,omitempty"`
 }
 
 // PhaseReport summarizes one phase of a progressive run.
 type PhaseReport struct {
-	N             int    `yaml:"n"`
-	IterationsRun int    `yaml:"iterations_run"`
-	ExitReason    string `yaml:"exit_reason"` // solved-all | plateau | interrupted
-	Score         int    `yaml:"score"`
-	Total         int    `yaml:"total"`
+	N             int    `yaml:"n" json:"n"`
+	IterationsRun int    `yaml:"iterations_run" json:"iterations_run"`
+	ExitReason    string `yaml:"exit_reason" json:"exit_reason"` // solved-all | plateau | interrupted
+	Score         int    `yaml:"score" json:"score"`
+	Total         int    `yaml:"total" json:"total"`
 }
 
 // ReportWhere identifies the target a run executed against.
 type ReportWhere struct {
-	Kind string `yaml:"kind"`           // pod | vm | host
-	Name string `yaml:"name,omitempty"` // pod or vm name; absent for host
+	Kind string `yaml:"kind" json:"kind"`                     // pod | vm | host
+	Name string `yaml:"name,omitempty" json:"name,omitempty"` // pod or vm name; absent for host
 }
 
 // ReportSummary is the aggregate metrics panel.
 type ReportSummary struct {
-	Input         int     `yaml:"input"`
-	Solved        int     `yaml:"solved"`
-	Partial       int     `yaml:"partial"`
-	Unchanged     int     `yaml:"unchanged"`
-	Regressed     int     `yaml:"regressed"`
-	Tampered      int     `yaml:"tampered"`
-	Added         int     `yaml:"added"`
-	Skipped       int     `yaml:"skipped,omitempty"`
-	PercentSolved float64 `yaml:"percent_solved"`
+	Input         int     `yaml:"input" json:"input"`
+	Solved        int     `yaml:"solved" json:"solved"`
+	Partial       int     `yaml:"partial" json:"partial"`
+	Unchanged     int     `yaml:"unchanged" json:"unchanged"`
+	Regressed     int     `yaml:"regressed" json:"regressed"`
+	Tampered      int     `yaml:"tampered" json:"tampered"`
+	Added         int     `yaml:"added" json:"added"`
+	Skipped       int     `yaml:"skipped,omitempty" json:"skipped,omitempty"`
+	PercentSolved float64 `yaml:"percent_solved" json:"percent_solved"`
 }
 
 // ---------------------------------------------------------------------------
@@ -1233,38 +1233,38 @@ func computePlateauSoFar(r *FinalReport) int {
 
 // HarnessScope is the YAML-serializable form of /workspace/.check/scope.yml.
 type HarnessScope struct {
-	RunID            string              `yaml:"run_id"`
-	Score            string              `yaml:"score,omitempty"`
-	Agent            string              `yaml:"agent,omitempty"`
-	Iteration        int                 `yaml:"iteration"`
-	PlateauIteration int                 `yaml:"plateau_iteration"`
-	PlateauCounter   int                 `yaml:"plateau_counter"`
-	AttemptsLeft     int                 `yaml:"attempts_left"`
-	BestScore        int                 `yaml:"best_score"`
-	ScoreDelta       int                 `yaml:"score_delta"`
-	TargetImage      string              `yaml:"target_image"`
-	Where            ReportWhere         `yaml:"where"`
-	Tag              string              `yaml:"tag,omitempty"`
-	History          []ScopeHistoryEntry `yaml:"history,omitempty"`
-	Step             []ScopeStep         `yaml:"step,omitempty"`
+	RunID            string              `yaml:"run_id" json:"run_id"`
+	Score            string              `yaml:"score,omitempty" json:"score,omitempty"`
+	Agent            string              `yaml:"agent,omitempty" json:"agent,omitempty"`
+	Iteration        int                 `yaml:"iteration" json:"iteration"`
+	PlateauIteration int                 `yaml:"plateau_iteration" json:"plateau_iteration"`
+	PlateauCounter   int                 `yaml:"plateau_counter" json:"plateau_counter"`
+	AttemptsLeft     int                 `yaml:"attempts_left" json:"attempts_left"`
+	BestScore        int                 `yaml:"best_score" json:"best_score"`
+	ScoreDelta       int                 `yaml:"score_delta" json:"score_delta"`
+	TargetImage      string              `yaml:"target_image" json:"target_image"`
+	Where            ReportWhere         `yaml:"where" json:"where"`
+	Tag              string              `yaml:"tag,omitempty" json:"tag,omitempty"`
+	History          []ScopeHistoryEntry `yaml:"history,omitempty" json:"history,omitempty"`
+	Step             []ScopeStep         `yaml:"step,omitempty" json:"step,omitempty"`
 }
 
 // ScopeHistoryEntry summarizes one past iteration for the AI.
 type ScopeHistoryEntry struct {
-	K                   int      `yaml:"k"`
-	Score               int      `yaml:"score"`
-	ScoreDelta          int      `yaml:"score_delta"`
-	SolvedIDs           []string `yaml:"solved_id,omitempty"`
-	NewlySolvedIDs      []string `yaml:"newly_solved_id,omitempty"`
-	Runtime             string   `yaml:"runtime,omitempty"`
-	PlateauCounterAfter int      `yaml:"plateau_counter_after,omitempty"`
+	K                   int      `yaml:"k" json:"k"`
+	Score               int      `yaml:"score" json:"score"`
+	ScoreDelta          int      `yaml:"score_delta" json:"score_delta"`
+	SolvedIDs           []string `yaml:"solved_id,omitempty" json:"solved_id,omitempty"`
+	NewlySolvedIDs      []string `yaml:"newly_solved_id,omitempty" json:"newly_solved_id,omitempty"`
+	Runtime             string   `yaml:"runtime,omitempty" json:"runtime,omitempty"`
+	PlateauCounterAfter int      `yaml:"plateau_counter_after,omitempty" json:"plateau_counter_after,omitempty"`
 }
 
 // ScopeStep is one still-unsolved scored step as the AI sees it.
 type ScopeStep struct {
-	ID              string `yaml:"id"`
-	Origin          string `yaml:"origin,omitempty"`
-	BaselineVerdict string `yaml:"baseline_verdict,omitempty"`
+	ID              string `yaml:"id" json:"id"`
+	Origin          string `yaml:"origin,omitempty" json:"origin,omitempty"`
+	BaselineVerdict string `yaml:"baseline_verdict,omitempty" json:"baseline_verdict,omitempty"`
 }
 
 // renderScope builds the Scope that iteration k will see.

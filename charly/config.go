@@ -5,23 +5,21 @@ import (
 	"maps"
 	"slices"
 	"sort"
-
-	"gopkg.in/yaml.v3"
 )
 
 // Config represents the charly.yml configuration projection
 type Config struct {
-	Defaults BoxConfig            `yaml:"defaults"`
-	Box      map[string]BoxConfig `yaml:"box"`
+	Defaults BoxConfig            `yaml:"defaults" json:"defaults"`
+	Box      map[string]BoxConfig `yaml:"box" json:"box"`
 	// Local carries kind:local templates so remote-ref collection +
 	// validation walk their candy: lists symmetrically with box candy
 	// lists (kind:local templates compose remote @-ref candies too). Populated
 	// from UnifiedFile.Local by ProjectConfig().
-	Local map[string]*LocalSpec `yaml:"local,omitempty"`
+	Local map[string]*LocalSpec `yaml:"local,omitempty" json:"local,omitempty"`
 	// Sidecar carries the project's sidecar-template library (the embedded
 	// default set merged with any project-declared sidecar: entries). Populated
 	// from UnifiedFile.Sidecar by ProjectConfig(). See /charly-automation:sidecar.
-	Sidecar map[string]SidecarDef `yaml:"sidecar,omitempty"`
+	Sidecar map[string]SidecarDef `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
 	// Namespaces carries child namespaces mounted by namespaced `import:`
 	// entries (alias → projected sub-Config). Qualified refs like
 	// `cachyos.cachyos` resolve through here. Populated from
@@ -34,38 +32,17 @@ type Config struct {
 // Single string "rpm" becomes ["rpm"]. List ["pac", "aur"] stays as-is.
 type BuildFormats []string
 
-func (b *BuildFormats) UnmarshalYAML(value *yaml.Node) error {
-	// Try string first
-	if value.Kind == yaml.ScalarNode {
-		var s string
-		if err := value.Decode(&s); err != nil {
-			return err
-		}
-		if s != "" {
-			*b = BuildFormats{s}
-		}
-		return nil
-	}
-	// Try list
-	var list []string
-	if err := value.Decode(&list); err != nil {
-		return err
-	}
-	*b = BuildFormats(list)
-	return nil
-}
-
 // MergeConfig configures post-build layer merging
 type MergeConfig struct {
-	Auto       bool `yaml:"auto,omitempty"`         // enable automatic merging after builds
-	MaxMB      int  `yaml:"max_mb,omitempty"`       // maximum size of a merged layer (default: 128)
-	MaxTotalMB int  `yaml:"max_total_mb,omitempty"` // maximum total image size for merge (0 = no limit)
+	Auto       bool `yaml:"auto,omitempty" json:"auto,omitempty"`                 // enable automatic merging after builds
+	MaxMB      int  `yaml:"max_mb,omitempty" json:"max_mb,omitempty"`             // maximum size of a merged layer (default: 128)
+	MaxTotalMB int  `yaml:"max_total_mb,omitempty" json:"max_total_mb,omitempty"` // maximum total image size for merge (0 = no limit)
 }
 
 // AliasConfig represents a command alias in the box config
 type AliasConfig struct {
-	Name    string `yaml:"name"`
-	Command string `yaml:"command,omitempty"` // defaults to Name if empty
+	Name    string `yaml:"name" json:"name"`
+	Command string `yaml:"command,omitempty" json:"command,omitempty"` // defaults to Name if empty
 }
 
 // SecurityConfig holds container security options (privileged, capabilities, devices).
@@ -78,7 +55,7 @@ type SecurityConfig struct {
 	IpcMode     string   `yaml:"ipc_mode,omitempty" json:"ipc_mode,omitempty"`   // --ipc=<value>: "host" | "private" | "shareable" | "". When "host", podman REJECTS shm_size (the host's /dev/shm is shared in-kernel, sized by the host); the quadlet generator drops ShmSize= directives in that case.
 	ShmSize     string   `yaml:"shm_size,omitempty" json:"shm_size,omitempty"`   // shared memory size (e.g. "1g", "256m")
 	GroupAdd    []string `yaml:"group_add,omitempty" json:"group_add,omitempty"` // --group-add values (e.g. "keep-groups", "video")
-	Mounts      []string `yaml:"mount,omitempty" json:"mounts,omitempty"`        // host mounts (e.g. "/dev/input:/dev/input:rw", "tmpfs:/run/udev:rw,size=1m")
+	Mounts      []string `yaml:"mount,omitempty" json:"mount,omitempty"`         // host mounts (e.g. "/dev/input:/dev/input:rw", "tmpfs:/run/udev:rw,size=1m")
 	// Resource caps. Sizes use the same suffixes as ShmSize ("6g", "500m", "1024k").
 	// Candy merging is smallest-wins (tightest cap is safest); image-level values override.
 	MemoryMax     string `yaml:"memory_max,omitempty" json:"memory_max,omitempty"`           // hard OOM threshold (cgroup memory.max, podman --memory, systemd MemoryMax)
@@ -117,80 +94,80 @@ func (m BuilderMap) AllBuilder() []string {
 
 // BoxConfig represents configuration for a single box or defaults
 type BoxConfig struct {
-	Enabled     *bool  `yaml:"enabled,omitempty"`
-	Version     string `yaml:"version,omitempty"`     // CalVer version (YYYY.DDD.HHMM) of this image definition
-	Description string `yaml:"description,omitempty"` // plain-string self-description; first line = summary
-	Base        string `yaml:"base,omitempty"`
+	Enabled     *bool  `yaml:"enabled,omitempty" json:"enabled,omitempty"`
+	Version     string `yaml:"version,omitempty" json:"version,omitempty"`         // CalVer version (YYYY.DDD.HHMM) of this image definition
+	Description string `yaml:"description,omitempty" json:"description,omitempty"` // plain-string self-description; first line = summary
+	Base        string `yaml:"base,omitempty" json:"base,omitempty"`
 	// From selects a non-registry base via "builder:<name>" — the named
 	// builder must be kind: bootstrap and runs as a pre-build privileged
 	// container that produces a rootfs tarball, then the Containerfile
 	// emits FROM scratch + ADD. Mutually exclusive with Base.
-	From                  string       `yaml:"from,omitempty"`
-	BootstrapBuilderImage string       `yaml:"bootstrap_builder_image,omitempty"`
-	Platforms             []string     `yaml:"platform,omitempty"`
-	Tag                   string       `yaml:"tag,omitempty"`
-	Registry              string       `yaml:"registry,omitempty"`
-	Distro                []string     `yaml:"distro,omitempty"` // distro tags ["fedora:43", "fedora"] — first-match for packages
-	Build                 BuildFormats `yaml:"build,omitempty"`  // package formats ["rpm"] — all installed in order
-	Candy                 []string     `yaml:"candy,omitempty"`
+	From                  string       `yaml:"from,omitempty" json:"from,omitempty"`
+	BootstrapBuilderImage string       `yaml:"bootstrap_builder_image,omitempty" json:"bootstrap_builder_image,omitempty"`
+	Platforms             []string     `yaml:"platform,omitempty" json:"platform,omitempty"`
+	Tag                   string       `yaml:"tag,omitempty" json:"tag,omitempty"`
+	Registry              string       `yaml:"registry,omitempty" json:"registry,omitempty"`
+	Distro                []string     `yaml:"distro,omitempty" json:"distro,omitempty"` // distro tags ["fedora:43", "fedora"] — first-match for packages
+	Build                 BuildFormats `yaml:"build,omitempty" json:"build,omitempty"`   // package formats ["rpm"] — all installed in order
+	Candy                 []string     `yaml:"candy,omitempty" json:"candy,omitempty"`
 	// Port is REMOVED as an authored field — boxes no longer declare ports;
 	// published ports are inherited from the candy chain (CollectBoxPorts) and
 	// host mappings are auto-allocated at deploy. Parsed only so the loader can
 	// hard-reject a residual box `port:` (rejectLegacyBoxPort → `charly migrate`).
-	Port       []string      `yaml:"port,omitempty"`
-	User       string        `yaml:"user,omitempty"`        // username (default: "user")
-	UID        *int          `yaml:"uid,omitempty"`         // user ID (default: 1000)
-	GID        *int          `yaml:"gid,omitempty"`         // group ID (default: 1000)
-	UserPolicy string        `yaml:"user_policy,omitempty"` // how to reconcile user: with base_image's pre-existing account ("auto" (default) | "adopt" | "create")
-	Merge      *MergeConfig  `yaml:"merge,omitempty"`       // layer merge settings
-	Alias      []AliasConfig `yaml:"alias,omitempty"`       // command aliases
-	Builder    BuilderMap    `yaml:"builder,omitempty"`     // build type → builder image (pixi, npm, cargo, aur)
-	Produce    []string      `yaml:"produce,omitempty"`     // what this builder image can produce (pixi, npm, cargo, aur). Renamed from `builds:` to avoid yaml key collision with the `build:` BuildFormats above (field-singular cutover, 2026-05).
+	Port       []string      `yaml:"port,omitempty" json:"port,omitempty"`
+	User       string        `yaml:"user,omitempty" json:"user,omitempty"`               // username (default: "user")
+	UID        *int          `yaml:"uid,omitempty" json:"uid,omitempty"`                 // user ID (default: 1000)
+	GID        *int          `yaml:"gid,omitempty" json:"gid,omitempty"`                 // group ID (default: 1000)
+	UserPolicy string        `yaml:"user_policy,omitempty" json:"user_policy,omitempty"` // how to reconcile user: with base_image's pre-existing account ("auto" (default) | "adopt" | "create")
+	Merge      *MergeConfig  `yaml:"merge,omitempty" json:"merge,omitempty"`             // layer merge settings
+	Alias      []AliasConfig `yaml:"alias,omitempty" json:"alias,omitempty"`             // command aliases
+	Builder    BuilderMap    `yaml:"builder,omitempty" json:"builder,omitempty"`         // build type → builder image (pixi, npm, cargo, aur)
+	Produce    []string      `yaml:"produce,omitempty" json:"produce,omitempty"`         // what this builder image can produce (pixi, npm, cargo, aur). Renamed from `builds:` to avoid yaml key collision with the `build:` BuildFormats above (field-singular cutover, 2026-05).
 	// Schema v4: DNS / AcmeEmail / Tunnel / Engine removed — they are
 	// deployment choices with no declaration meaning. They live on
 	// DeploymentNode and flow through to consumers via BoxMetadata.
-	Env       []string        `yaml:"env,omitempty"`        // runtime env vars (KEY=VALUE) — declaration of vars the image consumes
-	EnvFile   string          `yaml:"env_file,omitempty"`   // path to env file for runtime injection
-	Security  *SecurityConfig `yaml:"security,omitempty"`   // container security options — declaration of required capabilities
-	Network   string          `yaml:"network,omitempty"`    // container network mode — declaration of required/recommended mode
-	Init      string          `yaml:"init,omitempty"`       // explicit init system override ("supervisord", "systemd", "")
-	DataImage bool            `yaml:"data_image,omitempty"` // true = scratch-based data-only image (no runtime, no init)
+	Env       []string        `yaml:"env,omitempty" json:"env,omitempty"`               // runtime env vars (KEY=VALUE) — declaration of vars the image consumes
+	EnvFile   string          `yaml:"env_file,omitempty" json:"env_file,omitempty"`     // path to env file for runtime injection
+	Security  *SecurityConfig `yaml:"security,omitempty" json:"security,omitempty"`     // container security options — declaration of required capabilities
+	Network   string          `yaml:"network,omitempty" json:"network,omitempty"`       // container network mode — declaration of required/recommended mode
+	Init      string          `yaml:"init,omitempty" json:"init,omitempty"`             // explicit init system override ("supervisord", "systemd", "")
+	DataImage bool            `yaml:"data_image,omitempty" json:"data_image,omitempty"` // true = scratch-based data-only image (no runtime, no init)
 
 	// Build-speed tunables — authored under `defaults:` (project-wide build
 	// knobs, not per-image-output settings). The CLI flag / env layer wins,
 	// then these `defaults:` values, then a named Go fallback (see build.go
 	// jobsFallback / podmanJobsCapFallback). Pointers distinguish "unset"
 	// from a deliberate zero so the precedence chain is exact.
-	Jobs          *int     `yaml:"jobs,omitempty"`            // outer: concurrent IMAGE builds per DAG level (flag --jobs / env CHARLY_BUILD_JOBS)
-	PodmanJobs    *int     `yaml:"podman_jobs,omitempty"`     // inner: stages per `podman build` (0 = auto; flag --podman-jobs / env CHARLY_PODMAN_JOBS)
-	PodmanJobsCap *int     `yaml:"podman_jobs_cap,omitempty"` // ceiling for the auto podman-jobs calc: min(NCPU, cap)
-	ContextIgnore []string `yaml:"context_ignore,omitempty"`  // extra build-context excludes merged into the generated .containerignore/.dockerignore
-	Cache         string   `yaml:"cache,omitempty"`           // default build cache mode (image|registry|gha|none); flag --cache / env CHARLY_BUILD_CACHE wins
+	Jobs          *int     `yaml:"jobs,omitempty" json:"jobs,omitempty"`                       // outer: concurrent IMAGE builds per DAG level (flag --jobs / env CHARLY_BUILD_JOBS)
+	PodmanJobs    *int     `yaml:"podman_jobs,omitempty" json:"podman_jobs,omitempty"`         // inner: stages per `podman build` (0 = auto; flag --podman-jobs / env CHARLY_PODMAN_JOBS)
+	PodmanJobsCap *int     `yaml:"podman_jobs_cap,omitempty" json:"podman_jobs_cap,omitempty"` // ceiling for the auto podman-jobs calc: min(NCPU, cap)
+	ContextIgnore []string `yaml:"context_ignore,omitempty" json:"context_ignore,omitempty"`   // extra build-context excludes merged into the generated .containerignore/.dockerignore
+	Cache         string   `yaml:"cache,omitempty" json:"cache,omitempty"`                     // default build cache mode (image|registry|gha|none); flag --cache / env CHARLY_BUILD_CACHE wins
 
 	// Reusable-artifact retention (project-wide; authored under defaults:).
 	// keep_images = newest CalVer tags to keep per image after `charly box build`;
 	// keep_check_runs = newest run dirs to keep per bed/score after `charly check run`.
 	// 0 (or absent → Go fallback 0) disables pruning. See `charly clean`.
-	KeepImages    *int `yaml:"keep_images,omitempty"`
-	KeepCheckRuns *int `yaml:"keep_check_runs,omitempty"`
+	KeepImages    *int `yaml:"keep_images,omitempty" json:"keep_images,omitempty"`
+	KeepCheckRuns *int `yaml:"keep_check_runs,omitempty" json:"keep_check_runs,omitempty"`
 
 	// Plan carries image-level acceptance + provisioning steps — the box's
 	// own cross-candy invariants. Candy plans propagate via the composition
 	// machinery; these are box-specific. Travels in the box section of the
 	// ai.opencharly.description OCI label.
-	Plan []Step `yaml:"plan,omitempty"`
+	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
 
 	// CheckLevel declares how deep `charly check run <bed>` runs this box's
 	// acceptance: none | build | noagent (default) | agent. Baked into the
 	// ai.opencharly.check_level capability label.
-	CheckLevel string `yaml:"check_level,omitempty"`
+	CheckLevel string `yaml:"check_level,omitempty" json:"check_level,omitempty"`
 
 	// Shell is an image-level shell-init contribution layered on top of
 	// what the included candies contribute. Same shape as the candy
 	// manifest's `shell:` field — generic body + per-shell overrides. Travels in
 	// the ai.opencharly.shell OCI label under the Box section.
 	// 2026-05 cutover.
-	Shell *ShellConfig `yaml:"shell,omitempty"`
+	Shell *ShellConfig `yaml:"shell,omitempty" json:"shell,omitempty"`
 }
 
 // IsEnabled returns true if the image is enabled (nil defaults to true)

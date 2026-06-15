@@ -8,8 +8,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 // Op is the unified operation vocabulary — the single struct that replaces the
@@ -206,8 +204,8 @@ type Op struct {
 	// metrics. Discriminator value is the metric kind ("latency"); siblings
 	// OverIDs / Metrics / EmitID / per-metric matchers configure it.
 	Summarize string   `yaml:"summarize,omitempty" json:"summarize,omitempty"`
-	OverIDs   []string `yaml:"over_id,omitempty"  json:"over_ids,omitempty"`
-	Metrics   []string `yaml:"metric,omitempty"   json:"metrics,omitempty"`
+	OverIDs   []string `yaml:"over_id,omitempty"  json:"over_id,omitempty"`
+	Metrics   []string `yaml:"metric,omitempty"   json:"metric,omitempty"`
 	EmitID    string   `yaml:"emit_id,omitempty"   json:"emit_id,omitempty"`
 	// Per-metric numeric matchers — when set, the verb fails if the metric
 	// exceeds the threshold. Reuses the existing Matcher type so lt/le/gt/ge
@@ -234,7 +232,7 @@ type Op struct {
 
 	// package-specific
 	Installed *bool    `yaml:"installed,omitempty" json:"installed,omitempty"`
-	Versions  []string `yaml:"version,omitempty"  json:"versions,omitempty"`
+	Versions  []string `yaml:"version,omitempty"  json:"version,omitempty"`
 	// PackageMap overrides the Package name per distro. Keys match the image's
 	// distro tags (e.g. "arch", "fedora", "ubuntu", "debian"). If the
 	// running image's distro tag is present in the map, that value replaces
@@ -250,7 +248,7 @@ type Op struct {
 	// probe when the package only ships on some distros' repos. Matched
 	// against the full image distro list (e.g. ["ubuntu:24.04", "ubuntu",
 	// "debian"]) so `ubuntu:24.04` and `ubuntu` both match.
-	ExcludeDistros []string `yaml:"exclude_distro,omitempty" json:"exclude_distros,omitempty"`
+	ExcludeDistros []string `yaml:"exclude_distro,omitempty" json:"exclude_distro,omitempty"`
 
 	// service-specific
 	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
@@ -268,7 +266,7 @@ type Op struct {
 	// http-specific
 	Status        int         `yaml:"status,omitempty"              json:"status,omitempty"`
 	Body          MatcherList `yaml:"body,omitempty"                json:"body,omitempty"`
-	Headers       MatcherList `yaml:"header,omitempty"             json:"headers,omitempty"`
+	Headers       MatcherList `yaml:"header,omitempty"             json:"header,omitempty"`
 	AllowInsecure bool        `yaml:"allow_insecure,omitempty"      json:"allow_insecure,omitempty"`
 	NoFollowRedir bool        `yaml:"no_follow_redirects,omitempty" json:"no_follow_redirects,omitempty"`
 	CAFile        string      `yaml:"ca_file,omitempty"             json:"ca_file,omitempty"`
@@ -298,7 +296,7 @@ type Op struct {
 	// mount-specific
 	MountSource string      `yaml:"mount_source,omitempty" json:"mount_source,omitempty"` // backing device/path
 	Filesystem  string      `yaml:"filesystem,omitempty"   json:"filesystem,omitempty"`
-	Opts        MatcherList `yaml:"opt,omitempty"         json:"opts,omitempty"`
+	Opts        MatcherList `yaml:"opt,omitempty"         json:"opt,omitempty"`
 
 	// addr-specific
 	Reachable *bool `yaml:"reachable,omitempty" json:"reachable,omitempty"`
@@ -314,7 +312,7 @@ type Op struct {
 	Selector              string   `yaml:"selector,omitempty"           json:"selector,omitempty"`                       // cdp: click/type/wait/coords/axtree
 	Dest                  string   `yaml:"dest,omitempty"               json:"dest,omitempty"`                           // dbus: service name
 	Path                  string   `yaml:"path,omitempty"               json:"path,omitempty"`                           // dbus: object path
-	Args                  []string `yaml:"arg,omitempty"               json:"args,omitempty"`                            // dbus: method args (type:value)
+	Args                  []string `yaml:"arg,omitempty"               json:"arg,omitempty"`                             // dbus: method args (type:value)
 	Artifact              string   `yaml:"artifact,omitempty"                json:"artifact,omitempty"`                  // cdp/wl/vnc: output file path for screenshot / raw capture
 	ArtifactMinBytes      int      `yaml:"artifact_min_bytes,omitempty"      json:"artifact_min_bytes,omitempty"`        // post-run size assertion on artifact
 	ArtifactMinDimensions string   `yaml:"artifact_min_dimensions,omitempty" json:"artifact_min_dimensions,omitempty"`   // post-run "WxH" min dimensions assertion (PNG/JPEG header decode)
@@ -543,43 +541,6 @@ type Matcher struct {
 	Value any    `json:"value,omitempty"`
 }
 
-// UnmarshalYAML accepts either a scalar or a single-key map.
-func (m *Matcher) UnmarshalYAML(node *yaml.Node) error {
-	switch node.Kind {
-	case yaml.ScalarNode:
-		var v any
-		if err := node.Decode(&v); err != nil {
-			return fmt.Errorf("decoding matcher scalar: %w", err)
-		}
-		m.Op = "equals"
-		m.Value = v
-		return nil
-	case yaml.SequenceNode:
-		var v []any
-		if err := node.Decode(&v); err != nil {
-			return fmt.Errorf("decoding matcher sequence: %w", err)
-		}
-		m.Op = "equals"
-		m.Value = v
-		return nil
-	case yaml.MappingNode:
-		var raw map[string]any
-		if err := node.Decode(&raw); err != nil {
-			return fmt.Errorf("decoding matcher map: %w", err)
-		}
-		if len(raw) != 1 {
-			return fmt.Errorf("matcher map must have exactly one operator key, got %d", len(raw))
-		}
-		for k, v := range raw {
-			m.Op = k
-			m.Value = v
-		}
-		return nil
-	default:
-		return fmt.Errorf("matcher: unsupported YAML kind %d", node.Kind)
-	}
-}
-
 // MarshalYAML emits the canonical operator-map form so round-tripping is stable.
 func (m Matcher) MarshalYAML() (any, error) { //nolint:unparam // error return kept for interface/API stability
 	if m.Op == "equals" {
@@ -637,25 +598,6 @@ func (m *Matcher) UnmarshalJSON(data []byte) error {
 // Matchers is expected. `stdout: PONG` and `stdout: [PONG]` decode identically.
 type MatcherList []Matcher
 
-// UnmarshalYAML accepts a sequence (normal list) OR a scalar/single-map
-// (wrapped in a one-element list).
-func (ml *MatcherList) UnmarshalYAML(node *yaml.Node) error {
-	if node.Kind == yaml.SequenceNode {
-		var list []Matcher
-		if err := node.Decode(&list); err != nil {
-			return err
-		}
-		*ml = list
-		return nil
-	}
-	var m Matcher
-	if err := m.UnmarshalYAML(node); err != nil {
-		return err
-	}
-	*ml = []Matcher{m}
-	return nil
-}
-
 // UnmarshalJSON mirrors UnmarshalYAML's scalar-shorthand behavior for the
 // JSON read path (OCI labels, hand-crafted JSON fixtures). Accepts:
 //   - JSON array  → []Matcher
@@ -698,53 +640,6 @@ func (ml *MatcherList) UnmarshalJSON(data []byte) error {
 // Explicit operator-map elements (`{equals: X}`, `{matches: R}`, `{lt: N}`)
 // keep the authored Op verbatim — only bare scalars/sequences are promoted.
 type ContainsList []Matcher
-
-// UnmarshalYAML promotes bare scalar/sequence elements to Op="contains" while
-// preserving the authored Op for explicit operator-map elements.
-func (cl *ContainsList) UnmarshalYAML(node *yaml.Node) error {
-	promote := func(child *yaml.Node) (Matcher, error) {
-		var m Matcher
-		switch child.Kind {
-		case yaml.ScalarNode:
-			var v any
-			if err := child.Decode(&v); err != nil {
-				return m, fmt.Errorf("decoding contains scalar: %w", err)
-			}
-			m.Op = "contains"
-			m.Value = v
-			return m, nil
-		case yaml.MappingNode, yaml.SequenceNode:
-			// Defer to Matcher; explicit {op: value} keeps the authored Op.
-			// Nested sequences fall through to Matcher's SequenceNode branch
-			// (Op="equals", Value=[]any) — the field-level promotion does not
-			// recurse into a list of lists.
-			if err := m.UnmarshalYAML(child); err != nil {
-				return m, err
-			}
-			return m, nil
-		default:
-			return m, fmt.Errorf("contains: unsupported YAML kind %d", child.Kind)
-		}
-	}
-	if node.Kind == yaml.SequenceNode {
-		list := make([]Matcher, 0, len(node.Content))
-		for i, child := range node.Content {
-			m, err := promote(child)
-			if err != nil {
-				return fmt.Errorf("contains[%d]: %w", i, err)
-			}
-			list = append(list, m)
-		}
-		*cl = ContainsList(list)
-		return nil
-	}
-	m, err := promote(node)
-	if err != nil {
-		return err
-	}
-	*cl = ContainsList{m}
-	return nil
-}
 
 // LabelDescriptionSet (labelset.go) is the three-section label set carrying an
 // image's baked plan steps; the LabelSet aggregate there wraps it.

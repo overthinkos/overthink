@@ -68,9 +68,9 @@ func generateAndStoreSecret(service, key string) (val, source string) {
 
 // SecretYAML represents a secret declaration in the candy manifest.
 type SecretYAML struct {
-	Name   string `yaml:"name"`             // unique secret name
-	Target string `yaml:"target,omitempty"` // container mount path (default: /run/secrets/<name>)
-	Env    string `yaml:"env,omitempty"`    // fallback env var name
+	Name   string `yaml:"name" json:"name"`                         // unique secret name
+	Target string `yaml:"target,omitempty" json:"target,omitempty"` // container mount path (default: /run/secrets/<name>)
+	Env    string `yaml:"env,omitempty" json:"env,omitempty"`       // fallback env var name
 }
 
 // LabelSecretEntry represents a secret requirement in an OCI image label.

@@ -48,8 +48,8 @@ func TestCueBox_Corpus(t *testing.T) {
 
 func rootShapeFiles() []string {
 	return []string{
-		"../charly.yml",             // repo root (pod/local/k8s/vm/check/android collections)
-		"../box/arch/charly.yml",    // box submodule stacks
+		"../charly.yml",          // repo root (pod/local/k8s/vm/check/android collections)
+		"../box/arch/charly.yml", // box submodule stacks
 		"../box/fedora/charly.yml",
 		"../box/debian/charly.yml",
 		"../box/ubuntu/charly.yml",

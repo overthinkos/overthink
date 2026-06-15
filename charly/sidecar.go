@@ -185,7 +185,7 @@ type SidecarVolume struct {
 // lives in the binary-embedded charly.yml `sidecar:` section and is read as
 // UnifiedFile.Sidecar by the unified loader (embed_defaults.go).
 type SidecarConfig struct {
-	Sidecar map[string]SidecarDef `yaml:"sidecar"`
+	Sidecar map[string]SidecarDef `yaml:"sidecar" json:"sidecar"`
 }
 
 // ResolvedSidecar is a fully resolved sidecar ready for quadlet generation.

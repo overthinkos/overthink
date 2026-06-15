@@ -152,8 +152,8 @@ func buildYamlFromFormatConfig(dir string) string {
 	}
 	var peek struct {
 		Defaults struct {
-			FormatConfig string `yaml:"format_config"`
-		} `yaml:"defaults"`
+			FormatConfig string `yaml:"format_config" json:"format_config"`
+		} `yaml:"defaults" json:"defaults"`
 	}
 	if err := yaml.Unmarshal(data, &peek); err != nil {
 		return ""

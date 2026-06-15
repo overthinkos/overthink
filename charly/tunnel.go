@@ -118,28 +118,6 @@ type TunnelYAML struct {
 	Private  PortScope `yaml:"private,omitempty" json:"private"`
 }
 
-// UnmarshalYAML handles bare string ("tailscale"/"cloudflare") or expanded form.
-func (t *TunnelYAML) UnmarshalYAML(value *yaml.Node) error {
-	if value.Kind == yaml.ScalarNode {
-		t.Provider = value.Value
-		switch value.Value {
-		case "tailscale":
-			t.Private = PortScope{All: true} // default: all ports private
-		case "cloudflare":
-			t.Public = PortScope{All: true} // default: all ports public
-		}
-		return nil
-	}
-	// Expanded form: decode into an alias to avoid infinite recursion
-	type raw TunnelYAML
-	var r raw
-	if err := value.Decode(&r); err != nil {
-		return err
-	}
-	*t = TunnelYAML(r)
-	return nil
-}
-
 // TunnelPort represents a single port to tunnel with its protocol and access scope.
 type TunnelPort struct {
 	Port        int    // Tailscale HTTPS listen port (must be valid serve port)

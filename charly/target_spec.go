@@ -17,7 +17,7 @@ type TargetSpec struct {
 
 	// Calamares settings.conf core fields.
 	ModulesSearch []string         `yaml:"modules-search,omitempty" json:"modules-search,omitempty"`
-	Instances     []TargetInstance `yaml:"instance,omitempty" json:"instances,omitempty"`
+	Instances     []TargetInstance `yaml:"instance,omitempty" json:"instance,omitempty"`
 	Sequence      *TargetSequence  `yaml:"sequence,omitempty" json:"sequence,omitempty"`
 	Branding      string           `yaml:"branding,omitempty" json:"branding,omitempty"`
 	PromptInstall bool             `yaml:"prompt-install,omitempty" json:"prompt-install,omitempty"`
@@ -27,7 +27,7 @@ type TargetSpec struct {
 
 	// charly extensions: bind groups and boxes to the target.
 	Group []string `yaml:"group,omitempty" json:"group,omitempty"` // group names from the unified file
-	Box   []string `yaml:"box,omitempty" json:"image,omitempty"`   // box names from the unified file
+	Box   []string `yaml:"box,omitempty" json:"box,omitempty"`     // box names from the unified file
 }
 
 // TargetInstance mirrors Calamares' `instances:` entries — multiple
@@ -49,6 +49,6 @@ type TargetSequence struct {
 // TargetDoc wraps a single TargetSpec with an explicit Name — the standalone
 // `kind: target` form.
 type TargetDoc struct {
-	Name       string `yaml:"name"`
+	Name       string `yaml:"name" json:"name"`
 	TargetSpec `yaml:",inline"`
 }

@@ -40,12 +40,38 @@ func unknownYAMLKeys(node *yaml.Node, shape docShape) []string {
 		var out []string
 		for line := range strings.SplitSeq(err.Error(), "\n") {
 			line = strings.TrimSpace(line)
-			if strings.Contains(line, "not found in type") {
-				out = append(out, line)
+			if !strings.Contains(line, "not found in type") {
+				continue
 			}
+			if keylintSelfDecodingType(line) {
+				continue // false positive — see keylintSelfDecodingTypes
+			}
+			out = append(out, line)
 		}
 		return out
 	}
+}
+
+// keylintSelfDecodingTypes are types whose authored keys are NOT literal struct
+// fields: the operator-map matchers self-decode via UnmarshalJSON (any operator
+// key is valid), and the shell-config types carry dynamic per-shell sub-blocks
+// the CUE normalizer canonicalizes into by_shell. yaml.v3 KnownFields(true)
+// cannot know this (it only opts out for types with a custom UnmarshalYAML, which
+// these no longer have after the CUE loader switch), so it false-flags their
+// valid keys. The CUE loader decodes them correctly; closed-schema unknown-key
+// detection for these is `charly box validate`'s job.
+var keylintSelfDecodingTypes = []string{
+	"main.Matcher", "main.MatcherList", "main.ContainsList", "main.PortScope",
+	"main.ShellConfig", "main.ShellSpec", "main.DeployShellOverlay",
+}
+
+func keylintSelfDecodingType(line string) bool {
+	for _, t := range keylintSelfDecodingTypes {
+		if strings.Contains(line, "type "+t) {
+			return true
+		}
+	}
+	return false
 }
 
 // warnUnknownYAMLKeys surfaces key misalignments that yaml.v3 would otherwise

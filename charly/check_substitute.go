@@ -16,6 +16,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"reflect"
 	"regexp"
 
 	"gopkg.in/yaml.v3"
@@ -274,9 +275,20 @@ func SubstituteStepNonces(plan []Step, nonces map[string]string) ([]Step, error)
 		}
 		return match
 	})
+	// Re-decode through the CUE path (Matcher shorthand → UnmarshalJSON,
+	// ContainsList → normalizer) so the per-type shorthand UnmarshalYAML methods
+	// can be deleted. The substituted bytes are a YAML sequence of steps.
+	var doc yaml.Node
+	if err := yaml.Unmarshal(substituted, &doc); err != nil {
+		return nil, fmt.Errorf("parse substituted plan: %w", err)
+	}
+	seq := &doc
+	if doc.Kind == yaml.DocumentNode && len(doc.Content) > 0 {
+		seq = doc.Content[0]
+	}
 	var out []Step
-	if err := yaml.Unmarshal(substituted, &out); err != nil {
-		return nil, fmt.Errorf("unmarshal substituted plan: %w", err)
+	if err := decodeEntityViaCUE(seq, reflect.TypeOf([]Step{}), &out, "substituted-plan"); err != nil {
+		return nil, fmt.Errorf("decode substituted plan: %w", err)
 	}
 	for i := range out {
 		if i < len(plan) {

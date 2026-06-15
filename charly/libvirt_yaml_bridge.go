@@ -53,7 +53,13 @@ func RenderDomainXML(spec *VmSpec, rt VmRuntimeParams) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("marshaling domain XML: %w", err)
 	}
-	return string(out) + "\n", nil
+	xmlStr := string(out) + "\n"
+	// Egress gate: best-effort koala XML validation of the rendered domain
+	// (libvirt's DomainDefineXML is the authoritative gate — see /charly-internals:egress).
+	if err := ValidateXMLEgress("libvirt_domain_xml", "libvirt-domain:"+rt.Name, xmlStr); err != nil {
+		return "", err
+	}
+	return xmlStr, nil
 }
 
 // BuildLibvirtDomainXML builds a libvirtxml.Domain tree. Exposed so

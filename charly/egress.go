@@ -24,9 +24,11 @@ package main
 import (
 	"embed"
 	"fmt"
+	"strings"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/errors"
+	"cuelang.org/go/encoding/xml/koala"
 	cueyaml "cuelang.org/go/encoding/yaml"
 )
 
@@ -128,6 +130,37 @@ func validateTextEgress(kind, label, text string) error {
 	}
 	if err := v.Unify(def).Validate(); err != nil {
 		return fmt.Errorf("%s: text egress validation failed:\n%s", label, errors.Details(err, nil))
+	}
+	return nil
+}
+
+// ValidateXMLEgress validates a rendered XML artifact (the libvirt domain XML) by
+// koala-decoding it (cuelang.org/go/encoding/xml/koala — elements→structs,
+// attributes→`$`-fields, text→`$$`) and unifying with the kind's koala-shaped
+// schema. koala is EXPERIMENTAL and best-effort: if it cannot DECODE the XML (a
+// koala limitation, not a malformed domain), this returns nil and defers to the
+// authoritative downstream gate (libvirt's DomainDefineXML). A genuine schema
+// violation on a SUCCESSFULLY-decoded document IS returned as a hard error.
+func ValidateXMLEgress(kind, label, xmlStr string) error {
+	def, ok := egressDef(kind)
+	if !ok {
+		return fmt.Errorf("%s: no egress schema registered for kind %q", label, kind)
+	}
+	expr, err := koala.NewDecoder(label, strings.NewReader(xmlStr)).Decode()
+	if err != nil {
+		return nil // best-effort: experimental koala couldn't parse it; defer to libvirt
+	}
+	v := cueSchemaCtx.BuildExpr(expr)
+	if v.Err() != nil {
+		return nil // best-effort
+	}
+	// Concrete(true): koala maps an empty element (<name></name>) to an absent
+	// `$$` field, so a non-concrete check would pass it. Concreteness requires the
+	// schema-constrained fields ($type / name.$$ / memory.$$) to be present and
+	// non-empty — exactly the "malformed domain" signal. The decoded XML is all
+	// concrete strings, so a valid domain unifies concretely.
+	if err := v.Unify(def).Validate(cue.Concrete(true)); err != nil {
+		return fmt.Errorf("%s: XML egress validation failed:\n%s", label, errors.Details(err, nil))
 	}
 	return nil
 }

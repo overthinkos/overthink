@@ -95,6 +95,34 @@ func TestValidateEgressValue_Kustomization(t *testing.T) {
 	}
 }
 
+func TestValidateEgressValue_DeployRecord(t *testing.T) {
+	good := &DeployRecord{
+		SchemaVersion: ledgerSchemaVersion, DeployID: "abc123", Image: "ghcr.io/x/y:tag",
+		Target: "host", Candy: []string{"ripgrep"}, DeployedAt: "2026-06-15T00:00:00Z",
+	}
+	if err := ValidateEgressValue("deploy_record", "good deploy rec", good); err != nil {
+		t.Fatalf("valid deploy record should pass, got: %v", err)
+	}
+	bad := &DeployRecord{Image: "x", Target: "host", DeployedAt: "t"} // empty DeployID
+	if err := ValidateEgressValue("deploy_record", "bad deploy rec", bad); err == nil {
+		t.Fatal("deploy record with empty deploy_id must be REJECTED, got nil")
+	}
+}
+
+func TestValidateEgressValue_CandyRecord(t *testing.T) {
+	good := &CandyRecord{
+		SchemaVersion: ledgerSchemaVersion, Candy: "ripgrep",
+		DeployedBy: []string{"abc123"}, DeployedAt: "2026-06-15T00:00:00Z",
+	}
+	if err := ValidateEgressValue("candy_record", "good candy rec", good); err != nil {
+		t.Fatalf("valid candy record should pass, got: %v", err)
+	}
+	bad := &CandyRecord{DeployedAt: "t"} // empty Candy
+	if err := ValidateEgressValue("candy_record", "bad candy rec", bad); err == nil {
+		t.Fatal("candy record with empty candy must be REJECTED, got nil")
+	}
+}
+
 // TestRenderCloudInit_OutputValidatesAgainstSchema proves the renderer's real
 // output satisfies the egress gate end to end (RenderCloudInit returns the gate's
 // error directly, so a non-nil err here would mean charly emits cloud-init that

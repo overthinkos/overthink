@@ -696,19 +696,8 @@ func TestValidateCandyTasks_ReservedVarKey(t *testing.T) {
 	}
 }
 
-func TestValidateCandyTasks_BadMode(t *testing.T) {
-	layers := map[string]*Candy{
-		"mylyr": {
-			Name: "mylyr",
-			plan: []Step{{Run: "build", Op: Op{Mkdir: "/a", Mode: "9999"}}},
-		},
-	}
-	errs := &ValidationError{}
-	validateCandyTasks(layers, errs)
-	if !errs.HasErrors() {
-		t.Fatal("expected bad-mode error")
-	}
-}
+// bad-mode (octal ^0[0-7]{3,4}$) rejection is now a CUE concern (#Op.mode) —
+// see TestCueTightening_RejectsAndAccepts "candy run step bad mode rejected".
 
 func TestValidateCandyTasks_BuildOnlyAll(t *testing.T) {
 	layers := map[string]*Candy{

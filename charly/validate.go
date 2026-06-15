@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"cuelang.org/go/cue"
+	"gopkg.in/yaml.v3"
 )
 
 // ValidationError collects multiple validation errors
@@ -58,11 +59,44 @@ func validateCandyCUESchemas(layers map[string]*Candy, errs *ValidationError) {
 }
 
 // validateProjectCUESchemas validates the project's non-candy entities against
-// the CUE schemas (additive/transitional during the cutover). Collection kinds
-// come from the root-shape files (project root + box submodules); box entities
-// from the discovered box/<distro>/box/<name>/charly.yml files. Candies are
+// the CUE schemas. Boxes are validated from the RESOLVED in-memory set
+// (cfg.Box) — exactly what the Go box validators iterate, so CUE coverage
+// matches Go coverage per repo (each repo validates its own boxes; submodule
+// boxes are validated when `charly box validate` runs in that submodule). The
+// other collection kinds are read from the root-shape files. Candies are
 // handled by validateCandyCUESchemas.
-func validateProjectCUESchemas(dir string, errs *ValidationError) {
+func validateProjectCUESchemas(cfg *Config, dir string, opts ResolveOpts, errs *ValidationError) {
+	// Boxes: BoxConfig has no Name field (the name is the cfg.Box map key), so
+	// inject it into the wire form before validating against #Box. Marshal the
+	// resolved struct back to YAML and run it through the same ingest path the
+	// on-disk corpus uses. Skip disabled boxes exactly like the Go box
+	// validators (a disabled box's invalid fields are intentionally not flagged).
+	for name, box := range cfg.Box {
+		if !box.IsEnabled() && !opts.shouldIncludeDisabled(name) {
+			continue
+		}
+		entityYAML, err := boxEntityWireYAML(name, box)
+		if err != nil {
+			errs.Add("box %q: CUE wire-encode: %v", name, err)
+			continue
+		}
+		doc, derr := cueDocFromYAML("box:"+name, entityYAML)
+		if derr != nil {
+			errs.Add("box %q: CUE ingest: %v", name, derr)
+			continue
+		}
+		// Non-concrete (closedness + value-constraint conflicts, NOT
+		// missing-required / disjunction-resolution): a scratch box with
+		// neither base nor from is valid, but Concrete(true) can't resolve the
+		// base/from mutual-exclusion disjunction when both are absent. The
+		// re-wiring's purpose is to catch SET-value declarative violations
+		// (version/jobs/check_level/…), which Unify().Validate() catches; the
+		// only required #Box field, name, is always injected above.
+		if verr := validateEntityClosedCUE("box", "box:"+name, doc.LookupPath(cue.ParsePath("box"))); verr != nil {
+			errs.Add("%v", verr)
+		}
+	}
+
 	collectionKinds := []string{
 		"pod", "local", "android", "k8s", "sidecar", "distro", "builder",
 		"init", "agent", "resource", "group", "target", "module",
@@ -99,24 +133,25 @@ func validateProjectCUESchemas(dir string, errs *ValidationError) {
 			}
 		}
 	}
-	if boxFiles, _ := filepath.Glob(filepath.Join(dir, "box", "*", "box", "*", UnifiedFileName)); len(boxFiles) > 0 {
-		for _, f := range boxFiles {
-			data, err := os.ReadFile(f)
-			if err != nil {
-				continue
-			}
-			doc, derr := cueDocFromYAML(f, data)
-			if derr != nil {
-				errs.Add("%s: CUE ingest: %v", f, derr)
-				continue
-			}
-			if box := doc.LookupPath(cue.ParsePath("box")); box.Exists() {
-				if verr := validateEntityCUE("box", f, box); verr != nil {
-					errs.Add("%v", verr)
-				}
-			}
-		}
+}
+
+// boxEntityWireYAML marshals a resolved BoxConfig back to the authored `box:`
+// wire form (a kind-keyed document), injecting the map-key name that BoxConfig
+// does not itself carry, so it can be CUE-ingested and validated against #Box.
+func boxEntityWireYAML(name string, box BoxConfig) ([]byte, error) {
+	raw, err := yaml.Marshal(box)
+	if err != nil {
+		return nil, err
 	}
+	var m map[string]any
+	if err := yaml.Unmarshal(raw, &m); err != nil {
+		return nil, err
+	}
+	if m == nil {
+		m = map[string]any{}
+	}
+	m["name"] = name
+	return yaml.Marshal(map[string]any{"box": m})
 }
 
 // Validate validates the configuration and candies. opts.IncludeDisabled
@@ -158,13 +193,10 @@ func Validate(cfg *Config, layers map[string]*Candy, dir string, opts ResolveOpt
 	validateCandyCUESchemas(layers, errs)
 
 	// Validate non-candy entities (box/deploy/check/vm/pod/...) against CUE
-	validateProjectCUESchemas(dir, errs)
+	validateProjectCUESchemas(cfg, dir, opts, errs)
 
 	// Validate tasks: field (replaces root.yml/user.yml)
 	validateCandyTasks(layers, errs)
-
-	// Validate env files
-	validateEnvFiles(layers, errs)
 
 	// Validate package config (rpm/deb/pac/aur sections in the candy manifest)
 	validatePkgConfig(layers, errs)
@@ -174,12 +206,6 @@ func Validate(cfg *Config, layers map[string]*Candy, dir string, opts ResolveOpt
 
 	// Validate no circular dependencies in images
 	validateBoxDAG(cfg, layers, dir, opts, errs)
-
-	// Validate ports
-	validatePort(cfg, layers, errs)
-
-	// Validate routes
-	validateRoutes(cfg, layers, errs)
 
 	// Validate volumes
 	validateVolume(layers, errs)
@@ -226,9 +252,6 @@ func Validate(cfg *Config, layers map[string]*Candy, dir string, opts ResolveOpt
 
 	// Validate port_relay declarations
 	validatePortRelay(cfg, layers, errs)
-
-	// Validate version fields
-	validateVersionFields(cfg, layers, errs)
 
 	// Validate env_provides declarations
 	validateEnvProvides(layers, errs)
@@ -546,11 +569,8 @@ func validateBuildAndDistro(cfg *Config, distroCfg *DistroConfig, errs *Validati
 			continue
 		}
 		validateBuild(fmt.Sprintf("box %q", name), img.Build)
-		// check_level (acceptance-depth rung) must be one of the canonical
-		// values when set; empty defaults to noagent (ResolveCheckLevel).
-		if img.CheckLevel != "" && !IsValidCheckLevel(img.CheckLevel) {
-			errs.Add("box %q: check_level %q must be one of: %s", name, img.CheckLevel, strings.Join(CheckLevels, ", "))
-		}
+		// box check_level enum is enforced by #Box; the build-format set is
+		// dynamic (build.yml, not a static CUE enum) so it stays validated here.
 	}
 }
 
@@ -587,22 +607,8 @@ func validateCandyContents(layers map[string]*Candy, errs *ValidationError) {
 			errs.Add("candy %q: must have at least one install file (candy manifest distro: packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml) or a candy: field", name)
 		}
 
-		// `version:` is MANDATORY for the candy kind (optional for every other
-		// kind). It is the authoritative per-entity version that drives both the
-		// image's content-stable ai.opencharly.version label and cross-repo
-		// candy resolution (pickCandyVersion). Scoped to local candies — a fetched
-		// remote candy with no version is already a hard error at scan time
-		// (ScanAllCandyWithConfigOpts). Run `charly migrate` to backfill.
-		if !layer.Remote && layer.Version == "" {
-			errs.Add("candy %q: missing required `version:` (CalVer YYYY.DDD.HHMM). Run: charly migrate", name)
-		}
-
-		// `status:` (optional) must be one of working|testing|broken when set.
-		switch layer.Status {
-		case "", StatusWorking, StatusTesting, StatusBroken:
-		default:
-			errs.Add("candy %q: invalid status %q (must be one of: %s, %s, %s)", name, layer.Status, StatusWorking, StatusTesting, StatusBroken)
-		}
+		// version: (mandatory CalVer) and status: (working|testing|broken enum)
+		// are enforced by #Candy; ADE plan-completeness below is not.
 
 		// ADE is MANDATORY per candy: every local candy MUST ship a non-empty
 		// `description:` string AND a `plan:` containing at least one
@@ -658,24 +664,8 @@ func validateCandyContents(layers map[string]*Candy, errs *ValidationError) {
 			}
 		}
 
-		// Validate extract field
-		for _, ext := range layer.Extract() {
-			if ext.Source == "" {
-				errs.Add("candy %q: extract source cannot be empty", name)
-			}
-			if ext.Path == "" {
-				errs.Add("candy %q: extract path cannot be empty", name)
-			}
-			if ext.Dest == "" {
-				errs.Add("candy %q: extract dest cannot be empty", name)
-			}
-			if ext.Path != "" && !strings.HasPrefix(ext.Path, "/") {
-				errs.Add("candy %q: extract path must be absolute (got %q)", name, ext.Path)
-			}
-			if ext.Dest != "" && !strings.HasPrefix(ext.Dest, "/") {
-				errs.Add("candy %q: extract dest must be absolute (got %q)", name, ext.Dest)
-			}
-		}
+		// extract source/path/dest presence + path/dest absoluteness are enforced
+		// by #CandyExtract.
 
 		// Validate shell:-schema declarations (2026-05 cutover).
 		validateCandyShell(name, layer.Shell(), errs)
@@ -690,16 +680,9 @@ func validateCandyContents(layers map[string]*Candy, errs *ValidationError) {
 //     committed local APK),
 //   - source: (when set) is one of the apkeep sources.
 func validateCandyApk(candyName string, apks []ApkPackageSpec, errs *ValidationError) {
+	// package⊕apk one-of + the source enum are enforced by #CandyApk; only the
+	// "source applies only to package installs" cross-field rule stays here.
 	for i, a := range apks {
-		switch {
-		case a.Package == "" && a.Apk == "":
-			errs.Add("candy %q apk[%d]: must set either `package:` (apkeep download) or `apk:` (committed local APK)", candyName, i)
-		case a.Package != "" && a.Apk != "":
-			errs.Add("candy %q apk[%d]: set only ONE of `package:` or `apk:`, not both", candyName, i)
-		}
-		if a.Source != "" && !apkSourceAllowlist[a.Source] {
-			errs.Add("candy %q apk[%d]: source %q is not valid (want apk-pure, google-play, f-droid, or huawei-app-gallery)", candyName, i, a.Source)
-		}
 		if a.Apk != "" && a.Source != "" {
 			errs.Add("candy %q apk[%d]: `source:` applies only to `package:` (apkeep) installs, not committed `apk:` files", candyName, i)
 		}
@@ -745,14 +728,9 @@ func validateCandyShell(candyName string, cfg *ShellConfig, errs *ValidationErro
 	for _, p := range cfg.PathAppend {
 		validateShellPath(candyName, "shell.path_append", p, errs)
 	}
-	// Per-shell sub-blocks — UnmarshalYAML already enforced the
-	// allowlist, but defend in depth in case ByShell is populated by
-	// hand-rolled label-side data.
+	// Per-shell sub-block keys (bash/zsh/fish/sh) are enforced by the closed
+	// #Shell def; here we validate each sub-block's init/path semantics.
 	for shell, spec := range cfg.ByShell {
-		if !ShellAllowlist[shell] {
-			errs.Add("candy %q: shell.%s: unknown shell name (must be one of bash/zsh/fish/sh)", candyName, shell)
-			continue
-		}
 		checkSpec(shell, spec)
 	}
 }
@@ -844,25 +822,6 @@ func checkIncludeCycle(name string, layers map[string]*Candy, visited map[string
 	return nil
 }
 
-// validateEnvFiles validates env config from the candy manifest
-func validateEnvFiles(layers map[string]*Candy, errs *ValidationError) {
-	for name, layer := range layers {
-		if !layer.HasEnv() {
-			continue
-		}
-
-		cfg, _ := layer.EnvConfig()
-		if cfg == nil {
-			continue
-		}
-
-		// PATH must not be set directly (use path_append in the candy manifest)
-		if _, hasPath := cfg.Vars["PATH"]; hasPath {
-			errs.Add("candy %q candy manifest: use path_append instead of setting PATH in env", name)
-		}
-	}
-}
-
 // validatePkgConfig validates per-distro/format package config in the candy
 // manifest. Packages live in per-distro tag sections (debian, ubuntu, debian:13,
 // …) plus the always-included top-level base; the only format section is `aur`.
@@ -877,16 +836,10 @@ func validatePkgConfig(layers map[string]*Candy, errs *ValidationError) {
 		if raw == nil {
 			return
 		}
-		if repos := toMapSlice(raw["repo"]); len(repos) > 0 {
-			if !candyHasPkgs {
-				errs.Add("candy %q candy manifest: %s.repo requires packages (none declared anywhere in the candy)", name, label)
-			}
-			for _, repo := range repos {
-				repoName := fmt.Sprint(repo["name"])
-				if repoName == "" || repoName == "<nil>" {
-					errs.Add("candy %q candy manifest: %s.repo entry requires name", name, label)
-				}
-			}
+		// repo-entry name presence is enforced by #RepoBlock; only the
+		// cross-section "repo/copr/modules require packages" union gate stays here.
+		if repos := toMapSlice(raw["repo"]); len(repos) > 0 && !candyHasPkgs {
+			errs.Add("candy %q candy manifest: %s.repo requires packages (none declared anywhere in the candy)", name, label)
 		}
 		if copr := toStringSlice(raw["copr"]); len(copr) > 0 && !candyHasPkgs {
 			errs.Add("candy %q candy manifest: %s.copr requires packages", name, label)
@@ -995,68 +948,15 @@ func validateCandyDAG(cfg *Config, layers map[string]*Candy, errs *ValidationErr
 }
 
 // validatePort validates port declarations in candies and images
-func validatePort(_ *Config, layers map[string]*Candy, errs *ValidationError) {
-	// Validate candy ports from the candy manifest
-	for name, layer := range layers {
-		if !layer.HasPorts() {
-			continue
-		}
-		ports, _ := layer.Port()
-		for _, port := range ports {
-			if !isValidPort(port) {
-				errs.Add("candy %q candy manifest ports: %q is not a valid port number (1-65535)", name, port)
-			}
-		}
-	}
-
-	// Box-level / defaults `port:` is REMOVED — published ports are inherited
-	// from the candy chain (CollectBoxPorts) and host mappings are auto-allocated
-	// at deploy. A residual box `port:` is hard-rejected at load time
-	// (rejectLegacyBoxPort), so there is nothing to format-validate here.
-}
 
 // validateRoutes validates route file declarations in candies
-func validateRoutes(_ *Config, layers map[string]*Candy, errs *ValidationError) {
-	// Validate route config from the candy manifest
-	for name, layer := range layers {
-		if !layer.HasRoute() {
-			continue
-		}
-		route, _ := layer.Route()
-		if route == nil {
-			continue
-		}
-		if route.Host == "" {
-			errs.Add("candy %q candy manifest route: missing required \"host\" field", name)
-		}
-		if route.Port == "" {
-			errs.Add("candy %q candy manifest route: missing required \"port\" field", name)
-		} else if !isValidPort(route.Port) {
-			errs.Add("candy %q candy manifest route: %q is not a valid port number (1-65535)", name, route.Port)
-		}
-	}
-
-	// Route is generic service metadata consumed by traefik, tunnel, or both.
-	// No validation requiring traefik — images may use tunnels instead.
-}
 
 // validateMergeConfig validates merge configuration
 func validateMergeConfig(cfg *Config, errs *ValidationError) {
-	check := func(name string, m *MergeConfig) {
-		if m == nil {
-			return
-		}
-		if m.MaxMB < 0 {
-			errs.Add("%s: merge max_mb must be > 0, got %d", name, m.MaxMB)
-		}
-	}
-
-	check("defaults", cfg.Defaults.Merge)
-	for name, img := range cfg.Box {
-		if !img.IsEnabled() {
-			continue
-		}
-		check(fmt.Sprintf("box %q", name), img.Merge)
+	// box-entity merge.max_mb >= 0 is enforced by #BoxMerge; the `defaults:`
+	// block is NOT validated against #Box, so its check stays here.
+	if m := cfg.Defaults.Merge; m != nil && m.MaxMB < 0 {
+		errs.Add("defaults: merge max_mb must be > 0, got %d", m.MaxMB)
 	}
 }
 
@@ -1107,10 +1007,8 @@ func validateBuildTunables(cfg *Config, errs *ValidationError) {
 	}
 }
 
-// volumeNameRe matches valid volume names: lowercase alphanumeric + hyphens
-var volumeNameRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
-
-// validateVolume validates volume declarations in candies
+// validateVolume checks the cross-entry duplicate-name invariant CUE cannot
+// express; volume name char-set + name/path presence are enforced by #CandyVolume.
 func validateVolume(layers map[string]*Candy, errs *ValidationError) {
 	for name, layer := range layers {
 		if !layer.HasVolumes() {
@@ -1118,19 +1016,10 @@ func validateVolume(layers map[string]*Candy, errs *ValidationError) {
 		}
 		seen := make(map[string]bool)
 		for _, vol := range layer.Volume() {
-			switch {
-			case vol.Name == "":
-				errs.Add("candy %q candy manifest volumes: missing required \"name\" field", name)
-			case !volumeNameRe.MatchString(vol.Name):
-				errs.Add("candy %q candy manifest volumes: name %q must be lowercase alphanumeric with hyphens", name, vol.Name)
-			case seen[vol.Name]:
+			if seen[vol.Name] {
 				errs.Add("candy %q candy manifest volumes: duplicate volume name %q", name, vol.Name)
-			default:
-				seen[vol.Name] = true
 			}
-			if vol.Path == "" {
-				errs.Add("candy %q candy manifest volumes: missing required \"path\" field", name)
-			}
+			seen[vol.Name] = true
 		}
 	}
 }
@@ -1142,21 +1031,17 @@ func validateAliases(cfg *Config, layers map[string]*Candy, errs *ValidationErro
 		if !layer.HasAliases() {
 			continue
 		}
+		// name + command presence are enforced by #CandyAlias; the name char-set
+		// and cross-entry dedup are not.
 		seen := make(map[string]bool)
 		for _, a := range layer.Alias() {
-			switch {
-			case a.Name == "":
-				errs.Add("candy %q candy manifest aliases: missing required \"name\" field", name)
-			case !aliasNameRe.MatchString(a.Name):
+			if a.Name != "" && !aliasNameRe.MatchString(a.Name) {
 				errs.Add("candy %q candy manifest aliases: name %q must match [a-zA-Z0-9][a-zA-Z0-9._-]*", name, a.Name)
-			case seen[a.Name]:
+			}
+			if seen[a.Name] {
 				errs.Add("candy %q candy manifest aliases: duplicate alias name %q", name, a.Name)
-			default:
-				seen[a.Name] = true
 			}
-			if a.Command == "" {
-				errs.Add("candy %q candy manifest aliases: missing required \"command\" field for alias %q", name, a.Name)
-			}
+			seen[a.Name] = true
 		}
 	}
 
@@ -1463,17 +1348,6 @@ func candyHasOrphanPackaged(l *Candy) bool {
 	return false
 }
 
-// isValidPort checks if a string is a valid port number (1-65535).
-// Handles /udp and /tcp suffixes: "47998/udp" is valid.
-func isValidPort(s string) bool {
-	clean, _ := stripPortSuffix(s)
-	n, err := strconv.Atoi(clean)
-	if err != nil {
-		return false
-	}
-	return n >= 1 && n <= 65535
-}
-
 // findSimilarName finds a similar name for typo suggestions
 func findSimilarName(target string, candidates []string) string {
 	// Simple Levenshtein-like check for close matches
@@ -1546,18 +1420,8 @@ func validateLibvirt(cfg *Config, layers map[string]*Candy, errs *ValidationErro
 
 // validateEngineConfig validates engine declarations in candies and images
 func validateEngineConfig(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
-	validEngines := map[string]bool{"docker": true, "podman": true}
-
-	// Validate candy engine declarations
-	for name, layer := range layers {
-		if e := layer.Engine(); e != "" && !validEngines[e] {
-			errs.Add("candy %q: engine must be \"docker\" or \"podman\", got %q", name, e)
-		}
-	}
-
-	// Schema v4: BoxConfig.Engine removed (deploy-only choice).
-	// Defaults.Engine + per-image Engine no longer exist. Candy-level
-	// conflict detection still applies below.
+	// The candy engine enum (docker|podman) is enforced by #Candy.engine; only
+	// cross-candy engine-conflict detection within an image stays here.
 
 	for boxName, img := range cfg.Box {
 		if !img.IsEnabled() {
@@ -1599,12 +1463,10 @@ func validatePortRelay(cfg *Config, layers map[string]*Candy, errs *ValidationEr
 		if len(layer.PortRelayPorts) == 0 {
 			continue
 		}
-		// Validate each port
+		// Port range (1-65535) is enforced by #Candy.port_relay; dedup +
+		// relay-port-declared-in-ports + the socat-presence gate stay here.
 		portSet := make(map[int]bool)
 		for _, port := range layer.PortRelayPorts {
-			if port < 1 || port > 65535 {
-				errs.Add("candy %q port_relay: %d is not a valid port number (1-65535)", name, port)
-			}
 			if portSet[port] {
 				errs.Add("candy %q port_relay: duplicate port %d", name, port)
 			}
@@ -1667,26 +1529,6 @@ func min(a, b, c int) int {
 		return b
 	}
 	return c
-}
-
-// calverRe matches CalVer format: YYYY.DDD.HHMM (3 dot-separated non-negative integers)
-var calverRe = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
-
-// validateVersionFields validates version fields in candies and images.
-func validateVersionFields(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
-	for name, layer := range layers {
-		if layer.Version != "" && !calverRe.MatchString(layer.Version) {
-			errs.Add("candy %q: version must be CalVer format (YYYY.DDD.HHMM), got %q", name, layer.Version)
-		}
-	}
-	for name, img := range cfg.Box {
-		if !img.IsEnabled() {
-			continue
-		}
-		if img.Version != "" && !calverRe.MatchString(img.Version) {
-			errs.Add("box %q: version must be CalVer format (YYYY.DDD.HHMM), got %q", name, img.Version)
-		}
-	}
 }
 
 // candyHasFile checks if a candy has a specific file (used for builder detection).
@@ -1843,16 +1685,12 @@ func validateEnvDeps(layers map[string]*Candy, errs *ValidationError) {
 // shared `seen` map, reporting collisions with whichever section claimed the
 // name first. Used by validateEnvDeps for all four env/secret sections.
 func validateDepEntries(candyName, section string, entries []EnvDependency, seen map[string]string, errs *ValidationError) {
+	// name presence + env-var-name format + description presence are enforced by
+	// #CandyEnvDep / #CandySecretDep; only the cross-section single-membership
+	// rule (an env var belongs to exactly one section) stays here.
 	for _, dep := range entries {
 		if dep.Name == "" {
-			errs.Add("candy %s: %s has entry with empty name", candyName, section)
 			continue
-		}
-		if !isValidEnvVarName(dep.Name) {
-			errs.Add("candy %s: %s[%s] is not a valid environment variable name", candyName, section, dep.Name)
-		}
-		if dep.Description == "" {
-			errs.Add("candy %s: %s[%s] has no description", candyName, section, dep.Name)
 		}
 		if prev, ok := seen[dep.Name]; ok && prev != section {
 			errs.Add("candy %s: env var %s appears in both %s and %s — an env var belongs to exactly one section", candyName, dep.Name, prev, section)
@@ -1860,12 +1698,6 @@ func validateDepEntries(candyName, section string, entries []EnvDependency, seen
 		seen[dep.Name] = section
 	}
 }
-
-// secretKeyPattern matches the optional Key field on secret_accepts /
-// secret_requires entries. Enforces <service>/<key> with an "charly/" prefix to
-// prevent candies from exfiltrating unrelated user credentials (e.g.,
-// "aws/access-key") into a podman secret. Plan §2.7 / §4.4 rule 5.
-var secretKeyPattern = regexp.MustCompile(`^charly/[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9_-]*$`)
 
 // podmanSecretSlugPattern matches the lowercase-kebab slug form used for
 // per-image podman secret names (charly-<image>-<slug>). Plan §4.4 rule 4.
@@ -1911,11 +1743,7 @@ func validateSecretDeps(layers map[string]*Candy, errs *ValidationError) {
 				if !podmanSecretSlugPattern.MatchString(slug) {
 					errs.Add("candy %s: %s[%s] would produce invalid podman secret slug %q (must match %s)", name, section, dep.Name, slug, podmanSecretSlugPattern.String())
 				}
-				// Rule 5: optional Key override must match <service>/<key>
-				// with an charly/ prefix.
-				if dep.Key != "" && !secretKeyPattern.MatchString(dep.Key) {
-					errs.Add("candy %s: %s[%s] key %q must match %s — must start with \"charly/\" and be <service>/<key>", name, section, dep.Name, dep.Key, secretKeyPattern.String())
-				}
+				// The credential-store key: format is enforced by #CandySecretDep.key.
 			}
 		}
 
@@ -1930,31 +1758,18 @@ func validateMCPProvides(layers map[string]*Candy, errs *ValidationError) {
 		if !layer.HasMCPProvides() {
 			continue
 		}
+		// name/url presence + the transport enum are enforced by #CandyMCPProvide;
+		// duplicate-name detection + the {{...}} URL template grammar stay here.
 		seen := make(map[string]bool)
 		for _, mcp := range layer.MCPProvide() {
-			if mcp.Name == "" {
-				errs.Add("candy %s: mcp_provides has entry with empty name", name)
-				continue
+			if mcp.Name != "" {
+				if seen[mcp.Name] {
+					errs.Add("candy %s: mcp_provides has duplicate name %q", name, mcp.Name)
+				}
+				seen[mcp.Name] = true
 			}
-			if seen[mcp.Name] {
-				errs.Add("candy %s: mcp_provides has duplicate name %q", name, mcp.Name)
-			}
-			seen[mcp.Name] = true
-
-			if mcp.URL == "" {
-				errs.Add("candy %s: mcp_provides[%s] has empty url", name, mcp.Name)
-				continue
-			}
-
-			// Check for valid template variables. Allowed: {{.ContainerName}},
-			// {{.HostPort <N>}}, {{.ContainerPort <N>}}.
-			if !validateProvidesTemplate(mcp.URL) {
+			if mcp.URL != "" && !validateProvidesTemplate(mcp.URL) {
 				errs.Add("candy %s: mcp_provides[%s] url contains unknown or malformed template variable (allowed: {{.ContainerName}}, {{.HostPort N}}, {{.ContainerPort N}}): %s", name, mcp.Name, mcp.URL)
-			}
-
-			// Validate transport if specified
-			if mcp.Transport != "" && mcp.Transport != "http" && mcp.Transport != "sse" {
-				errs.Add("candy %s: mcp_provides[%s] has invalid transport %q (must be http, sse, or empty)", name, mcp.Name, mcp.Transport)
 			}
 		}
 	}
@@ -1962,65 +1777,30 @@ func validateMCPProvides(layers map[string]*Candy, errs *ValidationError) {
 
 // validateMCPDeps checks mcp_requires and mcp_accepts declarations in candies.
 func validateMCPDeps(layers map[string]*Candy, errs *ValidationError) {
+	// name presence + description presence are enforced by #CandyMCPDep; only the
+	// cross-section single-membership rule (a server in exactly one of
+	// mcp_requires/mcp_accepts) stays here.
 	for name, layer := range layers {
 		seen := make(map[string]string) // name -> "requires" or "accepts"
-
-		for _, dep := range layer.MCPRequire() {
-			if dep.Name == "" {
-				errs.Add("candy %s: mcp_requires has entry with empty name", name)
-				continue
+		check := func(entries []EnvDependency, section string) {
+			for _, dep := range entries {
+				if dep.Name == "" {
+					continue
+				}
+				if prev, ok := seen[dep.Name]; ok && prev != section {
+					errs.Add("candy %s: MCP server %s appears in both mcp_%s and mcp_%s", name, dep.Name, prev, section)
+				}
+				seen[dep.Name] = section
 			}
-			if dep.Description == "" {
-				errs.Add("candy %s: mcp_requires[%s] has no description", name, dep.Name)
-			}
-			if prev, ok := seen[dep.Name]; ok {
-				errs.Add("candy %s: MCP server %s appears in both mcp_%s and mcp_requires", name, dep.Name, prev)
-			}
-			seen[dep.Name] = "requires"
 		}
-
-		for _, dep := range layer.MCPAccept() {
-			if dep.Name == "" {
-				errs.Add("candy %s: mcp_accepts has entry with empty name", name)
-				continue
-			}
-			if dep.Description == "" {
-				errs.Add("candy %s: mcp_accepts[%s] has no description", name, dep.Name)
-			}
-			if prev, ok := seen[dep.Name]; ok {
-				errs.Add("candy %s: MCP server %s appears in both mcp_%s and mcp_accepts", name, dep.Name, prev)
-			}
-			seen[dep.Name] = "accepts"
-		}
+		check(layer.MCPRequire(), "requires")
+		check(layer.MCPAccept(), "accepts")
 	}
-}
-
-// isValidEnvVarName checks if s is a valid environment variable name (uppercase alphanumeric + underscore, not starting with digit).
-func isValidEnvVarName(s string) bool {
-	if len(s) == 0 {
-		return false
-	}
-	for i, c := range s {
-		if c >= 'A' && c <= 'Z' || c == '_' {
-			continue
-		}
-		if c >= '0' && c <= '9' && i > 0 {
-			continue
-		}
-		// Allow lowercase too — some env vars use mixed case
-		if c >= 'a' && c <= 'z' {
-			continue
-		}
-		return false
-	}
-	return true
 }
 
 // --- Task validation (replaces root.yml / user.yml) ---
 
 var (
-	taskModePattern        = regexp.MustCompile(`^0[0-7]{3,4}$`)
-	taskVarKeyPattern      = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 	taskUserLiteralPattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]*$`)
 	taskUserUIDGIDPattern  = regexp.MustCompile(`^\d+:\d+$`)
 	taskCapsPattern        = regexp.MustCompile(`^cap_[a-z_]+[=+][a-z]+(,cap_[a-z_]+[=+][a-z]+)*$`)
@@ -2045,11 +1825,9 @@ var (
 //   - build: value restricted to "all" in initial implementation
 func validateCandyTasks(layers map[string]*Candy, errs *ValidationError) {
 	for name, layer := range layers {
-		// vars: validation
-		for k, v := range layer.vars {
-			if !taskVarKeyPattern.MatchString(k) {
-				errs.Add("candy %q: vars: key %q is not a valid shell identifier (expected ^[A-Z_][A-Z0-9_]*$)", name, k)
-			}
+		// vars: key shape (^[A-Z_][A-Z0-9_]*$) is enforced by #Candy.var; the
+		// reserved-auto-export + env: cross-section collisions stay here.
+		for k := range layer.vars {
 			if taskAutoExports[k] {
 				errs.Add("candy %q: vars: key %q collides with a reserved auto-export (USER, UID, GID, HOME, ARCH, BUILD_ARCH)", name, k)
 			}
@@ -2058,7 +1836,6 @@ func validateCandyTasks(layers map[string]*Candy, errs *ValidationError) {
 					errs.Add("candy %q: vars: key %q also declared in env: — pick one", name, k)
 				}
 			}
-			_ = v // value is free-form; no further pattern enforced
 		}
 
 		if !layer.HasTasks() {
@@ -2091,10 +1868,7 @@ func validateSingleTask(candyName string, idx int, verb string, t *Op, known map
 		}
 	}
 
-	// mode: format check (applies to mkdir/copy/write/download)
-	if t.Mode != "" && !taskModePattern.MatchString(t.Mode) {
-		errs.Add("candy %q: tasks[%d]: mode: %q is not valid octal (expected ^0[0-7]{3,4}$)", candyName, idx, t.Mode)
-	}
+	// mode: octal format (^0[0-7]{3,4}$) is enforced by #Op.mode.
 
 	// cache: additional buildkit cache mounts — only meaningful on the
 	// RUN-emitting verbs (command/download); each path must be absolute (or

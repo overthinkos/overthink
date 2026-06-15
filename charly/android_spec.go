@@ -81,15 +81,6 @@ func (a *AndroidSpec) EffectiveSerial() string {
 	return "emulator-5554"
 }
 
-// apkSourceAllowlist is the set of valid apkeep download sources. Mirrors
-// the AdbInstallAppCmd --source enum; validated for candy `apk:` entries.
-var apkSourceAllowlist = map[string]bool{
-	"apk-pure":           true,
-	"google-play":        true,
-	"f-droid":            true,
-	"huawei-app-gallery": true,
-}
-
 // ApkPackageSpec is one Android app install entry — the unit of the `apk:`
 // package format declared in a candy. Exactly one of Package (download by id
 // via apkeep) XOR Apk (a committed local APK path pushed via the adb sync

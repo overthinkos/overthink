@@ -71,7 +71,7 @@ func normalizeNode(node *yaml.Node, t reflect.Type) error {
 	if node.Kind == yaml.AliasNode {
 		return nil
 	}
-	for t.Kind() == reflect.Ptr {
+	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 
@@ -150,7 +150,7 @@ func flattenYamlFields(t reflect.Type) map[string]reflect.Type {
 		name, opts, _ := strings.Cut(tag, ",")
 		inline := strings.Contains(opts, "inline")
 		ft := f.Type
-		for ft.Kind() == reflect.Ptr {
+		for ft.Kind() == reflect.Pointer {
 			ft = ft.Elem()
 		}
 		if (f.Anonymous || inline) && ft.Kind() == reflect.Struct {

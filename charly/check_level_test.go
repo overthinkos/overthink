@@ -1,9 +1,6 @@
 package main
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
 // The ladder ordering + default are load-bearing for the bed-runner depth
 // dispatch — a regression here would silently change how deep every bed runs.
@@ -76,13 +73,5 @@ func TestExtractMetadata_CheckLevel(t *testing.T) {
 }
 
 // validateBuild rejects an out-of-ladder check_level value.
-func TestValidate_RejectsBadCheckLevel(t *testing.T) {
-	cfg := &Config{Box: map[string]BoxConfig{
-		"img": {Enabled: new(true), CheckLevel: "verbose"},
-	}}
-	errs := &ValidationError{}
-	validateBuildAndDistro(cfg, &DistroConfig{}, errs)
-	if !errs.HasErrors() || !strings.Contains(errs.Error(), "check_level") {
-		t.Errorf("expected check_level rejection, got: %v", errs.Error())
-	}
-}
+// check_level enum rejection is now a CUE concern (#Box.check_level) — see
+// TestCueTightening_RejectsAndAccepts "box bad check_level rejected".

@@ -151,14 +151,9 @@ func TestRunCharlyVerb_UnknownMethodFails(t *testing.T) {
 
 // --- §D validation tests ---
 
-func TestValidateCharlyVerb_UnknownMethodReportsError(t *testing.T) {
-	errs := &ValidationError{}
-	c := &Op{Cdp: "bogus"}
-	validateCharlyVerb(c, "cdp", "loc", errs)
-	if !errs.HasErrors() || !strings.Contains(strings.Join(errs.Errors, "\n"), "unknown method") {
-		t.Errorf("expected unknown-method error, got: %+v", errs.Errors)
-	}
-}
+// Unknown live-verb method rejection is now a CUE concern (the per-verb #*Method
+// enums) — see TestCueTightening_RejectsAndAccepts "candy cdp bogus method rejected"
+// and the mcp/spice/libvirt bogus-method cases.
 
 func TestValidateCharlyVerb_MissingRequiredModifier(t *testing.T) {
 	errs := &ValidationError{}

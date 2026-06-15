@@ -120,23 +120,27 @@
 	exec?: string & !=""
 }
 
-// VolumeYAML — path may be home-relative (~/…) or absolute, so not anchored to /.
+// VolumeYAML — name is lowercase-hyphen (validateVolume); path may be
+// home-relative (~/…) or absolute, so not anchored to /.
 #CandyVolume: {
-	name: string & !=""
+	name: string & =~"^[a-z0-9]+(-[a-z0-9]+)*$"
 	path: string & !=""
 }
 
-// AliasYAML — command defaults to name when omitted.
+// AliasYAML — for a CANDY alias `command` is REQUIRED (validateAliases); the
+// box-level #BoxAlias keeps it optional (defaults to name).
 #CandyAlias: {
-	name:     string & !=""
-	command?: string & !=""
+	name:    string & !=""
+	command: string & !=""
 }
 
-// ExtractYAML — copy a path out of another OCI image into this one.
+// ExtractYAML — copy a path out of another OCI image into this one. source is
+// an image ref; path (in the source image) and dest (in this image) are
+// absolute (validateCandyContents).
 #CandyExtract: {
 	source: string & !=""
-	path:   string & !=""
-	dest:   string & !=""
+	path:   string & =~"^/"
+	dest:   string & =~"^/"
 }
 
 // DataYAML — stage candy-dir data into a volume at build, provision at deploy.

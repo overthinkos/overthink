@@ -1010,8 +1010,8 @@ func matchAll(value string, matchers []Matcher) error {
 }
 
 // matchOne evaluates a single matcher. The operator set here must stay in
-// lockstep with validMatcherOps in validate_tests.go — if the validator
-// accepts an op, the runner must handle it.
+// lockstep with #MatchOpMap (the CUE matcher-operator authority in _common.cue)
+// — if the schema accepts an op, the runner must handle it.
 func matchOne(value string, m Matcher) error {
 	switch m.Op {
 	case "equals":

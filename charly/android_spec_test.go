@@ -51,9 +51,8 @@ func TestValidateCandyApk(t *testing.T) {
 	}{
 		{"valid-package", []ApkPackageSpec{{Package: "org.fdroid.fdroid", Source: "apk-pure"}}, false},
 		{"valid-committed", []ApkPackageSpec{{Apk: "tests/data/x.apk"}}, false},
-		{"neither", []ApkPackageSpec{{Source: "apk-pure"}}, true},
-		{"both", []ApkPackageSpec{{Package: "x", Apk: "y.apk"}}, true},
-		{"bad-source", []ApkPackageSpec{{Package: "x", Source: "apk-mirror"}}, true},
+		// package⊕apk one-of + the source enum are now enforced by #CandyApk
+		// (cue_tighten_test.go); only the source⊕apk cross-field rule stays in Go.
 		{"source-on-committed", []ApkPackageSpec{{Apk: "y.apk", Source: "apk-pure"}}, true},
 	}
 	for _, tc := range cases {

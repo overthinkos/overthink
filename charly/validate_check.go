@@ -3,10 +3,8 @@ package main
 import (
 	"fmt"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // lowercaseCheckVarPattern matches a ${name} token whose identifier begins with a
@@ -73,23 +71,11 @@ func validateCheck(c *Op, loc string, errs *ValidationError) {
 		errs.Add("%s: %v", loc, err)
 		return
 	}
-	if c.Port < 0 || c.Port > 65535 {
-		errs.Add("%s: port %d out of range (1-65535)", loc, c.Port)
-	}
+	// port range (0-65535), timeout (#Duration), and the context enum
+	// (build|deploy|runtime) are enforced by #Op; only the verb-specific
+	// "port verb needs a non-zero port" cross-field rule stays here.
 	if verb == "port" && c.Port == 0 {
 		errs.Add("%s: port verb requires a non-zero port number", loc)
-	}
-	if c.Timeout != "" {
-		if _, err := time.ParseDuration(c.Timeout); err != nil {
-			errs.Add("%s: timeout %q: %v", loc, c.Timeout, err)
-		}
-	}
-	for _, ctx := range c.Context {
-		switch ExecContext(ctx) {
-		case CtxBuild, CtxDeploy, CtxRuntime:
-		default:
-			errs.Add("%s: context %q must be one of build|deploy|runtime", loc, ctx)
-		}
 	}
 	if spec, ok := VerbCatalog[verb]; ok {
 		for _, ctx := range c.EffectiveContexts() {
@@ -111,12 +97,7 @@ func validateCheck(c *Op, loc string, errs *ValidationError) {
 			}
 		}
 	}
-	if c.UID != nil && *c.UID < 0 {
-		errs.Add("%s: uid %d must be non-negative", loc, *c.UID)
-	}
-	if c.GID != nil && *c.GID < 0 {
-		errs.Add("%s: gid %d must be non-negative", loc, *c.GID)
-	}
+	// uid/gid non-negativity is enforced by #Op.
 
 	// Runtime-only variable references — illegal in a build-legal op.
 	if c.InContext(CtxBuild) {
@@ -148,17 +129,7 @@ func validateCheck(c *Op, loc string, errs *ValidationError) {
 		}
 	}
 
-	// Matcher operator sanity check.
-	for _, name := range []string{"contains", "stdout", "stderr", "body", "headers", "opts"} {
-		_ = name // placeholder — full iteration below
-	}
-	validateMatchers(c.Contains, loc+" contains", errs)
-	validateMatchers(c.Stdout, loc+" stdout", errs)
-	validateMatchers(c.Stderr, loc+" stderr", errs)
-	validateMatchers(c.Body, loc+" body", errs)
-	validateMatchers(c.Headers, loc+" headers", errs)
-	validateMatchers(c.Opts, loc+" opts", errs)
-	validateMatchers(c.Value, loc+" value", errs)
+	// Matcher operator names (equals/contains/matches/…) are enforced by #MatchOpMap.
 
 	// cdp/wl/dbus/vnc verbs: validate method allowlist + required modifiers
 	// + scope enforcement (all four are deploy-scope-only since they need a
@@ -201,14 +172,11 @@ func validateCharlyVerb(c *Op, verb, loc string, errs *ValidationError) {
 		return
 	}
 
+	// The method-name allowlist is enforced by the per-verb #*Method CUE enums;
+	// an unknown method is rejected there. Here we only need the spec to drive
+	// the cross-field required-modifier / artifact checks below.
 	spec, ok := allowlist[method]
 	if !ok {
-		methods := make([]string, 0, len(allowlist))
-		for k := range allowlist {
-			methods = append(methods, k)
-		}
-		sort.Strings(methods)
-		errs.Add("%s: %s: unknown method %q (allowed: %s)", loc, verb, method, strings.Join(methods, ", "))
 		return
 	}
 
@@ -274,38 +242,6 @@ func collectCheckRefs(c *Op) []string {
 				out = append(out, r)
 			}
 		}
-	}
-	return out
-}
-
-// validateMatchers checks each Matcher in the list for a supported operator.
-// Uses a stable small allowlist; verbs that need numeric operators will be
-// added as Phase 7 lands those verbs.
-var validMatcherOps = map[string]bool{
-	"equals": true, "not_equals": true,
-	"contains": true, "not_contains": true,
-	"matches": true, "not_matches": true,
-	"lt": true, "le": true, "gt": true, "ge": true,
-}
-
-// Takes []Matcher rather than MatcherList so callers can pass any named slice
-// type whose underlying element is Matcher (MatcherList, ContainsList) without
-// an explicit conversion at every call site.
-func validateMatchers(ml []Matcher, loc string, errs *ValidationError) {
-	for i, m := range ml {
-		if m.Op == "" {
-			continue // UnmarshalYAML guarantees Op is set; defensive only.
-		}
-		if !validMatcherOps[m.Op] {
-			errs.Add("%s[%d]: unsupported matcher op %q (allowed: %s)", loc, i, m.Op, strings.Join(validMatcherOpList(), ", "))
-		}
-	}
-}
-
-func validMatcherOpList() []string {
-	out := make([]string, 0, len(validMatcherOps))
-	for k := range validMatcherOps {
-		out = append(out, k)
 	}
 	return out
 }

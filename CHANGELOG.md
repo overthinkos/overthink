@@ -22,6 +22,58 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-15 — feat(validate)!: CUE owns declarative validation — split the Go per-entity validators
+
+The immediate-next cutover after the loader switch. CUE is now the SOLE authority
+for declarative validation (shape, type, enum, regex, range, required-field,
+closedness); the hand-written Go per-entity validators are reduced to the
+cross-entity / semantic checks CUE cannot express.
+
+Four pure-declarative validators are DELETED outright — `validateEnvFiles`
+(PATH-in-env → `#Candy.env`), `validatePort` (candy port range → `#Candy.port`),
+`validateRoutes` (route host/port → `#CandyRoute`), `validateVersionFields`
+(CalVer → `#CalVer`) — along with their orphaned helpers (`isValidPort`,
+`calverRe`). Sixteen MIXED validators are SPLIT: each declarative sub-check moves
+to its CUE constraint while the semantic core stays in Go — `validateVolume`
+keeps only duplicate-name detection (name regex + presence → `#CandyVolume`);
+`validatePortRelay` keeps dedup + relay-in-ports + the socat gate (range →
+`#Candy.port_relay`); `validateEngineConfig` keeps cross-candy conflict detection
+(enum → `#Candy.engine`); the dependency validators (`validateEnvDeps` /
+`validateSecretDeps` / `validateMCPProvides` / `validateMCPDeps`) keep their
+cross-section collision rules (name/description/key/url/transport →
+`#CandyEnvDep` / `#CandySecretDep` / `#CandyMCPProvide` / `#CandyMCPDep`);
+`validateCandyTasks` keeps one-verb / required-modifiers / `${VAR}`-scope (var-key
++ mode → `#Candy.var` / `#Op.mode`); `validateOps` / `validateCheck` keep
+`Kind()` / verb-context legality / do:act / runtime-var scope / required-modifiers
+(port-range, timeout, context enum, uid/gid, matcher operators, live-verb method
+allowlists → `#Op` / `#MatchOpMap` / the per-verb `#*Method` enums). The orphaned
+helpers from the splits (`volumeNameRe`, `apkSourceAllowlist`, `secretKeyPattern`,
+`validEngines`, `isValidEnvVarName`, `validMatcherOps`/`validateMatchers`,
+`taskModePattern`, `taskVarKeyPattern`) are deleted with them.
+`validateLocalTemplates` and `validateBuildTunables` are KEPT WHOLE — the former
+because the disk-read CUE pass can miss imported-namespace `local` templates its
+candy-ref guard reaches, the latter because the `defaults:` block is not validated
+against `#Box`.
+
+Box validation is RE-WIRED to the resolved in-memory `cfg.Box` (was a
+`box/*/box/*` disk glob), so CUE coverage matches the Go box validators per repo:
+`validateProjectCUESchemas` marshals each `BoxConfig` back to its authored `box:`
+wire form (injecting the map-key name `BoxConfig` does not carry) and validates it
+non-concretely against `#Box` — closedness + value constraints without forcing the
+base/from disjunction to resolve, so a scratch box stays valid — skipping disabled
+boxes and the retired-tombstone `port:` field. Four schema gaps are tightened to
+Go-validator parity: `#CandyVolume.name` regex, `#CandyAlias.command` required,
+`#CandyExtract.{path,dest}` leading-`/`, `#Box.{jobs,podman_jobs_cap}` `>= 1`.
+
+The deleted validators' unit tests are migrated to CUE reject/accept cases in
+`cue_tighten_test.go` (the spec-is-the-schema regression guard); the now-redundant
+Go tests are removed.
+
+R10: `go test ./...` + `golangci-lint run` (0 issues) + `charly box validate` clean
+on every box submodule (the tightened schema does not false-reject the real
+corpus) + the representative `kind: check` beds (check-pod / check-k3s-vm /
+check-local / check-charly-vm) through a fresh `charly update`.
+
 ### 2026-06-15 — feat(loader)!: CUE-decode loader switch — eliminate the custom YAML unmarshalers
 
 The full loader switch (Cutover 1 of the CUE migration). The unified loader now

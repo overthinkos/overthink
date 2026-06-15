@@ -66,9 +66,9 @@
 	init?:       "supervisord" | "systemd"
 	data_image?: bool
 
-	jobs?:            int & >=0
-	podman_jobs?:     int & >=0
-	podman_jobs_cap?: int & >=0
+	jobs?:            int & >=1
+	podman_jobs?:     int & >=0 // 0 = auto (min(NCPU, cap))
+	podman_jobs_cap?: int & >=1
 	context_ignore?: [...(string & !="")]
 	cache?:           "image" | "registry" | "gha" | "none"
 	keep_images?:     int & >=0

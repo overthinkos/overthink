@@ -274,31 +274,6 @@ func TestValidateInvalidPkgValue(t *testing.T) {
 // TestValidatePacReposMissingServer removed — format-specific field requirements
 // (pac repos must have server) are now in build.yml validate rules, not Go code.
 
-func TestValidatePacReposMissingName(t *testing.T) {
-	cfg := &Config{
-		Box: map[string]BoxConfig{},
-	}
-	layers := map[string]*Candy{
-		"layer": {
-			Name: "layer",
-			formatSections: map[string]*PackageSection{
-				"pac": {FormatName: "pac", Packages: []string{"pkg"}, Raw: map[string]any{
-					"packages": []any{"pkg"},
-					"repo":     []any{map[string]any{"server": "https://example.com"}},
-				}},
-			},
-		},
-	}
-
-	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-	if err == nil {
-		t.Error("expected error for pac.repos without name")
-	}
-	if !strings.Contains(err.Error(), "requires name") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
 func TestValidateAurWithoutAurBuilder(t *testing.T) {
 	// Arch image declaring build: [pac, aur] (i.e. it WILL invoke the aur
 	// builder per IR-compile time) but with no builder.aur configured —
@@ -521,93 +496,6 @@ func TestValidateMultipleErrors(t *testing.T) {
 	}
 }
 
-func TestValidateCandyPortsValid(t *testing.T) {
-	cfg := &Config{
-		Box: map[string]BoxConfig{},
-	}
-	layers := map[string]*Candy{
-		"web": {
-			Name:      "web",
-			plan:      []Step{{Run: "build", Op: Op{Command: "true"}}},
-			portSpecs: []PortSpec{{Port: 8080}},
-			ports:     []string{"8080", "9090"},
-		},
-	}
-
-	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-	if err != nil {
-		t.Errorf("Validate() unexpected error: %v", err)
-	}
-}
-
-func TestValidateCandyPortsInvalid(t *testing.T) {
-	cfg := &Config{
-		Box: map[string]BoxConfig{},
-	}
-	layers := map[string]*Candy{
-		"web": {
-			Name:      "web",
-			plan:      []Step{{Run: "build", Op: Op{Command: "true"}}},
-			portSpecs: []PortSpec{{Port: 8080}},
-			ports:     []string{"99999"},
-		},
-	}
-
-	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-	if err == nil {
-		t.Error("expected error for invalid port number")
-	}
-	if !strings.Contains(err.Error(), "not a valid port") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestValidateCandyPortsInvalidFromYAML(t *testing.T) {
-	cfg := &Config{
-		Box: map[string]BoxConfig{},
-	}
-	layers := map[string]*Candy{
-		"web": {
-			Name:      "web",
-			plan:      []Step{{Run: "build", Op: Op{Command: "true"}}},
-			portSpecs: []PortSpec{{Port: 8080}},
-			ports:     []string{"0"},
-		},
-	}
-
-	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-	if err == nil {
-		t.Error("expected error for invalid port number")
-	}
-	if !strings.Contains(err.Error(), "candy manifest ports") {
-		t.Errorf("expected candy manifest reference in error, got: %v", err)
-	}
-}
-
-func TestValidateImagePortsValid(t *testing.T) {
-	cfg := &Config{
-		Defaults: BoxConfig{
-			Registry:  "ghcr.io/test",
-			Build:     BuildFormats{"rpm"},
-			Platforms: []string{"linux/amd64"},
-		},
-		Box: map[string]BoxConfig{
-			"test": {
-				Candy: []string{"web"},
-				Port:  []string{"8080:8080", "9090"},
-			},
-		},
-	}
-	layers := map[string]*Candy{
-		"web": {Name: "web", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
-	}
-
-	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-	if err != nil {
-		t.Errorf("Validate() unexpected error: %v", err)
-	}
-}
-
 // TestRejectLegacyBoxPort proves a residual box-level (or defaults) `port:` is
 // hard-rejected at load — box-level ports are retired; ports are inherited from
 // candies and host mappings are auto-allocated at deploy.
@@ -632,69 +520,6 @@ func TestRejectLegacyBoxPort(t *testing.T) {
 	clean := &UnifiedFile{Box: map[string]BoxConfig{"test": {Candy: []string{"web"}}}}
 	if err := rejectLegacyBoxPort("charly.yml", clean); err != nil {
 		t.Errorf("clean box should not error: %v", err)
-	}
-}
-
-func TestValidateRouteMissingHost(t *testing.T) {
-	cfg := &Config{
-		Box: map[string]BoxConfig{},
-	}
-	layers := map[string]*Candy{
-		"svc": {
-			Name:  "svc",
-			plan:  []Step{{Run: "build", Op: Op{Command: "true"}}},
-			route: &RouteConfig{Host: "", Port: "8080"},
-		},
-	}
-
-	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-	if err == nil {
-		t.Error("expected error for route missing host")
-	}
-	if !strings.Contains(err.Error(), "missing required \"host\"") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestValidateRouteMissingPort(t *testing.T) {
-	cfg := &Config{
-		Box: map[string]BoxConfig{},
-	}
-	layers := map[string]*Candy{
-		"svc": {
-			Name:  "svc",
-			plan:  []Step{{Run: "build", Op: Op{Command: "true"}}},
-			route: &RouteConfig{Host: "svc.localhost", Port: ""},
-		},
-	}
-
-	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-	if err == nil {
-		t.Error("expected error for route missing port")
-	}
-	if !strings.Contains(err.Error(), "missing required \"port\"") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestValidateRouteInvalidPort(t *testing.T) {
-	cfg := &Config{
-		Box: map[string]BoxConfig{},
-	}
-	layers := map[string]*Candy{
-		"svc": {
-			Name:  "svc",
-			plan:  []Step{{Run: "build", Op: Op{Command: "true"}}},
-			route: &RouteConfig{Host: "svc.localhost", Port: "99999"},
-		},
-	}
-
-	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-	if err == nil {
-		t.Error("expected error for route invalid port")
-	}
-	if !strings.Contains(err.Error(), "not a valid port") {
-		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -793,69 +618,6 @@ func TestValidateVolumesValid(t *testing.T) {
 	}
 }
 
-func TestValidateVolumesMissingName(t *testing.T) {
-	cfg := &Config{
-		Box: map[string]BoxConfig{},
-	}
-	layers := map[string]*Candy{
-		"svc": {
-			Name:    "svc",
-			plan:    []Step{{Run: "build", Op: Op{Command: "true"}}},
-			volumes: []VolumeYAML{{Name: "", Path: "~/.myapp"}},
-		},
-	}
-
-	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-	if err == nil {
-		t.Error("expected error for missing volume name")
-	}
-	if !strings.Contains(err.Error(), "missing required \"name\"") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestValidateVolumesMissingPath(t *testing.T) {
-	cfg := &Config{
-		Box: map[string]BoxConfig{},
-	}
-	layers := map[string]*Candy{
-		"svc": {
-			Name:    "svc",
-			plan:    []Step{{Run: "build", Op: Op{Command: "true"}}},
-			volumes: []VolumeYAML{{Name: "data", Path: ""}},
-		},
-	}
-
-	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-	if err == nil {
-		t.Error("expected error for missing volume path")
-	}
-	if !strings.Contains(err.Error(), "missing required \"path\"") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestValidateVolumesInvalidName(t *testing.T) {
-	cfg := &Config{
-		Box: map[string]BoxConfig{},
-	}
-	layers := map[string]*Candy{
-		"svc": {
-			Name:    "svc",
-			plan:    []Step{{Run: "build", Op: Op{Command: "true"}}},
-			volumes: []VolumeYAML{{Name: "My Data!", Path: "~/.myapp"}},
-		},
-	}
-
-	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-	if err == nil {
-		t.Error("expected error for invalid volume name")
-	}
-	if !strings.Contains(err.Error(), "lowercase alphanumeric") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
 func TestValidateVolumesDuplicate(t *testing.T) {
 	cfg := &Config{
 		Box: map[string]BoxConfig{},
@@ -901,48 +663,6 @@ func TestValidateAliasesValid(t *testing.T) {
 	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
-	}
-}
-
-func TestValidateAliasesMissingName(t *testing.T) {
-	cfg := &Config{
-		Box: map[string]BoxConfig{},
-	}
-	layers := map[string]*Candy{
-		"svc": {
-			Name:    "svc",
-			plan:    []Step{{Run: "build", Op: Op{Command: "true"}}},
-			aliases: []AliasYAML{{Name: "", Command: "cmd"}},
-		},
-	}
-
-	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-	if err == nil {
-		t.Error("expected error for missing alias name")
-	}
-	if !strings.Contains(err.Error(), "missing required \"name\"") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestValidateAliasesMissingCommand(t *testing.T) {
-	cfg := &Config{
-		Box: map[string]BoxConfig{},
-	}
-	layers := map[string]*Candy{
-		"svc": {
-			Name:    "svc",
-			plan:    []Step{{Run: "build", Op: Op{Command: "true"}}},
-			aliases: []AliasYAML{{Name: "mycli", Command: ""}},
-		},
-	}
-
-	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-	if err == nil {
-		t.Error("expected error for missing alias command")
-	}
-	if !strings.Contains(err.Error(), "missing required \"command\"") {
-		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -1087,30 +807,6 @@ func TestValidatePerImageBuilderNotFound(t *testing.T) {
 	}
 }
 
-func TestIsValidPort(t *testing.T) {
-	tests := []struct {
-		input string
-		want  bool
-	}{
-		{"80", true},
-		{"8080", true},
-		{"65535", true},
-		{"1", true},
-		{"0", false},
-		{"65536", false},
-		{"abc", false},
-		{"", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := isValidPort(tt.input)
-			if got != tt.want {
-				t.Errorf("isValidPort(%q) = %v, want %v", tt.input, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestValidateCandyWithIncludesNoInstallFiles(t *testing.T) {
 	cfg := &Config{
 		Defaults: BoxConfig{Build: BuildFormats{"rpm"}},
@@ -1206,29 +902,6 @@ func TestValidatePortRelayValid(t *testing.T) {
 	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
-	}
-}
-
-func TestValidatePortRelayInvalidPort(t *testing.T) {
-	cfg := &Config{
-		Box: map[string]BoxConfig{},
-	}
-	layers := map[string]*Candy{
-		"svc": {
-			Name:           "svc",
-			plan:           []Step{{Run: "build", Op: Op{Command: "true"}}},
-			ports:          []string{"99999"},
-			portSpecs:      []PortSpec{{Port: 99999, Protocol: "http"}},
-			PortRelayPorts: []int{99999},
-		},
-	}
-
-	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-	if err == nil {
-		t.Error("expected error for invalid port_relay port")
-	}
-	if !strings.Contains(err.Error(), "not a valid port") {
-		t.Errorf("unexpected error: %v", err)
 	}
 }
 
@@ -1436,43 +1109,9 @@ func TestValidateSecretAcceptsHappyPath(t *testing.T) {
 
 // TestValidateSecretRequiresMissingDescription — secret_requires entry with
 // empty description must be rejected (consistency with env_requires).
-func TestValidateSecretRequiresMissingDescription(t *testing.T) {
-	cfg := &Config{Box: map[string]BoxConfig{}}
-	layers := map[string]*Candy{
-		"svc": secretDepsCandy(func(l *Candy) {
-			l.secretRequires = []EnvDependency{
-				{Name: "WEBUI_ADMIN_PASSWORD"}, // no Description
-			}
-		}),
-	}
-	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-	if err == nil {
-		t.Fatal("expected error for secret_requires entry with no description")
-	}
-	if !strings.Contains(err.Error(), "has no description") {
-		t.Errorf("expected 'has no description' error, got: %v", err)
-	}
-}
 
 // TestValidateSecretAcceptsInvalidName — name with invalid chars must be
 // rejected by the env-var-name check.
-func TestValidateSecretAcceptsInvalidName(t *testing.T) {
-	cfg := &Config{Box: map[string]BoxConfig{}}
-	layers := map[string]*Candy{
-		"svc": secretDepsCandy(func(l *Candy) {
-			l.secretAccepts = []EnvDependency{
-				{Name: "OPENROUTER-API-KEY", Description: "hyphen not allowed"},
-			}
-		}),
-	}
-	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-	if err == nil {
-		t.Fatal("expected error for invalid env var name in secret_accepts")
-	}
-	if !strings.Contains(err.Error(), "not a valid environment variable name") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
 
 // TestValidateSecretAcceptsCollidesWithEnvAccepts — plan §4.4 rule 1: a name
 // cannot appear in both env_accepts and secret_accepts.
@@ -1570,75 +1209,6 @@ func TestValidateSecretCollidesWithEnvProvides(t *testing.T) {
 // TestValidateSecretAcceptsKeyMustStartWithCharly — plan §4.4 rule 5: the
 // optional Key override must start with "charly/" to prevent candies from
 // exfiltrating unrelated user credentials.
-func TestValidateSecretAcceptsKeyMustStartWithCharly(t *testing.T) {
-	cfg := &Config{Box: map[string]BoxConfig{}}
-	layers := map[string]*Candy{
-		"svc": secretDepsCandy(func(l *Candy) {
-			l.secretAccepts = []EnvDependency{
-				{Name: "AWS_ACCESS_KEY_ID", Description: "bad key", Key: "aws/access-key"},
-			}
-		}),
-	}
-	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-	if err == nil {
-		t.Fatal("expected error when secret_accepts Key does not start with charly/")
-	}
-	if !strings.Contains(err.Error(), "must start with") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-// TestValidateSecretAcceptsKeyValidFormats — a handful of Key values that
-// should parse cleanly as <charly/service/key>.
-func TestValidateSecretAcceptsKeyValidFormats(t *testing.T) {
-	cases := []string{
-		"charly/api-key/openrouter",
-		"charly/secret/webui_admin_password",
-		"charly/api-key/openai",
-		"charly/secret/immich-api-key",
-	}
-	for _, k := range cases {
-		cfg := &Config{Box: map[string]BoxConfig{}}
-		layers := map[string]*Candy{
-			"svc": secretDepsCandy(func(l *Candy) {
-				l.secretAccepts = []EnvDependency{
-					{Name: "SOME_API_KEY", Description: "ok", Key: k},
-				}
-			}),
-		}
-		if err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{}); err != nil {
-			t.Errorf("Validate() unexpected error for Key=%q: %v", k, err)
-		}
-	}
-}
-
-// TestValidateSecretAcceptsKeyInvalidFormats — values that look plausible but
-// fail the secretKeyPattern check.
-func TestValidateSecretAcceptsKeyInvalidFormats(t *testing.T) {
-	cases := []string{
-		"openrouter",                // not <service>/<key>
-		"charly/",                   // empty key segment
-		"charly/api-key",            // only one segment after charly
-		"charly/api-key/",           // empty key segment
-		"charly//openrouter",        // empty service segment
-		"charly/API-KEY/openrouter", // uppercase in service
-	}
-	for _, k := range cases {
-		cfg := &Config{Box: map[string]BoxConfig{}}
-		layers := map[string]*Candy{
-			"svc": secretDepsCandy(func(l *Candy) {
-				l.secretAccepts = []EnvDependency{
-					{Name: "SOME_API_KEY", Description: "ok", Key: k},
-				}
-			}),
-		}
-		err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
-		if err == nil {
-			t.Errorf("Validate() should have rejected Key=%q", k)
-		}
-	}
-}
-
 // TestValidateSecretAcceptsInvalidSlug — a name that would produce an invalid
 // podman-secret slug (e.g., leading underscore → leading hyphen after
 // lowercase-kebab) must be rejected.
@@ -1718,16 +1288,3 @@ func vCandies(m map[string]*Candy) map[string]*Candy {
 // mandatory-version rule: a local candy with no version: fails validation with
 // an actionable message. (Uses a distinctly-named map so the vCandies wrap that
 // the other tests apply does not mask the error.)
-func TestValidateCandyMissingVersion(t *testing.T) {
-	cfg := &Config{Box: map[string]BoxConfig{}}
-	badCandies := map[string]*Candy{
-		"noversion": {Name: "noversion", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
-	}
-	err := Validate(cfg, badCandies, t.TempDir(), ResolveOpts{})
-	if err == nil {
-		t.Fatal("expected validation error for a layer with no version:, got nil")
-	}
-	if !strings.Contains(err.Error(), "missing required `version:`") {
-		t.Errorf("expected missing-version error, got: %v", err)
-	}
-}

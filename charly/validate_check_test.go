@@ -39,23 +39,6 @@ func TestValidateOps_MultiVerbRejected(t *testing.T) {
 }
 
 // Port out-of-range and timeout parse failure.
-func TestValidateOps_NumericAndTimeout(t *testing.T) {
-	layers := map[string]*Candy{
-		"lyr": opsCandy("lyr",
-			Op{Port: 70000},                // out of range
-			Op{Port: 6379, Timeout: "xxx"}, // bad duration
-		),
-	}
-	cfg := &Config{Box: map[string]BoxConfig{}}
-	got := runValidateOps(t, cfg, layers)
-	if !strings.Contains(got, "out of range") {
-		t.Errorf("expected range error: %s", got)
-	}
-	if !strings.Contains(got, "timeout") {
-		t.Errorf("expected timeout error: %s", got)
-	}
-}
-
 // A build-context op may not reference runtime-only variables. command defaults
 // to build+deploy+runtime, so with no explicit context it is build-legal and the
 // runtime-only ${HOST_PORT} reference is flagged.
@@ -83,32 +66,6 @@ func TestValidateOps_RuntimeVarInDeployContext(t *testing.T) {
 	got := runValidateOps(t, cfg, layers)
 	if got != "" {
 		t.Errorf("unexpected errors: %s", got)
-	}
-}
-
-// An unknown context value is rejected.
-func TestValidateOps_UnknownContext(t *testing.T) {
-	layers := map[string]*Candy{
-		"lyr": opsCandy("lyr", Op{File: "/x", Context: []string{"weird"}}),
-	}
-	cfg := &Config{Box: map[string]BoxConfig{}}
-	got := runValidateOps(t, cfg, layers)
-	if !strings.Contains(got, "must be one of build|deploy|runtime") {
-		t.Errorf("expected context-value error: %s", got)
-	}
-}
-
-// Unknown matcher operator rejected.
-func TestValidateOps_UnknownMatcherOp(t *testing.T) {
-	layers := map[string]*Candy{
-		"lyr": opsCandy("lyr",
-			Op{Command: "x", Stdout: MatcherList{{Op: "mystery", Value: "?"}}},
-		),
-	}
-	cfg := &Config{Box: map[string]BoxConfig{}}
-	got := runValidateOps(t, cfg, layers)
-	if !strings.Contains(got, "unsupported matcher op") {
-		t.Errorf("expected matcher op error: %s", got)
 	}
 }
 
@@ -150,19 +107,6 @@ func TestValidateOps_McpReadRequiresURI(t *testing.T) {
 }
 
 // Unknown mcp method rejected with a listing of allowed methods.
-func TestValidateOps_McpUnknownMethod(t *testing.T) {
-	layers := map[string]*Candy{
-		"jupyter": opsCandy("jupyter", Op{Mcp: "bogus"}),
-	}
-	cfg := &Config{Box: map[string]BoxConfig{}}
-	got := runValidateOps(t, cfg, layers)
-	if !strings.Contains(got, "mcp: unknown method") {
-		t.Errorf("expected unknown method error: %s", got)
-	}
-	if !strings.Contains(got, "ping") || !strings.Contains(got, "list-tools") {
-		t.Errorf("expected error to list allowed methods: %s", got)
-	}
-}
 
 // Valid mcp checks (default runtime context) produce no errors.
 func TestValidateOps_McpClean(t *testing.T) {
@@ -249,16 +193,6 @@ func TestValidateOps_SpiceTypeRequiresText(t *testing.T) {
 	}
 }
 
-func TestValidateOps_SpiceUnknownMethod(t *testing.T) {
-	layers := map[string]*Candy{
-		"vm": opsCandy("vm", Op{Spice: "bogus"}),
-	}
-	got := runValidateOps(t, &Config{Box: map[string]BoxConfig{}}, layers)
-	if !strings.Contains(got, "spice: unknown method") {
-		t.Errorf("expected spice unknown-method error: %s", got)
-	}
-}
-
 func TestValidateOps_SpiceClean(t *testing.T) {
 	layers := map[string]*Candy{
 		"vm": opsCandy("vm",
@@ -301,16 +235,6 @@ func TestValidateOps_LibvirtSnapshotCreateRequiresTarget(t *testing.T) {
 	got := runValidateOps(t, &Config{Box: map[string]BoxConfig{}}, layers)
 	if !strings.Contains(got, "libvirt") || !strings.Contains(got, "target") {
 		t.Errorf("expected libvirt: snapshot/create target-required error: %s", got)
-	}
-}
-
-func TestValidateOps_LibvirtUnknownMethod(t *testing.T) {
-	layers := map[string]*Candy{
-		"vm": opsCandy("vm", Op{Libvirt: "bogus"}),
-	}
-	got := runValidateOps(t, &Config{Box: map[string]BoxConfig{}}, layers)
-	if !strings.Contains(got, "libvirt: unknown method") {
-		t.Errorf("expected libvirt unknown-method error: %s", got)
 	}
 }
 

@@ -322,17 +322,21 @@ func TestFormatResultsText(t *testing.T) {
 	}
 }
 
-// Sync guard: every operator listed as valid by the validator must be
-// implemented by matchOne. A new allow-listed op without a runner branch
-// would crash at runtime; this test fails at compile time of the allowlist
-// instead.
+// Sync guard: every operator allowed by #MatchOpMap (the CUE matcher-operator
+// authority in _common.cue) must be implemented by matchOne — a new allow-listed
+// op without a runner branch would crash at runtime. Keep this list in sync with
+// #MatchOpMap.
 func TestMatcher_AllowlistRunnerSync(t *testing.T) {
-	for op := range validMatcherOps {
+	matcherOps := []string{
+		"equals", "not_equals", "contains", "not_contains",
+		"matches", "not_matches", "lt", "le", "gt", "ge",
+	}
+	for _, op := range matcherOps {
 		err := matchOne("x", Matcher{Op: op, Value: "x"})
 		// Either a clean result or a domain-specific error is fine; an
 		// "unsupported matcher op" error means matchOne is missing a case.
 		if err != nil && strings.Contains(err.Error(), "unsupported matcher op") {
-			t.Errorf("validator allows op %q but runner has no implementation", op)
+			t.Errorf("#MatchOpMap allows op %q but runner has no implementation", op)
 		}
 	}
 }

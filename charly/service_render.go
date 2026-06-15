@@ -15,7 +15,7 @@ package main
 //
 // This file declares the schema types, the rendering context, and the
 // template rendering helpers. It does NOT parse the candy manifest — that
-// happens in layers.go alongside the rest of the CandyYAML unmarshaller.
+// happens via the CUE-decode loader (cue_loader.go: decodeEntityViaCUE).
 
 import (
 	"bytes"

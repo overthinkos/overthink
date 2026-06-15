@@ -13,8 +13,10 @@ import (
 // single classified document — every key that matches no struct field and
 // would therefore be SILENTLY DROPPED by the lenient decode. It re-decodes
 // the already-parsed node with KnownFields(true) into the same target type
-// the loader uses. Types with a custom UnmarshalYAML (the candy types) opt
-// out of KnownFields and self-decode, so they are never falsely flagged.
+// the loader uses. The operator-map / shell-config types whose authored keys
+// are not literal struct fields are suppressed via keylintSelfDecodingTypes
+// (post-CUE-switch they no longer opt out via a custom UnmarshalYAML), so they
+// are never falsely flagged.
 // Only unknown-key diagnostics are returned; any other strict-mode complaint
 // (type coercion) is suppressed — the loader's lenient decode is the source
 // of truth for everything except dropped keys.

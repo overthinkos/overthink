@@ -1,0 +1,73 @@
+package main
+
+import "testing"
+
+// Egress-validation coverage. The teeth tests (the *BadFails cases) are the ones
+// that would PASS — wrongly — if the egress gate did not exist: they assert that
+// a malformed artifact is REJECTED before it could ever be written.
+
+func TestValidateEgress_CloudConfigGoodPasses(t *testing.T) {
+	good := []byte(`hostname: vm1
+users:
+  - default
+  - name: charly
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    groups: [wheel]
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - "ssh-ed25519 AAAAtest charly@host"
+packages:
+  - openssh
+  - curl
+runcmd:
+  - [systemctl, enable, --now, sshd]
+`)
+	if err := ValidateEgress("cloud_config", "good user-data", good); err != nil {
+		t.Fatalf("good cloud-config should validate, got: %v", err)
+	}
+}
+
+func TestValidateEgress_CloudConfigBadFails(t *testing.T) {
+	// package_update must be a bool; packages must be a list — both type-violated.
+	bad := []byte("package_update: \"yes\"\npackages: 12345\n")
+	if err := ValidateEgress("cloud_config", "bad user-data", bad); err == nil {
+		t.Fatal("malformed cloud-config (string package_update, int packages) must be REJECTED, got nil")
+	}
+}
+
+func TestValidateEgress_CloudInitMeta(t *testing.T) {
+	if err := ValidateEgress("cloud_init_meta", "good meta", []byte("instance-id: iid-1\nlocal-hostname: vm1\n")); err != nil {
+		t.Fatalf("good meta-data should validate, got: %v", err)
+	}
+	// #CloudInitMeta is closed → an unknown key is rejected.
+	if err := ValidateEgress("cloud_init_meta", "bad meta", []byte("bogus-key: x\n")); err == nil {
+		t.Fatal("meta-data with an unknown key must be REJECTED (closed schema), got nil")
+	}
+}
+
+func TestValidateEgress_NetworkConfig(t *testing.T) {
+	if err := ValidateEgress("cloud_init_net", "good net", []byte("version: 2\nethernets:\n  eth0: {dhcp4: true}\n")); err != nil {
+		t.Fatalf("good network-config should validate, got: %v", err)
+	}
+	if err := ValidateEgress("cloud_init_net", "bad net", []byte("version: 2\nbogus: 1\n")); err == nil {
+		t.Fatal("network-config with an unknown top-level key must be REJECTED (closed schema), got nil")
+	}
+}
+
+func TestValidateEgress_UnknownKind(t *testing.T) {
+	if err := ValidateEgress("no-such-kind", "x", []byte("a: 1\n")); err == nil {
+		t.Fatal("unknown egress kind must error, got nil")
+	}
+}
+
+// TestRenderCloudInit_OutputValidatesAgainstSchema proves the renderer's real
+// output satisfies the egress gate end to end (RenderCloudInit returns the gate's
+// error directly, so a non-nil err here would mean charly emits cloud-init that
+// its own vendored schema rejects).
+func TestRenderCloudInit_OutputValidatesAgainstSchema(t *testing.T) {
+	spec := &VmSpec{Source: VmSource{Kind: "cloud_image", Distro: "arch", BaseUser: "arch"}}
+	rt := CloudInitRuntimeParams{SSHPublicKey: testPubKey, InjectKeyViaCloudInit: true, InstanceID: "iid-xyz", Hostname: "egress-vm"}
+	if _, _, _, err := RenderCloudInit(spec, rt); err != nil {
+		t.Fatalf("rendered cloud-init must pass its own egress gate, got: %v", err)
+	}
+}

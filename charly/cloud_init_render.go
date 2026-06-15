@@ -72,6 +72,9 @@ func RenderCloudInit(spec *VmSpec, rt CloudInitRuntimeParams) (userData, metaDat
 		return "", "", "", fmt.Errorf("render meta-data: %w", err)
 	}
 	metaData = string(metaBytes)
+	if err := ValidateEgress("cloud_init_meta", "cloud-init meta-data", metaBytes); err != nil {
+		return "", "", "", err
+	}
 
 	// --- network-config ---
 
@@ -88,6 +91,9 @@ func RenderCloudInit(spec *VmSpec, rt CloudInitRuntimeParams) (userData, metaDat
 			return "", "", "", fmt.Errorf("render network-config: %w", err)
 		}
 		networkConfig = string(netBytes)
+		if err := ValidateEgress("cloud_init_net", "cloud-init network-config", netBytes); err != nil {
+			return "", "", "", err
+		}
 	}
 
 	// --- user-data ---
@@ -137,6 +143,12 @@ func RenderCloudInit(spec *VmSpec, rt CloudInitRuntimeParams) (userData, metaDat
 	userBytes, err := yaml.Marshal(userMap)
 	if err != nil {
 		return "", "", "", fmt.Errorf("render user-data: %w", err)
+	}
+	// Egress gate: the rendered cloud-config (the structured user-data document,
+	// before the #cloud-config header + any raw Extra passthrough) must validate
+	// against Canonical's vendored schema before it reaches the seed ISO.
+	if err := ValidateEgress("cloud_config", "cloud-init user-data", userBytes); err != nil {
+		return "", "", "", err
 	}
 
 	var b strings.Builder

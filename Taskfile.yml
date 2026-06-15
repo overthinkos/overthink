@@ -9,6 +9,9 @@ includes:
   setup:
     taskfile: ./taskfiles/Setup.yml
     dir: "{{.ROOT_DIR}}"
+  cue:
+    taskfile: ./taskfiles/Cue.yml
+    dir: "{{.ROOT_DIR}}"
 
 tasks:
   default:

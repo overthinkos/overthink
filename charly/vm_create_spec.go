@@ -42,6 +42,16 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 	}
 	ovr.ApplyToVmSpec(spec)
 
+	// Fill schema-declared defaults (unify-after-merge): the loader decode
+	// leaves unset fields at their zero value so config + the instance override
+	// above merge on true-unset; now that the spec is fully resolved, materialize
+	// #Vm's required-with-default fields (firmware → "bios") from the schema —
+	// the single source of truth. Backend is already resolved into the `backend`
+	// param above, so materializing spec.Backend here is inert. See cue_defaults.go.
+	if err := applyCueDefaults("vm", spec); err != nil {
+		return fmt.Errorf("applying vm defaults for %s: %w", vmName, err)
+	}
+
 	// Locate prebuilt disk + seed ISO in this VM's OWN per-VM disk dir, so a
 	// fresh create can never adopt a sibling VM's stale disk/seed (whose
 	// embedded SSH key would mismatch this VM's id_ed25519).

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -29,28 +28,5 @@ func TestResolveVmSshPort(t *testing.T) {
 	}
 	if p == 2222 {
 		t.Errorf("port_auto: got the 2222 default instead of an allocated ephemeral port")
-	}
-}
-
-// TestValidateVmSpec_SshPortAutoMutualExclusion proves ssh.port and
-// ssh.port_auto cannot both be set.
-func TestValidateVmSpec_SshPortAutoMutualExclusion(t *testing.T) {
-	base := func(ssh *VmSSH) *VmSpec {
-		return &VmSpec{
-			Source: VmSource{Kind: "cloud_image", URL: "https://example/img.qcow2"},
-			SSH:    ssh,
-		}
-	}
-	// port + port_auto → rejected.
-	bad := &ValidationError{}
-	ValidateVmSpec("vm", base(&VmSSH{Port: 2244, PortAuto: true}), bad)
-	if !bad.HasErrors() || !strings.Contains(strings.Join(bad.Errors, "\n"), "mutually exclusive") {
-		t.Fatalf("expected ssh.port + ssh.port_auto to be rejected, got: %v", bad.Errors)
-	}
-	// port_auto alone → no mutual-exclusion error.
-	ok := &ValidationError{}
-	ValidateVmSpec("vm", base(&VmSSH{PortAuto: true}), ok)
-	if strings.Contains(strings.Join(ok.Errors, "\n"), "mutually exclusive") {
-		t.Errorf("ssh.port_auto alone should be valid, got: %v", ok.Errors)
 	}
 }

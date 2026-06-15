@@ -22,6 +22,74 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-15 — feat(schema)!: CUE owns VM/libvirt validation + the firmware default
+
+The immediate-next cutover after the validator-deletion (`feat(validate)!`, below).
+The schema-tightening cutover had already recorded that `ValidateVmSpec` /
+`ValidateLibvirtDomain` were TEST-ONLY (the closed `#Vm` CUE path has been the SOLE
+production validator for VM/libvirt/cloud_init since the loader switch); the
+validator-deletion swept `validate.go` / `validate_check.go` but never reached
+`libvirt_validate.go`. This cutover finishes that, closes the one parity gap, and
+moves the firmware default into the schema.
+
+**Part A — the Go VM/libvirt validators are DELETED.** `charly/libvirt_validate.go`
+is removed in its entirety (546 lines): `ValidateVmSpec` and its whole tree
+(`validateVmSource*`, `validateVmSnapshots`, `validateVmFirmwareMachine`,
+`validateVmSSH`, `validateVmNetwork`, `validateVmCloudInit`, `ValidateLibvirtDomain`,
+`validateLibvirtCPU` / `validateLibvirtDevices` / `validateLibvirtFilesystem` /
+`validateLibvirtHostdev`, `validateLibvirtChannelPath`) plus the dead CPU-vendor
+helpers `detectHostCPUVendor` / `readCPUInfoVendor` (the latter a never-implemented
+stub returning an error, so the host-vendor↔`vmx`/`svm` coherence check was
+doubly-dead). All had no production caller — only tests. Their coverage is migrated
+to the table-driven `charly/cue_tighten_test.go` reject/accept guard (hostdev
+PCI-hex + `managed` enum, filesystem `driver`/`accessmode`/`source`/`target`,
+`autostart ⇒ libvirt` backend, the `clone`/`imported` source cross-arms). The dead
+tests are removed from `vfio_test.go` / `vm_ssh_port_test.go` / `vm_snapshot_test.go`;
+`ValidateLibvirtSnippet` (in `libvirt.go`, live caller in `validate.go`) and the
+shared `boolPtrTrue` / `hexUintPtr` helpers stay.
+
+The one PARITY GAP is closed by tightening `#Vm`: `firmware: uefi-secure` now
+requires `libvirt.features.smm: true`. The renderer does NOT auto-enable SMM
+(`buildDomainOS` emits the secure-boot `<feature>` toggles + secure `<loader>` but
+never `<smm>`; `buildDomainFeatures` emits `<smm state='on'/>` only from an explicit
+`features.smm`), so the deleted Go check was the sole enforcer. The CUE rule uses
+required-field markers (`libvirt!: features!: smm!: true`) so it REQUIRES an explicit
+declaration — a plain `smm: true` constraint would auto-fill and silently pass. The
+stale `/charly-internals:libvirt-renderer` claim that `uefi-secure` "additionally
+sets `Features.SMM = true`" is corrected in the same change.
+
+Four checks have NO CUE home and are DROPPED with note (all production-dead since the
+loader switch, so zero behavior change): snapshot duplicate-`name` dedup (cross-element
+uniqueness — surfaces at libvirt apply time), the CPU host-vendor coherence check
+(also inert per above), `<channel>` `/home/<user>` path-portability (needs the
+`{{.VmStateDir}}` Go template context CUE lacks; the renderer's `expandVmPathTemplate`
+remains the create-time path), and `kind: vm`-inline `libvirt.snippets` XML
+well-formedness (the live `validate.go` path validates candy/image snippets only).
+
+**Part B — CUE owns the firmware default (unify-after-merge).** New
+`charly/cue_defaults.go` `applyCueDefaults(kind, *entity)` marshals a RESOLVED entity,
+unifies it with `#<Kind>`, and decodes back, materializing the schema's
+required-with-default fields. It runs at the VM-create resolve point
+(`vm_create_spec.go`, after the per-host instance-override merge and after backend
+resolution — so materializing `spec.Backend` there is inert), NOT at load: the loader
+decode stays deliberately non-unifying so config + overlay merge still see
+unset-as-zero. Only REQUIRED-with-default fields materialize (an optional-with-default
+field stays absent on unify); a set or inherited value is never clobbered. `#Vm`'s
+`firmware: *"bios"` thus becomes the single source of truth and the Go `empty → "bios"`
+fallback in `buildDomainOS` is deleted (the firmware `switch` already treated `""` and
+`"bios"` identically, so the change is render-identical).
+
+**Scope investigated and rejected.** Moving the generators (`k8s_generate.go`,
+`cloud_init_render.go`, the libvirt input via `Decode`) or the cloud-init / k8s
+defaults to CUE was scoped and rejected: the generation logic and those defaults are
+irreducibly imperative (libvirt auto-pairing of shared-memory/idmap/passt, the k8s
+workload-kind heuristic, cloud-init's `composeUsers` adopt-merge). Of the misc
+string-default Go fallbacks, only `firmware` was a clean entity-field default;
+`network.mode` / `cpu.mode` (absent-block construction + sibling `Model`/`Check`
+defaults), `sharing` (a function parameter), `transport` (also read from baked OCI
+labels), and `deploy.target` (an error-check, not a default) are entangled with
+defaulting CUE cannot own, and stay Go.
+
 ### 2026-06-15 — feat(validate)!: CUE owns declarative validation — split the Go per-entity validators
 
 The immediate-next cutover after the loader switch. CUE is now the SOLE authority

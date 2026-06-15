@@ -86,8 +86,8 @@ func ValidateVmNamingGuard(name string, errs *ValidationError) {
 }
 
 // ValidateImportedSource checks the additional invariants for the
-// imported VmSource branch beyond what validateVmSource already
-// covers (which validates required-field presence). This adds
+// imported VmSource branch beyond what the #VmSource CUE schema already
+// covers (required-field presence + cross-arm exclusion). This adds
 // path/sanity checks that need filesystem access.
 func ValidateImportedSource(name string, src *VmSource, errs *ValidationError) {
 	if src.Kind != "imported" {

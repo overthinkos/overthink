@@ -1,9 +1,8 @@
 package main
 
-// Helpers shared by the libvirt YAML bridge + qemu_render argv emitter
-// + libvirt_validate coherence checker. Moved here from the old
-// libvirt_render.go as part of the libvirtxml cutover, when the rest
-// of that file was deleted.
+// Helpers shared by the libvirt YAML bridge + qemu_render argv emitter.
+// Moved here from the old libvirt_render.go as part of the libvirtxml
+// cutover, when the rest of that file was deleted.
 
 import (
 	"strings"

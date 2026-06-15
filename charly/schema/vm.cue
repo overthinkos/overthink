@@ -7,7 +7,7 @@
 // cloud_init.network.ethernets (cloud-init network-config v2), and every
 // libvirt map[string]string Go field as `{[string]: string}`.
 //
-// Cross-rules mirror libvirt_validate.go: firmware:uefi-secure ⇒ machine≠i440fx,
+// Cross-rules (CUE-owned): firmware:uefi-secure ⇒ machine≠i440fx,
 // ssh.port ⊕ ssh.port_auto, cpu.mode:custom ⇒ model required, hostdev pci ⇒ hex
 // source domain/bus/slot/function. Shared #Step from _common.cue (R3).
 
@@ -32,12 +32,18 @@
 	if autostart {
 		backend: "auto" | "libvirt"
 	}
-	// Secure Boot needs Q35 SMM — i440fx can't supply it (libvirt_validate.go).
+	// Secure Boot needs Q35 SMM — i440fx can't supply it.
 	// machine stays OPTIONAL (Go allows empty machine with uefi-secure), so the
 	// constraint is `machine?: !=…`, not `machine: !=…` (the latter would force
 	// machine present and false-reject the common omit-machine uefi-secure case).
 	if firmware == "uefi-secure" {
 		machine?: !="i440fx"
+		// Secure Boot requires SMM: the renderer does NOT
+		// auto-enable SMM for uefi-secure (buildDomainFeatures only sets it from an
+		// explicit libvirt.features.smm), so the user MUST declare it. The `!`
+		// required-field markers force libvirt/features/smm to be EXPLICITLY present
+		// (a plain `smm: true` would auto-fill and silently pass) and pinned true.
+		libvirt!: features!: smm!: true
 	}
 
 	network?:    #VmNetwork
@@ -133,8 +139,8 @@
 	port_auto?:     bool
 	key_source?:    *"auto" | "generate" | "none" | (string & =~"^/")
 	key_injection?: #VmKeyInjection
-	// port and port_auto are mutually exclusive (libvirt_validate.go: PortAuto &&
-	// Port>0 is an error): port_auto is false/absent OR port is ≤0/absent. The
+	// port and port_auto are mutually exclusive (PortAuto && Port>0 was the
+	// error): port_auto is false/absent OR port is ≤0/absent. The
 	// disjunction keeps the struct CLOSED — an embedded matchN would open it.
 } & ({port_auto?: false} | {port?: int & <=0})
 
@@ -292,7 +298,7 @@
 	features?: [...#LibvirtCPUFeature]
 	cache?: #LibvirtCPUCache
 	numa?: [...#LibvirtNUMACell]
-	// custom mode requires model (libvirt_validate.go).
+	// custom mode requires model.
 	if mode == "custom" {
 		model: string & !=""
 	}
@@ -491,7 +497,7 @@
 }
 
 #LibvirtGraphics: {
-	type:      "vnc" | "spice" | "rdp" | "sdl" | "egl-headless" // required (libvirt_validate.go)
+	type:      "vnc" | "spice" | "rdp" | "sdl" | "egl-headless" // required
 	port?:     int
 	autoport?: string
 	listen?:   #LibvirtListen
@@ -510,7 +516,7 @@
 }
 
 #LibvirtVideo: {
-	model:    string & !="" // LibvirtVideo.Model required (libvirt_validate.go); "none" is valid
+	model:    string & !="" // LibvirtVideo.Model required; "none" is valid
 	vram?:    int
 	heads?:   int
 	accel3d?: bool
@@ -545,14 +551,14 @@
 #LibvirtPCIHex: string & =~"^(0[xX][0-9a-fA-F]+|[0-9]+)$"
 
 #LibvirtHostdev: {
-	type:     "pci" | "usb" | "scsi" | "mdev" // required (libvirt_validate.go)
+	type:     "pci" | "usb" | "scsi" | "mdev" // required
 	mode?:    string
 	managed?: "yes" | "no"
 	source: {[string]: string} // LibvirtHostdev.Source yaml:"source" — required typed map
 	rom?:    {[string]: string}
 	driver?: {[string]: string}
-	// PCI passthrough requires hex source domain/bus/slot/function
-	// (libvirt_validate.go); a malformed address silently drops <source>.
+	// PCI passthrough requires hex source domain/bus/slot/function;
+	// a malformed address silently drops <source>.
 	if type == "pci" {
 		source: {
 			domain:   #LibvirtPCIHex
@@ -566,8 +572,8 @@
 
 #LibvirtFilesystem: {
 	type?:       string
-	driver?:     "virtiofs" | "9p" | "path"          // libvirt_validate.go
-	accessmode?: "passthrough" | "mapped" | "squash" // libvirt_validate.go
+	driver?:     "virtiofs" | "9p" | "path"
+	accessmode?: "passthrough" | "mapped" | "squash"
 	source: string & !="" // required (host path)
 	target: string & !="" // required (guest mount tag)
 	readonly?: bool
@@ -638,7 +644,7 @@
 }
 
 #LibvirtLaunchSecurity: {
-	type?:              "sev" | "sev-es" | "sev-snp" | "tdx" // libvirt_validate.go
+	type?:              "sev" | "sev-es" | "sev-snp" | "tdx"
 	cbitpos?:           int
 	reduced_phys_bits?: int
 	policy?:            string

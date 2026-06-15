@@ -159,10 +159,9 @@ func buildDomainOS(spec *VmSpec, rt VmRuntimeParams) *libvirtxml.DomainOS {
 	if machine == "" {
 		machine = defaultMachineForArch(arch)
 	}
+	// firmware is materialized to its #Vm schema default ("bios") by
+	// applyCueDefaults at the resolve point (vm_create_spec.go) — no Go fallback.
 	firmware := spec.Firmware
-	if firmware == "" {
-		firmware = "bios"
-	}
 
 	os := &libvirtxml.DomainOS{
 		Type: &libvirtxml.DomainOSType{

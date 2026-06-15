@@ -219,6 +219,59 @@ func TestCueTightening_RejectsAndAccepts(t *testing.T) {
 			candy(candyHead + candyPlan + "  extract:\n  - source: img:tag\n    path: rel/x\n    dest: /opt/x\n"), true},
 		{"candy extract absolute accepted", "candy",
 			candy(candyHead + candyPlan + "  extract:\n  - source: img:tag\n    path: /usr/bin/x\n    dest: /opt/x\n"), false},
+
+		// --- Part A: VM/libvirt validator deletion — coverage migrated from the
+		//     deleted Go VM/libvirt validators (formerly vfio_test.go / vm_snapshot_test.go). ---
+		// hostdev pci: hex source domain/bus/slot/function + managed enum
+		{"vm hostdev pci full hex accepted", "vm",
+			"source:\n  kind: cloud_image\n  url: http://x\nlibvirt:\n  devices:\n    hostdevs:\n    - type: pci\n      managed: \"yes\"\n      source:\n        domain: \"0x0000\"\n        bus: \"0x01\"\n        slot: \"0x00\"\n        function: \"0x0\"\n", false},
+		{"vm hostdev bad managed rejected", "vm",
+			"source:\n  kind: cloud_image\n  url: http://x\nlibvirt:\n  devices:\n    hostdevs:\n    - type: pci\n      managed: maybe\n      source:\n        domain: \"0x0000\"\n        bus: \"0x01\"\n        slot: \"0x00\"\n        function: \"0x0\"\n", true},
+		{"vm hostdev pci missing slot/function rejected", "vm",
+			"source:\n  kind: cloud_image\n  url: http://x\nlibvirt:\n  devices:\n    hostdevs:\n    - type: pci\n      source:\n        domain: \"0x0000\"\n        bus: \"0x01\"\n", true},
+		{"vm hostdev pci non-hex bus rejected", "vm",
+			"source:\n  kind: cloud_image\n  url: http://x\nlibvirt:\n  devices:\n    hostdevs:\n    - type: pci\n      source:\n        domain: \"0x0000\"\n        bus: zz\n        slot: \"0x00\"\n        function: \"0x0\"\n", true},
+		// filesystem: driver/accessmode enums + source/target required
+		{"vm filesystem virtiofs accepted", "vm",
+			"source:\n  kind: cloud_image\n  url: http://x\nlibvirt:\n  devices:\n    filesystems:\n    - driver: virtiofs\n      accessmode: passthrough\n      source: /home/atrawog\n      target: workspace\n", false},
+		{"vm filesystem bad driver rejected", "vm",
+			"source:\n  kind: cloud_image\n  url: http://x\nlibvirt:\n  devices:\n    filesystems:\n    - driver: nfs\n      source: /h\n      target: w\n", true},
+		{"vm filesystem bad accessmode rejected", "vm",
+			"source:\n  kind: cloud_image\n  url: http://x\nlibvirt:\n  devices:\n    filesystems:\n    - accessmode: weird\n      source: /h\n      target: w\n", true},
+		{"vm filesystem missing source rejected", "vm",
+			"source:\n  kind: cloud_image\n  url: http://x\nlibvirt:\n  devices:\n    filesystems:\n    - driver: virtiofs\n      target: w\n", true},
+		{"vm filesystem missing target rejected", "vm",
+			"source:\n  kind: cloud_image\n  url: http://x\nlibvirt:\n  devices:\n    filesystems:\n    - driver: virtiofs\n      source: /h\n", true},
+		// autostart ⇒ libvirt backend (qemu has no persistent daemon)
+		{"vm autostart qemu rejected", "vm",
+			"source:\n  kind: cloud_image\n  url: http://x\nautostart: true\nbackend: qemu\n", true},
+		{"vm autostart libvirt accepted", "vm",
+			"source:\n  kind: cloud_image\n  url: http://x\nautostart: true\nbackend: libvirt\n", false},
+		{"vm autostart default-backend accepted", "vm",
+			"source:\n  kind: cloud_image\n  url: http://x\nautostart: true\n", false},
+		// source clone: from_vm + from_snapshot required, cross-arm url forbidden
+		{"vm source clone valid accepted", "vm",
+			"source:\n  kind: clone\n  from_vm: arch\n  from_snapshot: baseline\n", false},
+		{"vm source clone missing from_vm rejected", "vm",
+			"source:\n  kind: clone\n  from_snapshot: baseline\n", true},
+		{"vm source clone missing from_snapshot rejected", "vm",
+			"source:\n  kind: clone\n  from_vm: arch\n", true},
+		{"vm source clone with url rejected", "vm",
+			"source:\n  kind: clone\n  from_vm: arch\n  from_snapshot: baseline\n  url: http://x\n", true},
+		// source imported: libvirt_name/disk_path required, disk_format enum
+		{"vm source imported valid accepted", "vm",
+			"source:\n  kind: imported\n  libvirt_name: my-vm\n  disk_path: /var/x.qcow2\n  disk_format: qcow2\n", false},
+		{"vm source imported missing libvirt_name rejected", "vm",
+			"source:\n  kind: imported\n  disk_path: /x\n  disk_format: qcow2\n", true},
+		{"vm source imported bad disk_format rejected", "vm",
+			"source:\n  kind: imported\n  libvirt_name: x\n  disk_path: /x\n  disk_format: vmdk\n", true},
+		// the smm GAP closed this cutover: uefi-secure ⇒ libvirt.features.smm:true
+		{"vm uefi-secure without smm rejected", "vm",
+			"source:\n  kind: cloud_image\n  url: http://x\nfirmware: uefi-secure\n", true},
+		{"vm uefi-secure with smm accepted", "vm",
+			"source:\n  kind: cloud_image\n  url: http://x\nfirmware: uefi-secure\nlibvirt:\n  features:\n    smm: true\n", false},
+		{"vm uefi-secure i440fx rejected", "vm",
+			"source:\n  kind: cloud_image\n  url: http://x\nfirmware: uefi-secure\nmachine: i440fx\nlibvirt:\n  features:\n    smm: true\n", true},
 	}
 
 	for _, tc := range cases {

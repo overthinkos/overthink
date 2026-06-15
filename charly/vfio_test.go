@@ -170,32 +170,6 @@ func TestRenderHostdevAndFeaturesXML(t *testing.T) {
 
 // --- A5: hostdev validation ---
 
-func TestValidateLibvirtHostdev(t *testing.T) {
-	good := &ValidationError{}
-	validateLibvirtHostdev("vm", 0, LibvirtHostdev{
-		Type: "pci", Managed: "yes",
-		Source: map[string]string{"domain": "0x0000", "bus": "0x01", "slot": "0x00", "function": "0x0"},
-	}, good)
-	if good.HasErrors() {
-		t.Errorf("valid hostdev flagged: %v", good.Errors)
-	}
-
-	bad := &ValidationError{}
-	validateLibvirtHostdev("vm", 0, LibvirtHostdev{
-		Type: "pci", Managed: "maybe",
-		Source: map[string]string{"domain": "0x0000", "bus": "zz"}, // missing slot/function, bad bus
-	}, bad)
-	if !bad.HasErrors() {
-		t.Fatal("expected errors for bad managed + missing/invalid pci source")
-	}
-	joined := strings.Join(bad.Errors, "\n")
-	for _, want := range []string{"managed", "source.slot", "source.function", "source.bus"} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("missing expected error mentioning %q:\n%s", want, joined)
-		}
-	}
-}
-
 // --- A6: RebootStep ---
 
 func TestRebootStepInterface(t *testing.T) {
@@ -386,53 +360,5 @@ func TestSharedRenderersConsolidated(t *testing.T) {
 	})
 	if err != nil || got != "pacman -Sy --noconfirm --needed --overwrite * libyuv" {
 		t.Errorf("pac options not applied by shared host renderer: %q (err %v)", got, err)
-	}
-}
-
-// --- cachyos-gpu VM: autostart + virtiofs filesystem validation ---
-
-func TestValidateVmSpec_AutostartRequiresLibvirt(t *testing.T) {
-	base := func(backend string) *VmSpec {
-		return &VmSpec{
-			Source:    VmSource{Kind: "cloud_image", URL: "https://example/img.qcow2"},
-			Backend:   backend,
-			Autostart: true,
-		}
-	}
-	bad := &ValidationError{}
-	ValidateVmSpec("gpu", base("qemu"), bad)
-	if !bad.HasErrors() || !strings.Contains(strings.Join(bad.Errors, "\n"), "autostart") {
-		t.Fatalf("expected autostart+qemu to be rejected, got: %v", bad.Errors)
-	}
-	for _, backend := range []string{"libvirt", ""} {
-		ok := &ValidationError{}
-		ValidateVmSpec("gpu", base(backend), ok)
-		if joined := strings.Join(ok.Errors, "\n"); strings.Contains(joined, "autostart") {
-			t.Errorf("autostart with backend %q should be allowed, got autostart error: %v", backend, ok.Errors)
-		}
-	}
-}
-
-func TestValidateLibvirtFilesystem(t *testing.T) {
-	good := &ValidationError{}
-	validateLibvirtFilesystem("vm", 0, LibvirtFilesystem{
-		Driver: "virtiofs", AccessMode: "passthrough", Source: "/home/atrawog", Target: "workspace",
-	}, good)
-	if good.HasErrors() {
-		t.Errorf("valid virtiofs filesystem flagged: %v", good.Errors)
-	}
-
-	bad := &ValidationError{}
-	validateLibvirtFilesystem("vm", 0, LibvirtFilesystem{
-		Driver: "nfs", AccessMode: "weird", // bad driver + accessmode, missing source+target
-	}, bad)
-	if !bad.HasErrors() {
-		t.Fatal("expected errors for missing source/target + bad driver/accessmode")
-	}
-	joined := strings.Join(bad.Errors, "\n")
-	for _, want := range []string{"source", "target", "driver", "accessmode"} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("missing expected error mentioning %q:\n%s", want, joined)
-		}
 	}
 }

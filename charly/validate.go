@@ -1412,8 +1412,11 @@ func validateLibvirt(cfg *Config, layers map[string]*Candy, errs *ValidationErro
 
 	// Image-level `libvirt:` field was removed in the VM hard-cutover.
 	// Raw XML snippets live on candy `libvirt:` fields (validated above)
-	// and on `kind: vm` entity `spec.libvirt.snippets:` lists (validated
-	// by ValidateLibvirtDomain in libvirt_validate.go).
+	// and on `kind: vm` entity `spec.libvirt.snippets:` lists. The latter
+	// are modeled typed-open (`[...string]`) by #Vm in schema/vm.cue; their
+	// XML well-formedness is not checked at config time (it surfaces at
+	// libvirt-define time) — ValidateLibvirtSnippet remains the candy/image
+	// check above.
 	_ = cfg
 	_ = layers
 }

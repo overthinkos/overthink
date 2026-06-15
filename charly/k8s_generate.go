@@ -82,13 +82,13 @@ func GenerateK8sKustomize(opts K8sGenerateOpts) (string, error) {
 	baseResources := []string{}
 
 	workload, workloadKind := generateWorkload(opts)
-	if err := writeYAML(filepath.Join(baseDir, strings.ToLower(workloadKind)+".yaml"), workload); err != nil {
+	if err := writeK8sYAML(filepath.Join(baseDir, strings.ToLower(workloadKind)+".yaml"), workload, "k8s_object"); err != nil {
 		return "", err
 	}
 	baseResources = append(baseResources, strings.ToLower(workloadKind)+".yaml")
 
 	if svc := generateService(opts, workloadKind); svc != nil {
-		if err := writeYAML(filepath.Join(baseDir, "service.yaml"), svc); err != nil {
+		if err := writeK8sYAML(filepath.Join(baseDir, "service.yaml"), svc, "k8s_object"); err != nil {
 			return "", err
 		}
 		baseResources = append(baseResources, "service.yaml")
@@ -101,7 +101,7 @@ func GenerateK8sKustomize(opts K8sGenerateOpts) (string, error) {
 				name = "pvc"
 			}
 			file := "pvc-" + name + ".yaml"
-			if err := writeYAML(filepath.Join(baseDir, file), pvc); err != nil {
+			if err := writeK8sYAML(filepath.Join(baseDir, file), pvc, "k8s_object"); err != nil {
 				return "", err
 			}
 			baseResources = append(baseResources, file)
@@ -109,7 +109,7 @@ func GenerateK8sKustomize(opts K8sGenerateOpts) (string, error) {
 	}
 
 	if ing := generateIngress(opts); ing != nil {
-		if err := writeYAML(filepath.Join(baseDir, "ingress.yaml"), ing); err != nil {
+		if err := writeK8sYAML(filepath.Join(baseDir, "ingress.yaml"), ing, "k8s_object"); err != nil {
 			return "", err
 		}
 		baseResources = append(baseResources, "ingress.yaml")
@@ -147,7 +147,7 @@ func GenerateK8sKustomize(opts K8sGenerateOpts) (string, error) {
 	if annotations := opts.Cluster.Defaults.Annotations; len(annotations) > 0 {
 		baseKustomization["commonAnnotations"] = annotations
 	}
-	if err := writeYAML(filepath.Join(baseDir, "kustomization.yaml"), baseKustomization); err != nil {
+	if err := writeK8sYAML(filepath.Join(baseDir, "kustomization.yaml"), baseKustomization, "kustomization"); err != nil {
 		return "", err
 	}
 
@@ -185,7 +185,7 @@ func GenerateK8sKustomize(opts K8sGenerateOpts) (string, error) {
 		}
 		overlayKustomization["patches"] = patches
 	}
-	if err := writeYAML(filepath.Join(overlayDir, "kustomization.yaml"), overlayKustomization); err != nil {
+	if err := writeK8sYAML(filepath.Join(overlayDir, "kustomization.yaml"), overlayKustomization, "kustomization"); err != nil {
 		return "", err
 	}
 
@@ -903,6 +903,17 @@ func parseAddrForProbe(addr string) (host string, port int) {
 // -----------------------------------------------------------------------------
 // Helpers.
 // -----------------------------------------------------------------------------
+
+// writeK8sYAML validates a charly-GENERATED manifest against its egress schema,
+// then writes it (see /charly-internals:egress). The gate runs before bytes hit
+// disk, so a structurally-broken manifest fails deploy generation instead of
+// being applied to a cluster.
+func writeK8sYAML(path string, doc any, egressKind string) error {
+	if err := ValidateEgressValue(egressKind, path, doc); err != nil {
+		return err
+	}
+	return writeYAML(path, doc)
+}
 
 func writeYAML(path string, doc any) error {
 	out, err := yaml.Marshal(doc)

@@ -60,6 +60,41 @@ func TestValidateEgress_UnknownKind(t *testing.T) {
 	}
 }
 
+func TestValidateEgressValue_K8sObject(t *testing.T) {
+	good := map[string]any{
+		"apiVersion": "apps/v1", "kind": "Deployment",
+		"metadata": map[string]any{"name": "web"},
+		"spec":     map[string]any{"replicas": 2},
+	}
+	if err := ValidateEgressValue("k8s_object", "good deployment", good); err != nil {
+		t.Fatalf("valid k8s object should pass, got: %v", err)
+	}
+	// teeth: empty kind, and missing metadata.name, must be rejected.
+	for name, bad := range map[string]map[string]any{
+		"empty-kind":  {"apiVersion": "v1", "kind": "", "metadata": map[string]any{"name": "x"}},
+		"no-name":     {"apiVersion": "v1", "kind": "Service", "metadata": map[string]any{}},
+		"no-apiVer":   {"kind": "Service", "metadata": map[string]any{"name": "x"}},
+	} {
+		if err := ValidateEgressValue("k8s_object", name, bad); err == nil {
+			t.Fatalf("malformed k8s object %q must be REJECTED, got nil", name)
+		}
+	}
+}
+
+func TestValidateEgressValue_Kustomization(t *testing.T) {
+	good := map[string]any{
+		"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "Kustomization",
+		"resources": []string{"deployment.yaml", "service.yaml"},
+	}
+	if err := ValidateEgressValue("kustomization", "good kustomization", good); err != nil {
+		t.Fatalf("valid kustomization should pass, got: %v", err)
+	}
+	bad := map[string]any{"apiVersion": "kustomize.config.k8s.io/v1beta1", "kind": "NotKustomization", "resources": []string{}}
+	if err := ValidateEgressValue("kustomization", "bad kustomization", bad); err == nil {
+		t.Fatal("kustomization with wrong kind must be REJECTED, got nil")
+	}
+}
+
 // TestRenderCloudInit_OutputValidatesAgainstSchema proves the renderer's real
 // output satisfies the egress gate end to end (RenderCloudInit returns the gate's
 // error directly, so a non-nil err here would mean charly emits cloud-init that

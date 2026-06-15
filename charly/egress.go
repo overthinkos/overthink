@@ -92,3 +92,22 @@ func ValidateEgress(kind, label string, data []byte) error {
 	}
 	return nil
 }
+
+// ValidateEgressValue validates an in-memory Go value (a manifest map[string]any,
+// a record struct) against the egress kind's schema — no marshal roundtrip. Used
+// where the writer holds the artifact as a Go value just before serialization
+// (k8s manifests, ledger records). label identifies the artifact in errors.
+func ValidateEgressValue(kind, label string, v any) error {
+	def, ok := egressDef(kind)
+	if !ok {
+		return fmt.Errorf("%s: no egress schema registered for kind %q", label, kind)
+	}
+	val := cueSchemaCtx.Encode(v)
+	if val.Err() != nil {
+		return fmt.Errorf("%s: egress encode value: %w", label, val.Err())
+	}
+	if err := val.Unify(def).Validate(cue.Concrete(true)); err != nil {
+		return fmt.Errorf("%s: egress validation failed:\n%s", label, errors.Details(err, nil))
+	}
+	return nil
+}

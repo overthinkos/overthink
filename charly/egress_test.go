@@ -123,6 +123,23 @@ func TestValidateEgressValue_CandyRecord(t *testing.T) {
 	}
 }
 
+func TestValidateEgress_TraefikRoutes(t *testing.T) {
+	good := []byte("http:\n  routers:\n    app:\n      rule: \"Host(`app.example.com`)\"\n      service: app\n  services:\n    app:\n      loadBalancer:\n        servers:\n          - url: \"http://127.0.0.1:8080\"\n")
+	if err := ValidateEgress("traefik_routes", "good routes", good); err != nil {
+		t.Fatalf("valid traefik routes should pass, got: %v", err)
+	}
+	// empty routers/services (traefik composed but no route candies) must pass.
+	empty := []byte("http:\n  routers:\n  services:\n")
+	if err := ValidateEgress("traefik_routes", "empty routes", empty); err != nil {
+		t.Fatalf("empty traefik routes (null routers/services) should pass, got: %v", err)
+	}
+	// teeth: an empty service backend url must be rejected.
+	bad := []byte("http:\n  routers:\n    app:\n      rule: \"Host(`x`)\"\n      service: app\n  services:\n    app:\n      loadBalancer:\n        servers:\n          - url: \"\"\n")
+	if err := ValidateEgress("traefik_routes", "bad routes", bad); err == nil {
+		t.Fatal("traefik routes with an empty backend url must be REJECTED, got nil")
+	}
+}
+
 // TestRenderCloudInit_OutputValidatesAgainstSchema proves the renderer's real
 // output satisfies the egress gate end to end (RenderCloudInit returns the gate's
 // error directly, so a non-nil err here would mean charly emits cloud-init that

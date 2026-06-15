@@ -1280,7 +1280,13 @@ func (g *Generator) generateTraefikRoutes(boxName string, candyOrder []string, _
 		return err
 	}
 
-	return os.WriteFile(filepath.Join(imageDir, "traefik-routes.yml"), []byte(b.String()), 0644)
+	routesYAML := []byte(b.String())
+	// Egress gate: the hand-built traefik dynamic config must validate before it
+	// is written into the build context (see /charly-internals:egress).
+	if err := ValidateEgress("traefik_routes", filepath.Join(boxName, "traefik-routes.yml"), routesYAML); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(imageDir, "traefik-routes.yml"), routesYAML, 0644)
 }
 
 // generateInitFragments writes init system config fragments to

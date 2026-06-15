@@ -539,7 +539,16 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	g.Containerfiles[boxName] = content
 
 	containerfile := filepath.Join(imageDir, "Containerfile")
-	return os.WriteFile(containerfile, []byte(content), 0644)
+	return writeContainerfile(containerfile, content)
+}
+
+// writeContainerfile validates the rendered Containerfile (catching Go-template
+// render failures via #RenderedText — see /charly-internals:egress) and writes it.
+func writeContainerfile(path, content string) error {
+	if err := validateTextEgress("rendered_text", path, content); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(content), 0644)
 }
 
 // emitScratchStages emits one `FROM scratch AS <candy>` + COPY pair per candy.
@@ -961,7 +970,7 @@ func (g *Generator) generateDataImageContainerfile(boxName string, img *Resolved
 	}
 	content := b.String()
 	g.Containerfiles[boxName] = content
-	return os.WriteFile(filepath.Join(imageDir, "Containerfile"), []byte(content), 0644)
+	return writeContainerfile(filepath.Join(imageDir, "Containerfile"), content)
 }
 
 // resolveBaseImage returns the full base image reference.

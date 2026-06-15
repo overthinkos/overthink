@@ -111,3 +111,23 @@ func ValidateEgressValue(kind, label string, v any) error {
 	}
 	return nil
 }
+
+// validateTextEgress validates a rendered NON-DATA text artifact (Containerfile,
+// systemd/supervisord unit, …) by unifying it as a CUE string with the kind's
+// string-constraint def — e.g. #RenderedText rejects the Go text/template
+// nil-field marker "<no value>", catching a render failure before the text hits
+// disk. The def MUST be a string schema; no concreteness requirement.
+func validateTextEgress(kind, label, text string) error {
+	def, ok := egressDef(kind)
+	if !ok {
+		return fmt.Errorf("%s: no egress schema registered for kind %q", label, kind)
+	}
+	v := cueSchemaCtx.Encode(text)
+	if v.Err() != nil {
+		return fmt.Errorf("%s: text egress encode: %w", label, v.Err())
+	}
+	if err := v.Unify(def).Validate(); err != nil {
+		return fmt.Errorf("%s: text egress validation failed:\n%s", label, errors.Details(err, nil))
+	}
+	return nil
+}

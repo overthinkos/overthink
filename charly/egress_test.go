@@ -140,6 +140,18 @@ func TestValidateEgress_TraefikRoutes(t *testing.T) {
 	}
 }
 
+func TestValidateTextEgress_RenderedText(t *testing.T) {
+	good := "FROM fedora:43\nRUN dnf install -y git\nUSER 1000\n"
+	if err := validateTextEgress("rendered_text", "good containerfile", good); err != nil {
+		t.Fatalf("clean rendered text should pass, got: %v", err)
+	}
+	// teeth: a Go text/template nil-field marker means a render failure.
+	bad := "[Service]\nExecStart=<no value>\nRestart=always\n"
+	if err := validateTextEgress("rendered_text", "broken unit", bad); err == nil {
+		t.Fatal("rendered text containing the template-failure marker <no value> must be REJECTED, got nil")
+	}
+}
+
 // TestRenderCloudInit_OutputValidatesAgainstSchema proves the renderer's real
 // output satisfies the egress gate end to end (RenderCloudInit returns the gate's
 // error directly, so a non-nil err here would mean charly emits cloud-init that

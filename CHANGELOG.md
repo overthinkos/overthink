@@ -22,6 +22,101 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-15 — feat(pixi): pin pixi candy to v0.70.2 + pre-commit `[project]`→`[workspace]` (`v2026.166.1751`)
+
+The `pixi` candy now installs a PINNED pixi release: `var: PIXI_VERSION: v0.70.2` drives a
+`releases/download/${PIXI_VERSION}/pixi-${BUILD_ARCH}-unknown-linux-musl.tar.gz` URL, replacing the
+unpinned `releases/latest` form — which made the SAME candy version install a different pixi over
+time (non-reproducible, against the content-hash/CalVer build model). v0.70.2 was already the latest
+release; the version `check:` now asserts the pinned `0.70.2`. The `pre-commit` candy's `pixi.toml`
+moved off the deprecated pixi `[project]` table to `[workspace]` (pixi ≥ 0.70 warns on `[project]`).
+R10 (`analysed on a live system`): the pinned download fetched + extracted to `pixi 0.70.2`, and
+`pixi install --frozen` on the `[workspace]` manifest succeeded with the EXISTING `pixi.lock` (no
+regen — the lock binds to resolved content, not the manifest table name) and zero `[project]`
+deprecation. Commit `29f8c2e7`; plugins `9553c954`. (Surfaced by the `check-arch-vm` R10 of the
+text-egress cutover, then taken on as its own cutover per R2.)
+
+### 2026-06-15 — feat(egress): CUE-validate rendered libvirt domain XML via koala (`v2026.166.1734`)
+
+Sixth and final cutover of the CUE-egress-validation sweep. `RenderDomainXML` now runs
+`ValidateXMLEgress` on its output: the rendered libvirt domain XML is decoded via CUE's EXPERIMENTAL
+`cuelang.org/go/encoding/xml/koala` encoding (elements→structs, attributes→`$`-fields, text→`$$`)
+and validated against the koala-shaped `#LibvirtDomainXML` envelope (non-empty `$type`/`name.$$`/
+`memory.$$`), catching a broken render or `XMLPassthrough` snippet before VM create. BEST-EFFORT: a
+koala *decode* error returns nil and defers to libvirt's `DomainDefineXML` (the authoritative gate);
+only a schema violation on a successfully-decoded domain hard-fails. `Concrete(true)` catches an empty
+`<name>` (koala maps an empty element to an absent `$$`). The earlier "CUE has no XML encoding" belief
+was a stale web-search claim — RDD against the installed `cuelang.org/go` v0.16.1 found the shipped
+`koala` decoder. R10: `check-arch-vm` PASS 13/13 incl. fresh-rebuild; the rendered arch domain passed
+the gate on both `vm-create` and `update`. Commit `a5b2e829`; plugins `e9d4993c`.
+
+### 2026-06-15 — feat(egress): CUE-validate rendered Containerfile + service units (`v2026.166.1720`)
+
+Fifth egress cutover. `validateTextEgress` + the `#RenderedText` string schema (`schema/egress_text.cue`)
+reject the Go `text/template` `<no value>` nil-field marker, gating the two TEMPLATE-rendered text
+artifacts: the Containerfile (`writeContainerfile`, both base + extra-image writes) and systemd/
+supervisord service units (`RenderService`). charly does not set the template `missingkey=error`
+option, so a render failure leaves `<no value>` in the output; the gate turns that into a hard
+build/deploy error. Hand-built text (quadlet/shell/ssh/qemu — no template) has no `<no value>`
+failure mode and is deliberately NOT gated. R10: `check-arch-vm` PASS 13/13 incl. fresh-rebuild; the
+Containerfile render (nested charly build) and the tailscale `.service` render both passed. Commit
+`ea028442`; plugins `00521880`.
+
+### 2026-06-15 — feat(egress): CUE-validate generated traefik dynamic config (`v2026.166.1706`)
+
+Fourth egress cutover. `generateTraefikRoutes` now runs `ValidateEgress` against `#TraefikRoutes`
+(`schema/egress_traefik.cue`) before `.build/<box>/traefik-routes.yml` is written: the hand-built YAML
+must carry a non-empty Host rule, service name, and backend url (null routers/services tolerated when
+no route candies). A candy with an empty host/port now fails the build instead of emitting a broken
+proxy config. This cutover also DOCUMENTED the deliberate decision NOT to egress-validate pure
+`yaml.Marshal(struct)` writers — runtime config (`SaveRuntimeConfig`) and the deploy-state overlay
+(`SaveDeployConfig`, already CUE-validated on ingress) — which cannot malform by construction, so a
+schema there would be validation theater. R10 (`analysed on a live system`): live `charly box generate
+fedora-test` ran the gate and accepted the real testapi routes; `kubectl`-style validity confirmed.
+Commit `def2ca82`; plugins `a2bee339`.
+
+### 2026-06-15 — feat(egress): CUE-validate install-ledger records before write (`v2026.166.1658`)
+
+Third egress cutover. All four install-ledger write paths — `WriteDeployRecord` / `WriteCandyRecord`
+(host, atomic) and `AddCandyDeploymentVia` / `WriteDeployRecordVia` (guest, executor heredoc) — now
+validate against `#DeployRecord` / `#CandyRecord` (`schema/egress_ledger.cue`) via `ValidateEgressValue`
+before the JSON is written. A record missing its identity/time fields fails the deploy instead of
+silently corrupting teardown (the ledger drives `ReverseOps`). RDD correction: `#DeployRecord` requires
+`deploy_id`/`target`/`deployed_at` but `image` is OPTIONAL — a candy-only deploy legitimately has no
+image (`deploy_target_vm.go`'s `if deployRec.Image == ""` fallback), which a too-strict first schema
+wrongly rejected (caught by an existing collector test). R10: `check-arch-vm` PASS 13/13 incl.
+fresh-rebuild; the nested local deploys wrote ledger records through the gate (in-guest ledger probes
+PASS). Commit `b756537f`; plugins `8594e7ef`.
+
+### 2026-06-15 — feat(egress): CUE-validate generated Kubernetes manifests (`v2026.166.1641`)
+
+Second egress cutover. `GenerateK8sKustomize` now routes every emitted manifest through `writeK8sYAML`
+→ `ValidateEgressValue`: workload/service/pvc/ingress against the `#K8sObject` envelope (non-empty
+`apiVersion`/`kind` + named `metadata`) and the base+overlay `kustomization.yaml` against
+`#Kustomization` (`schema/egress_k8s.cue`). These validate charly's OWN typed-Go output, so they check
+STRUCTURE (the egress failure mode) rather than deep per-field k8s API types — that depth is an
+INGRESS concern for user-authored manifests. Adds `ValidateEgressValue` (Go-value validation, no
+marshal roundtrip). H3 RDD proved a full k8s schema vendors + compiles in 4.6 ms, but the envelope is
+the right altitude for machine-generated manifests (no ~54K-line vendored bloat). R10 (`analysed on a
+live system`): live `charly deploy from-box --cluster vm-k3s-vm` generated the tree through the gate;
+`kubectl kustomize` confirmed valid k8s. Commit `7f27dfd8`; plugins `ae6b8baa`.
+
+### 2026-06-15 — feat(egress): the CUE egress-validation foundation + `cue` candy + cloud-init (`v2026.166.1618`)
+
+First egress cutover — the counterpart to charly's CUE INGRESS validation: ingress proves the input
+config (`charly.yml`), egress proves the config files charly WRITES to a system, before the bytes hit
+disk. New `charly/egress.go`: `ValidateEgress` (serialized YAML/JSON) + a vendored-schema registry
+(`registerVendoredEgressKind`) that compiles `package`+`import` schemas as their OWN `cue.Value` —
+they cannot join the package-less concatenated `sharedCueSchema` (`cue_schema.go`). cloud-init's three
+seed files are gated in `RenderCloudInit`: user-data against Canonical's cloud-config schema vendored
+offline via `cue import jsonschema:` (the new `task cue:vendor` pipeline + the new `cue` CLI candy,
+pinned to charly's embedded `cuelang.org/go` v0.16.1), meta-data/network-config against closed
+hand-authored schemas. New skills `/charly-internals:egress` (subsystem owner) + `/charly-tools:cue`.
+Vendoring is dev-time only — schemas convert to plain `.cue` and embed; nothing is fetched at
+runtime (hermetic single binary). RDD proved import→bare-context-compile→validate→generate end-to-end
+offline. R10: `check-arch-vm` PASS 13/13 incl. fresh-rebuild; the gate validated cloud-init live on
+both create and the fresh `update`. Commit `abdbaaa2`; plugins `5a06c368`.
+
 ### 2026-06-15 — feat(loader): CUE-source the embedded default config (`charly/charly.yml` → `charly/charly.cue`)
 
 The binary-embedded default config — the build vocabulary (`resource`/`builder`/`distro`/`init`)

@@ -27,17 +27,18 @@ func TestBootstrapTarPreservesFileCaps(t *testing.T) {
 	// 2. Every `tar … --xattrs` line in the bootstrap builders must also carry
 	//    --xattrs-include (create side; defensive + symmetric with extract).
 	//    A generic scan so any future bootstrap tar is caught too.
-	// charly.yml is the binary's embedded default config (build vocabulary +
+	// charly.cue is the binary's embedded default config (build vocabulary +
 	// sidecar templates), living in the charly/ package dir (same dir as this
-	// test), not the repo root.
-	data, err := os.ReadFile("charly.yml")
+	// test), not the repo root. The tar lines live in its builder install
+	// templates (""" strings), scannable as plain text.
+	data, err := os.ReadFile("charly.cue")
 	if err != nil {
-		t.Fatalf("reading charly.yml: %v", err)
+		t.Fatalf("reading charly.cue: %v", err)
 	}
 	for i, line := range strings.Split(string(data), "\n") {
 		if strings.Contains(line, "tar ") && strings.Contains(line, "--xattrs") &&
 			!strings.Contains(line, "--xattrs-include") {
-			t.Errorf("charly.yml line %d: `tar --xattrs` without --xattrs-include drops "+
+			t.Errorf("charly.cue line %d: `tar --xattrs` without --xattrs-include drops "+
 				"file capabilities (security.capability): %s", i+1, strings.TrimSpace(line))
 		}
 	}

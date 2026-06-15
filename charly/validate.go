@@ -116,20 +116,30 @@ func validateProjectCUESchemas(cfg *Config, dir string, opts ResolveOpts, errs *
 			errs.Add("%s: CUE ingest: %v", f, derr)
 			continue
 		}
-		for _, kind := range collectionKinds {
-			m := doc.LookupPath(cue.ParsePath(kind))
-			if !m.Exists() {
-				continue
-			}
-			it, ferr := m.Fields()
-			if ferr != nil {
-				continue
-			}
-			for it.Next() {
-				label := fmt.Sprintf("%s:%s.%s", f, kind, it.Selector().String())
-				if verr := validateEntityCUE(kind, label, it.Value()); verr != nil {
-					errs.Add("%v", verr)
-				}
+		validateVocabularyCollections(doc, collectionKinds, f, errs.Add)
+	}
+}
+
+// validateVocabularyCollections validates each entity of the given collection
+// kinds in doc against its registered #Kind (validateEntityCUE), reporting every
+// failure via report. Shared by validateProjectCUESchemas (on-disk project
+// files) and the embedded-default schema-conformance gate
+// (TestEmbeddedDefaults_SchemaConformance) so a project's vocabulary and the
+// binary-embedded vocabulary validate through the IDENTICAL path (R3).
+func validateVocabularyCollections(doc cue.Value, kinds []string, srcLabel string, report func(format string, args ...any)) {
+	for _, kind := range kinds {
+		m := doc.LookupPath(cue.ParsePath(kind))
+		if !m.Exists() {
+			continue
+		}
+		it, ferr := m.Fields()
+		if ferr != nil {
+			continue
+		}
+		for it.Next() {
+			label := fmt.Sprintf("%s:%s.%s", srcLabel, kind, it.Selector().String())
+			if verr := validateEntityCUE(kind, label, it.Value()); verr != nil {
+				report("%v", verr)
 			}
 		}
 	}

@@ -22,6 +22,58 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-15 — feat(loader): CUE-source the embedded default config (`charly/charly.yml` → `charly/charly.cue`)
+
+The binary-embedded default config — the build vocabulary (`resource`/`builder`/`distro`/`init`)
++ the sidecar-template library (`sidecar:`) that every build inherits — is now authored in CUE
+(`charly/charly.cue`) instead of YAML. CUE was already the loader's decode + validation engine
+(fed from YAML via `cueyaml.Extract`); this adds a CUE *source* front-end and points the embed at
+it. Scope is deliberately bounded to the embedded default ONLY: project on-disk config stays
+`charly.yml`. The write verbs — `charly box reconcile`, the `charly migrate` chain, the
+scaffold / `box set` / `add-candy` verbs — are all `yaml.v3`-Node-based for comment preservation
+and cannot operate on a `.cue` file without a CUE-AST rewriter; the embedded default is the one
+config that is read-only at runtime, so it carries zero write-surface entanglement and is the
+clean, fully-decoupled consumer of CUE-source authoring.
+
+**One document-interpretation path, two source front-ends (R3).** New `charly/cue_source.go`
+`compileCUEToYAML` compiles a CUE document with the existing `cueSchemaCtx`, requires it concrete
+(`cue.Concrete(true)` — a config is data, not a schema; CUE definitions + hidden `_` helpers
+resolve at compile time and never export), and re-encodes it to YAML bytes that flow through the
+UNCHANGED `mergeUnifiedDocs` core. The embedded `.cue` is parsed EXACTLY like any `charly.yml`
+after the front-end — no parallel CUE routing/normalize/merge. `embed_defaults.go` switches
+`//go:embed charly.yml` → `charly.cue` and runs the compile before `mergeUnifiedDocs`.
+
+**Idiomatic, not mechanical.** The 1,373-line vocabulary was rewritten with CUE hidden-field
+helpers + references that DRY the genuinely-repeated data — `_pacmanCacheMount` / `_pacmanCache`
+(the locked pacman cache, 5×), `_aptCache` (2×), `_dnfCache` (2×), `_bootstrapBuilderBase`
+(pacstrap + debootstrap), `_homeArtifact` (npm + pixi `copy_artifact`) — 13 duplicated
+occurrences collapsed to 5 named helpers that resolve at compile time and never export. Distinct
+per-distro logic (install / bootloader templates, package lists) stays explicit.
+
+**Closed the embedded-vocabulary schema-validation gap.** `charly box validate` already unified
+each `distro`/`builder`/`init`/`resource`/`sidecar` entity against its closed `#Kind` — but only
+for on-disk PROJECT files; the binary's embedded vocabulary (the richest in the system) was
+decoded but never schema-validated. The shared loop is now factored into
+`validateVocabularyCollections` (`validate.go`), called for BOTH project files and the embedded
+default. `TestEmbeddedDefaults_SchemaConformance` validates every embedded vocab entity against
+`charly/schema` — and it passed with ZERO changes to the schemas (the earlier CUE-tightening had
+already given them parity; they were simply never wired to the embed). Boundary: `schema/*.cue`
+is the validation CONTRACT (binary-internal, not overridable); `charly.cue` is default DATA (fully
+project-`charly.yml`-overridable via the gap-filling `applyEmbeddedDefaults` merge, and a project
+override is itself `#Kind`-validated — `TestEmbeddedDefaults_AllVocabKindsOverridable`,
+`TestProjectVocabOverride_IsSchemaValidated`).
+
+**Proof.** `TestEmbeddedCUE_DataEquivalentToLegacyYAML` asserts the CUE source produces a
+`UnifiedFile` byte-for-byte identical to the frozen pre-migration YAML
+(`charly/testdata/embedded_legacy.yml`, the verbatim deleted `charly/charly.yml`). Live on the
+freshly-rebuilt binary: `charly box validate` (exit 0), `charly box generate` for all five distro
+families (arch/cachyos → `/var/cache/pacman/pkg`, debian/ubuntu → `/var/cache/apt`, fedora →
+`/var/cache/libdnf5` — the DRY helpers render correctly into the Containerfiles), and the
+`check-local` disposable bed (deploy → check-live → fresh-update → cleanup, PASS). The heavy VM
+beds were not run: the embedded data is byte-identical, so a VM build is downstream-unchanged and
+cannot fail differently (EXERCISE). No project migration or schema-version bump — projects are
+unaffected; only the binary-internal embed format changed.
+
 ### 2026-06-15 — feat(schema)!: CUE owns VM/libvirt validation + the firmware default
 
 The immediate-next cutover after the validator-deletion (`feat(validate)!`, below).

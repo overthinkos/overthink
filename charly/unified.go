@@ -26,8 +26,9 @@ var namespaceAliasRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 // android/deploy + any build-vocabulary overrides). Boxes and candies are
 // DISCOVERED per name as box/<name>/charly.yml and candy/<name>/charly.yml. The
 // default distro/builder/init/resource build vocabulary AND sidecar templates
-// are embedded in the binary (charly/charly.yml, //go:embed — the embedded
-// default is parsed by the SAME loader as any project charly.yml); a project
+// are embedded in the binary (charly/charly.cue, //go:embed — the CUE-source
+// front-end compiles it to data, parsed by the SAME loader as any project
+// charly.yml); a project
 // declares distro:/builder:/init:/resource:/sidecar: only to extend or override
 // it. Legacy per-kind files (box.yml/vm.yml/...) still LOAD as flat `import:`
 // items, never the canonical layout.
@@ -132,12 +133,12 @@ type UnifiedFile struct {
 	// name (matching requires_exclusive: / preemptible.holds:) → an optional
 	// hardware selector (e.g. gpu.vendor) that drives GPU auto-allocation at
 	// `charly vm create`. Build-vocab VALUE map; the binary-embedded default
-	// set lives in the embedded charly.yml (embed_defaults.go).
+	// set lives in the embedded charly.cue (embed_defaults.go).
 	Resource map[string]*ResourceDef `yaml:"resource,omitempty" json:"resource,omitempty"`
 
 	// Sidecar — the reusable sidecar-container template library (sidecar name
 	// → SidecarDef). The binary-embedded default set (e.g. `tailscale`) lives
-	// in the embedded charly.yml (embed_defaults.go) and is merged UNDER a
+	// in the embedded charly.cue (embed_defaults.go) and is merged UNDER a
 	// project's own entries by applyEmbeddedDefaults (project-wins). A deploy
 	// references a template by name under `deploy.<name>.sidecar:` and overrides
 	// per-instance. See /charly-automation:sidecar.
@@ -1016,10 +1017,10 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 
 	// Parse + merge every document in the file via the SHARED routing core
 	// (mergeUnifiedDocs → classifyDoc → mergeUnified/mergeKindDoc). The SAME
-	// mergeUnifiedDocs parses the binary-embedded charly.yml (embeddedDefaults,
-	// embed_defaults.go), so the default config flows through EXACTLY the same
-	// code path as any project charly.yml. Imports are returned for resolution
-	// below.
+	// mergeUnifiedDocs parses the data compiled from the binary-embedded
+	// charly.cue (embeddedDefaults → compileCUEToYAML, embed_defaults.go), so the
+	// default config flows through EXACTLY the same code path as any project
+	// charly.yml. Imports are returned for resolution below.
 	importQueue, err := mergeUnifiedDocs(merged, data, abs, filepath.Dir(abs))
 	if err != nil {
 		return err
@@ -1069,7 +1070,7 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 			return fmt.Errorf("%s: %w", abs, err)
 		}
 		// Fill any distro/builder/init/resource vocabulary AND sidecar templates
-		// the project did NOT declare from the binary-embedded default charly.yml
+		// the project did NOT declare from the binary-embedded default charly.cue
 		// (project-wins; see applyEmbeddedDefaults). Runs for the root AND every
 		// namespace, so a project needs no build vocabulary of its own.
 		if err := applyEmbeddedDefaults(merged); err != nil {
@@ -1085,9 +1086,9 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 // (kind-keyed). srcLabel labels diagnostics; srcDir anchors relative discover
 // paths. Returns the concatenated `import:` queue of every root-shape doc (the
 // caller resolves imports). This is the SINGLE document-interpretation path:
-// both loadUnifiedInto (an on-disk charly.yml) and embeddedDefaults (the
-// binary-embedded charly.yml) call it, so the embedded default is parsed
-// EXACTLY like every other charly.yml.
+// both loadUnifiedInto (an on-disk charly.yml) and embeddedDefaults (the data
+// compiled from the binary-embedded charly.cue) call it, so the embedded default
+// is parsed EXACTLY like every other charly.yml.
 func mergeUnifiedDocs(merged *UnifiedFile, data []byte, srcLabel, srcDir string) (ImportList, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	docIdx := 0
@@ -1265,11 +1266,11 @@ var rootShapeKeys = map[string]bool{
 	"group": true, "target": true, "module": true,
 	// Exclusive host-resource vocabulary (token -> hardware selector) driving
 	// GPU auto-allocation. Build-vocab VALUE map, like distro:; the embedded
-	// default set lives in the binary-embedded charly.yml.
+	// default set lives in the binary-embedded charly.cue.
 	"resource": true,
 	// Sidecar-container template library (sidecar name -> SidecarDef). A
 	// root-shape collection map like resource:; the embedded default set
-	// (tailscale) lives in the binary-embedded charly.yml.
+	// (tailscale) lives in the binary-embedded charly.cue.
 	"sidecar": true,
 }
 

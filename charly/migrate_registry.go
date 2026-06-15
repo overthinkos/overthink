@@ -362,7 +362,7 @@ func migrationSteps() []MigrationStep {
 		// 2026-06 sidecar-root: the sidecar-template library became a first-class
 		// root key. `sidecar:` is now a recognized UnifiedFile field (it was
 		// parsed only by a bespoke embedded loader before), so the binary's own
-		// embedded charly.yml — and any project — can carry a root `sidecar:`
+		// embedded charly.cue — and any project — can carry a root `sidecar:`
 		// section that flows through the SAME unified loader as every charly.yml.
 		// Purely ADDITIVE — a config without `sidecar:` is unchanged — so this
 		// step transforms nothing; it raises HEAD so an older `charly` REJECTS a

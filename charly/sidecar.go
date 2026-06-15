@@ -12,18 +12,18 @@ import (
 )
 
 // SidecarDef is a sidecar container template. The default set is the
-// binary-embedded charly.yml `sidecar:` library (embed_defaults.go); a project
+// binary-embedded charly.cue `sidecar:` library (embed_defaults.go); a project
 // may override or extend it (a root `sidecar:` map, or a per-deploy override
 // under `deploy.<name>.sidecar:`).
 //
 // The `Parameter` field carries BOTH the template's parameter
-// declarations (the embedded charly.yml `sidecar:` section: each key maps to
+// declarations (the embedded charly.cue `sidecar:` section: each key maps to
 // an empty-string sentinel for "required, must be supplied by deploy") AND the
 // per-deploy override values (each key maps to the operator-chosen string).
 // After MergeSidecar, every required parameter must have a non-empty
 // value or ResolveSidecar errors out with a remediation hint.
 //
-// Example template (embedded charly.yml `sidecar:` section):
+// Example template (embedded charly.cue `sidecar:` section):
 //
 //	sidecar:
 //	  tailscale:
@@ -182,7 +182,7 @@ type SidecarVolume struct {
 // SidecarConfig is the inline sidecar-wrapper shape authored under a
 // kind:pod template's `sidecar:` list (PodSpec.Sidecar []SidecarConfig).
 // The default sidecar-template library is NOT loaded through this type — it
-// lives in the binary-embedded charly.yml `sidecar:` section and is read as
+// lives in the binary-embedded charly.cue `sidecar:` section and is read as
 // UnifiedFile.Sidecar by the unified loader (embed_defaults.go).
 type SidecarConfig struct {
 	Sidecar map[string]SidecarDef `yaml:"sidecar" json:"sidecar"`
@@ -355,7 +355,7 @@ func sidecarTemplatesOf(dc *DeployConfig) map[string]SidecarDef {
 }
 
 // EmbeddedSidecarTemplates returns the binary-embedded sidecar-template
-// library (the charly.yml `sidecar:` section), read through the unified loader
+// library (the charly.cue `sidecar:` section), read through the unified loader
 // (embeddedDefaults). It is the deploy-time template base for any sidecar a
 // deploy attaches.
 func EmbeddedSidecarTemplates() (map[string]SidecarDef, error) {

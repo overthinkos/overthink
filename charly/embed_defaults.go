@@ -5,26 +5,32 @@ import (
 	"fmt"
 )
 
-// embeddedCharlyYAML is the binary's DEFAULT config, compiled into the charly
-// CLI. It is a complete charly.yml carrying the default build vocabulary
+// embeddedCharlyCUE is the binary's DEFAULT config, compiled into the charly
+// CLI. It is a complete charly.cue carrying the default build vocabulary
 // (resource / builder / distro / init) AND the default sidecar-template library
-// (sidecar:). A project needs to ship NONE of it: the binary fills any
-// vocabulary or sidecar the project did not declare (project-wins), and a
-// project EXTENDS or OVERRIDES it by declaring its own entries (inline in its
-// charly.yml or in an imported vocabulary file).
+// (sidecar:), authored in CUE (definitions / references / hidden fields factor
+// out the per-distro / per-format repetition). A project needs to ship NONE of
+// it: the binary fills any vocabulary or sidecar the project did not declare
+// (project-wins), and a project EXTENDS or OVERRIDES it by declaring its own
+// entries in its charly.yml (project config stays YAML).
 //
-//go:embed charly.yml
-var embeddedCharlyYAML []byte
+//go:embed charly.cue
+var embeddedCharlyCUE []byte
 
-// embeddedDefaults parses the binary-embedded charly.yml into a UnifiedFile
+// embeddedDefaults compiles the binary-embedded charly.cue to its concrete data
+// (compileCUEToYAML — the CUE-source front-end) and parses it into a UnifiedFile
 // through the SAME document-routing core (mergeUnifiedDocs → classifyDoc →
-// mergeUnified) that every on-disk charly.yml flows through — the embedded
-// default is just another charly.yml that happens to live in the binary. Parsed
-// fresh on each call so no mutable state is shared across loads.
+// mergeUnified) that every on-disk charly.yml flows through. The embedded
+// default is just another config that happens to live in the binary, authored
+// in CUE. Parsed fresh on each call so no mutable state is shared across loads.
 func embeddedDefaults() (*UnifiedFile, error) {
+	yamlBytes, err := compileCUEToYAML(embeddedCharlyCUE, "charly.cue (embedded)")
+	if err != nil {
+		return nil, fmt.Errorf("compiling embedded charly.cue: %w", err)
+	}
 	var uf UnifiedFile
-	if _, err := mergeUnifiedDocs(&uf, embeddedCharlyYAML, "charly.yml (embedded)", ""); err != nil {
-		return nil, fmt.Errorf("parsing embedded charly.yml: %w", err)
+	if _, err := mergeUnifiedDocs(&uf, yamlBytes, "charly.cue (embedded)", ""); err != nil {
+		return nil, fmt.Errorf("parsing embedded charly.cue: %w", err)
 	}
 	return &uf, nil
 }

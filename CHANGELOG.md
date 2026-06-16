@@ -22,7 +22,7 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
-### 2026-06-16 — fix(check): one unified file-lock primitive — safe parallel `charly check` runs (`v2026.167.1516`)
+### 2026-06-16 — fix(check): safe parallel `charly check` runs — unified flock + race-free atomic `.build/` + DAG-aware build coordination (`v2026.167.1601`)
 
 A hyper-parallel fan-out of all pod check beds (16 concurrent `charly check run`)
 failed, and the RCA found TWO real shared-state races (NOT a "concurrency limit"):
@@ -49,36 +49,59 @@ scalar containing `cut -d: -f1` — the colon-space is the YAML "mapping values
 not allowed" trigger) aborted every bed's candy scan in ~1s. Fixed by
 single-quoting; that fix lands with the container-nesting cluster-B cutover.
 
-**Fix — ONE unified flock primitive** (`charly/filelock.go`,
+**Fix, part 1 — ONE unified flock primitive** (`charly/filelock.go`,
 `acquireFileLock(path, blocking)`), replacing the two pre-existing ad-hoc flock
 copies and serving every serialization site. `syscall.Flock` now lives in
-exactly one file. The five call sites:
+exactly one file. The four call sites:
 
 | Site | Lock file | Mode | Prevents |
 |---|---|---|---|
 | per-bed | `.check/<bed>/.lock` | fail-fast (`LOCK_NB`) | a 2nd `charly check run` of the SAME bed clobbering the 1st (its pre-run `charly remove --purge` / `charly vm destroy` would wipe the live target mid-test) |
-| build | `<dir>/.build/.lock` | blocking | the `_layers` race (per project dir; held across generate + the podman COPY-from-`_layers` steps) |
+| per-image build | `<dir>/.build/.locks/<image>.lock` | blocking | concurrent COLD rebuilds of the SAME image — see part 3 |
 | deploy-config | `~/.config/charly/charly.yml.lock` | blocking | the lost-update on the shared deploy overlay |
 | harness | `.check/<score>/.lock` | fail-fast | (migrated — `acquireHarnessLock` now delegates) |
 | ledger | `~/.config/opencharly/installed/.lock` | blocking | (migrated — `AcquireLedgerLock` now delegates) |
 
-The concurrency model the locks establish: builds in DISTINCT project dirs
-(worktrees / `box/<distro>` submodules) take distinct `.build/.lock` files and
-run fully parallel; SAME-dir builds serialize only the build phase (the shared
-`_layers`), then release before deploy/check — so a later bed's build overlaps an
-earlier bed's deploy (pipelined). The fan-out-by-project-dir model is now
-enforced by code, not left as a manual footgun.
+**Fix, part 2 — race-free, deterministic `.build/` generation**
+(`charly/build_stage_atomic.go` + `generate.go`). The shared `.build/` staging is
+made concurrency-safe by ATOMIC writes, NOT by serializing the build (serializing
+cold builds — the long pole — would be catastrophic for wall-clock). Every shared
+write is atomic + idempotent + byte-deterministic, so a concurrent `podman build`
+always reads a COMPLETE artifact and podman's content+instruction-keyed cache
+still hits: the destructive `os.RemoveAll(_layers)`/`RemoveAll(imageDir)` are
+gone; `_layers` is rebuilt in a temp dir and installed via
+`renameat2(RENAME_EXCHANGE)`; the Containerfile, init fragments, traefik routes,
+context-ignore, and content-addressed inline staging are written temp-then-rename;
+`cleanStaleBuildDirs` skips the `_`/`.`-prefixed staging dirs (`_layers`,
+`_buildconfig`, `.locks`). Containerfiles are confirmed byte-identical across
+repeat generations (the cache-miss-avoidance the determinism guarantees).
 
-R10 (`fully tested and validated`): `go test ./...` PASS; `task build:charly`
-(binary fresh). Per-bed lock — two concurrent `charly check run check-local`: one
-ran (`rc=0`), the other failed instantly with `check bed "check-local" is already
-running in this project — refusing a concurrent run`. Config lock — survived a
-16-way concurrent run with `0` lost entries (valid YAML throughout). Build lock —
-the 5 fedora beds that previously died on the `_layers` race
-(`check-pod`, `check-cross-pod-cdp`, `check-cross-local-http`,
+**Fix, part 3 — DAG-aware build coordination: serialize the shared intermediates,
+parallelize the fan-out.** A PER-IMAGE build lock (keyed by image name under
+`.build/.locks/`) is held across each image's build. When many beds in one project
+dir start at once, the FIRST to reach a shared intermediate (a base like `fedora`,
+or an auto-intermediate) cold-builds it ONCE while the others block on THAT image's
+lock and then cache-HIT it — so a shared base is built once, never N× redundant
+cold builds — while each distinct LEAF image takes its own lock so the leaves'
+(cold) builds run FULLY PARALLEL. There is deliberately no per-dir build lock:
+serializing the whole build phase would stall the parallel cold leaf builds.
+Distinct project dirs (worktrees / box submodules) have distinct `.build/` trees →
+distinct locks → unaffected.
+
+R10 (`fully tested and validated`): `go test ./...` PASS (incl. new
+`TestAtomicWriteFile_*` / `TestInstallDirAtomic_*` / `TestAcquireFileLock_*`);
+`task build:charly` (binary fresh); Containerfile generation verified
+deterministic (byte-identical across repeat generates). Per-bed lock — two
+concurrent `charly check run check-local`: one ran (`rc=0`), the other refused
+instantly (`check bed "check-local" is already running in this project — refusing
+a concurrent run`). Config lock — survived a 16-way concurrent run with `0` lost
+entries. Parallel build — the 5 fedora beds that previously died on the `_layers`
+race (`check-pod`, `check-cross-pod-cdp`, `check-cross-local-http`,
 `check-fedora-test-pod`, `check-jupyter-pod`) re-run concurrently from one project
-dir all PASS (`ok:true`, `steps=10` incl. the fresh-`charly update` step;
-WALLCLOCK 365s, `_layers` race signature eliminated).
+dir (with the shared `charly` intermediate freshly cache-invalidated) all PASS
+(`ok:true`, `steps=10` incl. the fresh-`charly update` step), per-image locks
+(`fedora.lock`, `fedora-nonfree.lock`, … + `check-pod.lock`, `jupyter.lock`, …)
+confirmed present, `_layers` race signature eliminated; WALLCLOCK 380s.
 
 ### 2026-06-16 — fix(traefik): resolve `${HOME}` in the ACME storage path at build time (`v2026.167.1342`)
 

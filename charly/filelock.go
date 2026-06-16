@@ -75,21 +75,22 @@ func acquireFileLock(path string, blocking bool) (release func() error, err erro
 	}, nil
 }
 
-// acquireBuildLock serializes generate+build for ONE project dir's .build/
-// tree across concurrent charly processes. The .build/_layers staging dir is
-// SHARED by every image in a project dir (NOT per-image), so two concurrent
-// `charly box build` / `charly box generate` runs in the same dir race: one's
-// cleanStaleBuildDirs / _layers repopulation removes the dir mid-COPY of the
-// other's podman build (observed under a parallel bed fan-out: "removing stale
-// dir .build/_layers: directory not empty" + "COPY .build/_layers/...: no such
-// file or directory"). Blocking: same-dir builds serialize on this lock;
-// DISTINCT project dirs (worktrees / box submodules) get distinct .build/.lock
-// files and stay fully parallel — the fan-out-by-project-dir model. The lock is
-// held across generate AND the podman build (the COPY-from-_layers steps read
-// the staging dir the whole time), then released before deploy/check, so a
-// later bed's build overlaps an earlier bed's deploy.
-func acquireBuildLock(buildDir string) (func() error, error) {
-	return acquireFileLock(filepath.Join(buildDir, ".lock"), true)
+// acquireImageBuildLock serializes concurrent builds of the SAME image across
+// charly processes, while letting DISTINCT images build in PARALLEL — the
+// "serialize the shared intermediates, parallelize the fan-out" model. Keyed by
+// image name under the project dir's .build/.locks/. When many `charly check run`
+// beds in one project dir start at once, the FIRST to reach a shared intermediate
+// (a base like fedora, or an auto-intermediate) builds it COLD once while the
+// others block on THAT image's lock, then cache-HIT it — so a shared base is
+// built ONCE, never N× redundant cold builds. Meanwhile each distinct LEAF image
+// takes its own lock, so the leaves' (often cold) builds run fully parallel —
+// cold builds are the long pole and must never serialize. Distinct project dirs
+// (worktrees / box submodules) have distinct .build/ trees → distinct locks →
+// unaffected. Blocking. The shared .build/ STAGING (deterministic Containerfiles
+// + _layers) is made race-free by atomic writes (build_stage_atomic.go), not by
+// this lock — so the parallel leaf builds don't collide on it either.
+func acquireImageBuildLock(buildDir, image string) (func() error, error) {
+	return acquireFileLock(filepath.Join(buildDir, ".locks", image+".lock"), true)
 }
 
 // acquireDeployConfigLock serializes the read-modify-write of the per-host

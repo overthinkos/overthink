@@ -98,14 +98,8 @@ func (c *GenerateCmd) Run() error {
 		return err
 	}
 
-	// Serialize against any concurrent generate/build sharing this dir's
-	// .build/_layers staging tree (see acquireBuildLock).
-	buildUnlock, err := acquireBuildLock(gen.BuildDir)
-	if err != nil {
-		return fmt.Errorf("acquiring build lock: %w", err)
-	}
-	defer func() { _ = buildUnlock() }()
-
+	// No lock: Generate() writes the shared .build/ tree race-free via atomic
+	// staging (build_stage_atomic.go), so concurrent generates in one dir are safe.
 	return gen.Generate()
 }
 

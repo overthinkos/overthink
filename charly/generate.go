@@ -210,6 +210,12 @@ func (g *Generator) cleanStaleBuildDirs() error {
 	for _, entry := range entries {
 		if entry.IsDir() {
 			name := entry.Name()
+			// Skip charly-managed staging dirs (_layers, _buildconfig, .locks,
+			// transient ._*.tmp.* dirs): they are NOT images, and removing them
+			// races a concurrent build that is COPYing from / locking on them.
+			if strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".") {
+				continue
+			}
 			if _, exists := g.Boxes[name]; !exists {
 				path := filepath.Join(g.BuildDir, name)
 				if err := os.RemoveAll(path); err != nil {
@@ -356,7 +362,7 @@ func (g *Generator) writeContextIgnore() error {
 			b.WriteString(p)
 			b.WriteByte('\n')
 		}
-		if err := os.WriteFile(filepath.Join(g.Dir, name), []byte(b.String()), 0o644); err != nil {
+		if err := atomicWriteFile(filepath.Join(g.Dir, name), []byte(b.String()), 0o644); err != nil {
 			return fmt.Errorf("writing %s: %w", name, err)
 		}
 	}
@@ -365,11 +371,13 @@ func (g *Generator) writeContextIgnore() error {
 
 // generateContainerfile generates a Containerfile for a single image
 func (g *Generator) generateContainerfile(boxName string) error {
-	// Clean image build directory to remove stale files from previous generations
+	// imageDir is NOT wiped here. A destructive RemoveAll+regenerate races
+	// concurrent builds of a SHARED base image (two parallel beds both regenerate
+	// .build/fedora/). The Containerfile is written ATOMICALLY (writeContainerfile)
+	// and inline content is content-addressed (_inline/<layer>/<sha>), so any
+	// stale leftover is unreferenced + harmless; cleanStaleBuildDirs removes whole
+	// dirs for REMOVED images.
 	imageDir := filepath.Join(g.BuildDir, boxName)
-	if err := os.RemoveAll(imageDir); err != nil {
-		return err
-	}
 
 	img := g.Boxes[boxName]
 	var b strings.Builder
@@ -530,7 +538,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	// of the Containerfile.
 	g.writeLabels(&b, boxName, candyOrder, img)
 
-	// imageDir was cleaned at the start of this function; ensure it exists
+	// Ensure the image dir exists (it is no longer wiped at function start).
 	if err := os.MkdirAll(imageDir, 0755); err != nil {
 		return err
 	}
@@ -548,7 +556,10 @@ func writeContainerfile(path, content string) error {
 	if err := validateTextEgress("rendered_text", path, content); err != nil {
 		return err
 	}
-	return os.WriteFile(path, []byte(content), 0644)
+	// Atomic write: a concurrent build reading this Containerfile (parallel
+	// same-dir fan-out) always sees a complete file; concurrent writers of the
+	// same deterministic content converge.
+	return atomicWriteFile(path, []byte(content), 0644)
 }
 
 // emitScratchStages emits one `FROM scratch AS <candy>` + COPY pair per candy.
@@ -1295,7 +1306,7 @@ func (g *Generator) generateTraefikRoutes(boxName string, candyOrder []string, _
 	if err := ValidateEgress("traefik_routes", filepath.Join(boxName, "traefik-routes.yml"), routesYAML); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(imageDir, "traefik-routes.yml"), routesYAML, 0644)
+	return atomicWriteFile(filepath.Join(imageDir, "traefik-routes.yml"), routesYAML, 0644)
 }
 
 // generateInitFragments writes init system config fragments to
@@ -1370,7 +1381,7 @@ func (g *Generator) generateInitFragments(boxName, initName string, def *InitDef
 			if candyBuf.Len() > 0 {
 				// Short name, not the slashed remote map key (see scratch-stage note).
 				fragFile := filepath.Join(fragDir, fmt.Sprintf("%02d-%s.conf", idx, layer.Name))
-				if err := os.WriteFile(fragFile, []byte(candyBuf.String()), 0644); err != nil {
+				if err := atomicWriteFile(fragFile, []byte(candyBuf.String()), 0644); err != nil {
 					return err
 				}
 			}
@@ -1386,7 +1397,7 @@ func (g *Generator) generateInitFragments(boxName, initName string, def *InitDef
 				}
 				confName := fmt.Sprintf("%02d-relay-%d.conf", idx, port)
 				fragFile := filepath.Join(fragDir, confName)
-				if err := os.WriteFile(fragFile, []byte(content), 0644); err != nil {
+				if err := atomicWriteFile(fragFile, []byte(content), 0644); err != nil {
 					return err
 				}
 			}
@@ -1400,7 +1411,7 @@ func (g *Generator) generateInitFragments(boxName, initName string, def *InitDef
 					return fmt.Errorf("reading service file %s: %w", svcPath, err)
 				}
 				destFile := filepath.Join(fragDir, filepath.Base(svcPath))
-				if err := os.WriteFile(destFile, content, 0644); err != nil {
+				if err := atomicWriteFile(destFile, content, 0644); err != nil {
 					return err
 				}
 			}
@@ -2360,30 +2371,40 @@ func (g *Generator) createRemoteCandyCopies() error {
 		}
 	}
 	if !hasRemote {
-		// Clean up _layers dir if it exists from a previous run
-		_ = os.RemoveAll(filepath.Join(g.BuildDir, "_layers"))
+		// No remote candies → no image COPYs from _layers, so any stale _layers
+		// is unreferenced and harmless. Leave it: a destructive RemoveAll here
+		// would race a concurrent build in the same project dir.
 		return nil
 	}
 
 	candiesDir := filepath.Join(g.BuildDir, "_layers")
-	// Remove and recreate to ensure clean state
-	_ = os.RemoveAll(candiesDir)
-	if err := os.MkdirAll(candiesDir, 0755); err != nil {
+	// Populate a per-process temp dir, then ATOMICALLY install it as _layers, so a
+	// concurrent `podman build` COPYing from _layers always sees a complete dir
+	// (the old RemoveAll+recreate raced under a parallel bed fan-out:
+	// "removing stale dir .build/_layers: directory not empty" /
+	// "COPY .build/_layers/...: no such file or directory"). Content is
+	// deterministic (cp -a of each remote candy keyed by name), so concurrent
+	// installs converge on identical bytes — podman's cache still hits.
+	if err := os.MkdirAll(g.BuildDir, 0o755); err != nil {
 		return err
 	}
-
+	tmpDir, err := os.MkdirTemp(g.BuildDir, "._layers.tmp.*")
+	if err != nil {
+		return err
+	}
 	for ref, layer := range g.Candies {
 		if !layer.Remote {
 			continue
 		}
-		destPath := filepath.Join(candiesDir, layer.Name)
+		destPath := filepath.Join(tmpDir, layer.Name)
 		cmd := exec.Command("cp", "-a", layer.Path, destPath)
 		if out, err := cmd.CombinedOutput(); err != nil {
+			_ = os.RemoveAll(tmpDir)
 			return fmt.Errorf("copying remote candy %s: %s: %w", ref, string(out), err)
 		}
 	}
 
-	return nil
+	return installDirAtomic(tmpDir, candiesDir)
 }
 
 // remoteBuildConfigCacheRoot derives the repo cache root that a remotely-included

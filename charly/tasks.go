@@ -156,11 +156,14 @@ func stageInlineContent(buildDir, contextRelPrefix, candyName, content string) (
 	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
 		return "", fmt.Errorf("staging inline content dir: %w", err)
 	}
-	// Idempotent: skip write if file already exists with identical content
+	// Idempotent: skip write if file already exists with identical content.
 	if existing, err := os.ReadFile(abs); err == nil && string(existing) == content {
 		return contextRel, nil
 	}
-	if err := os.WriteFile(abs, []byte(content), 0o644); err != nil {
+	// Atomic: content-addressed path, so a concurrent same-dir build writing the
+	// SAME sha sees no partial file (temp + rename); different content → different
+	// sha → different path, so there is never a stale-content hazard.
+	if err := atomicWriteFile(abs, []byte(content), 0o644); err != nil {
 		return "", fmt.Errorf("staging inline content: %w", err)
 	}
 	return contextRel, nil

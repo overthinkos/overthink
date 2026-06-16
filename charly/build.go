@@ -131,16 +131,11 @@ func (c *BuildCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	// Serialize generate+build against concurrent charly processes sharing this
-	// project dir's .build/ tree (the shared _layers staging dir races otherwise
-	// — see acquireBuildLock). Held through buildImages (the podman COPY-from-
-	// _layers steps), released before this command returns; distinct project
-	// dirs take distinct locks and stay parallel.
-	buildUnlock, err := acquireBuildLock(gen.BuildDir)
-	if err != nil {
-		return fmt.Errorf("acquiring build lock: %w", err)
-	}
-	defer func() { _ = buildUnlock() }()
+	// No per-dir build lock here: generate writes the shared .build/ tree
+	// race-free via atomic staging (build_stage_atomic.go), and buildImage takes a
+	// PER-IMAGE lock so shared intermediates build once while leaves fan out in
+	// parallel (acquireImageBuildLock). Serializing the whole build phase would
+	// stall parallel cold builds — the long pole — which we must not do.
 	// Disposable check beds build the charly toolchain (any localpkg candy) from
 	// LOCAL in-development source; production boxes download the published
 	// release. The check-bed runner passes --dev-local-pkg (see check_bed_run.go).
@@ -366,6 +361,17 @@ func mergeAfterBuild(name string, img *ResolvedBox) {
 // push happens separately after merge in Run().
 func (c *BuildCmd) buildImage(engine, dir, name string, img *ResolvedBox, cfg *Config, platform, engineName, containerfileContent string) error {
 	tags := imageTags(name, img, cfg)
+
+	// Per-image build lock: serialize concurrent builds of THIS image across
+	// charly processes (so a shared intermediate built by many parallel beds is
+	// built COLD once — the others block here, then cache-hit), while DISTINCT
+	// images (the leaf fan-out) take distinct locks and build in parallel. Held
+	// across the privileged bootstrap + the podman build for this image only.
+	buildUnlock, lockErr := acquireImageBuildLock(filepath.Join(dir, ".build"), name)
+	if lockErr != nil {
+		return fmt.Errorf("acquiring build lock for %s: %w", name, lockErr)
+	}
+	defer func() { _ = buildUnlock() }()
 
 	// Pre-build phase for `from: builder:<name>` images: run the named
 	// kind:bootstrap builder in a privileged container, capture its

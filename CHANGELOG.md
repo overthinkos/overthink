@@ -22,6 +22,72 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-16 — fix(preempt): correct concurrent shared-GPU arbitration — serialized flip + process-liveness lease reconciliation (`v2026.167.1853`)
+
+Two coupled fixes so multiple `requires_shared: [nvidia-gpu]` beds (e.g. comfyui +
+jupyter-ml) BUILD and RUN concurrently while only the brief GPU driver flip is
+gated — never the pods themselves.
+
+**1. Serialize the flip (the `driver=unbound` race).** A 16-way fan-out surfaced
+`check-cachyos-comfyui-pod` failing instantly at acquisition:
+`switch-to-nvidia FAILED: 0000:01:00.0 driver=unbound`. `ResourceArbiter`'s three
+mutating methods (`AcquireShared` / `AcquireExclusive` / `ReleaseClaimant`) ran the
+whole load-ledger → decide → GPU-driver-flip → save-ledger sequence with NO lock,
+so two claimants starting together both began the flip — one unbound vfio-pci while
+the other was mid-bind → the device was left `driver=unbound`, the nvidia bind
+failed, and both raced the lease-ledger write. Fix: the three methods now take a
+blocking lock (the unified `acquireFileLock` primitive — filelock.go) on
+`~/.local/share/charly/preemption/.lock` around the whole acquire/release. The
+first claimant flips the card and records its lease; the second blocks, then finds
+the card already nvidia (idempotent — no re-flip) and just refcounts. No
+re-entrancy / self-deadlock: holder stop/start is in-process, nested `charly`
+subprocesses are env-guarded (`CHARLY_PREEMPT_LEASE`) before any arbiter method, and
+`reconcileStranded`/`removeLease` use `loadLedger`/`saveLedger` directly. Fifth site
+on the one flock primitive (per-bed, deploy-config, build, harness/ledger, arbiter).
+
+**2. Process-liveness lease reconciliation (the concurrent-shared CLOBBER the lock
+EXPOSED).** Serializing the flip let a live concurrent R10 run far enough to surface
+a pre-existing bug from the GPU-switch cutover: `reconcileStranded` (run at the top
+of every acquire) judged a lease "stranded" via `a.running(lz.Claim)` — "is the
+claimant POD running?". But a TRANSIENT bed lease is created at the FIRST step of
+the run, minutes BEFORE its pod is built/deployed; so the second concurrent
+claimant's `reconcileStranded` saw the first, still-building bed's lease (pod not up)
+and garbage-collected it as "claimant gone" — two shared claimants clobbered each
+other's leases (`leases=1`, never the refcount of 2). Fix: a lease's liveness is its
+OWNER, not its pod. New `leaseLive` helper keys a TRANSIENT lease on its owning
+process (the long-lived `charly check run` orchestrator) via PID + `/proc`
+start-time (a PID-reuse guard so a crashed owner whose PID was recycled still reads
+as gone — crash-recovery must not hinge on luck), and a PERSISTENT lease on
+`a.running(Claim) || ownerAlive` (the OR covers a `charly start` creator's own
+bring-up window). `leaseLive` is used by BOTH `reconcileStranded` AND
+`Status` (`charly preempt status`), so the display never disagrees with the GC
+(R3/R5 — one predicate, both surfaces). The lease records `OwnerPID`/`OwnerStart` at
+creation (outermost process only — nested subprocesses skip the arbiter). And
+`reconcileStranded` now routes its teardown through the shared `releaseLeaseEffects`
+(extracted from `ReleaseClaimant`, R3) so a genuinely crashed shared-GPU bed also
+flips the card back instead of leaving it nvidia.
+
+Follow-up (own cutover, R2 — not this change): `AcquireExclusive` unconditionally
+drops overlapping shared leases (exclusive-wins), which would yank a still-building
+shared bed's lease — by-design exclusive-wins semantics, tracked separately.
+
+Regression coverage: `TestArbiter_TransientLeaseLiveOwnerNotReconciled` (a live-owner
+transient lease whose pod is not running is NOT reconciled — fails under the old
+pod-running predicate), `TestArbiter_TransientLeaseDeadOwnerReconciled` (PID-reuse
+guard via start-time mismatch), `TestArbiter_TwoConcurrentSharedLeasesCoexist`
+(refcount=2, token nvidia).
+
+R10 (`fully tested and validated`): `go test ./...` + `go vet` PASS (incl. 3 new
+arbiter regressions); `task build:charly` fresh (`2026.167.1703`). Concurrent live
+R10 of `check-cachyos-comfyui-pod` + `check-cachyos-jupyter-ml-pod` (both
+`requires_shared: [nvidia-gpu]`, launched together from one `box/cachyos` project
+dir): BOTH rc=0, all 10 steps `ok: true` incl. the `update` fresh-rebuild gate;
+~6 min wall for BOTH (overlapped — comfyui 168s, jupyter-ml 356s, wall ≈ max not
+sum, so the pods ran concurrently); a SINGLE gated `vfio→nvidia` flip with the
+nvidia-gpu refcount peaking at TWO coexisting active shared leases (the clobber is
+gone); `driver=unbound` observations during the run: 0; post-run the card
+auto-flipped back to `vfio-pci` with no leases left.
+
 ### 2026-06-16 — feat(build): version-keyed candy staging `.build/_candy/<candy>.<version>/` + `charly clean` retention (`v2026.167.1703`)
 
 Replaces the single shared `.build/_layers/<candy>/` staging dir with a

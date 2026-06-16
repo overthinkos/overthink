@@ -61,13 +61,22 @@ type preemptedHolder struct {
 // shared (a refcounted pod claim; many coexist on one token).
 type preemptLease struct {
 	Claimant  string            `yaml:"claimant" json:"claimant"`
-	Claim     holderAddr        `yaml:"claim" json:"claim"` // probe whether the claimant is still alive (reconcile)
+	Claim     holderAddr        `yaml:"claim" json:"claim"` // the claimant DEPLOYMENT addr (persistent-lease liveness; see leaseLive)
 	Tokens    []string          `yaml:"tokens" json:"tokens"`
 	Shared    bool              `yaml:"shared,omitempty" json:"shared,omitempty"` // true = refcounted SHARED claim (pods); false = EXCLUSIVE (VM)
 	Mode      string            `yaml:"mode,omitempty" json:"mode,omitempty"`     // driver MODE this claim needs: "nvidia" (shared) | "vfio" (exclusive); "" = legacy/none
 	Transient bool              `yaml:"transient" json:"transient"`               // check-bed claims auto-release; persistent claims (vm create/start) don't
 	Preempted []preemptedHolder `yaml:"preempted" json:"preempted"`               // holders/pods THIS claim stopped + must restore on release
 	Created   string            `yaml:"created" json:"created"`                   // RFC3339 UTC
+	// OwnerPID/OwnerStart identify the OUTERMOST process that created this lease —
+	// the long-lived `charly check run` orchestrator for a transient bed claim,
+	// the (short-lived) `charly start`/`charly vm create` invocation for a
+	// persistent claim. They are the liveness signal a CONCURRENT charly process's
+	// reconcile uses to tell a still-working owner from a crashed one (leaseLive);
+	// OwnerStart is the /proc start-time, a PID-REUSE guard. Set only in the
+	// outermost process (nested subprocesses skip the arbiter — envPreemptLeaseHeld).
+	OwnerPID   int    `yaml:"owner_pid,omitempty" json:"owner_pid,omitempty"`
+	OwnerStart string `yaml:"owner_start,omitempty" json:"owner_start,omitempty"`
 }
 
 type preemptLedger struct {
@@ -338,6 +347,18 @@ func (a *ResourceArbiter) saveLedger(l *preemptLedger) error {
 	return nil
 }
 
+// acquireArbiterLock serializes the whole load→decide→GPU-flip→save sequence of
+// AcquireExclusive / AcquireShared / ReleaseClaimant across concurrent charly
+// processes (the unified flock primitive — filelock.go). Without it, two
+// concurrent GPU claimants both load a ledger with no lease, both flip the
+// driver at once — the observed "switch-to-nvidia FAILED: 0000:01:00.0
+// driver=unbound" race when comfyui + another GPU bed start together — and both
+// race the lease-ledger write. Blocking: a flip is brief, and the idempotent
+// currentGPUMode check makes the second claimant a no-op once the first flipped.
+func (a *ResourceArbiter) acquireArbiterLock() (func() error, error) {
+	return acquireFileLock(filepath.Join(filepath.Dir(a.ledgerPath), ".lock"), true)
+}
+
 // AcquireExclusive gives a VM SOLE use of its required tokens: it stops every
 // running preemptible HOLDER of them AND every running SHARED-claim pod of them,
 // flips each gpu-backed token to vfio mode, and persists a crash-safe lease. The
@@ -358,6 +379,14 @@ func (a *ResourceArbiter) AcquireExclusive(claimant string, claimantNode Deploym
 	if len(tokens) == 0 {
 		return &Lease{}, nil
 	}
+
+	// Serialize the whole acquire (flip + ledger write) against concurrent GPU
+	// claimants — see acquireArbiterLock.
+	unlock, lerr := a.acquireArbiterLock()
+	if lerr != nil {
+		return nil, fmt.Errorf("acquiring resource-arbiter lock: %w", lerr)
+	}
+	defer func() { _ = unlock() }()
 
 	// Recover any holders stranded by a previously-crashed claim BEFORE
 	// reasoning about current occupancy.
@@ -422,14 +451,16 @@ func (a *ResourceArbiter) AcquireExclusive(claimant string, claimantNode Deploym
 	// isn't running" recovers them. lease.Preempted holds ONLY the holders to
 	// restore on release (operator VMs) — never the preempted shared pods.
 	lease := preemptLease{
-		Claimant:  claimant,
-		Claim:     holderAddrFor(claimant, claimantNode),
-		Tokens:    tokens,
-		Shared:    false,
-		Mode:      gpuModeVfio,
-		Transient: transient,
-		Preempted: toStop,
-		Created:   a.nowUTC(),
+		Claimant:   claimant,
+		Claim:      holderAddrFor(claimant, claimantNode),
+		Tokens:     tokens,
+		Shared:     false,
+		Mode:       gpuModeVfio,
+		Transient:  transient,
+		Preempted:  toStop,
+		Created:    a.nowUTC(),
+		OwnerPID:   os.Getpid(),
+		OwnerStart: selfProcStart(),
 	}
 	ledger.Leases = append(ledger.Leases, lease)
 	if err := a.saveLedger(ledger); err != nil {
@@ -467,6 +498,14 @@ func (a *ResourceArbiter) AcquireShared(claimant string, claimantNode Deployment
 		return &Lease{}, nil
 	}
 
+	// Serialize the whole acquire (flip + ledger write) against concurrent GPU
+	// claimants — see acquireArbiterLock.
+	unlock, lerr := a.acquireArbiterLock()
+	if lerr != nil {
+		return nil, fmt.Errorf("acquiring resource-arbiter lock: %w", lerr)
+	}
+	defer func() { _ = unlock() }()
+
 	if err := a.reconcileStranded(); err != nil {
 		return nil, err
 	}
@@ -503,14 +542,16 @@ func (a *ResourceArbiter) AcquireShared(claimant string, claimantNode Deployment
 	}
 
 	lease := preemptLease{
-		Claimant:  claimant,
-		Claim:     holderAddrFor(claimant, claimantNode),
-		Tokens:    tokens,
-		Shared:    true,
-		Mode:      gpuModeNvidia,
-		Transient: transient,
-		Preempted: toStop,
-		Created:   a.nowUTC(),
+		Claimant:   claimant,
+		Claim:      holderAddrFor(claimant, claimantNode),
+		Tokens:     tokens,
+		Shared:     true,
+		Mode:       gpuModeNvidia,
+		Transient:  transient,
+		Preempted:  toStop,
+		Created:    a.nowUTC(),
+		OwnerPID:   os.Getpid(),
+		OwnerStart: selfProcStart(),
 	}
 	ledger.Leases = append(ledger.Leases, lease)
 	if err := a.saveLedger(ledger); err != nil {
@@ -533,6 +574,14 @@ func (a *ResourceArbiter) AcquireShared(claimant string, claimantNode Deployment
 // the lease. success=false applies the per-holder restore policy: `always`
 // holders are restarted, `on-success` holders are left stopped for inspection.
 func (a *ResourceArbiter) ReleaseClaimant(claimant string, success bool) error {
+	// Serialize against concurrent acquires/releases (flip-back + ledger write) —
+	// see acquireArbiterLock.
+	unlock, lerr := a.acquireArbiterLock()
+	if lerr != nil {
+		return fmt.Errorf("acquiring resource-arbiter lock: %w", lerr)
+	}
+	defer func() { _ = unlock() }()
+
 	ledger, err := a.loadLedger()
 	if err != nil {
 		return err
@@ -555,16 +604,41 @@ func (a *ResourceArbiter) ReleaseClaimant(claimant string, success bool) error {
 	remaining = append(remaining, ledger.Leases[:idx]...)
 	remaining = append(remaining, ledger.Leases[idx+1:]...)
 
-	// Split this lease's preempted holders: restore the ones whose token is now
-	// FREE; carry forward (onto a survivor) the ones whose token is still
-	// claimed by a remaining shared lease — never restart a holder under an
-	// active claim. on-success holders on a failed claim stay stopped.
+	// Apply the teardown side-effects (restore freed holders, carry the rest onto
+	// a survivor, recompute each touched token's driver mode) — shared with
+	// reconcileStranded so an owner release and a crashed-owner GC behave identically (R3).
+	ok, err := a.releaseLeaseEffects(lease, remaining, success)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		// Partial restore → keep the lease untouched so a later reconcile /
+		// `charly preempt restore` retries; mode/ledger left unmutated. (on-success
+		// holders intentionally left stopped are a deliberate end state, not a partial.)
+		return fmt.Errorf("could not restore all holders for %q — lease retained; retry with `charly preempt restore %s`", claimant, claimant)
+	}
+
+	ledger.Leases = remaining
+	return a.saveLedger(ledger)
+}
+
+// releaseLeaseEffects applies the side-effects of removing `lease` from a ledger
+// whose post-removal state is `remaining`: restore the holders whose token is now
+// FREE, carry forward (onto a survivor) the ones whose token is still claimed by a
+// remaining lease — never restart a holder under an active claim — and recompute +
+// apply each touched token's driver mode (nvidia while a shared claim remains,
+// vfio under a surviving exclusive claim, vfio when fully free). Returns false
+// (caller must RETAIN the lease) on a PARTIAL holder restore. Shared by
+// ReleaseClaimant (owner/explicit release) and reconcileStranded (crashed-owner
+// GC) so both honor identical restore + mode semantics (R3) — in particular a
+// crashed shared-GPU bed flips the card back instead of leaving it nvidia.
+func (a *ResourceArbiter) releaseLeaseEffects(lease preemptLease, remaining []preemptLease, success bool) (bool, error) {
 	var toRestore, carry []preemptedHolder
 	for _, ph := range lease.Preempted {
 		if !success && ph.Restore == PreemptRestoreSuccess {
 			fmt.Fprintf(os.Stderr,
 				"preempt: leaving holder %q stopped (restore: on-success, claim failed) — `charly preempt restore %s` to bring it back\n",
-				ph.Addr.Name, claimant)
+				ph.Addr.Name, lease.Claimant)
 			continue
 		}
 		if tokenClaimed(remaining, ph.Holds) {
@@ -573,61 +647,127 @@ func (a *ResourceArbiter) ReleaseClaimant(claimant string, success bool) error {
 			toRestore = append(toRestore, ph)
 		}
 	}
-	allUp := a.restoreHolders(toRestore)
-
-	// Partial restore → keep the lease untouched so a later reconcile / `charly
-	// preempt restore` retries; do not mutate mode/ledger. (on-success holders
-	// intentionally left stopped are a deliberate end state, not a partial.)
-	if !allUp {
-		return fmt.Errorf("could not restore all holders for %q — lease retained; retry with `charly preempt restore %s`", claimant, claimant)
+	if !a.restoreHolders(toRestore) {
+		return false, nil
 	}
-
-	// Carry un-restored obligations onto a surviving lease so the LAST release
-	// of the token restores them.
 	if len(carry) > 0 {
 		attachPreemptedToSurvivor(remaining, carry)
 	}
-
-	// Recompute + apply the desired driver mode for every token this lease
-	// touched: nvidia while a shared claim remains, vfio under a surviving
-	// exclusive claim, vfio (default) when the token is fully free.
 	for _, tok := range lease.Tokens {
 		mode := desiredModeForToken(remaining, tok)
 		if err := a.applyMode([]string{tok}, mode); err != nil {
-			fmt.Fprintf(os.Stderr, "preempt: could not set %q to %s mode after releasing %q: %v\n", tok, mode, claimant, err)
+			fmt.Fprintf(os.Stderr, "preempt: could not set %q to %s mode after releasing %q: %v\n", tok, mode, lease.Claimant, err)
 		}
 	}
-
-	ledger.Leases = remaining
-	return a.saveLedger(ledger)
+	return true, nil
 }
 
-// reconcileStranded restores holders for any lease whose claimant is no longer
-// running (a crashed run), then drops the fully-restored leases. Conservative:
-// a lease whose claimant still appears to be running is left untouched so an
-// active claim's holder is never restarted out from under it.
+// reconcileStranded restores holders for any lease whose OWNER is gone (a crashed
+// run — leaseLive false), recomputes the freed tokens' driver mode, then drops the
+// fully-restored lease. Conservative: a lease whose owner is still alive is left
+// untouched, so a still-building bed's lease is never garbage-collected out from
+// under it by a CONCURRENT claimant's acquire (the concurrent-shared-GPU clobber
+// bug — leaseLive keys liveness on the owner PROCESS for transient beds, not on a
+// pod that does not exist until well after the lease is taken).
 func (a *ResourceArbiter) reconcileStranded() error {
 	ledger, err := a.loadLedger()
 	if err != nil {
 		return err
 	}
-	var kept []preemptLease
-	for _, lz := range ledger.Leases {
-		if a.running(lz.Claim) {
-			kept = append(kept, lz)
+	changed := false
+	for i := 0; i < len(ledger.Leases); {
+		lz := ledger.Leases[i]
+		if a.leaseLive(lz) {
+			i++
 			continue
 		}
-		if a.restoreHolders(lz.Preempted) {
-			fmt.Fprintf(os.Stderr, "preempt: reconciled stranded lease (claimant %q gone) — holders restored\n", lz.Claimant)
-			continue // fully restored → drop
+		remaining := make([]preemptLease, 0, len(ledger.Leases)-1)
+		remaining = append(remaining, ledger.Leases[:i]...)
+		remaining = append(remaining, ledger.Leases[i+1:]...)
+		ok, rerr := a.releaseLeaseEffects(lz, remaining, true)
+		if rerr != nil {
+			return rerr
 		}
-		kept = append(kept, lz) // partial restore → retry later
+		if !ok {
+			i++ // partial restore → retain, retry on a later reconcile
+			continue
+		}
+		fmt.Fprintf(os.Stderr, "preempt: reconciled stranded lease (claimant %q gone) — holders restored\n", lz.Claimant)
+		ledger.Leases = remaining
+		changed = true
 	}
-	if len(kept) != len(ledger.Leases) {
-		ledger.Leases = kept
+	if changed {
 		return a.saveLedger(ledger)
 	}
 	return nil
+}
+
+// leaseLive reports whether a lease's owner is still alive — the inverse of
+// "stranded". The owner differs by lease kind, so pod-running is NOT a universal
+// signal. A TRANSIENT lease (an check bed) is owned by the long-lived `charly
+// check run` orchestrator PROCESS, which exists from the acquire (the run's FIRST
+// step) through teardown — i.e. for the whole multi-minute build phase BEFORE its
+// pod is ever deployed; judging it by pod-running lets a concurrent claimant's
+// reconcile garbage-collect a still-building bed's lease (the observed
+// concurrent-shared-GPU clobber). A PERSISTENT lease (charly start / charly vm
+// create) is owned by the DEPLOYMENT — its creator process exits right after
+// bring-up — so deployment-running is the signal, OR-ed with owner-alive to cover
+// the creator's own bring-up window before the deployment reports running.
+func (a *ResourceArbiter) leaseLive(lz preemptLease) bool {
+	if lz.Transient {
+		return ownerAlive(lz.OwnerPID, lz.OwnerStart)
+	}
+	return a.running(lz.Claim) || ownerAlive(lz.OwnerPID, lz.OwnerStart)
+}
+
+// ownerAlive reports whether the process that created a lease (its OUTERMOST
+// orchestrator/creator) is still running, guarding against PID REUSE by matching
+// the recorded /proc start-time: a recycled PID belongs to a different process
+// with a different start-time, so a crashed owner reads as gone and its lease is
+// reconciled (crash-safety must not hinge on a PID happening not to be recycled).
+// pid<=0 (a pre-upgrade lease with no owner recorded) reads as not-alive, so such
+// a lease falls back to deployment-running / normal reconcile.
+func ownerAlive(pid int, start string) bool {
+	if pid <= 0 {
+		return false
+	}
+	st, err := procStartTime(pid)
+	if err != nil {
+		return false // /proc/<pid> gone → process dead
+	}
+	return start == "" || st == start
+}
+
+// procStartTime returns a process's kernel start-time (field 22 of
+// /proc/<pid>/stat, clock ticks since boot) — a per-process identity stable for
+// the process's life and distinct across PID reuse. Linux-specific; mirrors the
+// /proc-based liveness vmIsRunning already relies on.
+func procStartTime(pid int) (string, error) {
+	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return "", err
+	}
+	// comm (field 2) is wrapped in parens and may itself contain spaces or ')',
+	// so parse the fixed fields AFTER the last ')': field 3 (state) onward.
+	s := string(data)
+	rp := strings.LastIndexByte(s, ')')
+	if rp < 0 || rp+2 > len(s) {
+		return "", fmt.Errorf("malformed /proc/%d/stat", pid)
+	}
+	f := strings.Fields(s[rp+2:])
+	const startIdx = 19 // field 22 overall = index 19 counting from field 3 (state)
+	if len(f) <= startIdx {
+		return "", fmt.Errorf("short /proc/%d/stat", pid)
+	}
+	return f[startIdx], nil
+}
+
+// selfProcStart is the current process's start-time, stamped onto a lease so a
+// later reconcile running in ANOTHER charly process can tell a live owner from a
+// reused PID. Best-effort: "" disables only the reuse cross-check, never liveness.
+func selfProcStart() string {
+	st, _ := procStartTime(os.Getpid())
+	return st
 }
 
 // restoreHolders starts every holder that isn't currently running. Returns
@@ -679,7 +819,9 @@ func (a *ResourceArbiter) removeLease(claimant string) error {
 }
 
 // Status returns the current ledger plus the claimant names whose lease is
-// stranded (claimant no longer running). Used by `charly preempt status`.
+// stranded (its OWNER is gone — leaseLive false). Used by `charly preempt status`.
+// Uses the SAME predicate as reconcileStranded so the display never disagrees with
+// the garbage collector (a still-building bed shows active, not STRANDED).
 func (a *ResourceArbiter) Status() (*preemptLedger, []string, error) {
 	ledger, err := a.loadLedger()
 	if err != nil {
@@ -687,7 +829,7 @@ func (a *ResourceArbiter) Status() (*preemptLedger, []string, error) {
 	}
 	var stranded []string
 	for _, lz := range ledger.Leases {
-		if !a.running(lz.Claim) {
+		if !a.leaseLive(lz) {
 			stranded = append(stranded, lz.Claimant)
 		}
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -182,6 +183,107 @@ func TestArbiter_ReconcileStrandedRestores(t *testing.T) {
 	got, _, _ := a.Status()
 	if len(got.Leases) != 0 {
 		t.Fatalf("stranded lease should be pruned, got %+v", got.Leases)
+	}
+}
+
+// 5b. REGRESSION (concurrent shared-GPU clobber): a TRANSIENT lease whose OWNER
+// process is still alive is NOT reconciled even though its claimant POD is not yet
+// running (the multi-minute build phase before deploy). Before the fix,
+// reconcileStranded keyed liveness on pod-running, so a SECOND concurrent shared
+// claimant's acquire garbage-collected the first, still-building bed's lease.
+func TestArbiter_TransientLeaseLiveOwnerNotReconciled(t *testing.T) {
+	w := &fakeWorld{running: map[string]bool{"building-bed": false}} // pod not up yet
+	a := newTestArbiter(t, map[string]DeploymentNode{}, w)
+
+	led := &preemptLedger{Leases: []preemptLease{{
+		Claimant:   "building-bed",
+		Claim:      holderAddr{Name: "building-bed", Target: "pod", Base: "building-bed"},
+		Tokens:     []string{"gpu"},
+		Shared:     true,
+		Transient:  true,
+		OwnerPID:   os.Getpid(),     // this test process — alive
+		OwnerStart: selfProcStart(), // its real start-time
+		Created:    "2026-01-01T00:00:00Z",
+	}}}
+	if err := a.saveLedger(led); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if err := a.reconcileStranded(); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	got, stranded, _ := a.Status()
+	if len(got.Leases) != 1 {
+		t.Fatalf("a live-owner transient lease must NOT be reconciled (build phase), got %+v", got.Leases)
+	}
+	if len(stranded) != 0 {
+		t.Fatalf("a live-owner transient lease must not display STRANDED, got %v", stranded)
+	}
+}
+
+// 5c. A TRANSIENT lease whose OWNER is gone IS reconciled even if its pod still
+// appears to be running (an orphaned pod after the orchestrator crashed). Here the
+// PID is alive but the recorded start-time mismatches — the PID-REUSE guard — so
+// the owner reads as dead and crash-recovery restores the holder + drops the lease.
+func TestArbiter_TransientLeaseDeadOwnerReconciled(t *testing.T) {
+	w := &fakeWorld{running: map[string]bool{"h1": false, "crashed-bed": true}} // pod orphaned, still "running"
+	a := newTestArbiter(t, map[string]DeploymentNode{}, w)
+
+	led := &preemptLedger{Leases: []preemptLease{{
+		Claimant:   "crashed-bed",
+		Claim:      holderAddr{Name: "crashed-bed", Target: "pod", Base: "crashed-bed"},
+		Tokens:     []string{"gpu"},
+		Shared:     true,
+		Transient:  true,
+		OwnerPID:   os.Getpid(), // PID alive...
+		OwnerStart: "0",         // ...but start-time mismatch ⇒ PID reused ⇒ owner gone
+		Preempted: []preemptedHolder{{
+			Addr:    holderAddr{Name: "h1", Target: "pod", Base: "h1"},
+			Holds:   []string{"gpu"},
+			Restore: PreemptRestoreAlways,
+		}},
+	}}}
+	if err := a.saveLedger(led); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if err := a.reconcileStranded(); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if !w.running["h1"] {
+		t.Fatalf("a dead-owner lease's holder h1 should be restored; ops=%v", w.ops)
+	}
+	got, _, _ := a.Status()
+	if len(got.Leases) != 0 {
+		t.Fatalf("a dead-owner transient lease should be reconciled away, got %+v", got.Leases)
+	}
+}
+
+// 5d. Two concurrent SHARED claimants of one token coexist (refcount=2). The
+// second's AcquireShared runs reconcileStranded; the first's pod is not running
+// (mid-build) but its owner is alive, so its lease must survive — proving the
+// concurrent-shared-GPU path the live R10 exercises. The token flips to nvidia.
+func TestArbiter_TwoConcurrentSharedLeasesCoexist(t *testing.T) {
+	w := &fakeWorld{
+		running:   map[string]bool{}, // neither pod running yet (both mid-build)
+		resources: map[string]*ResourceDef{"gpu": {Gpu: &GpuSelector{Vendor: "0x10de"}}},
+	}
+	a := newTestArbiter(t, map[string]DeploymentNode{}, w)
+	node := DeploymentNode{Target: "pod", RequiresShared: []string{"gpu"}}
+
+	if _, err := a.AcquireShared("bed-a", node, true); err != nil {
+		t.Fatalf("acquire bed-a: %v", err)
+	}
+	if _, err := a.AcquireShared("bed-b", node, true); err != nil {
+		t.Fatalf("acquire bed-b: %v", err)
+	}
+	led, stranded, _ := a.Status()
+	if len(led.Leases) != 2 {
+		t.Fatalf("two concurrent shared claimants must hold TWO leases (refcount), got %d: %+v", len(led.Leases), led.Leases)
+	}
+	if len(stranded) != 0 {
+		t.Fatalf("neither concurrent shared lease should be STRANDED, got %v", stranded)
+	}
+	if w.modes["0x10de"] != gpuModeNvidia {
+		t.Fatalf("shared claims should leave the token in nvidia mode, got %q", w.modes["0x10de"])
 	}
 }
 

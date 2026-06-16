@@ -1,5 +1,5 @@
 candy:
-    version: 2026.144.1443
+    version: 2026.167.0603
     name: nvidia
     description: |
         NVIDIA GPU runtime — nvidia-container-toolkit (nvidia-ctk CDI) plus the driver-lib path and Vulkan ICD wiring
@@ -21,9 +21,16 @@ candy:
             package:
                 - libva-nvidia-driver
             repo:
+                # negativo17 fedora-multimedia provides the driver libs (libva-nvidia-driver)
+                # but NOT nvidia-container-toolkit; that lives ONLY in NVIDIA's own
+                # libnvidia-container repo (RDD-confirmed on fedora:43, 2026-06-16:
+                # negativo17 → "No matching packages"; NVIDIA repo → installs 1.19.1).
                 - name: fedora-multimedia
                   url: "https://negativo17.org/repos/fedora-multimedia.repo"
                   gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
+                - name: nvidia-container-toolkit
+                  url: "https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo"
+                  gpgkey: "https://nvidia.github.io/libnvidia-container/gpgkey"
     env:
         LD_LIBRARY_PATH: "/usr/lib64"
     plan:

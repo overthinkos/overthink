@@ -87,7 +87,7 @@ func acquireFileLock(path string, blocking bool) (release func() error, err erro
 // cold builds are the long pole and must never serialize. Distinct project dirs
 // (worktrees / box submodules) have distinct .build/ trees → distinct locks →
 // unaffected. Blocking. The shared .build/ STAGING (deterministic Containerfiles
-// + _layers) is made race-free by atomic writes (build_stage_atomic.go), not by
+// + _candy) is made race-free by atomic writes (build_stage_atomic.go), not by
 // this lock — so the parallel leaf builds don't collide on it either.
 func acquireImageBuildLock(buildDir, image string) (func() error, error) {
 	return acquireFileLock(filepath.Join(buildDir, ".locks", image+".lock"), true)

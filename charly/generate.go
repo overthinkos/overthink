@@ -210,7 +210,7 @@ func (g *Generator) cleanStaleBuildDirs() error {
 	for _, entry := range entries {
 		if entry.IsDir() {
 			name := entry.Name()
-			// Skip charly-managed staging dirs (_layers, _buildconfig, .locks,
+			// Skip charly-managed staging dirs (_candy, _buildconfig, .locks,
 			// transient ._*.tmp.* dirs): they are NOT images, and removing them
 			// races a concurrent build that is COPYing from / locking on them.
 			if strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".") {
@@ -255,7 +255,7 @@ func (g *Generator) Generate() error {
 		return fmt.Errorf("writing context ignore files: %w", err)
 	}
 
-	// Create symlinks for remote candies in .build/_layers/
+	// Stage remote candies into versioned .build/_candy/<name>.<version>/ dirs
 	if err := g.createRemoteCandyCopies(); err != nil {
 		return fmt.Errorf("creating remote candy symlinks: %w", err)
 	}
@@ -2358,7 +2358,8 @@ func worstStatus(a, b string) string {
 	return resolveStatus(a)
 }
 
-// createRemoteCandyCopies copies remote candy directories into .build/_layers/
+// createRemoteCandyCopies copies remote candy directories into versioned
+// .build/_candy/<name>.<version>/ dirs
 // so that Docker/Podman can access them from the build context.
 // Uses hard copies instead of symlinks because Podman doesn't follow symlinks
 // that point outside the build context.
@@ -2371,40 +2372,45 @@ func (g *Generator) createRemoteCandyCopies() error {
 		}
 	}
 	if !hasRemote {
-		// No remote candies → no image COPYs from _layers, so any stale _layers
-		// is unreferenced and harmless. Leave it: a destructive RemoveAll here
-		// would race a concurrent build in the same project dir.
+		// No remote candies → no image COPYs from _candy, so any stale _candy
+		// is unreferenced and harmless (pruned by `charly clean`). Leave it.
 		return nil
 	}
 
-	candiesDir := filepath.Join(g.BuildDir, "_layers")
-	// Populate a per-process temp dir, then ATOMICALLY install it as _layers, so a
-	// concurrent `podman build` COPYing from _layers always sees a complete dir
-	// (the old RemoveAll+recreate raced under a parallel bed fan-out:
-	// "removing stale dir .build/_layers: directory not empty" /
-	// "COPY .build/_layers/...: no such file or directory"). Content is
-	// deterministic (cp -a of each remote candy keyed by name), so concurrent
-	// installs converge on identical bytes — podman's cache still hits.
-	if err := os.MkdirAll(g.BuildDir, 0o755); err != nil {
-		return err
-	}
-	tmpDir, err := os.MkdirTemp(g.BuildDir, "._layers.tmp.*")
-	if err != nil {
+	// Each remote candy is staged into its OWN version-keyed dir
+	// .build/_candy/<name>.<version>/ — built in a per-process temp then
+	// installed via renameat2(RENAME_EXCHANGE). Version-keying keeps DISTINCT
+	// candy versions in DISTINCT dirs, so two concurrent builds resolving a
+	// candy at different versions never clobber each other (the old shared
+	// .build/_layers/<name>/ was last-writer-wins across versions). The atomic
+	// install closes the within-version concurrent-COPY race; identical content
+	// → identical bytes → podman's cache still hits. `charly clean` prunes
+	// outdated <name>.<oldversion> dirs.
+	candyRoot := filepath.Join(g.BuildDir, "_candy")
+	if err := os.MkdirAll(candyRoot, 0o755); err != nil {
 		return err
 	}
 	for ref, layer := range g.Candies {
 		if !layer.Remote {
 			continue
 		}
-		destPath := filepath.Join(tmpDir, layer.Name)
-		cmd := exec.Command("cp", "-a", layer.Path, destPath)
+		tmp, err := os.MkdirTemp(candyRoot, "."+layer.Name+".tmp.*")
+		if err != nil {
+			return err
+		}
+		// Copy the candy's CONTENTS (trailing /.) into the temp so the versioned
+		// dir holds the files directly (the Containerfile COPYs `<dir>/ /`).
+		cmd := exec.Command("cp", "-a", layer.Path+"/.", tmp)
 		if out, err := cmd.CombinedOutput(); err != nil {
-			_ = os.RemoveAll(tmpDir)
+			_ = os.RemoveAll(tmp)
 			return fmt.Errorf("copying remote candy %s: %s: %w", ref, string(out), err)
+		}
+		if err := installDirAtomic(tmp, filepath.Join(candyRoot, candyStageDirName(layer))); err != nil {
+			return fmt.Errorf("installing remote candy %s: %w", ref, err)
 		}
 	}
 
-	return installDirAtomic(tmpDir, candiesDir)
+	return nil
 }
 
 // remoteBuildConfigCacheRoot derives the repo cache root that a remotely-included
@@ -2427,7 +2433,7 @@ func (g *Generator) remoteBuildConfigCacheRoot() string {
 // remotely-included build.yml — e.g. the init header_file) is available in the
 // build context. If the project ships the file locally (local build.yml), relPath
 // is returned unchanged. Otherwise the file is copied from the remote build-config
-// cache into .build/_buildconfig/<relPath> (gitignored, like .build/_layers/) and
+// cache into .build/_buildconfig/<relPath> (gitignored, like .build/_candy/) and
 // the build-root-relative path is returned for use as a COPY source.
 func (g *Generator) materializeBuildConfigAsset(relPath string) (string, error) {
 	if relPath == "" {
@@ -2476,7 +2482,7 @@ func (g *Generator) rewriteHeaderCopyForRemote(headerCopy string) (string, error
 // relative to the build context root (g.Dir).
 //
 // For the common case (no `directory:` override in the candy manifest), this returns
-// "candy/<candyRef>/" for local candies and ".build/_layers/<name>/" for remote
+// "candy/<candyRef>/" for local candies and ".build/_candy/<name>.<version>/" for remote
 // candies — identical to the legacy behavior.
 //
 // When the candy declares `directory:` and points SourceDir outside the default
@@ -2495,10 +2501,25 @@ func candyMapKey(layer *Candy) string {
 	return layer.Name
 }
 
+// candyStageDirName is the versioned staging subdir for a remote candy under
+// .build/_candy/ — "<name>.<version>". Keying by the candy's CalVer keeps
+// DIFFERENT versions of the same candy in DISTINCT dirs, so concurrent builds
+// resolving a candy at different versions never clobber each other (the old
+// shared .build/_layers/<name>/ was last-writer-wins across versions), and
+// `charly clean` can prune outdated versions. Candy names are dot-free
+// (lowercase-hyphenated), so the version (a dotted CalVer) parses back off the
+// FIRST dot. Cache-safe: the path changes iff the candy version changes.
+func candyStageDirName(layer *Candy) string {
+	if layer.Version == "" {
+		return layer.Name // defensive; remote candies are mandatorily versioned
+	}
+	return layer.Name + "." + layer.Version
+}
+
 func (g *Generator) candyCopySource(candyRef string) string {
 	layer := g.Candies[candyRef]
 	if layer.Remote {
-		return ".build/_layers/" + layer.Name
+		return ".build/_candy/" + candyStageDirName(layer)
 	}
 	// If SourceDir matches the default candy/<candyRef>/ location, preserve
 	// the legacy path format (cheap, avoids filepath.Rel calls on hot path).

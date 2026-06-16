@@ -22,6 +22,44 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-16 — feat(build): version-keyed candy staging `.build/_candy/<candy>.<version>/` + `charly clean` retention (`v2026.167.1703`)
+
+Replaces the single shared `.build/_layers/<candy>/` staging dir with a
+VERSION-keyed `.build/_candy/<candy>.<version>/` (the candy's CalVer). Different
+candy versions now occupy DISTINCT dirs, which fixes a crossover the atomic-swap
+(`v2026.167.1601`) alone did not: two concurrent builds in one project dir that
+resolve the SAME candy at DIFFERENT versions (e.g. divergent `@github` pins across
+boxes) previously shared `_layers/<candy>/` and got last-writer-wins — one build
+silently COPYed the wrong version. Each version keyed to its own dir makes both
+correct.
+
+Cache-neutral by construction: a candy's CalVer changes iff the candy changes, so
+the Containerfile COPY path (`.build/_candy/<name>.<version>/`) moves exactly when
+its content does — podman's content+instruction cache still hits on unchanged
+candies. Containerfile generation verified byte-identical across repeat generates.
+
+The BOX build dir stays un-versioned (`.build/{box}/`): a box's
+`EffectiveVersion` is its highest candy version, so versioning the box dir would
+change every box-level COPY path on ANY candy bump → full box rebuild
+(cache-hostile, against the build-speed goal). The box dir's own artifacts are
+atomic single-version writes (no glob, no crossover), so versioning it buys
+nothing correctness-wise. Crossover prevention lives where the bug class was: the
+candy-derived, glob-installed staging.
+
+`charly clean` now prunes outdated `.build/_candy/<candy>.<oldversion>/` dirs
+(newest `keep_images` per candy — the build-staging counterpart to image-tag
+retention) AND removes the superseded `.build/_layers/` dir (unconditional, like
+the makepkg sweep). The same prune auto-runs after `charly box build`
+(`pruneBuildCandyDirs`).
+
+R10 (`fully tested and validated`): `go test ./...` PASS incl. new
+`TestPruneBuildCandyDirs` (keep-newest-N per candy + legacy `_layers` removal +
+transient-temp skip) and the updated `TestCandyCopySource` (versioned path);
+`task build:charly` fresh; generation verified deterministic; `charly clean`
+live-verified (legacy `_layers` removed, current `_candy` kept); `check-pod` built
+end-to-end from the versioned `_candy` dirs and PASSED (`ok:true`, `steps=10`,
+0 `_candy` COPY errors, 79s).
+
 ### 2026-06-16 — fix(build): dev-localpkg staging clears stale CalVer — regression from the atomic-`.build/` cutover (`v2026.167.1638`)
 
 The atomic-`.build/` cutover (`v2026.167.1601`) dropped the per-image

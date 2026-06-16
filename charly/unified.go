@@ -2361,7 +2361,7 @@ func (uf *UnifiedFile) ProjectCandies(rootDir string) (map[string]*Candy, error)
 			// live OUTSIDE the workspace's project tree (typically in
 			// the github cache under ~/.cache/charly/repos/). Mark them as
 			// Remote so the generator's createRemoteCandyCopies stages
-			// them into .build/_layers/ and the emitted Containerfile
+			// them into .build/_candy/ and the emitted Containerfile
 			// COPY paths resolve correctly.
 			if absRoot, err := filepath.Abs(rootDir); err == nil {
 				if absCandy, err := filepath.Abs(p); err == nil {

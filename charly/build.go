@@ -185,12 +185,18 @@ func (c *BuildCmd) Run() error {
 	// defaults.keep_images (in-use images skipped; rmi without -f). Skipped for
 	// push runs. keep_images: 0 / absent disables. See `charly clean`.
 	if !c.Push {
-		if keep := resolveIntPtr(def.KeepImages, nil, keepImagesFallback); keep > 0 {
+		keep := resolveIntPtr(def.KeepImages, nil, keepImagesFallback)
+		if keep > 0 {
 			if removed, err := pruneImagesByRetention(engine, keep, false); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: image retention prune: %v\n", err)
 			} else if len(removed) > 0 {
 				fmt.Fprintf(os.Stderr, "Pruned %d old image tag(s) (keep_images=%d)\n", len(removed), keep)
 			}
+		}
+		// Build-staging retention: prune outdated .build/_candy/<candy>.<version>/
+		// dirs (+ remove the legacy _layers dir), keyed on keep_images.
+		if removed := pruneBuildCandyDirs(filepath.Join(dir, ".build"), keep, false); len(removed) > 0 {
+			fmt.Fprintf(os.Stderr, "Pruned %d build-staging dir(s) under .build/_candy\n", len(removed))
 		}
 	}
 

@@ -3,11 +3,11 @@ package main
 // build_stage_atomic.go — race-free, deterministic .build/ staging primitives.
 //
 // The .build/ tree is SHARED by every concurrent `charly box build` /
-// `charly box generate` in one project dir (the _layers staging dir + each
+// `charly box generate` in one project dir (the _candy staging dirs + each
 // image's Containerfile). To let parallel beds fan out without a per-dir build
 // lock (serializing cold builds is catastrophic for wall-clock), every shared
 // write is made ATOMIC + IDEMPOTENT instead: a concurrent reader (a podman build
-// COPYing from _layers, or reading a Containerfile) always sees a COMPLETE,
+// COPYing from _candy, or reading a Containerfile) always sees a COMPLETE,
 // deterministic artifact — never a half-removed dir (the `directory not empty` /
 // `no such file` race) or a partially-written file. Identical inputs always
 // produce identical bytes, so podman's content+instruction-keyed cache hits.

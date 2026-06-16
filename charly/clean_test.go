@@ -203,3 +203,48 @@ func assertGone(t *testing.T, p string) {
 		t.Errorf("expected %s to be gone, stat err=%v", p, err)
 	}
 }
+
+// TestPruneBuildCandyDirs covers the versioned .build/_candy/<candy>.<version>/
+// retention (keep newest N per candy) + the legacy .build/_layers/ removal.
+func TestPruneBuildCandyDirs(t *testing.T) {
+	buildDir := t.TempDir()
+	candyRoot := filepath.Join(buildDir, "_candy")
+	mk := func(rel string) {
+		if err := os.MkdirAll(filepath.Join(buildDir, rel), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Two candies with three versions each + a transient temp + a legacy _layers.
+	for _, v := range []string{"2026.167.1000", "2026.167.1100", "2026.167.1200"} {
+		mk("_candy/alpha." + v)
+		mk("_candy/beta." + v)
+	}
+	mk("_candy/.alpha.tmp.XYZ") // transient in-flight install — must be ignored
+	mk("_layers/cuda")          // legacy shared staging — must be removed
+
+	removed := pruneBuildCandyDirs(buildDir, 1, false) // keep newest 1 per candy
+
+	// Legacy _layers gone.
+	if _, err := os.Stat(filepath.Join(buildDir, "_layers")); !os.IsNotExist(err) {
+		t.Errorf("legacy _layers should be removed")
+	}
+	// Newest kept, older removed, per candy.
+	for _, c := range []string{"alpha", "beta"} {
+		if _, err := os.Stat(filepath.Join(candyRoot, c+".2026.167.1200")); err != nil {
+			t.Errorf("%s newest version should be kept: %v", c, err)
+		}
+		for _, old := range []string{"2026.167.1000", "2026.167.1100"} {
+			if _, err := os.Stat(filepath.Join(candyRoot, c+"."+old)); !os.IsNotExist(err) {
+				t.Errorf("%s.%s should be pruned", c, old)
+			}
+		}
+	}
+	// Transient temp untouched.
+	if _, err := os.Stat(filepath.Join(candyRoot, ".alpha.tmp.XYZ")); err != nil {
+		t.Errorf("transient temp dir should be ignored, not removed: %v", err)
+	}
+	// 5 removals: legacy _layers + 2 old alpha + 2 old beta.
+	if len(removed) != 5 {
+		t.Errorf("removed %d, want 5: %v", len(removed), removed)
+	}
+}

@@ -358,6 +358,52 @@ func cleanMakepkgArtifacts(projectDir string, dryRun bool) []string {
 	return removed
 }
 
+// pruneBuildCandyDirs trims .build/_candy/<candy>.<version>/ to the newest keepN
+// versions PER CANDY — the build-staging counterpart to image-tag retention, so
+// outdated candy CalVer stagings don't accumulate (candy names are dot-free, so
+// the version parses off the first dot). It also removes the LEGACY shared
+// .build/_layers/ dir (fully superseded by the versioned _candy layout) — that
+// cleanup is unconditional, like the makepkg sweep. keepN<=0 disables only the
+// per-candy retention.
+func pruneBuildCandyDirs(buildDir string, keepN int, dryRun bool) []string {
+	var removed []string
+
+	// Legacy: the pre-versioned shared staging dir is superseded; remove it.
+	legacy := filepath.Join(buildDir, "_layers")
+	if _, err := os.Stat(legacy); err == nil {
+		if dryRun {
+			removed = append(removed, legacy)
+		} else if os.RemoveAll(legacy) == nil {
+			removed = append(removed, legacy)
+		}
+	}
+
+	if keepN <= 0 {
+		return removed
+	}
+	candyRoot := filepath.Join(buildDir, "_candy")
+	entries, err := os.ReadDir(candyRoot)
+	if err != nil {
+		return removed
+	}
+	byCandy := map[string][]string{}
+	for _, e := range entries {
+		// Skip transient .<name>.tmp.* staging dirs (in-flight installs).
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		name, _, ok := strings.Cut(e.Name(), ".")
+		if !ok {
+			continue
+		}
+		byCandy[name] = append(byCandy[name], e.Name())
+	}
+	for name, dirs := range byCandy {
+		removed = append(removed, removeOldestByCalVer(candyRoot, dirs, keepN, name+".", "", dryRun)...)
+	}
+	return removed
+}
+
 // CleanCmd applies the configured retention now (the on-demand counterpart to
 // the auto-prune that runs after `charly box build` / `charly check run`), and also
 // sweeps the one-time makepkg backlog.
@@ -425,6 +471,14 @@ func (c *CleanCmd) Run() error {
 		fmt.Printf("images: %s %d tag(s) (keep_images=%d)\n", tag, len(refs), keepImages)
 		for _, r := range refs {
 			fmt.Printf("  %s\n", r)
+		}
+		// Versioned build-staging retention: prune outdated .build/_candy/
+		// <candy>.<version>/ dirs (+ remove the legacy _layers dir), paired with
+		// image-tag retention.
+		bpaths := pruneBuildCandyDirs(filepath.Join(dir, ".build"), keepImages, c.DryRun)
+		fmt.Printf("build: %s %d staging dir(s) under .build/_candy (keep_images=%d)\n", tag, len(bpaths), keepImages)
+		for _, p := range bpaths {
+			fmt.Printf("  %s\n", p)
 		}
 	}
 	if doCheck {

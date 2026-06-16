@@ -22,6 +22,28 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-16 — fix(traefik): websecure entrypoint :443 → :8443 (rootless-bindable) (`v2026.167.1231`)
+
+Surfaced by the #22 unified-readiness R10 (the `check-fedora-test-pod` bed): the
+traefik candy's `websecure` entrypoint bound the PRIVILEGED `:443`, which a
+rootless uid-1000 pod cannot bind → `listen tcp :443: bind: permission denied` →
+supervisord FATAL ("Exited too quickly"), so `traefik-service-running` was
+`false` and the API probe got `connection reset by peer`. The candy already used
+the non-privileged `:8000` for the `web` entrypoint — the `:443` websecure was an
+inconsistent oversight. Fix: `websecure.address: ":443"` → `":8443"` in
+`candy/traefik/traefik.yml` + the candy `port:` list + the description; this makes
+traefik bind cleanly in EVERY rootless pod that composes it (box/fedora,
+box/cachyos, root), and the web→websecure HTTPS redirect still works (now to
+:8443). A new `traefik-websecure-port-open` `check:` (`addr 127.0.0.1:${HOST_PORT:8443}`
+reachable) pins the entrypoint binds — it fails without the fix. R10:
+`check-fedora-test-pod` PASS (10 steps, all ok incl. check-live + the fresh
+`update`/feature-run-rebuild), 111s (was 1889s — the old run burned the full 30m
+readiness cap on the crash-loop). NOT a #22 issue: #22's readiness primitive
+faithfully surfaced this pre-existing candy bug. (The separate non-fatal
+`${HOME}`-literal in the ACME storage path — traefik does not expand env in
+static config — is a distinct latent bug, no deterministic check exercises it,
+tracked separately.)
+
 ### 2026-06-16 — feat(check): unified load-robust readiness polling — `pollUntil` replaces every fixed-timeout deadline (`v2026.167.1213`)
 
 RCA of a heavy-parallel test fan-out (6 project dirs concurrent → ~10 beds

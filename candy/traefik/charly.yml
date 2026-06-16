@@ -1,11 +1,11 @@
 candy:
-    version: 2026.144.1443
+    version: 2026.167.1240
     name: traefik
     description: |
         Reverse proxy with TLS termination, HTTP-to-HTTPS redirect, and dynamic file-provider routing
         traefik downloads the pinned v3.4.0 release binary to /usr/local/bin/traefik
         and stages a static config at /etc/traefik/traefik.yml: a web entrypoint on
-        :8000 that redirects to HTTPS, a websecure entrypoint on :443 backed by the
+        :8000 that redirects to HTTPS, a websecure entrypoint on :8443 backed by the
         letsencrypt ACME resolver, an insecure API/dashboard on :8080, and a watched
         dynamic-provider directory at /etc/traefik/dynamic. It runs as a supervisord
         service, so every install artifact and the live API are independently verifiable.
@@ -16,7 +16,7 @@ candy:
     port:
         - 8000
         - 8080
-        - 443
+        - 8443
     volume:
         - name: certs
           path: "~/.traefik/acme"
@@ -72,6 +72,12 @@ candy:
         - check: addr=127.0.0.1:${HOST_PORT:8000}
           id: traefik-web-port-open
           addr: 127.0.0.1:${HOST_PORT:8000}
+          reachable: true
+          context:
+            - runtime
+        - check: the websecure entrypoint binds on the rootless-safe :8443 port
+          id: traefik-websecure-port-open
+          addr: 127.0.0.1:${HOST_PORT:8443}
           reachable: true
           context:
             - runtime

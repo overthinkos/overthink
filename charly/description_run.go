@@ -151,6 +151,19 @@ func runUnit(ctx context.Context, r *Runner, fs flatStep, stepCtx *ScenarioConte
 		return sr
 	}
 
+	// feature-run (ADE acceptance "Run"): skip the DETERMINISTIC run:
+	// install-timeline steps (Mutates but not an agent step). The install ran
+	// at image-build; re-executing it against a built/deployed target is
+	// redundant and fails for build-context steps (e.g. `pip install /ctx/...`,
+	// where /ctx exists only during the Containerfile build). feature-run
+	// verifies via check:/agent-check: and still grades agent-run: (IsAgent,
+	// not skipped here). See /charly-check:check ADE + checkrun.go
+	// SkipDeterministicRun.
+	if r.SkipDeterministicRun && step.Mutates() && !step.IsAgent() {
+		sr.Result = CheckResult{Status: TestSkip, Message: "skipped — run: install-timeline step (feature-run verifies, does not re-install)"}
+		return sr
+	}
+
 	// Agent steps route to the grader (read-only for agent-check).
 	if step.IsAgent() {
 		if r.Grader != nil {

@@ -132,6 +132,11 @@ func (c *BoxFeatureRunCmd) Run() error {
 
 	runner := NewRunner(ImageChain(rt.RunEngine, imageRef), ResolveCheckVarsBuild(meta), RunModeBox)
 	runner.Distros = meta.Distro
+	// ADE acceptance: verify the built image; do NOT re-run the build-time
+	// install (run:) steps — they provisioned the image during the Containerfile
+	// build and reference build-only context (/ctx) absent from the disposable
+	// feature-run container.
+	runner.SkipDeterministicRun = true
 	// Build scope: no live target to probe, so no grader — prose-only steps
 	// stay advisory (skip, or fail under --strict).
 	results := RunPlan(context.Background(), runner, meta.Description, filter, c.Strict)
@@ -215,6 +220,10 @@ func (c *CheckFeatureRunCmd) Run() error {
 	}
 
 	runner := NewRunner(ContainerChain(engine, containerName), resolver, RunModeLive)
+	// ADE acceptance: verify the deployed result via check:/agent-check: and
+	// grade agent-run:; do NOT re-run the build-time install (run:) steps —
+	// they already provisioned the image and reference build-only context.
+	runner.SkipDeterministicRun = true
 	runner.Box = c.Box
 	runner.Instance = c.Instance
 	runner.Distros = meta.Distro

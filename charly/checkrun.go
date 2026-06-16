@@ -127,6 +127,17 @@ type Runner struct {
 	// False (the default) runs every step in order (provision-and-verify).
 	VerifyOnly bool
 
+	// SkipDeterministicRun, when true, SKIPS deterministic run: (install-
+	// timeline) steps while still running check:/agent-check: and the
+	// agent-graded agent-run:. This is the `charly box/check feature run`
+	// (ADE acceptance "Run") mode: the install already happened at image-build,
+	// so re-executing run: against a built/deployed target is redundant AND
+	// fails for build-context steps (e.g. `pip install /ctx/...`, where /ctx
+	// exists only during the Containerfile build). Distinct from VerifyOnly
+	// (which also skips agent-run:); the iterate (kind:score) loop sets neither,
+	// so its runtime-context run: steps still run. See /charly-check:check ADE.
+	SkipDeterministicRun bool
+
 	// Scenario carries the per-run capture/var context when the runner is
 	// driving a plan: (from description_run.go). Nil under classical bare-Op
 	// runs — captures/${STEP_ID}/etc. stay absent and behaviour is unchanged.

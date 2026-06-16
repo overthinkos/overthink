@@ -65,6 +65,49 @@ func TestPlanUnify_VerifyOnlySkipsRun(t *testing.T) {
 	}
 }
 
+// §J.3 — feature-run's SkipDeterministicRun skips DETERMINISTIC run: install
+// steps (so build-context installs like `pip install /ctx/...` are not
+// re-executed at acceptance against a built/deployed target), while still
+// running check: and routing agent-run: to the grader path (NOT swept up as an
+// install step). Regression for #16: feature-run re-ran run: steps, so a
+// jupyter-mcp `pip install --no-deps /ctx/jupyter_mcp` step failed against the
+// live pod (/ctx exists only during image-build).
+func TestPlanUnify_SkipDeterministicRunSkipsInstall(t *testing.T) {
+	set := &LabelDescriptionSet{Candy: []LabeledDescription{{
+		Origin: "candy:x",
+		Plan: []Step{
+			{Run: "pip install /ctx/pkg", Op: Op{Command: "false"}}, // would FAIL if executed
+			{Check: "the marker resolves", Op: Op{
+				Matching: "m", Contains: ContainsList{{Op: "contains", Value: "m"}},
+			}},
+			{AgentRun: "an agent drives the UI", Op: Op{}}, // agent step, NOT a deterministic install
+		},
+	}}}
+	r := NewRunner(nil, nil, RunModeLive)
+	r.SkipDeterministicRun = true // the `charly check feature run` (ADE acceptance) mode
+	res := RunPlan(context.Background(), r, set, nil, false)
+	if len(res) != 3 {
+		t.Fatalf("want 3 step results, got %d", len(res))
+	}
+	// The deterministic run: install step is skipped (would FAIL with `false` if executed).
+	if res[0].Keyword != string(KwRun) || res[0].Result.Status != TestSkip {
+		t.Errorf("run: install step should be skipped under SkipDeterministicRun, got keyword=%q status=%v", res[0].Keyword, res[0].Result.Status)
+	}
+	if !strings.Contains(res[0].Result.Message, "install-timeline") {
+		t.Errorf("skip reason should name the install-timeline, got %q", res[0].Result.Message)
+	}
+	// The check: step still runs and passes.
+	if res[1].Keyword != string(KwCheck) || res[1].Result.Status != TestPass {
+		t.Errorf("check: step should run, got keyword=%q status=%v", res[1].Keyword, res[1].Result.Status)
+	}
+	// agent-run: is NOT skipped as a deterministic install step — it reaches the
+	// agent path (no grader bound here → advisory skip with the agent reason, not
+	// the install-timeline reason).
+	if strings.Contains(res[2].Result.Message, "install-timeline") {
+		t.Errorf("agent-run: must NOT be skipped as a deterministic install step, got %q", res[2].Result.Message)
+	}
+}
+
 // §J.3 — validation rejects a candy whose plan has no check: step (ADE gate).
 func TestPlanUnify_ValidateRejectsNoCheckStep(t *testing.T) {
 	layers := map[string]*Candy{

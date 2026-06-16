@@ -175,7 +175,7 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 	}
 
 	deployRec := &DeployRecord{
-		DeployID:   firstDeployID(plans),
+		DeployID:   resolveDeployID(plans, t.targetName()),
 		Target:     t.targetName(),
 		DeployedAt: time.Now().UTC().Format(time.RFC3339),
 	}
@@ -235,6 +235,21 @@ func firstDeployID(plans []*InstallPlan) string {
 		}
 	}
 	return ""
+}
+
+// resolveDeployID returns the plans' shared DeployID, or — when there are no
+// candy plans (a boot-only VM deploy with no add_candy:, e.g. a VM check bed
+// that only proves the guest boots) — a stable id derived from the deployment's
+// target identity. The deploy record's deploy_id must NEVER be empty: the
+// egress #DeployRecord schema requires deploy_id != "" (so an empty id
+// hard-fails the write), and an empty id also collapses the ledger filename to
+// ".json". Reuses the canonical computeDeployID hash (R3) so the fallback id is
+// deterministic and filename-safe.
+func resolveDeployID(plans []*InstallPlan, fallbackKey string) string {
+	if id := firstDeployID(plans); id != "" {
+		return id
+	}
+	return computeDeployID(fallbackKey, nil, nil)
 }
 
 // recordCandy writes the per-candy ledger entry INTO THE GUEST via

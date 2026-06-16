@@ -501,20 +501,36 @@ func renderLocalPkgImageDevInstall(s *LocalPkgInstallStep, install, imageDir, bo
 		return "", fmt.Errorf("dev-local-pkg: build produced no %s package for candy %q (glob %q)", s.Format, s.CandyName, lp.PkgGlob)
 	}
 	// Stage the built package file(s) into the per-image build context so the
-	// Containerfile COPY can reach them.
+	// Containerfile COPY can reach them. Build into a per-process temp dir and
+	// ATOMICALLY install it as the stage dir. This is load-bearing: the install
+	// step GLOBS the dir (`dnf install /tmp/charly-pkgs/*.rpm` /
+	// `pacman -U .../*.pkg.tar.zst`), so a STALE package from a prior generate
+	// (a different CalVer of the same package) must NOT linger or the glob
+	// matches two versions ("conflicting requests" / "duplicate target"). The
+	// atomic swap replaces the whole dir with ONLY the current package(s) and
+	// keeps a concurrent build's COPY race-free (no destructive in-place clean).
 	stageRel := filepath.Join("_localpkg", s.CandyName)
 	stageDir := filepath.Join(imageDir, stageRel)
-	if err := os.MkdirAll(stageDir, 0o755); err != nil {
-		return "", fmt.Errorf("dev-local-pkg: staging dir %s: %w", stageDir, err)
+	if err := os.MkdirAll(filepath.Dir(stageDir), 0o755); err != nil {
+		return "", fmt.Errorf("dev-local-pkg: staging parent %s: %w", filepath.Dir(stageDir), err)
+	}
+	tmpStage, err := os.MkdirTemp(filepath.Dir(stageDir), "."+s.CandyName+".tmp.*")
+	if err != nil {
+		return "", fmt.Errorf("dev-local-pkg: staging temp dir: %w", err)
 	}
 	for _, pf := range pkgFiles {
 		data, err := os.ReadFile(pf)
 		if err != nil {
+			_ = os.RemoveAll(tmpStage)
 			return "", fmt.Errorf("dev-local-pkg: reading built package %s: %w", pf, err)
 		}
-		if err := os.WriteFile(filepath.Join(stageDir, filepath.Base(pf)), data, 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(tmpStage, filepath.Base(pf)), data, 0o644); err != nil {
+			_ = os.RemoveAll(tmpStage)
 			return "", fmt.Errorf("dev-local-pkg: staging package %s: %w", filepath.Base(pf), err)
 		}
+	}
+	if err := installDirAtomic(tmpStage, stageDir); err != nil {
+		return "", fmt.Errorf("dev-local-pkg: installing stage dir %s: %w", stageDir, err)
 	}
 	// COPY the staged package(s) into the image stage dir, then install via the
 	// SAME dep-resolving install template the download path uses. COPY of a

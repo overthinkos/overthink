@@ -22,6 +22,35 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-16 — fix(build): dev-localpkg staging clears stale CalVer — regression from the atomic-`.build/` cutover (`v2026.167.1638`)
+
+The atomic-`.build/` cutover (`v2026.167.1601`) dropped the per-image
+`os.RemoveAll(imageDir)` at the top of `generateContainerfile` (it raced
+concurrent shared-base builds), reasoning that stale leftovers are harmless
+because the Containerfile COPYs by name. That holds for fragments/routes/inline —
+but NOT for the **dev-local-pkg charly toolchain**: `renderLocalPkgImageDevInstall`
+stages the locally-built package into `.build/<image>/_localpkg/<candy>/` and the
+Containerfile installs via a GLOB (`dnf install /tmp/charly-pkgs/*.rpm` /
+`pacman -U …/*.pkg.tar.zst`). Without the wipe, successive `task build:charly`
+runs accumulated multiple CalVer builds of the package in that dir, so the glob
+matched two versions → `cannot install both opencharly-…1518 and …1343:
+conflicting requests` (fedora) / `duplicate target` (arch) on every charly-
+toolchain image (`charly-fedora`, `githubrunner`, `charly-selftest`, `charly-arch`).
+The 5-fedora R10 of `v2026.167.1601` missed it because those beds don't install
+the charly PACKAGE via the glob; the 16-way fan-out surfaced it.
+
+Fix: `renderLocalPkgImageDevInstall` now stages into a per-process temp dir and
+installs it via `installDirAtomic` (the same `renameat2(RENAME_EXCHANGE)` swap as
+`_layers`) — the stage dir is REPLACED each generate, so only the CURRENT CalVer
+is ever present, and the swap stays race-free under concurrent builds.
+
+R10 (`fully tested and validated`): `go test ./...` + `go vet` PASS;
+`task build:charly` fresh (`2026.167.1602`); `check-charly-fedora-pod` (the exact
+bed that hit "conflicting requests") re-run all green — `ok: true`, `PASS
+(steps=10)`, the conflict gone, and exactly one package staged
+(`opencharly-2026.167.1602-1.fc43.x86_64.rpm`); run concurrently with the 16-way
+fan-out's tail (live parallel-safety demonstration).
+
 ### 2026-06-16 — fix(check): safe parallel `charly check` runs — unified flock + race-free atomic `.build/` + DAG-aware build coordination (`v2026.167.1601`)
 
 A hyper-parallel fan-out of all pod check beds (16 concurrent `charly check run`)

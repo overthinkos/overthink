@@ -196,6 +196,29 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 	}
 	res := &bedRunResult{Bed: name, CalVer: calver, OK: true}
 
+	// Local-candy resolution (the candy-ref analogue of --dev-local-pkg): a bed
+	// in a box/<distro> submodule pulls its parent repo's shared candies via
+	// `@github.com/<org>/<parent>/candy/...:<tag>` refs, which would otherwise
+	// fetch the PINNED REMOTE candy — so the bed would test STALE code, not the
+	// in-development tree (CLAUDE.md R10/RDD: a bed must verify code-under-
+	// development). Auto-point those refs at the local superproject working tree
+	// (the `:vTAG` is ignored) so EVERY bed tests the latest local candies. An
+	// explicit operator CHARLY_REPO_OVERRIDE entry for the same repo still wins
+	// (mergeRepoOverrides places it first). Scoped + restored so --all-beds and
+	// the test suite don't leak the env.
+	if pair := selfSuperprojectOverridePair("."); pair != "" {
+		old, had := os.LookupEnv(RepoOverrideEnv)
+		_ = os.Setenv(RepoOverrideEnv, mergeRepoOverrides(old, pair))
+		defer func() {
+			if had {
+				_ = os.Setenv(RepoOverrideEnv, old)
+			} else {
+				_ = os.Unsetenv(RepoOverrideEnv)
+			}
+		}()
+		fmt.Fprintf(os.Stderr, "charly check run %s: testing LOCAL candies (%s += %s)\n", name, RepoOverrideEnv, pair)
+	}
+
 	// Resource arbitration (the "preemptible" axis): if this bed claims an
 	// exclusive host resource (requires_exclusive — e.g. a passthrough GPU),
 	// gracefully stop any running preemptible holder of it BEFORE bring-up and

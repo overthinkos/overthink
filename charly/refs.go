@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -279,6 +280,50 @@ func repoOverrideDir(repoPath string) (string, bool, error) {
 		return dir, true, nil
 	}
 	return "", false, nil
+}
+
+// selfSuperprojectOverridePair returns a CHARLY_REPO_OVERRIDE pair
+// (`<repo-identity>=<superproject-dir>`) that points a bed project's OWN
+// superproject `@github` refs at the local working tree, or "" when projectDir
+// is not a git submodule of a charly superproject. A `kind: check` bed living in
+// a `box/<distro>` submodule references its parent repo's shared candies via
+// `@github.com/<org>/<parent>/candy/<name>:<tag>`; without this override the bed
+// would build the PINNED REMOTE candy and so test STALE code — the candy-ref
+// analogue of why the bed runner builds the toolchain with `--dev-local-pkg`. The
+// override IGNORES the ref's `:vTAG`, so the bed always tests the dev's current
+// tree. Returns "" when projectDir is its own root (its candies already resolve
+// from the local tree) or when git / the superproject identity is unavailable.
+func selfSuperprojectOverridePair(projectDir string) string {
+	out, err := exec.Command("git", "-C", projectDir, "rev-parse", "--show-superproject-working-tree").Output()
+	if err != nil {
+		return ""
+	}
+	superDir := strings.TrimSpace(string(out))
+	if superDir == "" {
+		return "" // not a submodule — its candies already resolve from the local tree
+	}
+	identity := rootRepoIdentity(superDir)
+	if identity == "" {
+		return ""
+	}
+	return identity + "=" + superDir
+}
+
+// mergeRepoOverrides combines an existing CHARLY_REPO_OVERRIDE value with an
+// auto-added pair. The existing (operator-set) entries are placed FIRST so an
+// explicit operator override for a repo WINS over the auto pair — repoOverrideDir
+// returns the FIRST matching entry. Either argument may be empty.
+func mergeRepoOverrides(existing, add string) string {
+	existing = strings.TrimSpace(existing)
+	add = strings.TrimSpace(add)
+	switch {
+	case existing == "":
+		return add
+	case add == "":
+		return existing
+	default:
+		return existing + "," + add
+	}
 }
 
 // autoMigratedRepos guards the remote-cache auto-migration against unbounded

@@ -119,14 +119,6 @@ func printDebugRetentionNotice(w io.Writer, name string, node DeploymentNode) {
 	}
 }
 
-// Readiness-retry bounds for a pod/vm bed's check-live step. A fresh service may
-// take time to become serviceable (Immich's first-run DB migration is the worst
-// case observed) — stepReady polls check-live until it passes or the deadline.
-const (
-	bedCheckReadyDeadline = 6 * time.Minute
-	bedCheckReadyInterval = 15 * time.Second
-)
-
 // persistBedDeployOverrides seeds the per-host charly.yml with a kind:check
 // bed's project-declared deploy-shaped fields (port / volume / env / tunnel /
 // security / network) plus its disposable/lifecycle classification, BEFORE the
@@ -283,35 +275,44 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 	// synchronization primitive, not a fixed sleep). Fast beds pass on the first
 	// attempt (zero added latency); a genuinely-broken deploy still fails after
 	// the deadline.
-	stepReady := func(stepName string, args []string, deadline, interval time.Duration, beforeRetry func()) error {
+	stepReady := func(stepName string, args []string, beforeRetry func()) error {
 		t0 := time.Now()
-		end := t0.Add(deadline)
 		var out []byte
-		var runErr error
-		for {
-			out, runErr = runCapture(exe, args)
-			if runErr == nil || time.Now().After(end) {
-				break
+		var lastErr error
+		// CAP-ONLY readiness via the unified pollUntil primitive (poll.go): each
+		// tick runs a full `charly check live` pass. The pass tally is too
+		// coarse + format-fragile to be a reliable no-progress marker (a single
+		// long migration flips zero checks), so we wait on a GENEROUS,
+		// config-sourced cap — replacing the fixed 6m magic deadline that was too
+		// short for a slow-but-progressing deploy under heavy parallel load.
+		// recoverVMIfDown folds in as the per-attempt recovery. The per-attempt
+		// context bounds a hung check-live pass (never-hang). Fast beds pass on
+		// the first tick (zero added latency); a genuinely-broken deploy fails at
+		// the cap, surfacing the LAST check-live error (not the cap sentinel).
+		cfg := loadedReadiness().WaitCapped(stepName, PollHeavy, 0)
+		pollErr := pollUntil(context.Background(), cfg, func(actx context.Context) (bool, float64, error) {
+			out, lastErr = runCaptureCtx(actx, exe, args)
+			if lastErr == nil {
+				return true, 0, nil
 			}
 			if beforeRetry != nil {
 				beforeRetry()
 			}
-			time.Sleep(interval)
-		}
-		dur := time.Since(t0)
-		ok := runErr == nil
-		res.Step = append(res.Step, stepResult{Name: stepName, Duration: dur, OK: ok})
+			return false, 0, nil
+		})
+		ok := pollErr == nil
+		res.Step = append(res.Step, stepResult{Name: stepName, Duration: time.Since(t0), OK: ok})
 		if !ok {
 			res.OK = false
 			if res.FailExitCode == 0 {
-				res.FailExitCode = exitCodeOf(runErr)
+				res.FailExitCode = exitCodeOf(lastErr)
 			}
 		}
 		logPath := filepath.Join(logDir, stepName+".log")
 		if writeErr := os.WriteFile(logPath, out, 0o644); writeErr != nil {
 			fmt.Fprintf(os.Stderr, "charly check run %s: writing %s: %v\n", name, logPath, writeErr)
 		}
-		return runErr
+		return lastErr
 	}
 
 	// recoverVMIfDown is the check-live retry recovery hook for a disposable VM
@@ -334,7 +335,7 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 		}
 		fmt.Fprintf(os.Stderr, "charly check run %s: VM bed %q unreachable mid-check — restarting disposable domain before retry\n", name, vmTemplate)
 		_ = exec.Command(exe, "vm", "start", vmTemplate).Run()
-		waitForVmSshReady(vmTemplate, 120*time.Second)
+		waitForVmSshReady(vmTemplate)
 	}
 
 	// cleanup tears the disposable bed down (suppressed by --keep). Used on
@@ -418,7 +419,7 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 		// `charly vm create` auto-starts the domain, but in-guest sshd takes
 		// 30-90s on cold boot; poll until ssh connects so deploy-add starts
 		// at a known-ready state. Best-effort: silent on timeout.
-		waitForVmSshReady(vmTemplate, 120*time.Second)
+		waitForVmSshReady(vmTemplate)
 		// Deploy the VM node's own candies AND its nested target:pod children.
 		// The VM target's Add applies the candies over SSH (incl. any kernel-driver
 		// reboot), then deploys each nested pod as a PERSISTENT in-guest quadlet via
@@ -526,7 +527,7 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 			if i > 0 {
 				label = stepLabel + "-" + ref[len(name)+1:] // childKey after "<name>."
 			}
-			if err := stepReady(label, []string{"check", "live", ref}, bedCheckReadyDeadline, bedCheckReadyInterval, recoverVMIfDown); err != nil {
+			if err := stepReady(label, []string{"check", "live", ref}, recoverVMIfDown); err != nil {
 				return err
 			}
 		}
@@ -596,7 +597,7 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 				// auto-starts on the fresh boot — no re-assert needed. Just wait
 				// for ssh; the rebuild check-live then PROVES the nested pod
 				// survived the domain recreate (the Cutover 2 persistence gate).
-				waitForVmSshReady(vmTemplate, 120*time.Second)
+				waitForVmSshReady(vmTemplate)
 			} else {
 				waitForContainerReady(name)
 				for _, childKey := range sortedNestedKeys(node.Nested) {
@@ -634,7 +635,14 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 // runCapture runs the given charly subcommand, capturing combined stdout+stderr
 // and returning the bytes plus the exec error.
 func runCapture(exe string, args []string) ([]byte, error) {
-	cmd := exec.Command(exe, args...)
+	return runCaptureCtx(context.Background(), exe, args)
+}
+
+// runCaptureCtx is the context-aware capture used by stepReady's pollUntil cond
+// so a hung `charly check live` pass is bounded by the per-attempt context (R4
+// never-hang). runCapture delegates to it (R3, one implementation).
+func runCaptureCtx(ctx context.Context, exe string, args []string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, exe, args...)
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
@@ -651,10 +659,10 @@ func runCapture(exe string, args []string) ([]byte, error) {
 // signal — so deploy-add never races a still-running first-boot pacman). vmName
 // is the kind:vm entity name. Best-effort: silent on timeout — the downstream
 // deploy-add surfaces the real error.
-func waitForVmSshReady(vmName string, timeout time.Duration) {
+func waitForVmSshReady(vmName string) {
 	gate := &SSHExecutor{Host: VmSshAlias(vmName), ConnectTimeout: 5}
 	ctx := context.Background()
-	if err := gate.WaitForSSH(ctx, int(timeout.Seconds())); err != nil {
+	if err := gate.WaitForSSH(ctx); err != nil {
 		return
 	}
 	_ = gate.WaitForCloudInit(ctx)
@@ -670,34 +678,38 @@ func waitForVmSshReady(vmName string, timeout time.Duration) {
 // host-tuned interval. Images without supervisord settle immediately. Best-effort:
 // silent on timeout (the next check-live step surfaces the real failure).
 func waitForContainerReady(bed string) {
-	const readyTimeout = 30 * time.Second
-	const readyPoll = 250 * time.Millisecond
 	containerName := "charly-" + bed
 	// supervisorStatus reports __NOSUP__ when the image has no supervisorctl, so
 	// "no supervisord" is distinguishable from "socket not up yet".
 	const supervisorStatus = `command -v supervisorctl >/dev/null 2>&1 || { echo __NOSUP__; exit 0; }; supervisorctl status 2>&1`
-	deadline := time.Now().Add(readyTimeout)
-	for time.Now().Before(deadline) {
-		if exec.Command("podman", "exec", containerName, "true").Run() != nil {
-			time.Sleep(readyPoll) // container not exec-able yet
-			continue
+	// MONOTONIC readiness via the unified pollUntil primitive (poll.go): the
+	// progress marker is the count of SETTLED children — it climbs as children
+	// reach RUNNING, so a slow startup under heavy parallel load is waited for
+	// (the no-progress watchdog resets on each new settled child); a child
+	// crash-looping back to BACKOFF drops the count below its high-water, so the
+	// watchdog correctly does NOT treat the flap as progress and the bed stalls
+	// out instead of hiding the fault. Replaces the fixed 30s deadline (the most
+	// load-fragile in the old set). Best-effort: silent on stall/cap (the next
+	// check-live step surfaces the real failure).
+	cfg := loadedReadiness().Wait("container-ready "+bed, PollLocal)
+	_ = pollUntil(context.Background(), cfg, func(actx context.Context) (bool, float64, error) {
+		if exec.CommandContext(actx, "podman", "exec", containerName, "true").Run() != nil {
+			return false, 0, nil // container not exec-able yet
 		}
-		out, _ := exec.Command("podman", "exec", containerName, "sh", "-c", supervisorStatus).CombinedOutput()
+		out, _ := exec.CommandContext(actx, "podman", "exec", containerName, "sh", "-c", supervisorStatus).CombinedOutput()
 		if bytes.Contains(out, []byte("__NOSUP__")) {
-			return // no supervisord — nothing to settle
+			return true, 0, nil // no supervisord — nothing to settle
 		}
+		settled := float64(bytes.Count(out, []byte("RUNNING")) + bytes.Count(out, []byte("STOPPED")) +
+			bytes.Count(out, []byte("EXITED")) + bytes.Count(out, []byte("FATAL")))
 		if bytes.Contains(out, []byte("STARTING")) || bytes.Contains(out, []byte("BACKOFF")) {
-			time.Sleep(readyPoll) // children still coming up
-			continue
+			return false, settled, nil // children still coming up
 		}
-		// Settle only once supervisord answered with real program-state lines
-		// (guards the brief window before its control socket is up).
-		if bytes.Contains(out, []byte("RUNNING")) || bytes.Contains(out, []byte("STOPPED")) ||
-			bytes.Contains(out, []byte("EXITED")) || bytes.Contains(out, []byte("FATAL")) {
-			return
+		if settled > 0 {
+			return true, settled, nil // supervisord answered + nothing transitional
 		}
-		time.Sleep(readyPoll) // supervisord socket not up yet
-	}
+		return false, 0, nil // supervisord control socket not up yet
+	})
 }
 
 // writeBedSummary emits a YAML summary alongside the per-step logs.

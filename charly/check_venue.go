@@ -131,20 +131,27 @@ func sshForwardEndpoint(e *SSHExecutor, port int) (*CheckEndpoint, error) {
 		_ = cmd.Wait()
 	}
 
-	// Readiness probe: the ssh -L listener binds right after authentication.
-	deadline := time.Now().Add(time.Duration(timeout+5) * time.Second)
-	for time.Now().Before(deadline) {
+	// Readiness probe (poll.go WaitCapped): the ssh -L listener binds right after
+	// authentication. CALLER cap = ConnectTimeout+5s (preserved); the 300ms dial
+	// is the per-attempt probe. FATAL fast-fail if ssh has exited (auth/forward
+	// failure) — note cmd.ProcessState is only populated after Wait (cleanup), so
+	// this remains best-effort, as before.
+	cfg := loadedReadiness().WaitCapped(fmt.Sprintf("ssh-forward %s", dest), PollLocal, time.Duration(timeout+5)*time.Second)
+	perr := pollUntil(context.Background(), cfg, func(context.Context) (bool, float64, error) {
 		if c, derr := net.DialTimeout("tcp", localAddr, 300*time.Millisecond); derr == nil {
 			_ = c.Close()
-			return &CheckEndpoint{Addr: localAddr, cleanup: cleanup}, nil
+			return true, 0, nil
 		}
 		if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
-			break // ssh died (auth/forward failure)
+			return false, 0, ErrPollFatal // ssh died (auth/forward failure)
 		}
-		time.Sleep(150 * time.Millisecond)
+		return false, 0, nil
+	})
+	if perr == nil {
+		return &CheckEndpoint{Addr: localAddr, cleanup: cleanup}, nil
 	}
 	cleanup()
-	return nil, fmt.Errorf("ssh -L forward to %s:%d did not become ready", dest, port)
+	return nil, fmt.Errorf("ssh -L forward to %s:%d did not become ready: %w", dest, port, perr)
 }
 
 // venueRun runs a shell command on the venue, streaming stdout/stderr to the

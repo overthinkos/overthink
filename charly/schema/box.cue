@@ -26,6 +26,23 @@
 	command?: string & !=""
 }
 
+// ReadinessConfig (config.go / readiness_config.go) — the `defaults.readiness:`
+// bounds for the unified pollUntil readiness primitive (poll.go). CLOSED. Every
+// field is a Go time.ParseDuration string; absent → the named fallback const in
+// poll.go. Defaults-only (reuses the BoxConfig type), but modeled here per the
+// #Box completeness invariant in this file's header. The Resolve()-time ordering
+// invariants (interval <= no_progress <= absolute_cap; poll_interval_local <=
+// stop_grace <= absolute_cap) are cross-field and stay in Go (validateOrdering).
+#Readiness: {
+	poll_interval_local?:  #Duration
+	poll_interval_remote?: #Duration
+	poll_interval_heavy?:  #Duration
+	per_attempt?:          #Duration
+	no_progress?:          #Duration
+	absolute_cap?:         #Duration
+	stop_grace?:           #Duration
+}
+
 // base and from are mutually exclusive; neither is also valid (scratch box).
 // matchN is applied via `&` (NOT embedded) so the struct literal stays CLOSED —
 // an embedded matchN silently disables closedness.
@@ -65,6 +82,7 @@
 	network?:    string & !=""
 	init?:       "supervisord" | "systemd"
 	data_image?: bool
+	readiness?:  #Readiness
 
 	jobs?:            int & >=1
 	podman_jobs?:     int & >=0 // 0 = auto (min(NCPU, cap))

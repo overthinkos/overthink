@@ -276,9 +276,6 @@ func resolveNestedNode(roots map[string]DeploymentNode, path string) *Deployment
 //
 // VMs have no OCI image labels, so no candy/box test section exists —
 // only the local deploy overlay's `tests:` list applies.
-// vmCheckReadyWaitSeconds bounds the VM check-live readiness gate's WaitForSSH
-// poll (WaitForCloudInit carries its own internal 5-minute bound).
-const vmCheckReadyWaitSeconds = 120
 
 // guestNestedCheckCmd builds the `charly check live <pod>` command that runVm runs
 // IN the guest (over SSH) to evaluate a nested-in-VM pod as a direct pod. The
@@ -352,7 +349,7 @@ func (c *CheckLiveCmd) runVm() error {
 	// latency); the VM analog of waitForContainerReady for the bed runner.
 	gate := &SSHExecutor{Host: VmSshAlias(vmName), ConnectTimeout: 5}
 	gctx := context.Background()
-	if gerr := gate.WaitForSSH(gctx, vmCheckReadyWaitSeconds); gerr != nil {
+	if gerr := gate.WaitForSSH(gctx); gerr != nil {
 		return fmt.Errorf("vm %q is not up / SSH-reachable — is the domain running? %w", vmName, gerr)
 	}
 	if gerr := gate.WaitForCloudInit(gctx); gerr != nil {

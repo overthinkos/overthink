@@ -132,6 +132,10 @@ type BoxConfig struct {
 	Network   string          `yaml:"network,omitempty" json:"network,omitempty"`       // container network mode — declaration of required/recommended mode
 	Init      string          `yaml:"init,omitempty" json:"init,omitempty"`             // explicit init system override ("supervisord", "systemd", "")
 	DataImage bool            `yaml:"data_image,omitempty" json:"data_image,omitempty"` // true = scratch-based data-only image (no runtime, no init)
+	// Readiness is the project-wide bounds for the unified pollUntil readiness
+	// primitive (poll.go). Meaningful only under `defaults:`. Optional — absent
+	// means the named fallback constants. See readiness_config.go.
+	Readiness *ReadinessConfig `yaml:"readiness,omitempty" json:"readiness,omitempty"`
 
 	// Build-speed tunables — authored under `defaults:` (project-wide build
 	// knobs, not per-image-output settings). The CLI flag / env layer wins,

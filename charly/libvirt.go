@@ -1,13 +1,13 @@
 package main
 
 import (
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	libvirt "github.com/digitalocean/go-libvirt"
 )
@@ -146,17 +146,20 @@ func InjectLibvirtXML(vmName string, snippets []string) error {
 		if err := conn.destroyDomain(dom); err != nil {
 			return fmt.Errorf("stopping VM %s: %w", vmName, err)
 		}
-		// Wait for shutoff
-		for range 10 {
-			dom, err = conn.lookupDomain(vmName)
-			if err != nil {
-				break
+		// StopGate (poll.go): wait for the domain to reach shutoff before
+		// redefining — was a brittle fixed 10×1s loop with NO real deadline that
+		// silently proceeded while still running. On stall/cap, WARN (the destroy
+		// above was already issued) rather than silently redefine a live domain.
+		cfg := loadedReadiness().StopGate("shutoff " + vmName)
+		if perr := pollUntil(context.Background(), cfg, func(context.Context) (bool, float64, error) {
+			d, lerr := conn.lookupDomain(vmName)
+			if lerr != nil {
+				return true, 0, nil // domain gone — effectively shut off
 			}
-			s, _ := conn.domainState(dom)
-			if s == libvirt.DomainShutoff {
-				break
-			}
-			time.Sleep(time.Second)
+			s, _ := conn.domainState(d)
+			return s == libvirt.DomainShutoff, 0, nil
+		}); perr != nil {
+			fmt.Fprintf(os.Stderr, "warning: VM %s did not reach shutoff within the stop grace before redefine: %v\n", vmName, perr)
 		}
 	}
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"maps"
@@ -190,8 +191,8 @@ func (a *ResourceArbiter) stopHolders(toStop []preemptedHolder, claimant string)
 		fmt.Fprintf(os.Stderr, "preempt: stopping holder %q to free %s for %q\n",
 			ph.Addr.Name, strings.Join(ph.Holds, ", "), claimant)
 		stopErr := a.stop(ph.Addr)
-		if stopErr == nil && !a.waitStopped(ph.Addr, holderStopTimeout) {
-			stopErr = fmt.Errorf("holder did not reach a stopped state within %s (resource not freed)", holderStopTimeout)
+		if stopErr == nil && !a.waitStopped(ph.Addr) {
+			stopErr = fmt.Errorf("holder %q did not reach a stopped state within the stop grace (resource not freed)", ph.Addr.Name)
 		}
 		if stopErr != nil {
 			for _, done := range toStop[:i] {
@@ -648,29 +649,17 @@ func (a *ResourceArbiter) restoreHolders(holders []preemptedHolder) bool {
 	return allUp
 }
 
-// holderStopTimeout / holderStopPoll bound the readiness poll after a graceful
-// stop. A desktop VM ACPI shutdown is usually seconds; the generous ceiling
-// covers a heavy guest while still failing a genuinely-stuck holder.
-const (
-	holderStopTimeout = 180 * time.Second
-	holderStopPoll    = 2 * time.Second
-)
-
 // waitStopped polls until the holder is no longer running (its resource is
-// released) or the timeout elapses. Returns true once stopped. A condition
-// poll, not a fixed sleep — it returns immediately when the holder is already
-// down (so the fake-backed unit tests never sleep).
-func (a *ResourceArbiter) waitStopped(addr holderAddr, timeout time.Duration) bool {
-	deadline := time.Now().Add(timeout)
-	for {
-		if !a.running(addr) {
-			return true
-		}
-		if time.Now().After(deadline) {
-			return false
-		}
-		time.Sleep(holderStopPoll)
-	}
+// released), via the unified pollUntil primitive's StopGate mode (cap-only at
+// the config StopGrace — replaces the old fixed 180s magic deadline). Returns
+// true once stopped; false if it did not stop within StopGrace (the caller then
+// force-stops). Returns immediately when the holder is already down (so the
+// fake-backed unit tests never sleep).
+func (a *ResourceArbiter) waitStopped(addr holderAddr) bool {
+	cfg := loadedReadiness().StopGate("stop " + addr.Name)
+	return pollUntil(context.Background(), cfg, func(context.Context) (bool, float64, error) {
+		return !a.running(addr), 0, nil
+	}) == nil
 }
 
 // removeLease drops a claimant's lease without restoring (rollback helper).

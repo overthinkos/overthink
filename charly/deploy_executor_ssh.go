@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // SSHExecutor implements DeployExecutor against an SSH-reachable guest.
@@ -274,27 +273,26 @@ func shellSingleQuoteSSH(s string) string {
 // attempts, slow-to-boot guests get the full polling window
 // they were always supposed to receive. Fixed during the
 // 2026-05-06 R10 follow-up.
-func (e *SSHExecutor) WaitForSSH(ctx context.Context, maxWaitSeconds int) error {
-	if maxWaitSeconds <= 0 {
-		maxWaitSeconds = 120
-	}
-	deadline := time.Now().Add(time.Duration(maxWaitSeconds) * time.Second)
-	for time.Now().Before(deadline) {
+func (e *SSHExecutor) WaitForSSH(ctx context.Context) error {
+	// BINARY/EDGE readiness (sshd refused→up) → cap-only via the unified
+	// pollUntil primitive (poll.go) at the GENEROUS config cap, replacing the
+	// old fixed 120s magic deadline that was too short for a slow-boot guest
+	// under heavy parallel load. ConnectTimeout=2 bounds each connect attempt;
+	// ServerAliveInterval/CountMax bound a connected-then-blackholed session; the
+	// per-attempt context (poll.go PerAttempt) is the final never-hang bound.
+	cfg := loadedReadiness().WaitCapped(fmt.Sprintf("ssh-ready %s:%d", e.Host, e.Port), PollRemote, 0)
+	if err := pollUntil(ctx, cfg, func(actx context.Context) (bool, float64, error) {
 		args := e.sshBaseArgs()
-		args = append(args, "-o", "BatchMode=yes", "-o", "ConnectTimeout=2", "true")
-		cmd := exec.CommandContext(ctx, "ssh", args...)
+		args = append(args, "-o", "BatchMode=yes", "-o", "ConnectTimeout=2",
+			"-o", "ServerAliveInterval=2", "-o", "ServerAliveCountMax=2", "true")
+		cmd := exec.CommandContext(actx, "ssh", args...)
 		cmd.Stdout = nil
 		cmd.Stderr = nil
-		if err := cmd.Run(); err == nil {
-			return nil
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(1 * time.Second):
-		}
+		return cmd.Run() == nil, 0, nil
+	}); err != nil {
+		return fmt.Errorf("waiting for sshd on %s:%d: %w", e.Host, e.Port, err)
 	}
-	return fmt.Errorf("timed out waiting for sshd on %s:%d after %d seconds", e.Host, e.Port, maxWaitSeconds)
+	return nil
 }
 
 // WaitForCloudInit runs `cloud-init status --wait` on the guest,
@@ -313,28 +311,34 @@ func (e *SSHExecutor) WaitForCloudInit(ctx context.Context) error {
 	// (error/degraded): we wait for cloud-init to be DONE, not necessarily OK,
 	// and a non-zero status delivered over a live connection still proves sshd
 	// is stable.
-	script := `if command -v cloud-init >/dev/null 2>&1; then cloud-init status --wait >/dev/null 2>&1 || true; fi`
-	deadline := time.Now().Add(5 * time.Minute)
-	for {
+	// POLLED non-wait status (was a blocking `cloud-init status --wait`, which
+	// could not honor a per-attempt bound): each tick runs the quick `cloud-init
+	// status` and is ready when the ssh connection SURVIVES (sshd stable after
+	// first-boot key regen) AND cloud-init is no longer "running". Cap-only at the
+	// GENEROUS config cap (poll.go), replacing the fixed 5m that was too short for
+	// a heavy first boot (GMS/Play-Store) under parallel load. A non-cloud-init
+	// guest reports "done" immediately.
+	script := `if command -v cloud-init >/dev/null 2>&1; then cloud-init status 2>/dev/null || true; else echo "status: done"; fi`
+	cfg := loadedReadiness().WaitCapped(fmt.Sprintf("cloud-init %s:%d", e.Host, e.Port), PollRemote, 0)
+	if err := pollUntil(ctx, cfg, func(actx context.Context) (bool, float64, error) {
 		var buf bytes.Buffer
 		args := e.sshBaseArgs()
-		args = append(args, "bash", "-s")
-		cmd := exec.CommandContext(ctx, "ssh", args...)
+		args = append(args, "-o", "ServerAliveInterval=2", "-o", "ServerAliveCountMax=2", "bash", "-s")
+		cmd := exec.CommandContext(actx, "ssh", args...)
 		cmd.Stdin = strings.NewReader(script)
 		cmd.Stdout = &buf
 		cmd.Stderr = &buf
-		if err := cmd.Run(); err == nil {
-			return nil
+		if cmd.Run() != nil {
+			return false, 0, nil // ssh dropped (key regen in progress) — keep polling
 		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("cloud-init wait: ssh did not stabilize within 5m")
+		if strings.Contains(buf.String(), "status: running") {
+			return false, 0, nil // cloud-init still working
 		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(3 * time.Second):
-		}
+		return true, 0, nil // ssh stable + cloud-init settled (done/error/disabled)
+	}); err != nil {
+		return fmt.Errorf("cloud-init wait on %s:%d: %w", e.Host, e.Port, err)
 	}
+	return nil
 }
 
 // sshBaseArgs builds the common ssh invocation prefix. ssh(1) reads

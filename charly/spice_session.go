@@ -13,6 +13,7 @@ package main
 // CLI can read back.
 
 import (
+	"context"
 	"fmt"
 	"image"
 	"net"
@@ -183,24 +184,24 @@ func (s *SpiceSession) Inputs() *spice.ChInputs {
 // delivered. Useful to let screenshots wait for the first render
 // after connect.
 func (s *SpiceSession) WaitForDisplay(timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if s.Display() != nil {
-			return nil
-		}
-		time.Sleep(100 * time.Millisecond)
+	// CALLER cap (poll.go WaitCapped, NoProgress disabled): the caller's timeout
+	// is a per-call contract (a screenshot waits a few seconds), preserved exactly.
+	cfg := loadedReadiness().WaitCapped("spice-display", PollLocal, timeout)
+	if err := pollUntil(context.Background(), cfg, func(context.Context) (bool, float64, error) {
+		return s.Display() != nil, 0, nil
+	}); err != nil {
+		return fmt.Errorf("no display frame within %s: %w", timeout, err)
 	}
-	return fmt.Errorf("no display frame within %s", timeout)
+	return nil
 }
 
 // WaitForInputs blocks until the inputs channel is ready.
 func (s *SpiceSession) WaitForInputs(timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if s.Inputs() != nil {
-			return nil
-		}
-		time.Sleep(100 * time.Millisecond)
+	cfg := loadedReadiness().WaitCapped("spice-inputs", PollLocal, timeout)
+	if err := pollUntil(context.Background(), cfg, func(context.Context) (bool, float64, error) {
+		return s.Inputs() != nil, 0, nil
+	}); err != nil {
+		return fmt.Errorf("inputs channel not ready within %s: %w", timeout, err)
 	}
-	return fmt.Errorf("inputs channel not ready within %s", timeout)
+	return nil
 }

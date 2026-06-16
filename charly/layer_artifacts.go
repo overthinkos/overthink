@@ -154,28 +154,31 @@ func waitForArtifactPath(
 	if opts.DryRun {
 		return nil
 	}
-	deadline := time.Now().Add(maxWait)
-	var lastErr error
-	for {
-		_, err := exec.GetFile(ctx, path, true /*asRoot*/, opts)
-		if err == nil {
-			return nil
+	// AUTHOR/CALLER cap (poll.go WaitCapped, NoProgress disabled): maxWait is a
+	// per-artifact contract, preserved EXACTLY (not load-robustified). FATAL on a
+	// non-missing-file error (auth/network/permission won't self-heal); keep
+	// waiting on missing-file. Per-attempt context bounds a hung GetFile.
+	cfg := loadedReadiness().WaitCapped("artifact "+path, PollRemote, maxWait)
+	var fatalErr, lastErr error
+	pErr := pollUntil(ctx, cfg, func(actx context.Context) (bool, float64, error) {
+		_, gerr := exec.GetFile(actx, path, true /*asRoot*/, opts)
+		if gerr == nil {
+			return true, 0, nil
 		}
-		// Distinguish missing-file (keep waiting) from other errors
-		// (fail fast — auth/network/permission won't fix itself).
-		if !isMissingFile(err) {
-			return err
+		if !isMissingFile(gerr) {
+			fatalErr = gerr
+			return false, 0, ErrPollFatal // fail fast
 		}
-		lastErr = err
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timeout after %s waiting for %s: %w", maxWait, path, lastErr)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(1 * time.Second):
-		}
+		lastErr = gerr
+		return false, 0, nil // missing — keep waiting
+	})
+	if fatalErr != nil {
+		return fatalErr
 	}
+	if pErr != nil {
+		return fmt.Errorf("timeout after %s waiting for %s: %w", maxWait, path, lastErr)
+	}
+	return nil
 }
 
 // expandArtifactVars resolves ${deploy_name}, ${layer_name}, ${HOME},

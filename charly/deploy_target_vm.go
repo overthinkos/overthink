@@ -113,7 +113,7 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 	//    timeout is a ceiling, not a floor.
 	if sshExec, ok := t.Exec.(*SSHExecutor); ok {
 		fmt.Fprintf(os.Stderr, "Waiting for sshd on %s:%d...\n", sshExec.Host, sshExec.Port)
-		if err := sshExec.WaitForSSH(ctx, 300); err != nil {
+		if err := sshExec.WaitForSSH(ctx); err != nil {
 			return fmt.Errorf("VmDeployTarget: wait-for-sshd: %w", err)
 		}
 	}
@@ -558,27 +558,31 @@ func (t *VmDeployTarget) execReboot(ctx context.Context, s *RebootStep, opts Emi
 	// correctness-timing workaround.
 	_ = t.Exec.RunSystem(ctx, "(sleep 1; systemctl reboot || reboot) >/dev/null 2>&1 &\nexit 0", opts)
 
-	deadline := time.Now().Add(7 * time.Minute)
-	for time.Now().Before(deadline) {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(3 * time.Second):
-		}
-		out, _, _, err := t.Exec.RunCapture(ctx, "cat /proc/sys/kernel/random/boot_id 2>/dev/null")
-		if err != nil {
-			continue // guest still down or sshd not yet accepting
+	// BINARY/EDGE readiness (guest down→boot_id-changed) → cap-only via pollUntil
+	// (poll.go) at the GENEROUS config cap, replacing the fixed 7m a DKMS-heavy
+	// reboot under heavy parallel load could exceed. The marker is frozen "down"
+	// for the whole legitimate reboot, so a no-progress window would be a wrong
+	// (too-short) timeout — cap-only is correct here. Per-attempt context bounds
+	// a hung ssh probe.
+	cfg := loadedReadiness().WaitCapped(fmt.Sprintf("reboot vm:%s", t.VMName), PollRemote, 0)
+	if err := pollUntil(ctx, cfg, func(actx context.Context) (bool, float64, error) {
+		out, _, _, rerr := t.Exec.RunCapture(actx, "cat /proc/sys/kernel/random/boot_id 2>/dev/null")
+		if rerr != nil {
+			return false, 0, nil // guest still down or sshd not yet accepting
 		}
 		newBoot := strings.TrimSpace(out)
 		if newBoot == "" {
-			continue
+			return false, 0, nil
 		}
 		if oldBoot == "" || newBoot != oldBoot {
 			fmt.Fprintf(os.Stderr, "vm:%s reboot: guest is back up (boot_id=%s)\n", t.VMName, newBoot)
-			return nil
+			return true, 0, nil
 		}
+		return false, 0, nil // sshd back but still the pre-reboot kernel
+	}); err != nil {
+		return fmt.Errorf("vm:%s: guest did not return after reboot requested by candy %q: %w", t.VMName, s.CandyName, err)
 	}
-	return fmt.Errorf("vm:%s: guest did not return within 7m after reboot requested by candy %q", t.VMName, s.CandyName)
+	return nil
 }
 
 // execFile handles a FileStep — reads the file content from FileStep.Source

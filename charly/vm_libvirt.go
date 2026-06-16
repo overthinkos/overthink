@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -153,12 +154,8 @@ func (c *libvirtConn) destroyDomain(dom libvirt.Domain) error {
 	return c.l.DomainDestroy(dom)
 }
 
-// gracefulStopTimeout bounds the wait for an ACPI/agent shutdown before
-// gracefulStopDomain falls back to a forced destroy.
-const gracefulStopTimeout = 60 * time.Second
-
-// gracefulStopDomain requests an ACPI/agent shutdown and waits (up to
-// gracefulStopTimeout) for the domain to power off, forcing a destroy only if
+// gracefulStopDomain requests an ACPI/agent shutdown and waits (up to the
+// config StopGrace) for the domain to power off, forcing a destroy only if
 // it will not stop in time. A graceful stop lets the guest flush its
 // filesystems — notably the in-guest podman OVERLAY STORE: a forced
 // DomainDestroy of a busy guest can leave a layer's diff dir half-written, so a
@@ -174,14 +171,17 @@ func (c *libvirtConn) gracefulStopDomain(dom libvirt.Domain) {
 		_ = c.destroyDomain(dom)
 		return
 	}
-	deadline := time.Now().Add(gracefulStopTimeout)
-	for time.Now().Before(deadline) {
-		if state, err := c.domainState(dom); err != nil || state != domainStateRunning {
-			return // powered off (or domain gone)
-		}
-		time.Sleep(500 * time.Millisecond)
+	// StopGate (poll.go): wait up to the config StopGrace for the domain to
+	// power off, polling its state — replaces the fixed 60s magic deadline the
+	// census flagged as marginal under 8+ concurrent destroys (a forced destroy
+	// of a still-flushing guest can tear the in-guest podman overlay store).
+	cfg := loadedReadiness().StopGate("graceful-stop domain")
+	if err := pollUntil(context.Background(), cfg, func(context.Context) (bool, float64, error) {
+		state, serr := c.domainState(dom)
+		return serr != nil || state != domainStateRunning, 0, nil
+	}); err != nil {
+		_ = c.destroyDomain(dom) // did not power off within StopGrace — force
 	}
-	_ = c.destroyDomain(dom) // timed out — force
 }
 
 // undefineDomain removes the domain definition.

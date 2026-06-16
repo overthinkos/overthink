@@ -22,6 +22,77 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-16 — feat(check): unified load-robust readiness polling — `pollUntil` replaces every fixed-timeout deadline (`v2026.167.1213`)
+
+RCA of a heavy-parallel test fan-out (6 project dirs concurrent → ~10 beds
+failed at `check_s ≈ 363–396s`): the failures were NOT bed bugs but charly's
+own readiness waits hard-coded to a fixed `bedCheckReadyDeadline = 6m` magic
+deadline (and a scatter of sibling fixed timeouts / `time.Sleep` poll-loops).
+Under real CPU/IO contention a slow-but-PROGRESSING deploy blew the fixed 6m
+and was killed prematurely — so charly could not be driven in parallel. R4
+forbids exactly this (a magic value must be NAMED, CONFIG-SOURCED, and
+VALIDATED on load; a race is fixed with a synchronization primitive, never a
+delay). This cutover removes every such literal.
+
+ONE unified readiness primitive (`charly/poll.go`): `pollUntil(ctx, cfg, cond)`
+where `cond` returns `(ready, progress, err)`. `progress` is a MONOTONIC
+high-water marker; the no-progress watchdog aborts only after `NoProgress`
+elapses with NO new maximum (a stuck deploy dies fast; a slow-but-advancing one
+runs on), an `AbsoluteCap` is the hard never-hang ceiling, and a per-attempt
+`context.WithTimeout` bounds any single probe so one hung call can never wedge
+the loop. An `err` wrapping `ErrPollFatal` aborts immediately (auth/forward
+death). Four builders express the call-site intents: `Wait` (monotonic,
+no-progress + cap), `WaitCapped` (cap-only — for a binary ready/not-ready
+condition whose progress signal is too coarse), `WatchProgress` (no-cap
+monotonic), `StopGate` (cap-only at the stop grace). Three poll classes
+(`PollLocal`/`PollRemote`/`PollHeavy`) select the tick interval.
+
+Every bound is config-sourced + load-validated (`charly/readiness_config.go`):
+the new `defaults.readiness:` block (`poll_interval_local|remote|heavy`,
+`per_attempt`, `no_progress`, `absolute_cap`, `stop_grace`; all Go
+`time.ParseDuration` strings) resolves env (`CHARLY_READINESS_*`) > config >
+named fallback const, then validates the RESOLVED ordering (each interval ≤
+no_progress ≤ absolute_cap; poll_interval_local ≤ stop_grace ≤ absolute_cap) —
+on the post-env values, so an env override cannot smuggle in a nonsensical
+bound. Absent → the named fallback consts (`readiness*Fallback` in poll.go), so
+existing projects are unaffected. The block is modeled in the CUE schema
+(`#Readiness` in `charly/schema/box.cue`, reusing the shared `#Duration`) per
+the `#Box` completeness invariant — additive + optional, so no migration step
+and no schema-version bump.
+
+Twelve readiness/wait/stop loops across the codebase were unified onto the
+primitive — the check-bed runner (`check_bed_run.go`: `stepReady`,
+`waitForContainerReady`, `waitForVmSshReady`; the fixed `bedCheckReadyDeadline`
+/`bedCheckReadyInterval` consts deleted), VM deploy (`deploy_executor_ssh.go`
+`WaitForSSH`/`WaitForCloudInit`; `deploy_target_vm.go` reboot boot_id wait),
+the exclusive-resource arbiter (`preempt.go` `waitStopped` → `StopGate`;
+`holderStopTimeout`/`holderStopPoll` deleted), libvirt lifecycle (`libvirt.go`
+shutoff-before-redefine; `vm_libvirt.go` `gracefulStopDomain`; the
+`gracefulStopTimeout` const deleted), the guest agent (`libvirt_guest_agent.go`
+`ExecAndWait`), SPICE (`spice_session.go` `WaitForDisplay`/`WaitForInputs`),
+artifact collection (`layer_artifacts.go` `waitForArtifactPath`, FATAL on a
+non-missing-file error), the cross-deployment ssh-forward
+(`check_venue.go` `sshForwardEndpoint`), and the VM check-readiness gate
+(`check_cmd.go`). Two loops were deliberately RETAINED (documented): the
+`ProgressWatchdog` reference monitor (a distinct construct) and the
+author-spec `runWithEventually` retry (its budget is the step's own
+`eventually:`/`retry_interval:`, not a charly default).
+
+Coverage: `charly/poll_test.go` (12 tests, fake-clock: advancing / frozen /
+oscillating-crashloop / cap-only / binary-flip / fatal / transient /
+per-attempt-blocking / ctx-cancel / ready / validation / builders),
+`charly/readiness_config_test.go` (4: defaults, parse error, ordering rejected,
+valid override), and `charly/cue_box_readiness_test.go` (the `#Readiness`
+schema accepts a valid block, rejects a typo'd sub-key + a non-duration value +
+a non-struct — teeth-verified by removing the field and watching the ACCEPT
+case fail). R10: a 4-lane concurrent bed fan-out partitioned by project dir
+(recreating the contention that broke the old deadline) — `check-k3s-vm`
+(steps=6) + `check-arch-vm` (steps=13: SPICE, guest-agent, 8 libvirt-RPC
+probes, VmDeployTarget add_candy, two nested-local beds) + `check-local`
+(steps=4) all PASS on the fresh build with TWO VMs + heavy pod builds
+co-resident; the readiness primitive deployed every bed, waited, and surfaced
+real verdicts with no hang and no false-pass.
+
 ### 2026-06-16 — feat(gpu): vfio↔nvidia driver-mode switch + refcounted shared GPU claims (`v2026.167.0747`)
 
 `requires_shared:` joins `requires_exclusive:` / `preemptible:` on the

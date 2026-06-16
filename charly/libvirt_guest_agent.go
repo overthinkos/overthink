@@ -8,6 +8,7 @@ package main
 // Used by `charly check libvirt guest <verb>`.
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -316,20 +317,32 @@ func (a *GuestAgent) ExecAndWait(argv []string, capture bool, pollInterval time.
 	if maxWait <= 0 {
 		maxWait = 60 * time.Second
 	}
-	deadline := time.Now().Add(maxWait)
-	for {
-		status, err := a.ExecStatus(pid)
-		if err != nil {
-			return nil, err
+	// AUTHOR/CALLER cap (poll.go WaitCapped, NoProgress disabled): maxWait + the
+	// caller's pollInterval are the contract, preserved exactly. The bespoke
+	// deadline loop is replaced by the unified primitive (R3).
+	var result *GuestExecStatus
+	var statusErr error
+	cfg := loadedReadiness().WaitCapped(fmt.Sprintf("guest-exec pid=%d", pid), PollRemote, maxWait)
+	cfg.Interval = pollInterval
+	pErr := pollUntil(context.Background(), cfg, func(context.Context) (bool, float64, error) {
+		status, serr := a.ExecStatus(pid)
+		if serr != nil {
+			statusErr = serr
+			return false, 0, ErrPollFatal // ExecStatus error → abort now (as today)
 		}
 		if status.Exited {
-			return status, nil
+			result = status
+			return true, 0, nil
 		}
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("guest-exec pid=%d did not complete within %s", pid, maxWait)
-		}
-		time.Sleep(pollInterval)
+		return false, 0, nil
+	})
+	if statusErr != nil {
+		return nil, statusErr
 	}
+	if pErr != nil {
+		return nil, fmt.Errorf("guest-exec pid=%d did not complete within %s", pid, maxWait)
+	}
+	return result, nil
 }
 
 // FileRead reads a guest file via guest-file-open / guest-file-read /

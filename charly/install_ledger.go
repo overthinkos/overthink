@@ -27,7 +27,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"syscall"
 	"time"
 
 	"context"
@@ -75,34 +74,30 @@ func (p *LedgerPaths) Ensure() error {
 // LedgerLock is an acquired advisory lock on the ledger directory. Call
 // Release() when done. Panic-safe via defer.
 type LedgerLock struct {
-	f *os.File
+	release func() error
 }
 
-// AcquireLedgerLock opens the lock file (creating if absent) and takes
-// an exclusive flock. Blocks until the lock is available.
+// AcquireLedgerLock takes a blocking exclusive flock on the ledger lock file
+// via the shared acquireFileLock primitive (filelock.go). Blocks until the
+// lock is available.
 func AcquireLedgerLock(paths *LedgerPaths) (*LedgerLock, error) {
 	if err := paths.Ensure(); err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(paths.LockFile, os.O_RDWR|os.O_CREATE, 0644)
+	release, err := acquireFileLock(paths.LockFile, true)
 	if err != nil {
-		return nil, fmt.Errorf("ledger lock open: %w", err)
+		return nil, fmt.Errorf("ledger lock: %w", err)
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		_ = f.Close()
-		return nil, fmt.Errorf("ledger lock flock: %w", err)
-	}
-	return &LedgerLock{f: f}, nil
+	return &LedgerLock{release: release}, nil
 }
 
 // Release releases the flock and closes the file.
 func (l *LedgerLock) Release() error {
-	if l == nil || l.f == nil {
+	if l == nil || l.release == nil {
 		return nil
 	}
-	err := syscall.Flock(int(l.f.Fd()), syscall.LOCK_UN)
-	_ = l.f.Close()
-	l.f = nil
+	err := l.release()
+	l.release = nil
 	return err
 }
 

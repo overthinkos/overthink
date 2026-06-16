@@ -98,6 +98,14 @@ func (c *GenerateCmd) Run() error {
 		return err
 	}
 
+	// Serialize against any concurrent generate/build sharing this dir's
+	// .build/_layers staging tree (see acquireBuildLock).
+	buildUnlock, err := acquireBuildLock(gen.BuildDir)
+	if err != nil {
+		return fmt.Errorf("acquiring build lock: %w", err)
+	}
+	defer func() { _ = buildUnlock() }()
+
 	return gen.Generate()
 }
 

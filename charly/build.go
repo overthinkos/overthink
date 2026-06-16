@@ -131,6 +131,16 @@ func (c *BuildCmd) Run() error {
 	if err != nil {
 		return err
 	}
+	// Serialize generate+build against concurrent charly processes sharing this
+	// project dir's .build/ tree (the shared _layers staging dir races otherwise
+	// — see acquireBuildLock). Held through buildImages (the podman COPY-from-
+	// _layers steps), released before this command returns; distinct project
+	// dirs take distinct locks and stay parallel.
+	buildUnlock, err := acquireBuildLock(gen.BuildDir)
+	if err != nil {
+		return fmt.Errorf("acquiring build lock: %w", err)
+	}
+	defer func() { _ = buildUnlock() }()
 	// Disposable check beds build the charly toolchain (any localpkg candy) from
 	// LOCAL in-development source; production boxes download the published
 	// release. The check-bed runner passes --dev-local-pkg (see check_bed_run.go).

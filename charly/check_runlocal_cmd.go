@@ -18,11 +18,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 )
 
 // pinPersistentXDGRuntimeDir relocates `XDG_RUNTIME_DIR` to a persistent
@@ -280,26 +280,18 @@ func runSinglePhaseHarness(
 	return RunHarness(ctx, opts, layout)
 }
 
-// acquireHarnessLock takes an exclusive flock on the per-score lock file.
+// acquireHarnessLock takes a fail-fast exclusive flock on the per-score lock
+// file via the shared acquireFileLock primitive (filelock.go).
 func acquireHarnessLock(projectDir, score string) (func(), error) {
 	path := HarnessLockPath(projectDir, score)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, fmt.Errorf("create %s: %w", filepath.Dir(path), err)
-	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
+	release, err := acquireFileLock(path, false)
 	if err != nil {
-		return nil, fmt.Errorf("open lock %s: %w", path, err)
+		if errors.Is(err, errLockBusy) {
+			return nil, fmt.Errorf("harness: another run is in progress for score %q (lock: %s)", score, path)
+		}
+		return nil, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		_ = f.Close()
-		return nil, fmt.Errorf("harness: another run is in progress for score %q (lock: %s)", score, path)
-	}
-	_, _ = fmt.Fprintf(f, "pid=%d\n", os.Getpid())
-	return func() {
-		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-		_ = f.Close()
-		_ = os.Remove(path)
-	}, nil
+	return func() { _ = release() }, nil
 }
 
 // loadDescriptionsFromDir is retained for the (deprecated) image-baked

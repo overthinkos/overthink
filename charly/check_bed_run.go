@@ -188,6 +188,28 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 	}
 	res := &bedRunResult{Bed: name, CalVer: calver, OK: true}
 
+	// Per-bed exclusive lock — refuse a SECOND concurrent `charly check run` of
+	// the SAME bed in this project. Without it the second run's pre-run
+	// destroy-first (`charly remove <name> --purge` / `charly vm destroy` below)
+	// would wipe the first run's LIVE target mid-test, and the two would collide
+	// on the `charly-<name>` container name and the `.check/<name>/` dir. Fail-
+	// fast (non-blocking): a duplicate same-bed launch is a fan-out mistake to
+	// surface, not to silently serialize. DISTINCT beds (and distinct project
+	// dirs) take DISTINCT locks, so they still run fully in parallel — only the
+	// shared deploy-config read-modify-write (acquireDeployConfigLock) serializes
+	// them, and only briefly. Held through teardown via defer.
+	bedUnlock, bedLockErr := acquireFileLock(filepath.Join(".check", name, ".lock"), false)
+	if bedLockErr != nil {
+		res.OK = false
+		res.Step = append(res.Step, stepResult{Name: "bed-lock", OK: false})
+		writeBedSummary(logDir, res)
+		if errors.Is(bedLockErr, errLockBusy) {
+			return res, fmt.Errorf("check bed %q is already running in this project — refusing a concurrent run (lock: .check/%s/.lock)", name, name)
+		}
+		return res, fmt.Errorf("locking check bed %q: %w", name, bedLockErr)
+	}
+	defer func() { _ = bedUnlock() }()
+
 	// Local-candy resolution (the candy-ref analogue of --dev-local-pkg): a bed
 	// in a box/<distro> submodule pulls its parent repo's shared candies via
 	// `@github.com/<org>/<parent>/candy/...:<tag>` refs, which would otherwise

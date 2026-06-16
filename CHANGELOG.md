@@ -22,6 +22,64 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-16 — fix(check): one unified file-lock primitive — safe parallel `charly check` runs (`v2026.167.1516`)
+
+A hyper-parallel fan-out of all pod check beds (16 concurrent `charly check run`)
+failed, and the RCA found TWO real shared-state races (NOT a "concurrency limit"):
+
+1. **The `.build/_layers` race.** `.build/_layers` is a staging dir SHARED by
+   every image in a project dir (not per-image). Concurrent `charly box build`
+   processes in the same dir race: one's `cleanStaleBuildDirs` / `_layers`
+   repopulation removes the dir mid-COPY of the other's `podman build` — observed
+   as `removing stale dir .build/_layers: directory not empty` and
+   `COPY .build/_layers/rpmfusion/ /: no such file or directory` (`exit status
+   125`). This is the same-project-dir `.build/` race the memory note flagged as
+   "cross-image scope unverified" — now confirmed: DISTINCT images in the same
+   dir DO race on the shared `_layers`.
+2. **The deploy-config lost-update race.** `saveDeployState` / `cleanDeployEntry`
+   did an unprotected read-modify-write on the per-host deploy overlay
+   (`~/.config/charly/charly.yml`); `charly config` / `charly start` took no lock
+   at all (unlike `charly deploy add`, which already held the ledger lock). Two
+   parallel beds could load→modify→save and silently drop each other's entry —
+   the truncation class the `loadDeployConfigForWrite` docstring warns about.
+
+A separate trigger surfaced first and masked these: a YAML syntax error
+introduced into `candy/container-nesting/charly.yml` (an unquoted `command:`
+scalar containing `cut -d: -f1` — the colon-space is the YAML "mapping values
+not allowed" trigger) aborted every bed's candy scan in ~1s. Fixed by
+single-quoting; that fix lands with the container-nesting cluster-B cutover.
+
+**Fix — ONE unified flock primitive** (`charly/filelock.go`,
+`acquireFileLock(path, blocking)`), replacing the two pre-existing ad-hoc flock
+copies and serving every serialization site. `syscall.Flock` now lives in
+exactly one file. The five call sites:
+
+| Site | Lock file | Mode | Prevents |
+|---|---|---|---|
+| per-bed | `.check/<bed>/.lock` | fail-fast (`LOCK_NB`) | a 2nd `charly check run` of the SAME bed clobbering the 1st (its pre-run `charly remove --purge` / `charly vm destroy` would wipe the live target mid-test) |
+| build | `<dir>/.build/.lock` | blocking | the `_layers` race (per project dir; held across generate + the podman COPY-from-`_layers` steps) |
+| deploy-config | `~/.config/charly/charly.yml.lock` | blocking | the lost-update on the shared deploy overlay |
+| harness | `.check/<score>/.lock` | fail-fast | (migrated — `acquireHarnessLock` now delegates) |
+| ledger | `~/.config/opencharly/installed/.lock` | blocking | (migrated — `AcquireLedgerLock` now delegates) |
+
+The concurrency model the locks establish: builds in DISTINCT project dirs
+(worktrees / `box/<distro>` submodules) take distinct `.build/.lock` files and
+run fully parallel; SAME-dir builds serialize only the build phase (the shared
+`_layers`), then release before deploy/check — so a later bed's build overlaps an
+earlier bed's deploy (pipelined). The fan-out-by-project-dir model is now
+enforced by code, not left as a manual footgun.
+
+R10 (`fully tested and validated`): `go test ./...` PASS; `task build:charly`
+(binary fresh). Per-bed lock — two concurrent `charly check run check-local`: one
+ran (`rc=0`), the other failed instantly with `check bed "check-local" is already
+running in this project — refusing a concurrent run`. Config lock — survived a
+16-way concurrent run with `0` lost entries (valid YAML throughout). Build lock —
+the 5 fedora beds that previously died on the `_layers` race
+(`check-pod`, `check-cross-pod-cdp`, `check-cross-local-http`,
+`check-fedora-test-pod`, `check-jupyter-pod`) re-run concurrently from one project
+dir all PASS (`ok:true`, `steps=10` incl. the fresh-`charly update` step;
+WALLCLOCK 365s, `_layers` race signature eliminated).
+
 ### 2026-06-16 — fix(traefik): resolve `${HOME}` in the ACME storage path at build time (`v2026.167.1342`)
 
 Found during the #23 traefik rootless-bind fix: `candy/traefik/traefik.yml` set the

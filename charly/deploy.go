@@ -1909,6 +1909,14 @@ func RemoveBoxDeploy(dc *DeployConfig, boxName string) {
 // Also removes global service env vars that were injected by this image.
 // If charly.yml becomes empty after removal, the file is deleted.
 func cleanDeployEntry(boxName, instance string) {
+	// Same shared-file serialization as saveDeployState — a concurrent bed
+	// teardown must not race another writer's load→modify→save. See filelock.go.
+	unlock, lockErr := acquireDeployConfigLock()
+	if lockErr != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not lock charly.yml for clean: %v\n", lockErr)
+		return
+	}
+	defer func() { _ = unlock() }()
 	dc, err := LoadDeployConfig()
 	if err != nil || dc == nil {
 		return
@@ -2076,6 +2084,16 @@ type SaveDeployStateInput struct {
 // this scrub catches anything that slipped through (e.g., a future refactor
 // that adds a new code path writing into dc.Env). Matches plan §6.7.
 func saveDeployState(boxName, instance string, input SaveDeployStateInput) {
+	// Serialize the load→modify→save against concurrent charly processes
+	// (parallel check beds, charly config/start). Without it two writers race
+	// and silently drop each other's entry — the truncation class the
+	// loadDeployConfigForWrite docstring warns about. See filelock.go.
+	unlock, lockErr := acquireDeployConfigLock()
+	if lockErr != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not lock charly.yml for write: %v\n", lockErr)
+		return
+	}
+	defer func() { _ = unlock() }()
 	dc, err := loadDeployConfigForWrite("saveDeployState")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not save to charly.yml: %v\n", err)

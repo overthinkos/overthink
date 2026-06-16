@@ -22,6 +22,25 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-16 — fix(openclaw): gateway binds loopback + runs unconfigured (rootless-startable) (`v2026.167.1314`)
+
+Surfaced by the #22 unified-readiness R10 (the `check-openclaw-pod` bed): the
+openclaw gateway supervised service was `running=false`. RCA in a disposable
+container: the gateway exited at startup needing config (`Missing config. Run
+'openclaw setup' or set gateway.mode=local (or pass --allow-unconfigured)`), and
+with `--allow-unconfigured` it then hit a second guard — `Refusing to bind
+gateway to auto without auth` (in a container the gateway defaults to
+`bind=auto`/0.0.0.0, which it won't expose unauthenticated). But the candy's
+documented architecture is loopback-bind + socat relay (`port_relay: [18789]`),
+and the exec was MISSING the matching `--bind loopback` flag (it relied on a
+default that became `auto` in containers). Fix: the `openclaw` service exec adds
+`--allow-unconfigured --bind loopback` — loopback needs no auth, matches the
+socat relay, and lets the headless gateway start before any operator setup. The
+candy `description:` already claimed "loopback-bound gateway"; the exec now makes
+that true. R10: `check-openclaw-pod` PASS (10 steps, all ok incl. check-live +
+fresh update/feature-run-rebuild), 97s (RDD-verified the gateway reaches
+`[gateway] ready` + serves HTTP). NOT a #22 regression.
+
 ### 2026-06-16 — fix(traefik): websecure entrypoint :443 → :8443 (rootless-bindable) (`v2026.167.1231`)
 
 Surfaced by the #22 unified-readiness R10 (the `check-fedora-test-pod` bed): the

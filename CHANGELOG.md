@@ -22,6 +22,33 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-16 — fix(check): VM-target `charly check live` resolves cross-deployment peer vars (`v2026.167.1337`)
+
+Surfaced by the #22 unified-readiness R10 (the `check-cross-vm-http` bed): a VM
+SUBJECT bed whose check DRIVES a peer (a local host-driver curls the guest's
+nginx via `${PEER_ENDPOINT}`'s ssh -L forward) failed with
+`peer unreachable — unresolved cross-deployment variable(s):
+PEER_ENDPOINT:check-cross-vm-http:80`, then `check-live` retried to the 30m cap.
+RCA ruled out, in order: a VMName-from-deploy-name bug (`checkVmTarget` correctly
+returns the `vm:` field), a missing `-F` (both `SSHExecutor.sshBaseArgs` and
+`sshForwardEndpoint` rely on the `~/.ssh/config` Include), stale-VM reuse (the bed
+runner destroys the domain first), and the ssh-forward mechanism itself (an
+isolated `sshForwardEndpoint` to a fresh `charly-web-vm:80` works). Root cause:
+`CheckLiveCmd.runVm()` (the VM-target check-live path) was MISSING the
+cross-deployment peer wiring its sibling paths already had — the pod path
+(`CheckLiveCmd.Run`) and the local path (`runLocalCheck`) both set
+`runner.TargetResolver = liveTargetResolver(...)` (for the `on:` driver dispatch)
+and call `applyPeerVarsSteps(...)` (to resolve `${PEER_HOST}`/`${PEER_ENDPOINT}`)
+before `RunPlan`; `runVm` did neither, so a VM bed's peer-driven check could never
+resolve its peer vars (no prior VM bed used them, so the gap was latent). Fix:
+`runVm` now wires `TargetResolver` + `applyPeerVarsSteps` + `defer ClosePeers`
+before `RunPlan` (R3 — the same wiring the pod/local paths use). R10:
+`check-cross-vm-http` PASS (6 steps, all ok incl. check-live + fresh update), 21s
+(was 15min+ stuck retrying to the cap); the `local-driver-reaches-vm` check now
+PASSES (`exit=0`, the guest marker fetched over the resolved forward). NOT a #22
+regression — #22's readiness primitive faithfully surfaced this pre-existing
+check-live gap.
+
 ### 2026-06-16 — fix(openclaw): gateway binds loopback + runs unconfigured (rootless-startable) (`v2026.167.1314`)
 
 Surfaced by the #22 unified-readiness R10 (the `check-openclaw-pod` bed): the

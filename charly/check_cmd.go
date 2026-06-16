@@ -429,6 +429,16 @@ func (c *CheckLiveCmd) runVm() error {
 	runner.VerifyOnly = true
 	runner.Box = c.Box
 	runner.Instance = c.Instance
+	// Cross-deployment support for a VM SUBJECT (the `on:` driver dispatch +
+	// ${PEER_HOST}/${PEER_ENDPOINT} resolution) — the SAME wiring the pod
+	// (CheckLiveCmd.Run) and local (runLocalCheck) paths already do (R3). Without
+	// it, a VM bed whose check drives a peer (e.g. check-cross-vm-http: a local
+	// host-driver curls the guest via ${PEER_ENDPOINT}'s ssh -L forward) leaves
+	// ${PEER_ENDPOINT} unresolved → the check FAILS "peer unreachable". ClosePeers
+	// tears down any ssh -L forwards at run end.
+	runner.TargetResolver = liveTargetResolver(c.Instance)
+	applyPeerVarsSteps(runner, plan, c.Instance)
+	defer runner.ClosePeers()
 	results := RunPlan(context.Background(), runner, set, nil, false)
 
 	fmt.Fprintf(os.Stderr, "VM: charly-%s (ssh %s@%s:%d)\n", c.Box, user, host, port)

@@ -1,5 +1,5 @@
 candy:
-    version: 2026.167.1240
+    version: 2026.167.1315
     name: traefik
     description: |
         Reverse proxy with TLS termination, HTTP-to-HTTPS redirect, and dynamic file-provider routing
@@ -41,6 +41,11 @@ candy:
           to: /etc/traefik/traefik.yml
           mode: "0644"
           run_as: root
+        - run: resolve ${HOME} in the ACME storage path — traefik does NOT expand env vars in static config, so the literal must be substituted at build time (getent works under both create and adopt user policies)
+          command: |
+            HOME_DIR=$(getent passwd 1000 | cut -d: -f6)
+            sed -i "s#\${HOME}#${HOME_DIR}#g" /etc/traefik/traefik.yml
+          run_as: root
         - check: the traefik release binary is installed at /usr/local/bin/traefik
           file: /usr/local/bin/traefik
           exists: true
@@ -54,6 +59,12 @@ candy:
           mode: "0644"
           contains:
             - contains: "certResolver: letsencrypt"
+        - check: the ACME storage path is resolved to an absolute home, not the literal ${HOME} (traefik does not expand env in static config)
+          id: traefik-acme-storage-resolved
+          file: /etc/traefik/traefik.yml
+          contains:
+            - not_contains: "${HOME}"
+            - matches: "storage: /home/"
         - check: the watched dynamic-provider directory exists
           file: /etc/traefik/dynamic
           filetype: directory

@@ -22,6 +22,24 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-16 — fix(traefik): resolve `${HOME}` in the ACME storage path at build time (`v2026.167.1342`)
+
+Found during the #23 traefik rootless-bind fix: `candy/traefik/traefik.yml` set the
+letsencrypt `acme.storage: ${HOME}/.traefik/acme/acme.json`, but traefik does NOT
+expand environment variables in its static config — so it read the LITERAL
+`${HOME}` path and SKIPPED the ACME resolver (`unable to get ACME account: open
+${HOME}/.traefik/acme/acme.json: no such file`). A latent production bug (ACME
+could never issue certs); no deterministic check exercised it, so it rode as its
+own cutover after #23. Fix: a post-copy `run:` step resolves the placeholder at
+build time — `HOME_DIR=$(getent passwd 1000 | cut -d: -f6); sed -i
+"s#\${HOME}#${HOME_DIR}#g" /etc/traefik/traefik.yml` (the `getent` pattern works
+under both create and adopt user policies, like the sshd sudoers drop-in). A new
+`traefik-acme-storage-resolved` `check:` pins it (asserts the on-disk config has
+NO literal `${HOME}` and matches `storage: /home/`), so it fails without the fix.
+R10: `check-fedora-test-pod` PASS (10 steps, all ok incl. check-live + fresh
+update), 98s — `traefik-acme-storage-resolved` PASSES alongside the #23
+`traefik-websecure-port-open`.
+
 ### 2026-06-16 — fix(check): VM-target `charly check live` resolves cross-deployment peer vars (`v2026.167.1337`)
 
 Surfaced by the #22 unified-readiness R10 (the `check-cross-vm-http` bed): a VM

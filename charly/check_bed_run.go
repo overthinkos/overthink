@@ -219,21 +219,23 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 		fmt.Fprintf(os.Stderr, "charly check run %s: testing LOCAL candies (%s += %s)\n", name, RepoOverrideEnv, pair)
 	}
 
-	// Resource arbitration (the "preemptible" axis): if this bed claims an
-	// exclusive host resource (requires_exclusive — e.g. a passthrough GPU),
-	// gracefully stop any running preemptible holder of it BEFORE bring-up and
-	// restore it AFTER teardown. The lease is owned HERE (the outermost
+	// Resource arbitration (the "preemptible" axis): if this bed claims a host
+	// resource — EXCLUSIVE (requires_exclusive — sole use, e.g. a passthrough
+	// GPU VM) or SHARED (requires_shared — refcounted, e.g. a GPU shared across
+	// pods via CDI) — the arbiter frees/flips it BEFORE bring-up (stopping any
+	// running preemptible holder; for shared, flipping the GPU to nvidia + CDI)
+	// and restores it AFTER teardown. The lease is owned HERE (the outermost
 	// orchestrator) and CHARLY_PREEMPT_LEASE suppresses the nested `charly vm create`/
 	// `charly deploy add`/`charly vm destroy` subprocesses from touching it. The defer
 	// guarantees restore on EVERY exit path (success, failure, early return);
 	// crash-recovery beyond the defer is handled by the ledger + `charly preempt
 	// restore`. See charly/preempt.go.
-	lease, lerr := acquireExclusiveForClaimant(name, node, true)
+	lease, lerr := acquireResourceForClaimant(name, node, true)
 	if lerr != nil {
 		res.OK = false
 		res.Step = append(res.Step, stepResult{Name: "preempt-acquire", OK: false})
 		writeBedSummary(logDir, res)
-		return res, fmt.Errorf("acquiring exclusive resources for %s: %w", name, lerr)
+		return res, fmt.Errorf("acquiring resources for %s: %w", name, lerr)
 	}
 	defer func() {
 		if res.OK {

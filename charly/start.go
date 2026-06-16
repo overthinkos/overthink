@@ -35,8 +35,14 @@ func (c *StartCmd) Run() error {
 	// charly/preempt.go.
 	if dc := loadDeployConfigForRead("charly start"); dc != nil {
 		key := deployKey(c.Box, c.Instance)
-		if node, ok := dc.Deploy[key]; ok && len(node.RequiredExclusive()) > 0 {
-			if _, perr := acquireExclusiveForClaimant(key, node, false); perr != nil {
+		if node, ok := dc.Deploy[key]; ok {
+			// Resource arbitration: an EXCLUSIVE claim (sole use — a VM) preempts
+			// holders + shared pods; a SHARED claim (refcounted — a GPU shared
+			// across pods via CDI) flips the resource into shared mode (GPU ->
+			// nvidia + CDI) BEFORE device detection below, so the quadlet/run
+			// picks the GPU up. Persistent lease (released by stop/remove). See
+			// charly/preempt.go.
+			if _, perr := acquireResourceForClaimant(key, node, false); perr != nil {
 				return perr
 			}
 		}
@@ -273,7 +279,7 @@ func (c *StopCmd) Run() error {
 	c.Box, c.Instance = canonicalizeDeployArg(c.Box, c.Instance)
 	// Releasing a persistent exclusive claim restores any holder this deploy
 	// preempted (no-op if no lease / gated by an outer orchestrator).
-	defer releaseExclusiveForClaimant(deployKey(c.Box, c.Instance))
+	defer releaseResourceClaim(deployKey(c.Box, c.Instance))
 	// Resolve the image name (handle remote refs)
 	boxName := c.Box
 	ref := StripURLScheme(c.Box)

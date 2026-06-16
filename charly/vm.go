@@ -499,7 +499,7 @@ func (c *VmStopCmd) Run() error {
 	// Releasing a persistent exclusive claim on this VM restores any holder it
 	// preempted (no-op if no lease / gated by an outer orchestrator).
 	if claimant, _, ok := lookupVMClaimant(c.Box); ok {
-		releaseExclusiveForClaimant(claimant)
+		releaseResourceClaim(claimant)
 	}
 	return nil
 }
@@ -588,7 +588,7 @@ func (c *VmDestroyCmd) Run() error {
 	// holder once the claimant is gone (deferred so it runs on every exit;
 	// no-op if no lease / gated by an outer orchestrator).
 	if claimant, _, ok := lookupVMClaimant(c.Box); ok {
-		defer releaseExclusiveForClaimant(claimant)
+		defer releaseResourceClaim(claimant)
 	}
 
 	rt, err := ResolveRuntime()

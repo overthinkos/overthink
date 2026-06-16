@@ -70,6 +70,7 @@
 	ephemeral?:  #Ephemeral
 	preemptible?: #Preemptible
 	requires_exclusive?: [...(string & !="")]
+	requires_shared?: [...(string & !="")]
 
 	// nested/peer map keys carry no dots (validateDeploymentName).
 	nested?: {[=~"^[^.]+$"]: #Deploy}

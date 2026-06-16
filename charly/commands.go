@@ -121,7 +121,7 @@ func (c *RemoveCmd) Run() error {
 	c.Box, c.Instance = canonicalizeDeployArg(c.Box, c.Instance)
 	// Releasing a persistent exclusive claim restores any holder this deploy
 	// preempted (no-op if no lease / gated by an outer orchestrator).
-	defer releaseExclusiveForClaimant(deployKey(c.Box, c.Instance))
+	defer releaseResourceClaim(deployKey(c.Box, c.Instance))
 	boxName := resolveBoxName(c.Box)
 
 	// Stop tunnel before removing container (best-effort)

@@ -41,9 +41,24 @@ func ValidatePreemptibleOnNode(name string, node *DeploymentNode, errs *Validati
 			errs.Add("deploy %q: `requires_exclusive` contains an empty token", name)
 		}
 	}
+	for _, tok := range node.RequiresShared {
+		if strings.TrimSpace(tok) == "" {
+			errs.Add("deploy %q: `requires_shared` contains an empty token", name)
+		}
+	}
+	// A node claims a resource EITHER exclusively (sole use — a VM) OR shared
+	// (refcounted — pods), never both: the arbiter dispatches on whichever list
+	// is set (acquireResourceForClaimant), and the driver MODE a resource is in
+	// (vfio for exclusive, nvidia for shared) is mutually exclusive.
+	if len(node.RequiresExclusive) > 0 && len(node.RequiresShared) > 0 {
+		errs.Add("deploy %q: declares both `requires_exclusive` and `requires_shared` — a deploy claims a resource one way (sole use) or the other (shared), not both", name)
+	}
 	if node.Preemptible != nil {
 		if shared := intersect(node.Preemptible.Holds, node.RequiresExclusive); len(shared) > 0 {
 			errs.Add("deploy %q: cannot both hold and require the same exclusive token(s): %s — a holder cannot contend with itself", name, strings.Join(shared, ", "))
+		}
+		if shared := intersect(node.Preemptible.Holds, node.RequiresShared); len(shared) > 0 {
+			errs.Add("deploy %q: cannot both hold and share the same token(s): %s — a holder cannot contend with itself", name, strings.Join(shared, ", "))
 		}
 	}
 }

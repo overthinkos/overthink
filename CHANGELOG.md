@@ -22,6 +22,42 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-16 — feat(gpu): vfio↔nvidia driver-mode switch + refcounted shared GPU claims (`v2026.167.0747`)
+
+`requires_shared:` joins `requires_exclusive:` / `preemptible:` on the
+resource-arbitration axis (`DeploymentNode`): a SHARED claim — refcounted, so
+MANY claimants of one token run CONCURRENTLY — on a host-resource token. For a
+GPU-backed token the arbiter (`charly/preempt.go`) now flips the card's driver
+MODE between `vfio` (VM passthrough) and `nvidia` (host CDI, shared across
+rootless pods via `--device nvidia.com/gpu=all`); the driver mode is the real
+mutual exclusion. The first shared claim flips the display function (`01:00.0`
+only — the audio function stays vfio-pci so the vfio-pci module never
+deregisters), via `sudo` + sysfs `driver_override` (the chosen primitive:
+`driverctl` is absent on hosts here and documented to hang on a running nvidia
+driver; rootless `qemu:///session` `virsh nodedev-reattach` is Permission-denied
+writing `driver_override`), generates the CDI spec AS ROOT
+(`nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml` — `/etc/cdi` is
+root-owned, so the user-level `EnsureCDI` cannot write it; `ensureCDIRoot`
+reuses the sudo seam), and preempts any running `preemptible` vfio holder;
+subsequent shared claims refcount with no further flip. An EXCLUSIVE claim
+preempts ALL shared pods (stops them, does not auto-restart — the operator
+re-runs `charly start`, which re-acquires shared and re-flips to nvidia) and
+flips to vfio; the last shared release flips back to the vfio default + restores
+the preempted holder. New `charly vm gpu mode <vfio|nvidia>` operator verb (the
+charly-CLI way to switch, vs ad-hoc sysfs). New `charly/gpu_driver_switch.go`;
+`preempt.go` extended with shared leases + a `Mode` field + injectable
+`switchMode`/`ensureCDI`/`resources` seams; `deployNodeSharesGPU` forces the CDI
+device into a shared pod's quadlet even while the card is still vfio at config
+time; `releaseExclusiveForClaimant` renamed `releaseResourceClaim`
+(kind-agnostic). RDD-proven live on an RTX 4080 SUPER (the exact vfio→nvidia→vfio
+sysfs recipe); R10: two ollama pods shared the card CONCURRENTLY (both saw the
+GPU via CDI inside the container) and an exclusive claim preempted both + flipped
+to vfio, then released cleanly back to the vfio default. The GPU POD beds
+(comfyui / unsloth / immich-ml / jupyter-ml) gain `requires_shared: [nvidia-gpu]`
+in the bed-rationalization cutover, which then measures them; the skill-doc
+enhancement (`requires_shared` in /charly-internals:disposable,
+/charly-core:deploy, /charly-vm:vm) rides with the plugins land.
+
 ### 2026-06-15 — feat(pixi): pin pixi candy to v0.70.2 + pre-commit `[project]`→`[workspace]` (`v2026.166.1751`)
 
 The `pixi` candy now installs a PINNED pixi release: `var: PIXI_VERSION: v0.70.2` drives a

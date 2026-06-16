@@ -6,10 +6,51 @@ import (
 	"strings"
 )
 
-// VmGpuCmd groups the host-side VFIO/GPU-passthrough inspection verbs.
+// VmGpuCmd groups the host-side VFIO/GPU-passthrough inspection + mode verbs.
 type VmGpuCmd struct {
 	Status VmGpuStatusCmd `cmd:"" help:"Report host IOMMU readiness for GPU passthrough"`
 	List   VmGpuListCmd   `cmd:"" help:"List passthrough-capable GPUs and emit a ready-to-paste hostdevs block"`
+	Mode   VmGpuModeCmd   `cmd:"" help:"Show or set the GPU driver mode: vfio (VM passthrough) | nvidia (shared CDI pods)"`
+}
+
+// VmGpuModeCmd shows or sets the host GPU driver mode for a vendor-matched card.
+// This is the manual operator interface for the vfio<->nvidia switch (the
+// charly-CLI way, vs ad-hoc sysfs). The arbiter (charly/preempt.go) flips
+// automatically for requires_exclusive (vfio) / requires_shared (nvidia)
+// claims; this verb is the explicit override + inspector. It does NOT consult
+// the arbiter ledger — a manual flip while an exclusive lease is active is the
+// operator's call.
+type VmGpuModeCmd struct {
+	Mode   string `arg:"" optional:"" help:"Target mode: vfio (passthrough) | nvidia (CDI pods). Omit to SHOW the current mode."`
+	Vendor string `long:"vendor" default:"0x10de" help:"PCI vendor of the GPU to switch (default 0x10de = NVIDIA)."`
+}
+
+func (c *VmGpuModeCmd) Run() error {
+	if c.Mode != "" && c.Mode != gpuModeVfio && c.Mode != gpuModeNvidia {
+		return fmt.Errorf("invalid mode %q — want %q or %q (or omit to show the current mode)", c.Mode, gpuModeVfio, gpuModeNvidia)
+	}
+	gpu, found := selectGPUByVendor(DetectVFIO(), c.Vendor)
+	if !found {
+		return fmt.Errorf("no GPU matching vendor %s on this host — check `charly vm gpu status`", normalizePCIVendor(c.Vendor))
+	}
+	cur := currentGPUMode(gpu)
+	ids := trim0x(gpu.VendorID) + ":" + trim0x(gpu.DeviceID)
+	if c.Mode == "" {
+		fmt.Printf("%s (%s) GPU driver mode: %s\n", gpu.Addr, ids, cur)
+		return nil
+	}
+	if cur == c.Mode {
+		fmt.Printf("%s (%s) already in %s mode\n", gpu.Addr, ids, c.Mode)
+		return nil
+	}
+	if err := switchGPUDriverMode(gpu, c.Mode); err != nil {
+		return err
+	}
+	if c.Mode == gpuModeNvidia {
+		ensureCDIRoot() // /etc/cdi is root-owned — generate the CDI spec as root
+	}
+	fmt.Printf("%s (%s) switched %s -> %s\n", gpu.Addr, ids, cur, c.Mode)
+	return nil
 }
 
 // VmGpuStatusCmd reports whether the host is configured for VFIO passthrough.

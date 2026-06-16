@@ -11,9 +11,12 @@ import (
 // operations the arbiter performs, so the arbiter logic is testable without
 // real VMs/pods. Keyed by deploy name (holderAddr.Name).
 type fakeWorld struct {
-	running map[string]bool
-	ops     []string
-	stopErr map[string]bool // names whose stop() should fail
+	running   map[string]bool
+	ops       []string
+	stopErr   map[string]bool         // names whose stop() should fail
+	resources map[string]*ResourceDef // token -> ResourceDef (gpu selector drives mode flips)
+	modes     map[string]string       // vendor -> last mode flipped to (by switchMode)
+	cdiCalls  int                     // EnsureCDI invocations (nvidia-direction flips)
 }
 
 func newTestArbiter(t *testing.T, holders map[string]DeploymentNode, w *fakeWorld) *ResourceArbiter {
@@ -36,7 +39,17 @@ func newTestArbiter(t *testing.T, holders map[string]DeploymentNode, w *fakeWorl
 			w.ops = append(w.ops, "start:"+addr.Name)
 			return nil
 		},
-		nowUTC: func() string { return "2026-01-01T00:00:00Z" },
+		resources: func() map[string]*ResourceDef { return w.resources },
+		switchMode: func(vendor, mode string) error {
+			if w.modes == nil {
+				w.modes = map[string]string{}
+			}
+			w.modes[vendor] = mode
+			w.ops = append(w.ops, "mode:"+mode+":"+vendor)
+			return nil
+		},
+		ensureCDI: func() { w.cdiCalls++ },
+		nowUTC:    func() string { return "2026-01-01T00:00:00Z" },
 	}
 }
 
@@ -224,6 +237,9 @@ func TestArbiter_LedgerPersistsAcrossInstances(t *testing.T) {
 		running:    a1.running,
 		stop:       a1.stop,
 		start:      a1.start,
+		resources:  a1.resources,
+		switchMode: a1.switchMode,
+		ensureCDI:  a1.ensureCDI,
 		nowUTC:     a1.nowUTC,
 	}
 	led, _, _ := a2.Status()

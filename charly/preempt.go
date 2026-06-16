@@ -56,14 +56,17 @@ type preemptedHolder struct {
 	Restore string     `yaml:"restore" json:"restore"` // always | on-success
 }
 
-// preemptLease is one active exclusive claim.
+// preemptLease is one active resource claim — exclusive (a VM with sole use) OR
+// shared (a refcounted pod claim; many coexist on one token).
 type preemptLease struct {
 	Claimant  string            `yaml:"claimant" json:"claimant"`
 	Claim     holderAddr        `yaml:"claim" json:"claim"` // probe whether the claimant is still alive (reconcile)
 	Tokens    []string          `yaml:"tokens" json:"tokens"`
-	Transient bool              `yaml:"transient" json:"transient"` // check-bed claims auto-release; persistent claims (vm create/start) don't
-	Preempted []preemptedHolder `yaml:"preempted" json:"preempted"`
-	Created   string            `yaml:"created" json:"created"` // RFC3339 UTC
+	Shared    bool              `yaml:"shared,omitempty" json:"shared,omitempty"` // true = refcounted SHARED claim (pods); false = EXCLUSIVE (VM)
+	Mode      string            `yaml:"mode,omitempty" json:"mode,omitempty"`     // driver MODE this claim needs: "nvidia" (shared) | "vfio" (exclusive); "" = legacy/none
+	Transient bool              `yaml:"transient" json:"transient"`               // check-bed claims auto-release; persistent claims (vm create/start) don't
+	Preempted []preemptedHolder `yaml:"preempted" json:"preempted"`               // holders/pods THIS claim stopped + must restore on release
+	Created   string            `yaml:"created" json:"created"`                   // RFC3339 UTC
 }
 
 type preemptLedger struct {
@@ -107,6 +110,9 @@ type ResourceArbiter struct {
 	running    func(addr holderAddr) bool       // is this deployment running?
 	stop       func(addr holderAddr) error      // graceful stop
 	start      func(addr holderAddr) error      // start an already-configured deployment
+	resources  func() map[string]*ResourceDef   // token -> ResourceDef (gpu selector for the mode flip)
+	switchMode func(vendor, mode string) error  // flip a gpu-backed token's host driver (vfio<->nvidia)
+	ensureCDI  func()                           // (re)generate the nvidia CDI spec after a flip to nvidia
 	nowUTC     func() string
 }
 
@@ -117,8 +123,89 @@ func newResourceArbiter() *ResourceArbiter {
 		running:    holderRunning,
 		stop:       holderStop,
 		start:      holderStart,
+		resources:  gatherResources,
+		switchMode: gpuSwitchModeTolerant,
+		ensureCDI:  ensureCDIRoot,
 		nowUTC:     func() string { return time.Now().UTC().Format(time.RFC3339) },
 	}
+}
+
+// applyMode flips every gpu-backed token in `tokens` to the target driver MODE
+// (+ regenerate CDI after a flip to nvidia). Selector-less tokens are pure
+// refcounted arbitration labels — there is no device to flip, so they're
+// skipped. Idempotent at the primitive level (switchMode no-ops when already in
+// mode). This is the ONE place a claim's desired mode reaches the hardware.
+func (a *ResourceArbiter) applyMode(tokens []string, mode string) error {
+	resources := a.resources()
+	for _, tok := range tokens {
+		rdef := resources[tok]
+		if rdef == nil || rdef.Gpu == nil {
+			continue // arbitration-only token — no physical device to rebind
+		}
+		if err := a.switchMode(rdef.Gpu.Vendor, mode); err != nil {
+			return fmt.Errorf("setting resource %q to %s mode: %w", tok, mode, err)
+		}
+		if mode == gpuModeNvidia {
+			a.ensureCDI()
+		}
+	}
+	return nil
+}
+
+// holdersToStop selects the RUNNING preemptible holders whose holds intersect
+// `tokens` (excluding the claimant itself) — the VMs to gracefully stop to free
+// the resource. Shared between exclusive and shared acquisition (R3).
+func (a *ResourceArbiter) holdersToStop(tokens []string, claimant string) []preemptedHolder {
+	holders := a.gather()
+	var toStop []preemptedHolder
+	for _, name := range sortedHolderKeys(holders) {
+		if name == claimant {
+			continue
+		}
+		node := holders[name]
+		shared := intersect(node.PreemptionHolds(), tokens)
+		if len(shared) == 0 {
+			continue
+		}
+		addr := holderAddrFor(name, node)
+		if !a.running(addr) {
+			continue
+		}
+		toStop = append(toStop, preemptedHolder{
+			Addr:    addr,
+			Holds:   shared,
+			Restore: node.Preemptible.EffectiveRestore(),
+		})
+	}
+	return toStop
+}
+
+// stopHolders gracefully stops each holder and WAITS until it powers off (the
+// resource is truly released) before returning. On any stop failure it rolls
+// back — restarts what it already stopped and drops the claimant's lease — so a
+// partial preemption never strands a holder or leaves a phantom lease. Shared
+// between exclusive and shared acquisition (R3).
+func (a *ResourceArbiter) stopHolders(toStop []preemptedHolder, claimant string) error {
+	for i, ph := range toStop {
+		fmt.Fprintf(os.Stderr, "preempt: stopping holder %q to free %s for %q\n",
+			ph.Addr.Name, strings.Join(ph.Holds, ", "), claimant)
+		stopErr := a.stop(ph.Addr)
+		if stopErr == nil && !a.waitStopped(ph.Addr, holderStopTimeout) {
+			stopErr = fmt.Errorf("holder did not reach a stopped state within %s (resource not freed)", holderStopTimeout)
+		}
+		if stopErr != nil {
+			for _, done := range toStop[:i] {
+				if !a.running(done.Addr) {
+					_ = a.start(done.Addr)
+				}
+			}
+			_ = a.removeLease(claimant)
+			return fmt.Errorf("preempting holder %q: %w", ph.Addr.Name, stopErr)
+		}
+		fmt.Fprintf(os.Stderr, "preempt: holder %q stopped — %s freed for %q\n",
+			ph.Addr.Name, strings.Join(ph.Holds, ", "), claimant)
+	}
+	return nil
 }
 
 // envPreemptLeaseHeld is set by the OUTERMOST claim-bringing `charly` invocation
@@ -155,11 +242,50 @@ func acquireExclusiveForClaimant(claimant string, node DeploymentNode, transient
 	return lease, nil
 }
 
-// releaseExclusiveForClaimant releases a persistent claimant's lease on
-// teardown (charly vm stop/destroy, charly stop, charly remove). Best-effort, a no-op when
-// the claimant holds no lease, and skipped when an outer orchestrator owns the
-// lease (envPreemptLeaseHeld set — the owner will release it).
-func releaseExclusiveForClaimant(claimant string) {
+// acquireSharedForClaimant acquires (or reuses) a SHARED refcounted lease for a
+// pod/bed that declares requires_shared (e.g. a GPU shared across pods via CDI)
+// — UNLESS an outer orchestrator already owns the lease (envPreemptLeaseHeld
+// set). Mirrors acquireExclusiveForClaimant; the release path is shared
+// (releaseResourceClaim). A no-op lease when nothing shared is claimed.
+func acquireSharedForClaimant(claimant string, node DeploymentNode, transient bool) (*Lease, error) {
+	if len(node.RequiredShared()) == 0 {
+		return &Lease{}, nil
+	}
+	if os.Getenv(envPreemptLeaseHeld) != "" {
+		return &Lease{}, nil // an outer orchestrator owns the lease
+	}
+	lease, err := newResourceArbiter().AcquireShared(claimant, node, transient)
+	if err != nil {
+		return nil, err
+	}
+	if lease != nil && lease.active {
+		_ = os.Setenv(envPreemptLeaseHeld, claimant)
+	}
+	return lease, nil
+}
+
+// acquireResourceForClaimant acquires the appropriate lease for a claimant:
+// EXCLUSIVE when it declares requires_exclusive, SHARED when it declares
+// requires_shared (a node declares at most one — enforced by validation), a
+// no-op lease when it claims nothing. The single entry point for the start +
+// check-bed paths (R3), so both honor the same exclusive/shared semantics.
+func acquireResourceForClaimant(claimant string, node DeploymentNode, transient bool) (*Lease, error) {
+	if len(node.RequiredExclusive()) > 0 {
+		return acquireExclusiveForClaimant(claimant, node, transient)
+	}
+	if len(node.RequiredShared()) > 0 {
+		return acquireSharedForClaimant(claimant, node, transient)
+	}
+	return &Lease{}, nil
+}
+
+// releaseResourceClaim releases a persistent claimant's resource-arbitration
+// lease on teardown (charly vm stop/destroy, charly stop, charly remove) —
+// kind-agnostic: it releases whatever lease (SHARED or EXCLUSIVE) the claimant
+// holds, by name. Best-effort, a no-op when the claimant holds no lease, and
+// skipped when an outer orchestrator owns the lease (envPreemptLeaseHeld set —
+// the owner will release it).
+func releaseResourceClaim(claimant string) {
 	if os.Getenv(envPreemptLeaseHeld) != "" {
 		return
 	}
@@ -211,15 +337,21 @@ func (a *ResourceArbiter) saveLedger(l *preemptLedger) error {
 	return nil
 }
 
-// AcquireExclusive frees the claimant's required exclusive tokens by stopping
-// every running preemptible holder of them, persisting a crash-safe lease,
-// and returning a handle whose Release()/ReleaseFailed() restarts them.
+// AcquireExclusive gives a VM SOLE use of its required tokens: it stops every
+// running preemptible HOLDER of them AND every running SHARED-claim pod of them,
+// flips each gpu-backed token to vfio mode, and persists a crash-safe lease. The
+// returned handle's Release()/ReleaseFailed() restarts the preempted HOLDERS
+// (the operator's VM) — a preempted shared POD is NOT auto-restarted by the
+// arbiter, because a low-level restart would bring it back while the card is
+// vfio (GPU-less); instead the operator re-runs `charly start`, which re-acquires
+// shared and re-flips to nvidia. The driver MODE (vfio XOR nvidia) is the real
+// mutual exclusion, so a SHARED claim does not block an exclusive claim — it is
+// preempted by it.
 //
 // transient=true marks an check-bed-style claim (auto-released at run end);
 // false marks a persistent claim (charly vm create / charly start) released only when
-// the claimant itself is torn down.
-//
-// A claimant that requires nothing exclusive gets a no-op lease.
+// the claimant itself is torn down. A claimant that requires nothing exclusive
+// gets a no-op lease.
 func (a *ResourceArbiter) AcquireExclusive(claimant string, claimantNode DeploymentNode, transient bool) (*Lease, error) {
 	tokens := dedupeNonEmpty(claimantNode.RequiredExclusive())
 	if len(tokens) == 0 {
@@ -244,9 +376,12 @@ func (a *ResourceArbiter) AcquireExclusive(claimant string, claimantNode Deploym
 		}
 	}
 
-	// Mutual exclusion among claimants: refuse if another live claim already
-	// holds an overlapping token (exclusive means one claimant at a time).
+	// Mutual exclusion: refuse only against another EXCLUSIVE claim (one VM at a
+	// time). A SHARED claim (refcounted pods) does NOT block — it is PREEMPTED.
 	for _, lz := range ledger.Leases {
+		if lz.Shared {
+			continue
+		}
 		if shared := intersect(lz.Tokens, tokens); len(shared) > 0 {
 			return nil, fmt.Errorf(
 				"exclusive resource %s is already claimed by %q — release it (`charly preempt restore %s`) before claiming it for %q",
@@ -254,38 +389,43 @@ func (a *ResourceArbiter) AcquireExclusive(claimant string, claimantNode Deploym
 		}
 	}
 
-	// Select the preemptible holders to preempt: those holding any requested
-	// token that are CURRENTLY running (a holder the operator already left
-	// stopped is not ours to start later).
-	holders := a.gather()
-	var toStop []preemptedHolder
-	for _, name := range sortedHolderKeys(holders) {
-		if name == claimant {
+	// Preempt the running preemptible HOLDERS (the operator's vfio VM) — these
+	// are restored when this exclusive claim releases.
+	toStop := a.holdersToStop(tokens, claimant)
+	// PLUS every running SHARED-claim pod of these tokens: stop it to free the
+	// device for vfio, and DROP its shared lease. A preempted shared pod is NOT
+	// recorded for restore (see the doc comment — the operator re-runs `charly
+	// start`); carry forward only the operator-VM restore obligation the shared
+	// leases held, so it is not lost.
+	var kept []preemptLease
+	var sharedPodStops []preemptedHolder
+	for _, lz := range ledger.Leases {
+		if !lz.Shared || len(intersect(lz.Tokens, tokens)) == 0 {
+			kept = append(kept, lz)
 			continue
 		}
-		node := holders[name]
-		shared := intersect(node.PreemptionHolds(), tokens)
-		if len(shared) == 0 {
-			continue
+		if a.running(lz.Claim) {
+			sharedPodStops = append(sharedPodStops, preemptedHolder{
+				Addr:    lz.Claim,
+				Holds:   intersect(lz.Tokens, tokens),
+				Restore: PreemptRestoreAlways,
+			})
 		}
-		addr := holderAddrFor(name, node)
-		if !a.running(addr) {
-			continue
-		}
-		toStop = append(toStop, preemptedHolder{
-			Addr:    addr,
-			Holds:   shared,
-			Restore: node.Preemptible.EffectiveRestore(),
-		})
+		toStop = append(toStop, lz.Preempted...) // carry the operator-VM obligation forward
 	}
+	toStop = dedupePreempted(toStop)
+	ledger.Leases = kept
 
-	// Persist the lease FIRST (crash-safety): if we crash mid-stop, the
-	// ledger already names the holders, and restore = "start any listed
-	// holder that isn't running" recovers them.
+	// Persist the lease FIRST (crash-safety): if we crash mid-stop, the ledger
+	// already names what to restore, and restore = "start any listed holder that
+	// isn't running" recovers them. lease.Preempted holds ONLY the holders to
+	// restore on release (operator VMs) — never the preempted shared pods.
 	lease := preemptLease{
 		Claimant:  claimant,
 		Claim:     holderAddrFor(claimant, claimantNode),
 		Tokens:    tokens,
+		Shared:    false,
+		Mode:      gpuModeVfio,
 		Transient: transient,
 		Preempted: toStop,
 		Created:   a.nowUTC(),
@@ -295,32 +435,94 @@ func (a *ResourceArbiter) AcquireExclusive(claimant string, claimantNode Deploym
 		return nil, err
 	}
 
-	// Now stop the holders. After each graceful stop, WAIT until the holder
-	// actually reaches a stopped state before proceeding — a VM's `vm stop`
-	// issues an ACPI shutdown and returns immediately, but the resource (e.g. a
-	// VFIO GPU) isn't released until the domain powers off; the claim must not
-	// race ahead and try to grab a still-held device. This is a readiness poll
-	// (a real synchronization primitive), not a fixed sleep. On a stop failure
-	// or timeout, roll back: restart what we stopped and drop the lease, so a
-	// partial preemption never strands a holder or leaves a phantom lease.
-	for i, ph := range toStop {
-		fmt.Fprintf(os.Stderr, "preempt: stopping holder %q to free %s for %q\n",
-			ph.Addr.Name, strings.Join(ph.Holds, ", "), claimant)
-		stopErr := a.stop(ph.Addr)
-		if stopErr == nil && !a.waitStopped(ph.Addr, holderStopTimeout) {
-			stopErr = fmt.Errorf("holder did not reach a stopped state within %s (resource not freed)", holderStopTimeout)
+	// Stop everything (holders to restore + shared pods to free), waiting for
+	// each to actually power off / stop (rollback on failure — see stopHolders),
+	// then flip the gpu-backed tokens to vfio. The stops freed the device (no pod
+	// holds /dev/nvidia*), so the rebind succeeds; libvirt managed='yes' then
+	// re-binds vfio-pci on domain start (a no-op safety net since the card is
+	// already vfio here).
+	allStops := append(append([]preemptedHolder{}, lease.Preempted...), sharedPodStops...)
+	if err := a.stopHolders(allStops, claimant); err != nil {
+		return nil, err
+	}
+	if err := a.applyMode(tokens, gpuModeVfio); err != nil {
+		a.restoreHolders(lease.Preempted)
+		_ = a.removeLease(claimant)
+		return nil, fmt.Errorf("freeing %s for vfio passthrough: %w", strings.Join(tokens, ", "), err)
+	}
+
+	return &Lease{arbiter: a, claimant: claimant, active: true}, nil
+}
+
+// AcquireShared brings up a SHARED (refcounted) claim — the pod side. Many
+// shared claimants of one token run CONCURRENTLY. The FIRST shared claim flips
+// the token's gpu-backed resource to nvidia mode (+ regenerate CDI) and preempts
+// any running preemptible holder; subsequent claims just refcount (the device is
+// already nvidia, the holder already stopped). A shared claim is refused only
+// when an EXCLUSIVE claim already holds the token.
+func (a *ResourceArbiter) AcquireShared(claimant string, claimantNode DeploymentNode, transient bool) (*Lease, error) {
+	tokens := dedupeNonEmpty(claimantNode.RequiredShared())
+	if len(tokens) == 0 {
+		return &Lease{}, nil
+	}
+
+	if err := a.reconcileStranded(); err != nil {
+		return nil, err
+	}
+	ledger, err := a.loadLedger()
+	if err != nil {
+		return nil, err
+	}
+
+	// Idempotent re-acquire.
+	for _, lz := range ledger.Leases {
+		if lz.Claimant == claimant {
+			return &Lease{arbiter: a, claimant: claimant, active: true}, nil
 		}
-		if stopErr != nil {
-			for _, done := range toStop[:i] {
-				if !a.running(done.Addr) {
-					_ = a.start(done.Addr)
-				}
-			}
-			_ = a.removeLease(claimant)
-			return nil, fmt.Errorf("preempting holder %q: %w", ph.Addr.Name, stopErr)
+	}
+
+	// Refuse against an EXCLUSIVE holder (sole use). Other SHARED claims coexist.
+	for _, lz := range ledger.Leases {
+		if lz.Shared {
+			continue
 		}
-		fmt.Fprintf(os.Stderr, "preempt: holder %q stopped — %s freed for %q\n",
-			ph.Addr.Name, strings.Join(ph.Holds, ", "), claimant)
+		if s := intersect(lz.Tokens, tokens); len(s) > 0 {
+			return nil, fmt.Errorf(
+				"resource %s is held EXCLUSIVELY by %q — cannot share it for %q (release the exclusive claim first)",
+				strings.Join(s, ", "), lz.Claimant, claimant)
+		}
+	}
+
+	// First shared claim for these tokens → flip to nvidia + preempt holders.
+	// A subsequent claim finds the device already nvidia + the holder stopped, so
+	// it records no preemption and just refcounts.
+	var toStop []preemptedHolder
+	if !tokenHeldByShared(ledger, tokens) {
+		toStop = a.holdersToStop(tokens, claimant)
+	}
+
+	lease := preemptLease{
+		Claimant:  claimant,
+		Claim:     holderAddrFor(claimant, claimantNode),
+		Tokens:    tokens,
+		Shared:    true,
+		Mode:      gpuModeNvidia,
+		Transient: transient,
+		Preempted: toStop,
+		Created:   a.nowUTC(),
+	}
+	ledger.Leases = append(ledger.Leases, lease)
+	if err := a.saveLedger(ledger); err != nil {
+		return nil, err
+	}
+
+	if err := a.stopHolders(toStop, claimant); err != nil {
+		return nil, err
+	}
+	if err := a.applyMode(tokens, gpuModeNvidia); err != nil {
+		a.restoreHolders(toStop)
+		_ = a.removeLease(claimant)
+		return nil, fmt.Errorf("setting %s to nvidia/CDI mode for %q: %w", strings.Join(tokens, ", "), claimant, err)
 	}
 
 	return &Lease{arbiter: a, claimant: claimant, active: true}, nil
@@ -345,10 +547,18 @@ func (a *ResourceArbiter) ReleaseClaimant(claimant string, success bool) error {
 		return nil // nothing to release
 	}
 	lease := ledger.Leases[idx]
+	// State AFTER removing this lease — drives which preempted tokens are now
+	// free (restore) vs still claimed by a survivor (carry forward), and the
+	// post-release driver mode of each token.
+	remaining := make([]preemptLease, 0, len(ledger.Leases)-1)
+	remaining = append(remaining, ledger.Leases[:idx]...)
+	remaining = append(remaining, ledger.Leases[idx+1:]...)
 
-	// Filter holders by restore policy for this outcome, then restart any
-	// that aren't already running.
-	var toRestore []preemptedHolder
+	// Split this lease's preempted holders: restore the ones whose token is now
+	// FREE; carry forward (onto a survivor) the ones whose token is still
+	// claimed by a remaining shared lease — never restart a holder under an
+	// active claim. on-success holders on a failed claim stay stopped.
+	var toRestore, carry []preemptedHolder
 	for _, ph := range lease.Preempted {
 		if !success && ph.Restore == PreemptRestoreSuccess {
 			fmt.Fprintf(os.Stderr,
@@ -356,24 +566,39 @@ func (a *ResourceArbiter) ReleaseClaimant(claimant string, success bool) error {
 				ph.Addr.Name, claimant)
 			continue
 		}
-		toRestore = append(toRestore, ph)
+		if tokenClaimed(remaining, ph.Holds) {
+			carry = append(carry, ph)
+		} else {
+			toRestore = append(toRestore, ph)
+		}
 	}
 	allUp := a.restoreHolders(toRestore)
 
-	// Remove the lease only when every policy-eligible holder is back up; a
-	// partial restore keeps the lease so a later reconcile / `charly preempt
-	// restore` retries. (on-success holders intentionally left stopped do not
-	// block removal — they are a deliberate end state, recoverable manually.)
-	if allUp {
-		ledger.Leases = append(ledger.Leases[:idx], ledger.Leases[idx+1:]...)
-	}
-	if err := a.saveLedger(ledger); err != nil {
-		return err
-	}
+	// Partial restore → keep the lease untouched so a later reconcile / `charly
+	// preempt restore` retries; do not mutate mode/ledger. (on-success holders
+	// intentionally left stopped are a deliberate end state, not a partial.)
 	if !allUp {
 		return fmt.Errorf("could not restore all holders for %q — lease retained; retry with `charly preempt restore %s`", claimant, claimant)
 	}
-	return nil
+
+	// Carry un-restored obligations onto a surviving lease so the LAST release
+	// of the token restores them.
+	if len(carry) > 0 {
+		attachPreemptedToSurvivor(remaining, carry)
+	}
+
+	// Recompute + apply the desired driver mode for every token this lease
+	// touched: nvidia while a shared claim remains, vfio under a surviving
+	// exclusive claim, vfio (default) when the token is fully free.
+	for _, tok := range lease.Tokens {
+		mode := desiredModeForToken(remaining, tok)
+		if err := a.applyMode([]string{tok}, mode); err != nil {
+			fmt.Fprintf(os.Stderr, "preempt: could not set %q to %s mode after releasing %q: %v\n", tok, mode, claimant, err)
+		}
+	}
+
+	ledger.Leases = remaining
+	return a.saveLedger(ledger)
 }
 
 // reconcileStranded restores holders for any lease whose claimant is no longer
@@ -662,5 +887,92 @@ func sortedHolderKeys(m map[string]DeploymentNode) []string {
 		out = append(out, k)
 	}
 	sort.Strings(out)
+	return out
+}
+
+// --- shared-claim + mode-arbitration helpers -------------------------------
+
+// gatherResources loads the token -> ResourceDef map (the gpu selector that
+// drives the vfio<->nvidia mode flip) the same way gatherDeployNodes loads
+// deploy nodes — from the project charly.yml. nil when none / unreadable.
+func gatherResources() map[string]*ResourceDef {
+	if uf, ok, err := LoadUnified("."); err == nil && ok && uf != nil {
+		return uf.Resource
+	}
+	return nil
+}
+
+// tokenHeldByShared reports whether any existing SHARED lease holds a token in
+// `tokens` (so a new shared claim is a refcount bump, not a first-claim flip).
+func tokenHeldByShared(ledger *preemptLedger, tokens []string) bool {
+	for _, lz := range ledger.Leases {
+		if lz.Shared && len(intersect(lz.Tokens, tokens)) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// tokenClaimed reports whether any lease still claims a token overlapping
+// `toks` — used on release to choose restore-now vs carry-forward.
+func tokenClaimed(leases []preemptLease, toks []string) bool {
+	for _, lz := range leases {
+		if len(intersect(lz.Tokens, toks)) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// desiredModeForToken computes the driver MODE a token should be in given the
+// active leases: vfio under any exclusive claim, nvidia while a shared claim
+// remains, vfio (the boot default) when fully free.
+func desiredModeForToken(leases []preemptLease, token string) string {
+	hasShared := false
+	for _, lz := range leases {
+		if len(intersect(lz.Tokens, []string{token})) == 0 {
+			continue
+		}
+		if lz.Shared {
+			hasShared = true
+		} else {
+			return gpuModeVfio // an exclusive claim pins vfio
+		}
+	}
+	if hasShared {
+		return gpuModeNvidia
+	}
+	return gpuModeVfio
+}
+
+// attachPreemptedToSurvivor moves carried restore-obligations onto the first
+// surviving lease overlapping each holder's token, so the LAST release of that
+// token restores them (the operator-VM-restore obligation outlives any single
+// shared claim). leases entries are structs, so the mutation persists when the
+// caller saves the slice.
+func attachPreemptedToSurvivor(leases []preemptLease, carry []preemptedHolder) {
+	for _, ph := range carry {
+		for i := range leases {
+			if len(intersect(leases[i].Tokens, ph.Holds)) > 0 {
+				leases[i].Preempted = dedupePreempted(append(leases[i].Preempted, ph))
+				break
+			}
+		}
+	}
+}
+
+// dedupePreempted removes duplicate preempted holders by deploy name (a holder
+// stopped by two paths — e.g. the operator VM carried forward AND re-listed — is
+// restored exactly once).
+func dedupePreempted(in []preemptedHolder) []preemptedHolder {
+	seen := map[string]bool{}
+	var out []preemptedHolder
+	for _, ph := range in {
+		if ph.Addr.Name == "" || seen[ph.Addr.Name] {
+			continue
+		}
+		seen[ph.Addr.Name] = true
+		out = append(out, ph)
+	}
 	return out
 }

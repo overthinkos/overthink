@@ -326,6 +326,24 @@ type DeploymentNode struct {
 	// empty means this deploy claims nothing exclusive.
 	RequiresExclusive []string `yaml:"requires_exclusive,omitempty" json:"requires_exclusive,omitempty"`
 
+	// RequiresShared is the SHARED-CLAIMANT side of the resource-arbitration
+	// axis: the named host-resource token(s) this deploy needs in their SHARED
+	// mode while it runs. The canonical case is a GPU the host nvidia-container
+	// runtime shares across MANY rootless pods via CDI (--device
+	// nvidia.com/gpu=all each). Unlike RequiresExclusive (sole use — one VM via
+	// vfio passthrough), a shared claim is REFCOUNTED: any number of shared
+	// claimants of the same token run CONCURRENTLY. The arbiter (charly/preempt.go)
+	// flips the token's resource into its shared mode (for a GPU: rebind the card
+	// to the nvidia driver + generate CDI) on the first shared claim, refcounts
+	// the rest, and flips back to the vfio default when the last releases. A
+	// shared claim arriving while a preemptible holder occupies the token in vfio
+	// mode preempts that holder; an EXCLUSIVE claim preempts ALL shared claimants
+	// (the driver MODE — vfio XOR nvidia — is the real mutual exclusion). A token
+	// with a `resource:` gpu selector drives the rebind; a selector-less token is
+	// a pure refcounted arbitration label. nil/empty means nothing shared is
+	// claimed. See charly/preempt.go + /charly-internals:disposable.
+	RequiresShared []string `yaml:"requires_shared,omitempty" json:"requires_shared,omitempty"`
+
 	// FromSnapshot, on a target=vm deploy, names the snapshot on the
 	// referenced kind:vm to use as the cloned overlay's backing disk.
 	// Empty means "boot the template VM directly" (legacy behavior).
@@ -479,6 +497,13 @@ func (c DeploymentNode) PreemptionHolds() []string {
 // claims sole use of (the claimant side; nil-safe).
 func (c DeploymentNode) RequiredExclusive() []string {
 	return c.RequiresExclusive
+}
+
+// RequiredShared returns the shared-mode resource token(s) this deploy claims
+// (the refcounted shared-claimant side; nil-safe). Many shared claimants of one
+// token coexist; see RequiresShared + charly/preempt.go.
+func (c DeploymentNode) RequiredShared() []string {
+	return c.RequiresShared
 }
 
 // HasChildren reports whether this node has any nested deployments.

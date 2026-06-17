@@ -1,5 +1,5 @@
 candy:
-    version: 2026.144.1443
+    version: 2026.167.2100
     name: java-openjdk
     description: |
         OpenJDK 21 runtime + JDK tools with a distro-agnostic JAVA_HOME canonical symlink
@@ -36,19 +36,7 @@ candy:
             package:
                 - openjdk-21-jdk-headless
     plan:
-        - run: |
-            command=set -e
-            # Establish the canonical, distro-agnostic JAVA_HOME (see env: above).
-            # Pick the JDK 21 root the distro package installed and symlink a stable
-            # path to it. Prefer the full JDK (has bin/javac) over a bare JRE.
-            jdk=""
-            for c in /usr/lib/jvm/java-21-openjdk /usr/lib/jvm/java-21-openjdk-amd64 \
-                     /usr/lib/jvm/java-21-openjdk-* /usr/lib/jvm/jre-21-openjdk; do
-              if [ -x "$c/bin/java" ]; then jdk="$c"; break; fi
-            done
-            [ -n "$jdk" ] || { echo "java-openjdk: no JDK 21 found under /usr/lib/jvm" >&2; exit 1; }
-            ln -sfn "$jdk" /usr/lib/jvm/charly-jdk21
-            echo "java-openjdk: JAVA_HOME -> /usr/lib/jvm/charly-jdk21 -> $jdk"
+        - run: establish the distro-agnostic JAVA_HOME and set the system-default java launcher
           command: |
             set -e
             # Establish the canonical, distro-agnostic JAVA_HOME (see env: above).
@@ -62,6 +50,18 @@ candy:
             [ -n "$jdk" ] || { echo "java-openjdk: no JDK 21 found under /usr/lib/jvm" >&2; exit 1; }
             ln -sfn "$jdk" /usr/lib/jvm/charly-jdk21
             echo "java-openjdk: JAVA_HOME -> /usr/lib/jvm/charly-jdk21 -> $jdk"
+            # On Arch/CachyOS, /usr/bin/java is owned by java-runtime-common and is a
+            # symlink to /usr/lib/jvm/default-runtime/bin/java; default-runtime ships
+            # UNSET (-> /dev/null) until `archlinux-java set` runs, so the absolute
+            # /usr/bin/java launcher fails with ENOTDIR ("Not a directory") traversing
+            # /dev/null/bin/java. Point the system default at the installed JDK 21 so
+            # /usr/bin/java + /usr/bin/javac resolve. No-op on Fedora/Debian/Ubuntu —
+            # their packages wire up update-alternatives at install time, and
+            # archlinux-java is absent there.
+            if command -v archlinux-java >/dev/null 2>&1; then
+              archlinux-java set "$(basename "$jdk")"
+              echo "java-openjdk: archlinux-java default -> $(basename "$jdk")"
+            fi
           run_as: root
         - check: the JRE launcher is installed at /usr/bin/java
           file: /usr/bin/java

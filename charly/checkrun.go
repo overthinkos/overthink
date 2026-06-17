@@ -103,8 +103,17 @@ type Runner struct {
 	Mode        RunMode
 	HTTPClient  *http.Client
 	DialTimeout time.Duration
-	Box         string
-	Instance    string
+	// ProbeTimeout is the per-probe never-hang ceiling: each probe attempt in
+	// runOne runs under context.WithTimeout(ctx, ProbeTimeout) so a wedged probe
+	// (a hung `podman exec` / black-holed ssh) is cancelled INDIVIDUALLY and the
+	// pass continues to the next probe — instead of hanging the whole pass until
+	// the bed runner's outer per-attempt SIGKILLs the entire `charly check live`
+	// subprocess (the old hard-timeout-not-pooling failure under heavy load).
+	// Zero falls back to readinessPerAttemptFallback (probeNeverHang); a longer
+	// author-declared `timeout:` on a probe is honored over this floor.
+	ProbeTimeout time.Duration
+	Box          string
+	Instance     string
 	// Distros is the image's distro tag list (e.g. ["fedora:43", "fedora"]
 	// or ["arch"]). Used by the `package:` verb's PackageMap resolution
 	// to pick a distro-specific package name when names diverge across
@@ -234,12 +243,33 @@ func (r *Runner) RunLive(ctx context.Context, checks []Op, instance string) []Ch
 // PodmanExec{charly-name}}; for RunModeBox, ImageChain(engine, ref).
 func NewRunner(exec DeployExecutor, resolver *CheckVarResolver, mode RunMode) *Runner {
 	return &Runner{
-		Exec:        exec,
-		Resolver:    resolver,
-		Mode:        mode,
-		HTTPClient:  &http.Client{Timeout: 10 * time.Second},
-		DialTimeout: 3 * time.Second,
+		Exec:         exec,
+		Resolver:     resolver,
+		Mode:         mode,
+		HTTPClient:   &http.Client{Timeout: 10 * time.Second},
+		DialTimeout:  3 * time.Second,
+		ProbeTimeout: loadedReadiness().perAttempt(),
 	}
+}
+
+// probeNeverHang is the per-probe-attempt never-hang ceiling. It is NOT the
+// probe's semantic timeout — the http client (10s), dial timeout (3s), a verb's
+// own `timeout:`, and the `eventually:` retry loop all operate INSIDE it. It is
+// the kill-switch for a probe that wedges in its data phase (a hung
+// `podman exec`, a black-holed ssh) so one stuck probe cannot hang the whole
+// multi-probe pass. A longer author-declared `timeout:` is honored over the
+// floor so a legitimately slow probe is never cut short.
+func (r *Runner) probeNeverHang(c *Op) time.Duration {
+	floor := r.ProbeTimeout
+	if floor <= 0 {
+		floor = readinessPerAttemptFallback
+	}
+	if c != nil && c.Timeout != "" {
+		if d, err := time.ParseDuration(c.Timeout); err == nil && d+30*time.Second > floor {
+			return d + 30*time.Second
+		}
+	}
+	return floor
 }
 
 // Run executes the supplied checks sequentially and returns per-check
@@ -391,6 +421,16 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 
 	// Verb dispatch, wrapped in the `eventually:` retry when requested.
 	dispatch := func() CheckResult {
+		// Per-probe never-hang: bound THIS attempt so a wedged probe (a hung
+		// podman exec / black-holed ssh) is cancelled individually and the pass
+		// continues — instead of relying on the bed runner's whole-pass timeout
+		// to SIGKILL the entire 100+-probe `charly check live` subprocess (the
+		// old hard-timeout-not-pooling failure under heavy load). runWithEventually
+		// calls dispatch once per attempt, so each retry gets a FRESH bound; the
+		// author's timeout:/eventually: operate inside it. Shadows ctx for the
+		// rest of this closure so every r.runX(ctx, …) below is bounded.
+		ctx, cancel := context.WithTimeout(ctx, r.probeNeverHang(&expanded))
+		defer cancel()
 		var dr CheckResult
 		// do-mode branch: act on a state-provision verb → execute the
 		// create/configure. Action verbs (command/http/dbus/cdp/…) act in their

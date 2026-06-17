@@ -46,6 +46,12 @@ import (
 //      session) is cancelled per tick — the bounds are checked BETWEEN ticks, so
 //      a cond that never returns would otherwise defeat AbsoluteCap entirely.
 //      Conds MUST honor the passed ctx (exec.CommandContext, ssh keepalives).
+//      PerAttempt is sized for ONE atomic probe; a PollHeavy cond (each tick is a
+//      whole multi-probe `charly check live` pass) is NOT one atomic probe, so it
+//      uses the much larger PerAttemptHeavy instead — the inner pass bounds its
+//      OWN probes individually (Runner.probeNeverHang), so the heavy per-attempt
+//      is just a generous "this pass is taking unreasonably long" backstop, NOT a
+//      mid-pass guillotine that kills a slow-but-progressing pass under heavy load.
 //   2. AbsoluteCap: a generous wall-clock ceiling (or NoProgress when monotonic).
 //   3. ctx cancellation: a dispatcher-level cancel wins at the inter-tick select.
 // pollUntil self-validates these at entry (fail-closed) — it does not trust the
@@ -230,13 +236,14 @@ const (
 // constants — so a site that has not yet been threaded the resolved set still
 // gets sane, never-hang bounds (it just isn't operator-tunable until threaded).
 type ResolvedReadiness struct {
-	IntervalLocal  time.Duration
-	IntervalRemote time.Duration
-	IntervalHeavy  time.Duration
-	PerAttempt     time.Duration
-	NoProgress     time.Duration
-	AbsoluteCap    time.Duration
-	StopGrace      time.Duration
+	IntervalLocal   time.Duration
+	IntervalRemote  time.Duration
+	IntervalHeavy   time.Duration
+	PerAttempt      time.Duration
+	PerAttemptHeavy time.Duration
+	NoProgress      time.Duration
+	AbsoluteCap     time.Duration
+	StopGrace       time.Duration
 }
 
 // Named fallback constants — the single source of the defaults, referenced by
@@ -247,7 +254,13 @@ const (
 	readinessIntervalRemoteFallback = 3 * time.Second
 	readinessIntervalHeavyFallback  = 15 * time.Second
 	readinessPerAttemptFallback     = 120 * time.Second
-	readinessNoProgressFallback     = 90 * time.Second
+	// PollHeavy per-attempt: ONE tick is a whole `charly check live` pass (100+
+	// probes), so the per-attempt that bounds it must accommodate the FULL pass
+	// under heavy parallel load — NOT the single-probe 120s. The inner pass
+	// bounds each probe at PerAttempt individually (Runner.probeNeverHang), so
+	// this is the generous never-hang backstop, not a mid-pass guillotine.
+	readinessPerAttemptHeavyFallback = 15 * time.Minute
+	readinessNoProgressFallback      = 90 * time.Second
 	readinessAbsoluteCapFallback    = 30 * time.Minute
 	readinessStopGraceFallback      = 180 * time.Second
 )
@@ -276,6 +289,26 @@ func (rr ResolvedReadiness) perAttempt() time.Duration {
 	return readinessPerAttemptFallback
 }
 
+// perAttemptHeavy is the per-attempt bound for a PollHeavy cond (a whole
+// multi-probe `charly check live` pass). Generous on purpose — see the
+// readinessPerAttemptHeavyFallback comment.
+func (rr ResolvedReadiness) perAttemptHeavy() time.Duration {
+	if rr.PerAttemptHeavy > 0 {
+		return rr.PerAttemptHeavy
+	}
+	return readinessPerAttemptHeavyFallback
+}
+
+// perAttemptFor picks the right per-attempt bound for the poll class: PollHeavy
+// (a whole-pass cond) gets the generous heavy bound; everything else (single
+// atomic probes) gets the standard per-attempt never-hang.
+func (rr ResolvedReadiness) perAttemptFor(class PollClass) time.Duration {
+	if class == PollHeavy {
+		return rr.perAttemptHeavy()
+	}
+	return rr.perAttempt()
+}
+
 // Wait builds a MONOTONIC readiness PollConfig: the no-progress watchdog is
 // active (the load-robust early-out), with a generous absolute cap as the
 // never-hang backstop. Use ONLY where cond reports a genuinely advancing
@@ -290,7 +323,7 @@ func (rr ResolvedReadiness) Wait(name string, class PollClass) PollConfig {
 	if cap <= 0 {
 		cap = readinessAbsoluteCapFallback
 	}
-	return PollConfig{Name: name, Interval: rr.interval(class), PerAttempt: rr.perAttempt(), NoProgress: noProg, AbsoluteCap: cap}
+	return PollConfig{Name: name, Interval: rr.interval(class), PerAttempt: rr.perAttemptFor(class), NoProgress: noProg, AbsoluteCap: cap}
 }
 
 // WaitCapped builds a CAP-ONLY PollConfig (NoProgress disabled): wait until cond
@@ -306,7 +339,7 @@ func (rr ResolvedReadiness) WaitCapped(name string, class PollClass, cap time.Du
 			cap = readinessAbsoluteCapFallback
 		}
 	}
-	return PollConfig{Name: name, Interval: rr.interval(class), PerAttempt: rr.perAttempt(), NoProgress: 0, AbsoluteCap: cap}
+	return PollConfig{Name: name, Interval: rr.interval(class), PerAttempt: rr.perAttemptFor(class), NoProgress: 0, AbsoluteCap: cap}
 }
 
 // WatchProgress builds a NO-CAP monotonic watchdog (NoProgress active, no
@@ -320,7 +353,7 @@ func (rr ResolvedReadiness) WatchProgress(name string, class PollClass, noProgre
 			noProgress = readinessNoProgressFallback
 		}
 	}
-	return PollConfig{Name: name, Interval: rr.interval(class), PerAttempt: rr.perAttempt(), NoProgress: noProgress, AbsoluteCap: 0}
+	return PollConfig{Name: name, Interval: rr.interval(class), PerAttempt: rr.perAttemptFor(class), NoProgress: noProgress, AbsoluteCap: 0}
 }
 
 // StopGate builds a settle/teardown PollConfig: cap-only at StopGrace (a clean

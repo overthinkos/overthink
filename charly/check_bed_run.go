@@ -307,10 +307,15 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 		// long migration flips zero checks), so we wait on a GENEROUS,
 		// config-sourced cap — replacing the fixed 6m magic deadline that was too
 		// short for a slow-but-progressing deploy under heavy parallel load.
-		// recoverVMIfDown folds in as the per-attempt recovery. The per-attempt
-		// context bounds a hung check-live pass (never-hang). Fast beds pass on
-		// the first tick (zero added latency); a genuinely-broken deploy fails at
-		// the cap, surfacing the LAST check-live error (not the cap sentinel).
+		// recoverVMIfDown folds in as the per-attempt recovery. PollHeavy's
+		// per-attempt (PerAttemptHeavy, ~15m) bounds the WHOLE multi-probe pass
+		// generously — NOT the 120s single-probe bound that used to guillotine a
+		// slow-but-progressing pass mid-flight under load; the never-hang for an
+		// individual wedged probe now lives INSIDE check-live (Runner.probeNeverHang),
+		// so a stuck probe is cancelled individually and the pass still completes
+		// (which also means the step log is written in full, never empty-on-SIGKILL).
+		// Fast beds pass on the first tick (zero added latency); a genuinely-broken
+		// deploy fails at the cap, surfacing the LAST check-live error (not the cap sentinel).
 		cfg := loadedReadiness().WaitCapped(stepName, PollHeavy, 0)
 		pollErr := pollUntil(context.Background(), cfg, func(actx context.Context) (bool, float64, error) {
 			out, lastErr = runCaptureCtx(actx, exe, args)

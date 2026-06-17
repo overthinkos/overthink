@@ -22,6 +22,7 @@ type ReadinessConfig struct {
 	PollIntervalRemote string `yaml:"poll_interval_remote,omitempty" json:"poll_interval_remote,omitempty"`
 	PollIntervalHeavy  string `yaml:"poll_interval_heavy,omitempty" json:"poll_interval_heavy,omitempty"`
 	PerAttempt         string `yaml:"per_attempt,omitempty" json:"per_attempt,omitempty"`
+	PerAttemptHeavy    string `yaml:"per_attempt_heavy,omitempty" json:"per_attempt_heavy,omitempty"`
 	NoProgress         string `yaml:"no_progress,omitempty" json:"no_progress,omitempty"`
 	AbsoluteCap        string `yaml:"absolute_cap,omitempty" json:"absolute_cap,omitempty"`
 	StopGrace          string `yaml:"stop_grace,omitempty" json:"stop_grace,omitempty"`
@@ -63,6 +64,7 @@ func (rc *ReadinessConfig) Resolve() (ResolvedReadiness, error) {
 		{"poll_interval_remote", "CHARLY_READINESS_POLL_REMOTE", rc.PollIntervalRemote, readinessIntervalRemoteFallback, &rr.IntervalRemote},
 		{"poll_interval_heavy", "CHARLY_READINESS_POLL_HEAVY", rc.PollIntervalHeavy, readinessIntervalHeavyFallback, &rr.IntervalHeavy},
 		{"per_attempt", "CHARLY_READINESS_PER_ATTEMPT", rc.PerAttempt, readinessPerAttemptFallback, &rr.PerAttempt},
+		{"per_attempt_heavy", "CHARLY_READINESS_PER_ATTEMPT_HEAVY", rc.PerAttemptHeavy, readinessPerAttemptHeavyFallback, &rr.PerAttemptHeavy},
 		{"no_progress", "CHARLY_READINESS_NO_PROGRESS", rc.NoProgress, readinessNoProgressFallback, &rr.NoProgress},
 		{"absolute_cap", "CHARLY_READINESS_ABSOLUTE_CAP", rc.AbsoluteCap, readinessAbsoluteCapFallback, &rr.AbsoluteCap},
 		{"stop_grace", "CHARLY_READINESS_STOP_GRACE", rc.StopGrace, readinessStopGraceFallback, &rr.StopGrace},
@@ -99,6 +101,16 @@ func (rr ResolvedReadiness) validateOrdering() error {
 	}
 	if rr.NoProgress > rr.AbsoluteCap {
 		return fmt.Errorf("readiness: no_progress (%s) must be <= absolute_cap (%s)", rr.NoProgress, rr.AbsoluteCap)
+	}
+	// per_attempt (one atomic probe) <= per_attempt_heavy (a whole multi-probe
+	// pass) <= absolute_cap (the readiness-retry ceiling). A heavy per-attempt
+	// longer than the absolute cap would allow only a single attempt with no
+	// retry budget; one shorter than per_attempt is incoherent.
+	if rr.PerAttempt > rr.PerAttemptHeavy {
+		return fmt.Errorf("readiness: per_attempt (%s) must be <= per_attempt_heavy (%s)", rr.PerAttempt, rr.PerAttemptHeavy)
+	}
+	if rr.PerAttemptHeavy > rr.AbsoluteCap {
+		return fmt.Errorf("readiness: per_attempt_heavy (%s) must be <= absolute_cap (%s)", rr.PerAttemptHeavy, rr.AbsoluteCap)
 	}
 	if rr.StopGrace > rr.AbsoluteCap {
 		return fmt.Errorf("readiness: stop_grace (%s) must be <= absolute_cap (%s)", rr.StopGrace, rr.AbsoluteCap)

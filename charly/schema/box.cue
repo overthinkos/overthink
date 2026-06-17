@@ -38,6 +38,7 @@
 	poll_interval_remote?: #Duration
 	poll_interval_heavy?:  #Duration
 	per_attempt?:          #Duration
+	per_attempt_heavy?:    #Duration
 	no_progress?:          #Duration
 	absolute_cap?:         #Duration
 	stop_grace?:           #Duration

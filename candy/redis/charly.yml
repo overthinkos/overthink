@@ -58,11 +58,11 @@ candy:
           context:
             - runtime
         - agent-check: the supervised redis service is running and keeps answering clients, restarting automatically (restart=always) if the redis-server process exits
-        - check: command=redis-cli -h 127.0.0.1 -p ${HOST_PORT:6379} ping
+        - check: redis answers PONG to redis-cli inside the container (host-independent probe)
           id: redis-responds
-          command: redis-cli -h 127.0.0.1 -p ${HOST_PORT:6379} ping
+          command: redis-cli -h 127.0.0.1 -p 6379 ping
           stdout: PONG
-          in_container: false
+          in_container: true
           context:
             - runtime
         - check: addr=127.0.0.1:${HOST_PORT:6379}

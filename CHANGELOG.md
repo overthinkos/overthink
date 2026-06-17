@@ -91,6 +91,116 @@ gate (feature-run 260 passed / 0 failed / 20 skipped); `check-selkies-kde-pod`
 PASS (shared-runner regression check). Regression guard
 `TestRunPlan_StampsStepOrigin` fails without the origin stamp.
 
+### 2026-06-17 — fix(candy): unsloth-studio installs the Studio CLI via the official installer (`v2026.168.1135`)
+
+The supervised `unsloth studio` service FATAL'd "can't find command 'unsloth'":
+the prior fix wrongly assumed the `unsloth` pip package ships the Studio CLI — it
+ships the FastLanguageModel fine-tuning LIBRARY. Per upstream the CLI comes from
+the curl installer. Added a build-time `curl -fsSL https://unsloth.ai/install.sh |
+sh` run step (self-installs uv, lands `~/.local/bin/unsloth`, bootstraps the
+`~/.unsloth/studio` venv at build so the supervised launch is immediate) with a
+`test -x` build-time guard; `distro.arch.package: cmake + git + base-devel` (the
+installer builds its GGUF engine from source and on Arch does not auto-install
+them); the service execs the launcher by absolute path. R10:
+`check-cachyos-unsloth-studio-pod` PASS (10 steps, 85 check-live, 0 failed) through
+the fresh-rebuild gate.
+
+### 2026-06-17 — feat(check): eval-bed rationalization — gap-closing beds + two-part descriptions (`v2026.168.1126`)
+
+Landed the bed-rationalization campaign's config changes: new gap-closing beds
+`check-debian-coder-pod` (pod×debian) and `check-ubuntu-coder-pod` (pod×ubuntu),
+an arch pacstrap boot-witness + matching/kernel-param checks, and two-part
+PURPOSE+BEHAVIOR `description:` rewrites on the box and root beds (`check-k3s-vm` /
+`check-local` / `check-charly-vm`). R10: the new beds bed-verified PASS
+(`check-debian-coder-pod` 272/0, `check-ubuntu-coder-pod` 272/0, arch beds PASS)
+through the fresh-rebuild gate; descriptions are metadata, `charly box validate`
+clean across all repos.
+
+### 2026-06-17 — docs: memory-hygiene mandate + plugins doc catch-up (`v2026.168.1055`)
+
+CLAUDE.md gained the "Memory Hygiene — a saved memory is a CLAIM, held to
+never-trust-verify" mandate (a memory asserting a system fact is saved only after
+R1 confirms it real and any HIGH-RISK claim is bed-proven first; the live system
+wins on divergence), with a *Detail:* pointer to `/charly-internals:strict-policy`.
+The plugins pointer bump carried the R5 `require:` field-name skill sweep, the
+strict-policy memory-hygiene detail, and the container-nesting/go doc catch-up (all
+documentation). documentation reviewed; R5 grep self-test clean.
+
+### 2026-06-17 — docs(charly): R5 sweep — Go comments name the singular require:/distro:/deploy: fields (`v2026.168.1040`)
+
+The field-singular cutover (`requires:`->`require:`, `distros:`->`distro:`,
+`deployments:`->`deploy:`) left several Go doc comments naming the old plural
+forms. Swept `deploy_add_cmd.go` / `group_spec.go` / `layers.go` / `unified.go` to
+the singular schema fields; preserved the legitimate refs (prose "Env/Secret
+requires", the real `secret_requires:` / `exclude_distros:` fields, and migration
+code that must name the rejected plural keys). Added a CUE-closedness regression
+test (`TestCandyCUESchema_Rejects`) asserting an unknown top-level candy field is
+rejected. `go test ./...` + `go vet` clean; comment + schema-test change with no
+runtime surface.
+
+### 2026-06-17 — fix(candy): java-openjdk resolves /usr/bin/java on Arch (`v2026.168.1031`)
+
+On Arch/CachyOS `/usr/bin/java` symlinks through `/usr/lib/jvm/default-runtime`,
+which ships UNSET (-> `/dev/null`) until `archlinux-java set` runs, so the absolute
+launcher failed with ENOTDIR. Added a guarded `archlinux-java set` (a no-op on
+Fedora/Debian/Ubuntu, which wire update-alternatives at install) pointing the
+system default at JDK 21, and cleaned a malformed run-step whose prose leaked a
+`command=...` body. analysed on a live system: `check-android-emulator-pod`
+(cachyos) built fresh and ran check-image + check-live — all java-openjdk checks
+PASS; the bed's full gate did not complete due to the then-unfixed committed-APK
+fixture-path bug (its own cutover, since landed as `v2026.168.1403`).
+
+### 2026-06-17 — fix(candy): redis-responds probe is host-independent (`v2026.168.0957`)
+
+The `redis-responds` check ran `redis-cli` from the HOST against
+`${HOST_PORT:6379}`; on a multi-service pod where the host port mapping is not
+under test this is fragile. Probe redis INSIDE the container on its fixed port 6379
+(`in_container: true`), proving the supervised `redis-server` answers regardless of
+host remapping; the separate `redis-port-open` check still proves host TCP
+reachability. R10: `check-cachyos-immich-ml-pod` PASS (10 steps, 128 check-live, 0
+failed) through the fresh-rebuild gate.
+
+### 2026-06-17 — fix(candy): chrome/direnv/thunar check correctness (`v2026.168.0944`)
+
+chrome: removed the `google-chrome-stable --version` check — RDD on a live pod
+proved that when chrome-cdp wraps the binary, `--version` LAUNCHES a full browser
+and hangs ~125s, driving every desktop bed's check-live to the readiness cap; the
+file/package/`.desktop` checks already prove chrome is installed. direnv: the
+`/etc/profile.d/charly-direnv-<shell>.sh` drop-in said `check "$(direnv hook X)"` —
+`check` is no builtin, so direnv was never hooked and every login shell printed
+"check: command not found"; fixed to `eval`, with discriminating checks. thunar:
+`package_map {fedora: Thunar}` (the Fedora rpm capitalizes the name). R10:
+`check-sway-browser-vnc-pod` PASS (10 steps; check-live 34s vs the prior 30-min
+cap-kill) through the fresh-rebuild gate.
+
+### 2026-06-17 — fix(candy): cross-distro nested-container + gocryptfs/supervisord robustness (`v2026.168.0927`)
+
+container-nesting on Debian/Ubuntu: add `libcap2-bin` (provides `setcap(8)`, which
+Fedora/Arch ship transitively but Debian/Ubuntu do not — without it the setcap RUN
+step exits 127 and fails the build); `chmod u-s` newuidmap/newgidmap (Debian/Ubuntu
+ship them setuid-root, which fails in a nested rootless userns when combined with
+file capabilities — match Fedora/Arch's cap-only posture); resolve the uid-1000
+user via getent. gocryptfs: widen the version-banner regex (newer gocryptfs drops
+the leading `v`). supervisord: accept `XDG_RUNTIME_DIR` = `/tmp/xdg-runtime` OR
+`/tmp` and test by exit status. R10: PASS on `check-fedora-coder-pod` (278),
+`check-charly-fedora-pod` (106), `check-debian-coder-pod` (272),
+`check-ubuntu-coder-pod` (272) through the fresh-rebuild gate.
+
+### 2026-06-17 — fix(check): load-robust check-live — per-probe never-hang + generous PollHeavy bound (`v2026.168.0829`)
+
+Under heavy parallel load a slow-but-progressing `charly check live` pass was
+SIGKILLed: `stepReady` ran the WHOLE multi-probe pass under a 120s `PerAttempt` and
+the probes shared one ctx with no per-probe bound, so a 100+-probe pass needing
+>120s was killed every tick to the 30-min cap (bed FAIL, empty step log). Fix: a
+per-probe never-hang (each probe attempt under
+`context.WithTimeout(ctx, probeNeverHang)`, honoring a longer author `timeout:`) so
+a wedged probe is cancelled individually and the pass continues; and PollHeavy now
+uses a new `PerAttemptHeavy` (15m default; config + env + closed `#Readiness`
+schema) so the whole subprocess is never guillotined mid-pass. R10:
+`check-fedora-coder-pod` (278 steps) under load avg ~30 PASS — check-live 217s,
+feature-run 215s, feature-run-rebuild 219s (all >120s); new tests fail when the fix
+is neutralized.
+
 ### 2026-06-17 — fix(gpu)!: device_lock-safe group-aware GPU driver switch + wedge poisoning + `charly vm gpu recover` (`v2026.168.0526`)
 
 Root-caused and fixed the GPU driver-switch wedge that, in the prior campaign,

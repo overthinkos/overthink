@@ -22,6 +22,54 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-17 — fix(gpu)!: device_lock-safe group-aware GPU driver switch + wedge poisoning + `charly vm gpu recover` (`v2026.168.0526`)
+
+Root-caused and fixed the GPU driver-switch wedge that, in the prior campaign,
+hung the host's nvidia card uninterruptibly and required a reboot.
+
+**Root cause (source-confirmed against NVIDIA's open kernel modules
+`kernel-open/nvidia/nv-pci.c`, then RDD-proven on the live RTX 4080 SUPER).** A
+sysfs `unbind` of the `nvidia` driver fires `nv_pci_remove →
+nv_pci_remove_helper(block_if_gpu_in_use=TRUE)`, which — when `nvl->usage_count
+!= 0` (any open `/dev/nvidia*` fd, live CUDA context, or
+`nvidia_uvm`/`nvidia_modeset`/`nvidia_drm` still attached) — blocks forever in
+`while (usage_count != 0) os_delay(500)`. The Linux PCI core holds the
+per-device `device_lock` (`dev->mutex`, uninterruptible) across the entire
+`.remove`, so every later bind/reset/remove on the device serializes behind it
+in unkillable `D` state. Recovery is reboot-only: no userspace primitive
+releases a held `device_lock`. It is **not** power/runtime-PM related (a
+disproven earlier hypothesis); `nv_pci_shutdown` passes `block=FALSE` so host
+reboot/shutdown never wedges.
+
+**The fix (prevention + cascade containment, not avoidance):**
+- `charly/gpu_driver_switch.go` rewritten — the switch is now **group-aware**
+  (flips EVERY function of the IOMMU group: display→nvidia/vfio,
+  HDMI-audio→snd_hda_intel/vfio; a VFIO group is guest-usable only when all
+  members are vfio-bound) and the nvidia→vfio detach uses **`modprobe -r`**
+  (module-refcount-guarded → `EBUSY` fast-fail if a client holds the GPU; it can
+  never reach the blocking `.remove` loop) — it NEVER sysfs-unbinds a busy
+  nvidia. `runGPUSwitchScript` is bounded (context deadline + `WaitDelay`) so a
+  GSP-teardown stall frees charly + the arbiter lock instead of blocking forever;
+  a confirmed wedge returns the new `errGPUSwitchWedged` sentinel.
+- `charly/preempt.go` — on a wedge the arbiter **POISONS** the GPU resource
+  (a boot-id-keyed marker under the preemption dir) and refuses it to every later
+  claimant, including `reconcileStranded`, so a wedged card can never be handed
+  out to produce a second `D`-state; the poison clears on reboot.
+- `charly/vm_gpu_cmd.go` — `charly vm gpu status` now reports **per-function**
+  driver + IOMMU group + mode and flags a wedged/poisoned card; new `charly vm
+  gpu recover` rebinds an unbound/half-switched card to vfio-pci but, on a true
+  wedge, reports reboot-required and attempts nothing (a bind would re-wedge).
+  `charly vm gpu mode` switches the whole group.
+
+**Removed (R5 claim-keyed sweep).** The load-bearing comment in
+`gpu_driver_switch.go` asserting "Only the DISPLAY function is ever flipped; the
+sibling AUDIO function stays on vfio-pci … RDD-proven" is DELETED — it was false
+(the real constraint is IOMMU-group VFIO viability, and the wedge was never
+about module liveness). The vfio/GPU model in `/charly-vm:vm` (new "GPU
+driver-mode switch" section, the owner), `/charly-internals:disposable`, and
+`/charly-check:check` is rewritten to the source-confirmed model. Memory:
+`gpu-driver-switch-wedge-rca.md`.
+
 ### 2026-06-16 — fix(preempt): correct concurrent shared-GPU arbitration — serialized flip + process-liveness lease reconciliation (`v2026.167.1853`)
 
 Two coupled fixes so multiple `requires_shared: [nvidia-gpu]` beds (e.g. comfyui +

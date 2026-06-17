@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // GPU driver-mode switch — the vfio-pci <-> nvidia rebind primitive that lets a
@@ -13,41 +16,93 @@ import (
 // (see preempt.go's shared/exclusive arbitration); this file is just "make the
 // card's host driver be X".
 //
-// Two mutually exclusive host bindings of the GPU's DISPLAY function:
+// Two mutually exclusive host bindings of the GPU's IOMMU group:
 //
-//	gpuModeVfio   — display function bound to vfio-pci. The card is free for VM
-//	                passthrough (libvirt managed='yes' hostdev) and is the boot
-//	                DEFAULT on a passthrough host (`options vfio-pci ids=...`).
-//	gpuModeNvidia — display function bound to the nvidia driver, so the host
-//	                nvidia-container runtime can SHARE one card across many
-//	                rootless pods via CDI (--device nvidia.com/gpu=all each).
+//	gpuModeVfio   — EVERY function of the group bound to vfio-pci. The card is
+//	                free for VM passthrough (libvirt managed='yes' hostdev) and is
+//	                the boot DEFAULT on a passthrough host (`options vfio-pci
+//	                ids=...`). A VFIO group is usable from a guest only when EVERY
+//	                member is vfio-bound (VFIO_GROUP_FLAGS_VIABLE) — so both the
+//	                display AND the sibling HDMI-audio function must move together.
+//	gpuModeNvidia — each function bound to its CORRECT host driver: the display
+//	                function to `nvidia` (so the host nvidia-container runtime can
+//	                SHARE one card across many rootless pods via CDI), the
+//	                HDMI-audio function to `snd_hda_intel`. The whole card is
+//	                switched, never just the display function.
 //
-// Tooling + permissions decision (researched + RDD-proven on the live card):
-//   - driverctl is REJECTED — absent on hosts here AND documented to hang hard
-//     (reboot-only recovery) when switching a running nvidia driver.
-//   - The rootless qemu:///session libvirt CANNOT rebind — `nodedev-reattach`
-//     fails "Permission denied" writing driver_override (verified). libvirt's
-//     managed='yes' stays the VM-side mechanism (a no-op safety net here, since
-//     the card boots vfio), but the arbiter cannot delegate the flip to it.
-//   - => sudo + sysfs driver_override is the correct, only reliable primitive.
-//     PCI rebind needs root; sudo is charly's established host-op pattern
-//     (mirrors target:local ScopeSystem `sudo bash` steps). No new PKGBUILD dep.
+// THE DEVICE-LOCK HAZARD (root cause, source-confirmed + RDD-proven 2026-06-17,
+// memory gpu-driver-switch-wedge-rca.md):
+//   The nvidia driver's PCI `.remove` (nv_pci_remove, kernel-open nv-pci.c) is
+//   reached by a sysfs `unbind`. With a non-zero `usage_count` (any open
+//   /dev/nvidia* fd, live CUDA context, or nvidia_uvm/modeset/drm still
+//   attached) it BLOCKS FOREVER in an `os_delay` poll loop — while the kernel
+//   PCI core holds the per-device `device_lock` across the whole `.remove`. That
+//   wedges every later bind/reset/remove on the device in unkillable D-state →
+//   recovery is REBOOT-ONLY (no userspace primitive releases a held device_lock).
 //
-// Only the DISPLAY function is ever flipped; the sibling AUDIO function stays on
-// vfio-pci. That is load-bearing, RDD-proven: on a single-GPU host the vfio-pci
-// module deregisters once it holds no device, which broke the return-to-vfio
-// path (`/sys/bus/pci/drivers/vfio-pci/bind` vanished). Keeping audio on vfio-pci
-// keeps the module live; compute pods only need the display function anyway.
+//   THE FIX: never sysfs-`unbind` a busy nvidia. `modprobe -r` is refcount-
+//   guarded — it returns EBUSY *immediately* if any client holds the GPU and
+//   NEVER reaches the blocking loop — so module-unload IS the safe, deterministic
+//   detach gate. switchScriptToVfio() detaches nvidia via `modprobe -r` (EBUSY =>
+//   refuse, exit 3, NEVER force-unbind), and runGPUSwitchScript bounds the whole
+//   operation (context deadline + WaitDelay) as defense-in-depth so a rare
+//   GSP-teardown stall frees charly + the arbiter lock instead of blocking
+//   forever; a confirmed wedge poisons the resource (preempt.go) until reboot.
+//
+// Tooling + permissions: sudo + sysfs is the only reliable primitive (rootless
+// qemu:///session libvirt cannot rebind — nodedev-reattach fails Permission
+// denied writing driver_override; driverctl is absent and hangs on a running
+// nvidia driver). sudo is charly's established host-op pattern. No new PKGBUILD
+// dep. driver_override + drivers_probe forces the exact target driver regardless
+// of the boot-time `ids=` dynamic-id table.
 const (
 	gpuModeVfio   = "vfio"
 	gpuModeNvidia = "nvidia"
+
+	// nvidiaVendorID is the normalized PCI vendor of NVIDIA cards (the device_lock
+	// wedge is an nvidia-driver concept; status flags wedges only on these cards).
+	nvidiaVendorID = "0x10de"
+
+	// hostDriverDisplay / hostDriverAudio / hostDriverVfio are the host drivers a
+	// group function binds to. The display (VGA/3D, class 0x03xx) function takes
+	// nvidia in host mode; the HDMI-audio (class 0x0403) function takes
+	// snd_hda_intel; everything takes vfio-pci for passthrough.
+	hostDriverDisplay = "nvidia"
+	hostDriverAudio   = "snd_hda_intel"
+	hostDriverVfio    = "vfio-pci"
+
+	// gpuSwitchTimeout bounds the whole sudo rebind script. The RDD-proven switch
+	// completes in seconds; a script that runs longer is either a GSP-teardown
+	// stall or the device_lock wedge — either way charly must stop waiting (and
+	// release the arbiter lock) rather than block forever. gpuSwitchWaitDelay
+	// bounds how long Cmd.Wait lingers for output after the deadline kills the
+	// shell, so a leaked D-state grandchild holding the pipe cannot hang charly.
+	gpuSwitchTimeout   = 90 * time.Second
+	gpuSwitchWaitDelay = 5 * time.Second
 )
 
-// runGPUSwitchScript executes a root sysfs-rebind script. Package var so tests
-// fake it without touching the host or invoking sudo.
+// errGPUSwitchWedged signals that a switch did not complete because the nvidia
+// `.remove` is stuck holding the device_lock (deadline exceeded, or the script
+// self-detected a D-state task in nv_pci_remove). The arbiter POISONS the
+// resource on this error (preempt.go) so no later claimant re-wedges the card;
+// recovery is a host reboot.
+var errGPUSwitchWedged = errors.New("GPU driver switch wedged: nvidia .remove stuck holding the device_lock — host reboot required")
+
+// runGPUSwitchScript executes a root sysfs-rebind script under a bounded context
+// so a kernel-side stall can never block charly forever. Package var so tests
+// fake it without touching the host or invoking sudo. A deadline timeout maps to
+// errGPUSwitchWedged (the only thing that makes a brief rebind run >90s is the
+// device_lock wedge / GSP-teardown stall).
 var runGPUSwitchScript = func(script string) ([]byte, error) {
-	cmd := exec.Command("sudo", "bash", "-c", script)
-	return cmd.CombinedOutput()
+	ctx, cancel := context.WithTimeout(context.Background(), gpuSwitchTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "sudo", "bash", "-c", script)
+	cmd.WaitDelay = gpuSwitchWaitDelay // bound Wait after kill — a D-state child can't be reaped
+	out, err := cmd.CombinedOutput()
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return out, errGPUSwitchWedged
+	}
+	return out, err
 }
 
 // gpuDisplayDriver reads the live driver bound to a PCI function from sysfs
@@ -73,68 +128,135 @@ func gpuModeFromDriver(driver string) string {
 	return gpuModeVfio
 }
 
-// currentGPUMode reports the live mode of a GPU's display function. Read from
-// sysfs (not the cached VFIOGpu.Driver) so it reflects reality after a flip.
+// currentGPUMode reports the live mode of a GPU's DISPLAY function — the
+// indicator of which mode the card as a whole is in. Read from sysfs (not the
+// cached VFIOGpu.Driver) so it reflects reality after a flip.
 func currentGPUMode(gpu VFIOGpu) string {
 	return gpuModeFromDriver(gpuDisplayDriver(gpu.Addr))
 }
 
-// switchScriptToNvidia / switchScriptToVfio build the exact RDD-proven sysfs
-// sequences for the GPU display function `addr` (e.g. "0000:01:00.0"). They run
-// as root via runGPUSwitchScript and self-verify the resulting driver.
-func switchScriptToNvidia(addr string) string {
-	return fmt.Sprintf(`set -u
-addr=%q
-# keep vfio-pci registered (it still holds the sibling audio function)
-modprobe vfio-pci 2>/dev/null || true
-# unbind the display function from whatever currently holds it (vfio-pci)
-cur=$(readlink /sys/bus/pci/devices/$addr/driver 2>/dev/null); cur=${cur##*/}
-if [ -n "$cur" ]; then echo "$addr" > /sys/bus/pci/drivers/$cur/unbind 2>/dev/null || true; fi
-# force nvidia: override, load nvidia+nvidia_uvm + create /dev/nvidiaN, bind
-echo nvidia > /sys/bus/pci/devices/$addr/driver_override
-nvidia-modprobe -c 0 -u 2>/dev/null || true
-echo "$addr" > /sys/bus/pci/drivers/nvidia/bind 2>/dev/null || true
-drv=$(readlink /sys/bus/pci/devices/$addr/driver 2>/dev/null); drv=${drv##*/}
-[ "$drv" = nvidia ] || { echo "switch-to-nvidia FAILED: $addr driver=${drv:-unbound}" >&2; exit 1; }
-`, addr)
+// hostDriverForFunction maps an IOMMU-group member (by its PCI class) + target
+// mode to the host driver it should bind to. vfio mode => every function on
+// vfio-pci (group viability). nvidia/host mode => display on nvidia, HDMI-audio
+// on snd_hda_intel, any other sibling on vfio-pci (left safe — host use of the
+// GPU needs only the display function; group viability is a passthrough-only
+// requirement).
+func hostDriverForFunction(class, mode string) string {
+	if mode == gpuModeVfio {
+		return hostDriverVfio
+	}
+	switch {
+	case strings.HasPrefix(class, "0x03"): // VGA / 3D / display controller
+		return hostDriverDisplay
+	case class == "0x0403": // HDMI/DisplayPort audio
+		return hostDriverAudio
+	default:
+		return hostDriverVfio
+	}
 }
 
-func switchScriptToVfio(addr string) string {
-	return fmt.Sprintf(`set -u
-addr=%q
-cur=$(readlink /sys/bus/pci/devices/$addr/driver 2>/dev/null); cur=${cur##*/}
-if [ -n "$cur" ]; then echo "$addr" > /sys/bus/pci/drivers/$cur/unbind 2>/dev/null || true; fi
-# vfio-pci may have deregistered while the display fn was on nvidia — reload it
-modprobe vfio-pci 2>/dev/null || true
-echo vfio-pci > /sys/bus/pci/devices/$addr/driver_override
-echo "$addr" > /sys/bus/pci/drivers/vfio-pci/bind 2>/dev/null || true
-# clear the override so the device tracks the boot default (ids=) thereafter
-echo "" > /sys/bus/pci/devices/$addr/driver_override
-drv=$(readlink /sys/bus/pci/devices/$addr/driver 2>/dev/null); drv=${drv##*/}
-[ "$drv" = vfio-pci ] || { echo "switch-to-vfio FAILED: $addr driver=${drv:-unbound}" >&2; exit 1; }
-`, addr)
+// groupInMode reports whether EVERY function of the GPU's IOMMU group is already
+// bound to the driver the target mode wants (live sysfs read) — the idempotency
+// gate, group-aware (a half-switched group, e.g. display on nvidia but audio
+// stranded on vfio, is NOT "in mode" and gets completed).
+func groupInMode(gpu VFIOGpu, mode string) bool {
+	for _, m := range gpu.GroupMembers {
+		if gpuDisplayDriver(m.Addr) != hostDriverForFunction(m.Class, mode) {
+			return false
+		}
+	}
+	return true
 }
 
-// switchGPUDriverMode rebinds the GPU's display function to the target mode.
-// Idempotent: a no-op (no sudo call) when already in mode.
+// switchScriptToNvidia builds the group-aware vfio->host rebind: each function to
+// its host driver (display->nvidia, audio->snd_hda_intel), then create the
+// /dev/nvidia* nodes. The BIND direction never enters the nvidia .remove hazard.
+func switchScriptToNvidia(gpu VFIOGpu) string {
+	var b strings.Builder
+	b.WriteString("set -u\n")
+	for _, m := range gpu.GroupMembers {
+		target := hostDriverForFunction(m.Class, gpuModeNvidia)
+		fmt.Fprintf(&b, "modprobe %s 2>/dev/null || true\n", target)
+		fmt.Fprintf(&b, "a=%q; want=%q\n", m.Addr, target)
+		b.WriteString("cur=$(readlink /sys/bus/pci/devices/$a/driver 2>/dev/null); cur=${cur##*/}\n")
+		b.WriteString("if [ -n \"$cur\" ] && [ \"$cur\" != \"$want\" ]; then echo \"$a\" > /sys/bus/pci/drivers/$cur/unbind 2>/dev/null || true; fi\n")
+		b.WriteString("echo \"$want\" > /sys/bus/pci/devices/$a/driver_override\n")
+		b.WriteString("echo \"$a\" > /sys/bus/pci/drivers_probe 2>/dev/null || true\n")
+	}
+	// create /dev/nvidiaN + /dev/nvidiactl + /dev/nvidia-uvm for CDI/container use
+	b.WriteString("nvidia-modprobe -c 0 -u 2>/dev/null || true\n")
+	fmt.Fprintf(&b, "d=%q\n", gpu.Addr)
+	b.WriteString("drv=$(readlink /sys/bus/pci/devices/$d/driver 2>/dev/null); drv=${drv##*/}\n")
+	b.WriteString("[ \"$drv\" = nvidia ] || { echo \"switch-to-nvidia FAILED: $d driver=${drv:-unbound}\" >&2; exit 1; }\n")
+	return b.String()
+}
+
+// switchScriptToVfio builds the group-aware host->vfio rebind via the RDD-proven
+// SAFE detach: guarded module unload (NEVER a sysfs-unbind of a busy nvidia, the
+// device_lock wedge). modprobe -r returns EBUSY immediately if a client still
+// holds the GPU => exit 3 (refuse, do not force). Then bind every function to
+// vfio-pci. A post-bind verification failure WITH a D-state task in
+// nv_pci_remove => exit 4 (WEDGED, reboot required).
+func switchScriptToVfio(gpu VFIOGpu) string {
+	var b strings.Builder
+	b.WriteString("set -u\n")
+	// best-effort host-side quiesce of the common host holder
+	b.WriteString("systemctl stop nvidia-persistenced 2>/dev/null || true\n")
+	// SAFE detach: unload the dependent stack, then nvidia itself — refcount-guarded.
+	b.WriteString("modprobe -r nvidia_drm nvidia_modeset nvidia_uvm nvidia_peermem 2>/dev/null || true\n")
+	b.WriteString("if lsmod | grep -q '^nvidia '; then\n")
+	b.WriteString("  if ! modprobe -r nvidia 2>/dev/null; then\n")
+	b.WriteString("    echo \"switch-to-vfio REFUSED: nvidia module still in use (a GPU client holds the card) — refusing to force-unbind (would wedge the device_lock)\" >&2\n")
+	b.WriteString("    exit 3\n")
+	b.WriteString("  fi\n")
+	b.WriteString("fi\n")
+	b.WriteString("modprobe vfio-pci 2>/dev/null || true\n")
+	for _, m := range gpu.GroupMembers {
+		fmt.Fprintf(&b, "a=%q\n", m.Addr)
+		b.WriteString("cur=$(readlink /sys/bus/pci/devices/$a/driver 2>/dev/null); cur=${cur##*/}\n")
+		b.WriteString("if [ -n \"$cur\" ] && [ \"$cur\" != vfio-pci ]; then echo \"$a\" > /sys/bus/pci/drivers/$cur/unbind 2>/dev/null || true; fi\n")
+		b.WriteString("echo vfio-pci > /sys/bus/pci/devices/$a/driver_override\n")
+		b.WriteString("echo \"$a\" > /sys/bus/pci/drivers_probe 2>/dev/null || true\n")
+		b.WriteString("echo \"\" > /sys/bus/pci/devices/$a/driver_override\n") // track the boot ids= default thereafter
+	}
+	b.WriteString("rc=0\n")
+	for _, m := range gpu.GroupMembers {
+		fmt.Fprintf(&b, "a=%q\n", m.Addr)
+		b.WriteString("drv=$(readlink /sys/bus/pci/devices/$a/driver 2>/dev/null); drv=${drv##*/}\n")
+		b.WriteString("if [ \"$drv\" != vfio-pci ]; then\n")
+		b.WriteString("  if grep -lqs -e nv_pci_remove -e os_delay /proc/*/stack 2>/dev/null; then echo \"switch-to-vfio WEDGED: $a driver=${drv:-unbound}; nv_pci_remove in D-state — host reboot required\" >&2; exit 4; fi\n")
+		b.WriteString("  echo \"switch-to-vfio FAILED: $a driver=${drv:-unbound}\" >&2; rc=1\n")
+		b.WriteString("fi\n")
+	}
+	b.WriteString("exit $rc\n")
+	return b.String()
+}
+
+// switchGPUDriverMode rebinds the GPU's WHOLE IOMMU group to the target mode.
+// Idempotent: a no-op (no sudo call) when every function is already in mode. A
+// wedge (deadline / self-detected D-state) returns errGPUSwitchWedged so callers
+// can poison the resource.
 func switchGPUDriverMode(gpu VFIOGpu, mode string) error {
-	if currentGPUMode(gpu) == mode {
+	if groupInMode(gpu, mode) {
 		return nil
 	}
 	var script string
 	switch mode {
 	case gpuModeNvidia:
-		script = switchScriptToNvidia(gpu.Addr)
+		script = switchScriptToNvidia(gpu)
 	case gpuModeVfio:
-		script = switchScriptToVfio(gpu.Addr)
+		script = switchScriptToVfio(gpu)
 	default:
 		return fmt.Errorf("unknown GPU mode %q (want %q or %q)", mode, gpuModeVfio, gpuModeNvidia)
 	}
 	out, err := runGPUSwitchScript(script)
-	if err != nil {
-		return fmt.Errorf("switching GPU %s to %s mode: %w\n%s", gpu.Addr, mode, err, strings.TrimSpace(string(out)))
+	if err == nil {
+		return nil
 	}
-	return nil
+	if errors.Is(err, errGPUSwitchWedged) || strings.Contains(string(out), "WEDGED") {
+		return fmt.Errorf("%w\n%s", errGPUSwitchWedged, strings.TrimSpace(string(out)))
+	}
+	return fmt.Errorf("switching GPU %s to %s mode: %w\n%s", gpu.Addr, mode, err, strings.TrimSpace(string(out)))
 }
 
 // ensureCDIRoot (re)generates the nvidia CDI spec at /etc/cdi/nvidia.yaml as
@@ -171,16 +293,15 @@ func deployNodeSharesGPU(node DeploymentNode, resources map[string]*ResourceDef)
 }
 
 // gpuSwitchModeTolerant detects the GPU matching `vendor` (PCI vendor hex, e.g.
-// "0x10de") and flips its display function to `mode` — TOLERANT of an absent
+// "0x10de") and flips its WHOLE IOMMU group to `mode` — TOLERANT of an absent
 // card. This is the arbiter's switchMode hook (charly/preempt.go), used for
 // BOTH directions, so it MUST keep a claim portable across GPU and no-GPU hosts:
 //
-//   - card present → flip (no-op if already in mode); a real flip failure errors.
+//   - card present → flip (no-op if already in mode); a real flip failure errors
+//     (errGPUSwitchWedged on a device_lock wedge → the arbiter poisons it).
 //   - card ABSENT → skip with a note, NO error. For the vfio direction there is
-//     nothing to free (the VM-side autoAllocate/libvirt is the authority and
-//     fails hard at create if a required card is missing); for the nvidia
-//     direction a shared pod degrades to CPU-only (its GPU checks N/A). Erroring
-//     here would break every requires_exclusive bed on a no-GPU host.
+//     nothing to free; for the nvidia direction a shared pod degrades to CPU-only.
+//     Erroring here would break every requires_exclusive bed on a no-GPU host.
 //
 // The manual `charly vm gpu mode` verb deliberately does NOT use this — it
 // errors on an absent card, because the operator asked for a specific device.

@@ -152,7 +152,18 @@ func (a *ResourceArbiter) applyMode(tokens []string, mode string) error {
 		if rdef == nil || rdef.Gpu == nil {
 			continue // arbitration-only token — no physical device to rebind
 		}
+		// Refuse to touch a card whose driver switch previously WEDGED its
+		// device_lock — re-issuing a bind/unbind would D-state behind the stuck
+		// nvidia `.remove` (a SECOND permanent wedge). The poison clears on
+		// reboot (boot-id keyed). Guards BOTH the acquire flip and the reconcile
+		// flip from re-touching a wedged card.
+		if a.resourcePoisoned(tok) {
+			return fmt.Errorf("resource %q is poisoned: a previous GPU driver switch wedged the device_lock — a host reboot is required (%w)", tok, errGPUSwitchWedged)
+		}
 		if err := a.switchMode(rdef.Gpu.Vendor, mode); err != nil {
+			if errors.Is(err, errGPUSwitchWedged) {
+				a.poisonResource(tok) // contain the cascade: no later claimant may re-wedge
+			}
 			return fmt.Errorf("setting resource %q to %s mode: %w", tok, mode, err)
 		}
 		if mode == gpuModeNvidia {
@@ -419,6 +430,12 @@ func (a *ResourceArbiter) AcquireExclusive(claimant string, claimantNode Deploym
 		}
 	}
 
+	// Refuse a card wedged by a prior switch (boot-id poison) BEFORE stopping any
+	// holder — a flip on a wedged device_lock would only add a second D-state.
+	if tok := a.firstPoisonedToken(tokens); tok != "" {
+		return nil, fmt.Errorf("GPU resource %q is unavailable until a host reboot — a previous driver switch wedged the card's device_lock (see `charly vm gpu status` / `charly vm gpu recover`); reboot clears it", tok)
+	}
+
 	// Preempt the running preemptible HOLDERS (the operator's vfio VM) — these
 	// are restored when this exclusive claim releases.
 	toStop := a.holdersToStop(tokens, claimant)
@@ -531,6 +548,11 @@ func (a *ResourceArbiter) AcquireShared(claimant string, claimantNode Deployment
 				"resource %s is held EXCLUSIVELY by %q — cannot share it for %q (release the exclusive claim first)",
 				strings.Join(s, ", "), lz.Claimant, claimant)
 		}
+	}
+
+	// Refuse a card wedged by a prior switch (boot-id poison) before doing work.
+	if tok := a.firstPoisonedToken(tokens); tok != "" {
+		return nil, fmt.Errorf("GPU resource %q is unavailable until a host reboot — a previous driver switch wedged the card's device_lock (see `charly vm gpu status` / `charly vm gpu recover`); reboot clears it", tok)
 	}
 
 	// First shared claim for these tokens → flip to nvidia + preempt holders.
@@ -1031,6 +1053,93 @@ func gatherResources() map[string]*ResourceDef {
 		return uf.Resource
 	}
 	return nil
+}
+
+// --- GPU-resource poisoning (device_lock wedge containment) ----------------
+//
+// When a GPU driver switch WEDGES the card's device_lock (errGPUSwitchWedged —
+// nvidia `.remove` stuck), recovery is reboot-only and ANY further bind/unbind on
+// the device would add a SECOND permanent D-state. poisonResource records the
+// wedge keyed to the current boot, so every later acquire + reconcile REFUSES the
+// token until the host reboots (a new boot_id makes the marker stale → cleared).
+// This is the cascade-containment half of the device_lock fix (the prevention half
+// is the modprobe -r gate in gpu_driver_switch.go).
+
+func bootID() string {
+	data, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// poisonTokenFileName sanitizes a token into a safe poison-marker filename.
+func poisonTokenFileName(token string) string {
+	var b strings.Builder
+	for _, r := range token {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	return "poison-" + b.String() + ".id"
+}
+
+// poisonPath is the marker file for a token, in the arbiter's ledger dir — so it
+// shares the production preemption dir (newResourceArbiter) AND stays hermetic in
+// tests (the injected t.TempDir() ledgerPath).
+func (a *ResourceArbiter) poisonPath(token string) string {
+	return filepath.Join(filepath.Dir(a.ledgerPath), poisonTokenFileName(token))
+}
+
+// poisonResource marks a GPU token unusable until the next host reboot.
+func (a *ResourceArbiter) poisonResource(token string) {
+	bid := bootID()
+	if bid == "" {
+		return // no boot_id → cannot key the marker; the live wedge still errors per-call
+	}
+	p := a.poisonPath(token)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return
+	}
+	_ = os.WriteFile(p, []byte(bid+"\n"), 0o644)
+	fmt.Fprintf(os.Stderr, "preempt: POISONED GPU resource %q — driver switch wedged the device_lock; a host reboot is required before it can be claimed again\n", token)
+}
+
+// resourcePoisoned reports whether a token is poisoned FOR THE CURRENT BOOT. A
+// marker from a prior boot is stale (the reboot cleared the wedge) — it is removed
+// and reads as not-poisoned.
+func (a *ResourceArbiter) resourcePoisoned(token string) bool {
+	p := a.poisonPath(token)
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return false
+	}
+	if marked := strings.TrimSpace(string(data)); marked != "" && marked == bootID() {
+		return true
+	}
+	_ = os.Remove(p) // stale (prior boot) → clear
+	return false
+}
+
+// firstPoisonedToken returns the first gpu-backed token in `tokens` poisoned for
+// the current boot, or "" when none is. Only gpu-backed tokens can wedge.
+func (a *ResourceArbiter) firstPoisonedToken(tokens []string) string {
+	resources := a.resources()
+	for _, tok := range tokens {
+		if rdef := resources[tok]; rdef != nil && rdef.Gpu != nil && a.resourcePoisoned(tok) {
+			return tok
+		}
+	}
+	return ""
+}
+
+// clearPoison removes a token's poison marker (used by `charly vm gpu recover`
+// after verifying the card is healthy; a boot-id mismatch clears it implicitly).
+func (a *ResourceArbiter) clearPoison(token string) {
+	_ = os.Remove(a.poisonPath(token))
 }
 
 // tokenHeldByShared reports whether any existing SHARED lease holds a token in

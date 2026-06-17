@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -8,9 +9,10 @@ import (
 
 // VmGpuCmd groups the host-side VFIO/GPU-passthrough inspection + mode verbs.
 type VmGpuCmd struct {
-	Status VmGpuStatusCmd `cmd:"" help:"Report host IOMMU readiness for GPU passthrough"`
-	List   VmGpuListCmd   `cmd:"" help:"List passthrough-capable GPUs and emit a ready-to-paste hostdevs block"`
-	Mode   VmGpuModeCmd   `cmd:"" help:"Show or set the GPU driver mode: vfio (VM passthrough) | nvidia (shared CDI pods)"`
+	Status  VmGpuStatusCmd  `cmd:"" help:"Report host IOMMU readiness for GPU passthrough"`
+	List    VmGpuListCmd    `cmd:"" help:"List passthrough-capable GPUs and emit a ready-to-paste hostdevs block"`
+	Mode    VmGpuModeCmd    `cmd:"" help:"Show or set the GPU driver mode: vfio (VM passthrough) | nvidia (shared CDI pods)"`
+	Recover VmGpuRecoverCmd `cmd:"" help:"Recover a card left unbound/half-switched back to vfio-pci (refuses + reports reboot-required on a true device_lock wedge)"`
 }
 
 // VmGpuModeCmd shows or sets the host GPU driver mode for a vendor-matched card.
@@ -19,7 +21,8 @@ type VmGpuCmd struct {
 // automatically for requires_exclusive (vfio) / requires_shared (nvidia)
 // claims; this verb is the explicit override + inspector. It does NOT consult
 // the arbiter ledger — a manual flip while an exclusive lease is active is the
-// operator's call.
+// operator's call. The flip switches the WHOLE IOMMU group (display + audio),
+// never just the display function (see gpu_driver_switch.go).
 type VmGpuModeCmd struct {
 	Mode   string `arg:"" optional:"" help:"Target mode: vfio (passthrough) | nvidia (CDI pods). Omit to SHOW the current mode."`
 	Vendor string `long:"vendor" default:"0x10de" help:"PCI vendor of the GPU to switch (default 0x10de = NVIDIA)."`
@@ -39,18 +42,86 @@ func (c *VmGpuModeCmd) Run() error {
 		fmt.Printf("%s (%s) GPU driver mode: %s\n", gpu.Addr, ids, cur)
 		return nil
 	}
-	if cur == c.Mode {
-		fmt.Printf("%s (%s) already in %s mode\n", gpu.Addr, ids, c.Mode)
+	if groupInMode(gpu, c.Mode) {
+		fmt.Printf("%s (%s) already in %s mode (whole IOMMU group)\n", gpu.Addr, ids, c.Mode)
 		return nil
 	}
 	if err := switchGPUDriverMode(gpu, c.Mode); err != nil {
+		if errors.Is(err, errGPUSwitchWedged) {
+			fmt.Fprintf(os.Stderr, "%s: the switch WEDGED — a host reboot is required.\n", gpu.Addr)
+		}
 		return err
 	}
 	if c.Mode == gpuModeNvidia {
 		ensureCDIRoot() // /etc/cdi is root-owned — generate the CDI spec as root
 	}
-	fmt.Printf("%s (%s) switched %s -> %s\n", gpu.Addr, ids, cur, c.Mode)
+	fmt.Printf("%s (%s) switched %s -> %s (whole IOMMU group)\n", gpu.Addr, ids, cur, c.Mode)
 	return nil
+}
+
+// VmGpuRecoverCmd recovers a card left UNBOUND or half-switched (e.g. an
+// interrupted flip) back to the clean vfio-pci default — but ONLY when the card
+// is NOT wedged. A read-only probe detects a true device_lock wedge (an nvidia
+// `.remove` stuck in D-state) FIRST; on a wedge it reports reboot-required and
+// attempts NOTHING (a bind on a wedged device would add a second permanent
+// D-state). On a healthy/unbound card it rebinds the whole IOMMU group to
+// vfio-pci and clears any stale poison marker.
+type VmGpuRecoverCmd struct {
+	Vendor string `long:"vendor" default:"0x10de" help:"PCI vendor of the GPU to recover (default 0x10de = NVIDIA)."`
+}
+
+func (c *VmGpuRecoverCmd) Run() error {
+	gpu, found := selectGPUByVendor(DetectVFIO(), c.Vendor)
+	if !found {
+		return fmt.Errorf("no GPU matching vendor %s on this host — check `charly vm gpu status`", normalizePCIVendor(c.Vendor))
+	}
+	// Read-only wedge probe FIRST — NEVER bind a wedged card (device_driver_attach
+	// would D-state behind the stuck .remove = a second permanent wedge).
+	if gpuWedgeDetected() {
+		fmt.Printf("%s: WEDGED — the nvidia driver's .remove is stuck holding the device_lock.\n", gpu.Addr)
+		fmt.Println("  Recovery is REBOOT-ONLY: no userspace operation can release a held device_lock or")
+		fmt.Println("  abort an in-kernel driver callback. NOT attempting any bind (that would add a second")
+		fmt.Println("  permanent D-state). Reboot the host to clear it.")
+		return fmt.Errorf("GPU %s wedged (nvidia .remove holding the device_lock) — host reboot required", gpu.Addr)
+	}
+	if groupInMode(gpu, gpuModeVfio) {
+		clearVendorPoison(c.Vendor)
+		fmt.Printf("%s: healthy — all IOMMU-group functions already bound to vfio-pci. Nothing to recover.\n", gpu.Addr)
+		return nil
+	}
+	fmt.Printf("%s: not fully on vfio-pci and NOT wedged — rebinding the whole IOMMU group to vfio-pci...\n", gpu.Addr)
+	if err := switchGPUDriverMode(gpu, gpuModeVfio); err != nil {
+		if errors.Is(err, errGPUSwitchWedged) {
+			fmt.Fprintf(os.Stderr, "%s: the rebind WEDGED — a host reboot is required.\n", gpu.Addr)
+		}
+		return err
+	}
+	clearVendorPoison(c.Vendor)
+	fmt.Printf("%s: recovered — all IOMMU-group functions bound to vfio-pci.\n", gpu.Addr)
+	return nil
+}
+
+// gpuWedgeDetected runs a read-only root probe for any task stuck in the nvidia
+// `.remove` path (a D-state task whose kernel stack hits nv_pci_remove/os_delay).
+// Its presence means the device_lock is held by a never-returning `.remove` —
+// the reboot-only wedge. Read-only (no bind/unbind), bounded by runGPUSwitchScript.
+func gpuWedgeDetected() bool {
+	out, _ := runGPUSwitchScript("for p in $(ps -eo pid,stat | awk '$2 ~ /D/{print $1}'); do " +
+		"grep -qs -e nv_pci_remove -e os_delay /proc/$p/stack 2>/dev/null && { echo WEDGED; exit 0; }; done; echo CLEAN\n")
+	return strings.Contains(string(out), "WEDGED")
+}
+
+// clearVendorPoison removes the poison marker of every arbiter token whose gpu
+// selector matches `vendor` — called after `charly vm gpu recover` verifies the
+// card is healthy, so a later acquire is no longer refused.
+func clearVendorPoison(vendor string) {
+	want := normalizePCIVendor(vendor)
+	a := newResourceArbiter()
+	for tok, rdef := range gatherResources() {
+		if rdef != nil && rdef.Gpu != nil && normalizePCIVendor(rdef.Gpu.Vendor) == want {
+			a.clearPoison(tok)
+		}
+	}
 }
 
 // VmGpuStatusCmd reports whether the host is configured for VFIO passthrough.
@@ -99,6 +170,20 @@ func (c *VmGpuStatusCmd) Run() error { //nolint:unparam // error return kept for
 		fmt.Println("  GPUs: none detected")
 		return nil
 	}
+	poisoned := poisonedTokensByVendor()
+	// Probe for a live device_lock wedge (a sudo /proc scan) ONLY when an nvidia
+	// card looks unhealthy (not cleanly vfio/nvidia) or is poisoned — a clean
+	// status read needs no sudo.
+	suspect := len(poisoned) > 0
+	for _, g := range rep.GPUs {
+		if normalizePCIVendor(g.VendorID) == nvidiaVendorID && !groupInMode(g, gpuModeVfio) && !groupInMode(g, gpuModeNvidia) {
+			suspect = true
+		}
+	}
+	wedged := false
+	if suspect {
+		wedged = gpuWedgeDetected()
+	}
 	fmt.Println("  GPUs:")
 	for _, g := range rep.GPUs {
 		grp := "no IOMMU group"
@@ -117,8 +202,60 @@ func (c *VmGpuStatusCmd) Run() error { //nolint:unparam // error return kept for
 		}
 		fmt.Printf("    %s  %s:%s  %s  driver=%s  %s%s\n",
 			g.Addr, trim0x(g.VendorID), trim0x(g.DeviceID), g.ClassLabel, drv, grp, access)
+		// Per-function driver of the WHOLE IOMMU group — the switch unit. A group
+		// is VFIO-viable (guest-usable) only when EVERY member is on vfio-pci.
+		for _, m := range g.GroupMembers {
+			md := m.Driver
+			if md == "" {
+				md = "unbound"
+			}
+			fmt.Printf("        fn %s  %-22s driver=%s\n", m.Addr, m.ClassLabel, md)
+		}
+		fmt.Printf("        mode: %s\n", gpuGroupModeLabel(g))
+		if wedged && normalizePCIVendor(g.VendorID) == nvidiaVendorID {
+			fmt.Println("        *** WEDGED: an nvidia .remove is stuck holding the device_lock — host reboot REQUIRED")
+			fmt.Println("            (no userspace recovery exists; `charly vm gpu recover` confirms but cannot fix it) ***")
+		}
+		if poisoned[normalizePCIVendor(g.VendorID)] {
+			fmt.Println("        *** POISONED: a prior driver switch wedged this card — claims are refused until a host reboot")
+			fmt.Println("            (`charly vm gpu recover` clears the marker once the card is verified healthy) ***")
+		}
 	}
 	return nil
+}
+
+// gpuGroupModeLabel describes the live driver mode of a GPU's IOMMU group:
+// "vfio" (all functions vfio-pci, passthrough-ready), "nvidia" (host/CDI:
+// display on nvidia), a plain "host driver" label for a card on its own host
+// driver (amdgpu/i915/… — the host's display GPU, never vfio-switched), or
+// "mixed/transitional" when a vfio-switchable card is half-switched.
+func gpuGroupModeLabel(g VFIOGpu) string {
+	switch {
+	case groupInMode(g, gpuModeVfio):
+		return "vfio (all functions vfio-pci — passthrough-ready)"
+	case groupInMode(g, gpuModeNvidia):
+		return "nvidia (host/CDI — display on nvidia, audio on snd_hda_intel)"
+	}
+	// Not a vfio/nvidia state. If the display fn is on some OTHER host driver
+	// (amdgpu, i915, nouveau, …) it is the host's own GPU, not vfio-switchable.
+	if disp := gpuDisplayDriver(g.Addr); disp != "" && disp != hostDriverVfio && disp != hostDriverDisplay {
+		return fmt.Sprintf("host driver %q — not a vfio-switchable card", disp)
+	}
+	return "mixed/transitional (group half-switched — run `charly vm gpu recover` or `charly vm gpu mode <vfio|nvidia>`)"
+}
+
+// poisonedTokensByVendor maps each normalized PCI vendor to whether ANY of its
+// arbiter tokens is currently poisoned (boot-id keyed) — so status can flag the
+// card whose claims the arbiter is refusing.
+func poisonedTokensByVendor() map[string]bool {
+	out := map[string]bool{}
+	a := newResourceArbiter()
+	for tok, rdef := range gatherResources() {
+		if rdef != nil && rdef.Gpu != nil && a.resourcePoisoned(tok) {
+			out[normalizePCIVendor(rdef.Gpu.Vendor)] = true
+		}
+	}
+	return out
 }
 
 // VmGpuListCmd lists each GPU plus a ready-to-paste hostdevs YAML block.

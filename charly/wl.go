@@ -1601,7 +1601,7 @@ func wlrctlToplevel(ex DeployExecutor, action, target string) error {
 // up their actual socket). Degrades to the historical fallbacks when pgrep or
 // the compositor process is unavailable.
 const wlCompositorEnvPrelude = `for __c in kwin_wayland sway labwc; do __p=$(pgrep -x "$__c" 2>/dev/null | head -1); [ -n "$__p" ] && break; done; ` +
-	`if [ -n "$__p" ] && [ -r /proc/$__p/environ ]; then check "$(tr '\0' '\n' < /proc/$__p/environ | grep -E '^(XDG_RUNTIME_DIR|WAYLAND_DISPLAY|DBUS_SESSION_BUS_ADDRESS)=' | sed 's/^/export /')"; fi; ` +
+	`if [ -n "$__p" ] && [ -r /proc/$__p/environ ]; then eval "$(tr '\0' '\n' < /proc/$__p/environ | grep -E '^(XDG_RUNTIME_DIR|WAYLAND_DISPLAY|DBUS_SESSION_BUS_ADDRESS)=' | sed 's/^/export /')"; fi; ` +
 	`export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}" WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"`
 
 // wlShellCmd wraps a command with the compositor session environment (sourced

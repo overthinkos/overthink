@@ -23,6 +23,18 @@ func TestWlShellCmdSourcesCompositorEnv(t *testing.T) {
 			t.Errorf("wlShellCmd output missing %q:\n%s", want, got)
 		}
 	}
+	// Regression guard: the /proc/environ exports MUST be applied with `eval`,
+	// not `check` (a non-existent command). A prior `eval`→`check` corruption
+	// silently dropped the sourced WAYLAND_DISPLAY=wayland-1 + the live
+	// DBUS_SESSION_BUS_ADDRESS, so KWin wl probes (wtype hit wayland-0, kdotool
+	// hit the baked /tmp/dbus-session) all failed on selkies-kde. Proven on a live
+	// pod: with `eval` both wtype and kdotool reach the KWin session.
+	if !strings.Contains(got, `eval "$(tr `) {
+		t.Errorf("wlShellCmd must source /proc/environ via eval, got:\n%s", got)
+	}
+	if strings.Contains(got, `check "$(`) {
+		t.Errorf("wlShellCmd uses `check` where `eval` is required (the env-sourcing typo):\n%s", got)
+	}
 	if !strings.HasSuffix(got, "&& kdotool search ''") {
 		t.Errorf("wlShellCmd wrong suffix: %s", got)
 	}

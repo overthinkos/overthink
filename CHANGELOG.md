@@ -22,6 +22,36 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-17 — fix(selkies-kde): KWin wl-probes source the live compositor env (`eval`, not `check`) (`v2026.168.1408`)
+
+The selkies-kde streaming desktop's `charly check wl` probes
+(`kde-wl-keyboard-wtype`, `kde-wl-toplevel-via-kdotool`) failed on the KWin
+session: `wtype` reported "Compositor does not support the virtual keyboard
+protocol" and `kdotool` reported "org.kde.KWin was not provided".
+
+Root cause: `wlCompositorEnvPrelude` (wl.go) is designed to source the running
+compositor's live `WAYLAND_DISPLAY` + `DBUS_SESSION_BUS_ADDRESS` from
+`/proc/<pid>/environ` — KWin (started via `startplasma-wayland` under
+`dbus-run-session`) renders into `wayland-1` (pixelflux) and registers
+`org.kde.KWin` on a RANDOM `/tmp/dbus-XXXXXX` bus, not the baked defaults. But the
+prelude applied the sourced exports with `check "$(...)"` instead of
+`eval "$(...)"`; `check` is not a command, so the exports silently dropped and the
+probe fell back to `wayland-0` + the baked `/tmp/dbus-session`, where wtype's
+virtual-keyboard protocol is absent and `org.kde.KWin` is unregistered. One
+`check`->`eval` typo broke BOTH the keyboard and the window probes at once.
+
+Fix: `check`->`eval` in `wlCompositorEnvPrelude`. RDD-proven on a live selkies-kde
+pod (wtype "Typed 6 characters"; kdotool listed the live KWin windows). The
+kde-selkies supervisorctl-status check is marked `context: runtime` to match its
+sibling (supervisord runs only in a live deploy). R5 claim-keyed sweep: the same
+`eval`->`check` corruption in the secrets / direnv / charly-config / layer
+SKILL.md `.envrc` / `.secrets` / direnv-hook examples was fixed in the plugins
+repo (documentation reviewed).
+
+R10: `check-selkies-kde-pod` PASS (10 steps; the 5 `kde-wl-*` probes green)
+through the fresh-rebuild gate, run three times. Regression guard in
+`wl_kwin_test.go` asserts the prelude sources via `eval` and never `check`.
+
 ### 2026-06-17 — fix(check): committed-APK checks anchor to the authoring candy — fail hard, no fallback (`v2026.168.1403`)
 
 The android-emulator-pod bed's `adb: install` / `appium: install-app` checks

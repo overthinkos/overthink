@@ -6,7 +6,7 @@ package main
 // charly.yml. TouchesHost: the rename mutates per-host state, and ctx.HostDeployPath
 // is retargeted so the trailing calver-schema stamp lands on the renamed file
 // (mirrors the charly-rebrand host relocation). Idempotent — a host already on
-// charly.yml is a no-op. See CHANGELOG.md.
+// charly.yml is a no-op. See CHANGELOG/.
 
 import (
 	"os"

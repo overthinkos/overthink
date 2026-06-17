@@ -17,4 +17,4 @@ preserving) rather than hand-editing where possible.
 
 **Authoritative rules live in the repo-root `CLAUDE.md`** (one level up). R0–R10,
 the hard-cutover policy, and AI attribution are defined there — this file only
-signposts and restates no rule. History lives in `CHANGELOG.md`.
+signposts and restates no rule. History lives in this repo's `CHANGELOG/` (one file per month).

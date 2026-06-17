@@ -33,7 +33,7 @@ package main
 // TouchesHost=false so the Phase A project-YAML rewrites ALSO run in the
 // project-only / remote-cache runner; Phase B (keyring re-key + shell-init /
 // env.d cleanup) is gated INTERNALLY on ctx.HostDeployPath, so a remote fetch
-// never mutates per-host state. See CHANGELOG.md.
+// never mutates per-host state. See CHANGELOG/.
 
 import (
 	"fmt"

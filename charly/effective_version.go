@@ -13,7 +13,7 @@ import "fmt"
 //     else
 //  3. the internal base image's EffectiveVersion (recurse); else
 //  4. a HARD ERROR pointing at `charly migrate` — there is NO build-timestamp
-//     fallback (see CHANGELOG: per-kind versioning hard cutover).
+//     fallback (see CHANGELOG/ — per-kind versioning hard cutover).
 //
 // The label is stable across builds when no candy changed; that stability is
 // what keeps a child's `FROM <base>` SHA from shifting and cascading

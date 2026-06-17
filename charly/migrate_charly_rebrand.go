@@ -32,7 +32,7 @@ package main
 // per-file .bak.<unix-ts> backups on content rewrites. TouchesHost is false so
 // remote-cache auto-migration applies the project-side rewrites to fetched
 // repos too (its host paths are empty, so the relocation block is skipped).
-// See CHANGELOG.md.
+// See CHANGELOG/.
 
 import (
 	"fmt"

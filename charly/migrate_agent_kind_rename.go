@@ -20,7 +20,7 @@ package main
 // `agent:` is a no-op); per-file .bak.<unix-ts>. TouchesHost false so the
 // project-file rewrites run under remote-cache auto-migration; the per-host
 // agent catalog (the AI-CLI overlay that never ships with the repo) is
-// processed when HostDeployPath is set. See CHANGELOG.md.
+// processed when HostDeployPath is set. See CHANGELOG/.
 
 import (
 	"bytes"

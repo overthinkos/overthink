@@ -14,7 +14,7 @@ package main
 // schema), so no unrelated mapping key is touched. Comment-preserving (yaml.v3 node
 // API); idempotent (a config already on candy_* is a no-op); per-file .bak.<unix-ts>.
 // TouchesHost false → remote-cache auto-migration applies it to fetched repos that
-// override `init:`. See CHANGELOG.md.
+// override `init:`. See CHANGELOG/.
 
 import (
 	"path/filepath"

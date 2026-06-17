@@ -735,8 +735,8 @@ them at deploy time; `charly update` merges new data non-destructively.
 `data_image: true` scratch-based boxes carry data + OCI labels,
 consumed via `charly config --data-from <data-image>`.
 
-See `plugins/README.md` for the authoritative skill index and
-`CHANGELOG.md` for the dated history of cutovers.
+See `plugins/README.md` for the authoritative skill index and this repo's
+[`CHANGELOG/`](CHANGELOG/README.md) (one file per month) for the dated history of cutovers.
 
 ## Troubleshooting
 
@@ -843,8 +843,8 @@ agent, testing and verifying deployments uses the one surface.
 See [VISION.md](VISION.md) for the long-term thesis and direction,
 [CLAUDE.md](CLAUDE.md) for the project's rules and mandates,
 [plugins/README.md](plugins/README.md) for the full skill index (usage
-and architecture live in the skills), and [CHANGELOG.md](CHANGELOG.md)
-for dated history (by policy, never duplicated here or in skills).
+and architecture live in the skills), and this repo's [CHANGELOG/](CHANGELOG/README.md)
+for dated history (one file per month; by policy, never duplicated here or in skills).
 
 ## License
 

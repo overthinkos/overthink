@@ -17,7 +17,7 @@ package main
 // check-level `scope: build|deploy` are NEVER touched. Comment-preserving
 // (yaml.v3 node API); idempotent (a config on candy/box is a no-op); per-file
 // .bak.<unix-ts>. TouchesHost false → remote-cache auto-migration applies it to
-// fetched repos too. See CHANGELOG.md.
+// fetched repos too. See CHANGELOG/.
 
 import (
 	"path/filepath"

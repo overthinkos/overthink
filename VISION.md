@@ -53,4 +53,4 @@ Every candy, every box, every probe serves one end: **to build a better candybox
 
 ---
 
-*The factory floor is documented in [README.md](README.md); the house rules in [CLAUDE.md](CLAUDE.md); every candy and box has a recipe card in [plugins/README.md](plugins/README.md). Dated history lives — and only lives — in [CHANGELOG.md](CHANGELOG.md).*
+*The factory floor is documented in [README.md](README.md); the house rules in [CLAUDE.md](CLAUDE.md); every candy and box has a recipe card in [plugins/README.md](plugins/README.md). Dated history lives — and only lives — in each repo's [CHANGELOG/](CHANGELOG/README.md), one file per month.*

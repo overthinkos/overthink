@@ -152,7 +152,7 @@ func migrationSteps() []MigrationStep {
 		// deleted in favor of the single `import:` statement (flat + namespaced
 		// `alias: ref` items). This step renames include: → import: in every
 		// project YAML; repo-specific reshaping (base.yml merge, cachyos
-		// namespace, deploy→eval beds) is hand-authored. See CHANGELOG.md.
+		// namespace, deploy→eval beds) is hand-authored. See CHANGELOG/.
 		{mustCalVer("2026.143.0843"), "import-namespace", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateImportNamespace(c.Dir, c.DryRun)
 			return len(w) > 0, err
@@ -162,7 +162,7 @@ func migrationSteps() []MigrationStep {
 		// resolution). Backfills every layer.yml + bare-base image entry with the
 		// HEAD CalVer. TouchesHost is false so remote-cache auto-migration also
 		// backfills fetched remote layers (the runtime then hard-errors on an
-		// unversioned fetched layer rather than carrying a fallback). See CHANGELOG.md.
+		// unversioned fetched layer rather than carrying a fallback). See CHANGELOG/.
 		{mustCalVer("2026.144.1442"), "entity-version", false, func(c *MigrateContext) (bool, error) {
 			r, err := MigrateEntityVersion(c.Dir, latestSchemaVersion.String(), c.DryRun)
 			return len(r) > 0, err
@@ -175,7 +175,7 @@ func migrationSteps() []MigrationStep {
 		// build.yml init `label_key: org.overthinkos.service.<init>`, plus any
 		// forked `oci_label:` / eval label inspection. Baked image labels are
 		// re-emitted singular on the next `charly box build` (hard-cutover
-		// rebuild), not by config migration. See CHANGELOG.md.
+		// rebuild), not by config migration. See CHANGELOG/.
 		{mustCalVer("2026.155.1800"), "singular-label", false, func(c *MigrateContext) (bool, error) {
 			r, err := MigrateSingularLabel(c.Dir, c.DryRun)
 			return len(r) > 0, err
@@ -185,7 +185,7 @@ func migrationSteps() []MigrationStep {
 		// at every depth, the per-kind filenames (image.yml→box.yml,
 		// layer.yml→candy.yml), and the layers/→candy/ directory. This step
 		// renames the keys, the files, and the directory, and rewrites
-		// import:/discover: path references. See CHANGELOG.md.
+		// import:/discover: path references. See CHANGELOG/.
 		{mustCalVer("2026.156.0556"), "candy-box-rename", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateBoxCandyRename(c.Dir, c.HostDeployPath, c.DryRun)
 			return len(w) > 0, err
@@ -195,7 +195,7 @@ func migrationSteps() []MigrationStep {
 		// `discover: [{path, recursive, manifest}]`. Files are generic
 		// kind-containers routed by shape; discovery is fully configured in
 		// overthink.yml with no per-kind filename baked into the loader. See
-		// CHANGELOG.md.
+		// CHANGELOG/.
 		{mustCalVer("2026.156.1040"), "discover-flatten", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateDiscoverFlatten(c.Dir, c.DryRun)
 			return len(w) > 0, err
@@ -207,7 +207,7 @@ func migrationSteps() []MigrationStep {
 		// raises HEAD so an older `ov` REJECTS a `peer:`-using config (with a
 		// `Run: charly migrate` hint) instead of silently dropping the unknown key and
 		// never bringing the peer up. The calver-schema stamp re-stamps every
-		// file to the new HEAD. See CHANGELOG.md.
+		// file to the new HEAD. See CHANGELOG/.
 		{mustCalVer("2026.156.1530"), "peer-field", false, func(c *MigrateContext) (bool, error) {
 			return false, nil
 		}},
@@ -217,7 +217,7 @@ func migrationSteps() []MigrationStep {
 		// rewrites a legacy scalar `localpkg: <dir>` to `localpkg: {pac: <dir>}`
 		// (the legacy value always targeted the Arch PKGBUILD). The loader
 		// hard-rejects the scalar form (LocalPkgMap.UnmarshalYAML) with an
-		// `charly migrate` hint. See CHANGELOG.md.
+		// `charly migrate` hint. See CHANGELOG/.
 		{mustCalVer("2026.157.0310"), "localpkg-map", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateLocalpkgMap(c.Dir, c.DryRun)
 			return len(w) > 0, err
@@ -233,7 +233,7 @@ func migrationSteps() []MigrationStep {
 		// opencharly, ~/.cache/ov→charly, ~/.local/share/ov→charly) with OV_*→CH_*
 		// env-key rewrites, mutating ctx so calver-schema stamps the new paths.
 		// TouchesHost false → remote-cache auto-migration applies the project-side
-		// rewrites to fetched repos. See CHANGELOG.md.
+		// rewrites to fetched repos. See CHANGELOG/.
 		{mustCalVer("2026.159.0002"), "charly-rebrand", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateCharlyRebrand(c)
 			return len(w) > 0, err
@@ -271,7 +271,7 @@ func migrationSteps() []MigrationStep {
 		// and a check-level `scope: build|deploy` are never touched. The eval label
 		// WIRE keys were already candy/box; the new code hard-rejects a recipe
 		// `kind: layer` ("invalid kind ... (one of: candy, box, pod, vm)"), so this
-		// migration is mandatory. TouchesHost false. See CHANGELOG.md.
+		// migration is mandatory. TouchesHost false. See CHANGELOG/.
 		{mustCalVer("2026.161.1300"), "recipe-section-values", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateRecipeSectionValues(c.Dir, c.DryRun)
 			return len(w) > 0, err
@@ -307,7 +307,7 @@ func migrationSteps() []MigrationStep {
 		// defaults.port and the auto sentinel from deploy/eval/pod/k8s entries;
 		// explicit deploy port PINS are preserved. The loader hard-rejects a
 		// residual box `port:` (rejectLegacyBoxPort) with a `charly migrate` hint.
-		// TouchesHost false — runs under remote-cache auto-migration. See CHANGELOG.md.
+		// TouchesHost false — runs under remote-cache auto-migration. See CHANGELOG/.
 		{mustCalVer("2026.161.2302"), "drop-box-port", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateDropBoxPort(c.Dir, c.DryRun)
 			return len(w) > 0, err
@@ -321,7 +321,7 @@ func migrationSteps() []MigrationStep {
 		// `validate_ai_artifacts` flag is a separate concept and is NOT renamed.
 		// TouchesHost false → remote-cache auto-migration applies the project-file
 		// rewrites; the per-host agent overlay (the AI-CLI catalog that never ships
-		// with the repo) is processed when ctx.HostDeployPath is set. See CHANGELOG.md.
+		// with the repo) is processed when ctx.HostDeployPath is set. See CHANGELOG/.
 		{mustCalVer("2026.163.0927"), "agent-kind-rename", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateAgentKindRename(c.Dir, c.HostDeployPath, c.DryRun)
 			return len(w) > 0, err
@@ -332,7 +332,7 @@ func migrationSteps() []MigrationStep {
 		// + run-as user:→run_as:; check scope:→context:. The ROOT harness eval:
 		// block (a kind:eval bed map) is untouched (only a SequenceNode eval: is a
 		// check list). TouchesHost false → remote-cache auto-migration applies it
-		// to fetched candy manifests. See migrate_op_unify.go + CHANGELOG.md.
+		// to fetched candy manifests. See migrate_op_unify.go + CHANGELOG/.
 		{mustCalVer("2026.164.0001"), "op-unify", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateOpUnify(c.Dir, c.DryRun)
 			return len(w) > 0, err
@@ -342,7 +342,7 @@ func migrationSteps() []MigrationStep {
 		// root eval:→check: bed registry, eval_level:→check_level:, keep_eval_runs:→
 		// keep_check_runs:, kind: eval→kind: check. Author entity NAMES are not
 		// touched. TouchesHost false → remote-cache auto-migration applies it to
-		// fetched candy manifests. See migrate_eval_check.go + CHANGELOG.md.
+		// fetched candy manifests. See migrate_eval_check.go + CHANGELOG/.
 		{mustCalVer("2026.164.0003"), "eval-check", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateEvalCheck(c.Dir, c.DryRun)
 			return len(w) > 0, err
@@ -354,7 +354,7 @@ func migrationSteps() []MigrationStep {
 		// description: struct collapses to a string; kind:recipe/kind:score fold
 		// into a deploy iterate: block + the entity's own plan:. TouchesHost
 		// false → remote-cache auto-migration applies it to fetched candy
-		// manifests. See migrate_plan_unify.go + CHANGELOG.md.
+		// manifests. See migrate_plan_unify.go + CHANGELOG/.
 		{mustCalVer("2026.164.0005"), "plan-unify", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigratePlanUnify(c.Dir, c.DryRun)
 			return len(w) > 0, err
@@ -368,7 +368,7 @@ func migrationSteps() []MigrationStep {
 		// step transforms nothing; it raises HEAD so an older `charly` REJECTS a
 		// root-`sidecar:`-using config (with a `Run: charly migrate` hint) instead
 		// of silently dropping the key. The calver-schema stamp re-stamps every
-		// file to the new HEAD. See CHANGELOG.md.
+		// file to the new HEAD. See CHANGELOG/.
 		{mustCalVer("2026.165.1047"), "sidecar-root", false, func(c *MigrateContext) (bool, error) {
 			return false, nil
 		}},

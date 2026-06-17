@@ -15,7 +15,7 @@ candy:
         # deliberate, sum-verified version change). This deliberately does NOT use
         # the AUR `visual-studio-code-bin`, whose PKGBUILD periodically ships broken
         # source files (commit 07f5a1e shipped empty *.in placeholders, failing
-        # makepkg's validity check for every consumer). See CHANGELOG.md.
+        # makepkg's validity check for every consumer). See CHANGELOG/.
         VSCODE_VERSION: "1.123.0"
         VSCODE_SHA256: "2fdef947717befd2e06854cbe01e99b4898f7752f25e12269c38023e63b93c8f"
     distro:

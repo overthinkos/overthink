@@ -4,10 +4,10 @@
 # team lead / teammate. SOFT — always exits 0, so it NEVER blocks task creation,
 # task completion, or a teammate going idle.
 #
-# DOCTRINE: an ULTRA-LEAN POINTER — the authoritative team model (bed-scoped
+# DOCTRINE: a POINTER reminder — the authoritative team model (bed-scoped
 # ownership, persistent bed owners, the commit gate) lives in CLAUDE.md +
-# /charly-internals:agents; this hook points at it and keeps ONE behavioral
-# anchor, restating nothing. See /charly-internals:agents "Hooks doctrine".
+# /charly-internals:agents; this hook points at it with terse behavioral
+# anchors, restating no rule bodies. See /charly-internals:agents "Hooks doctrine".
 
 cat <<'EOF'
 OPENCHARLY TEAM REMINDER (pointers — the model lives in /charly-internals:agents):

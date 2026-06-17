@@ -22,7 +22,7 @@ package main
 // tree is a no-op); per-file .bak.<unix-ts> backups on key rewrites. File/dir
 // renames use os.Rename so git rename-detection preserves history (the body is
 // >99% similar after a key-only rewrite). TouchesHost is false, so remote-cache
-// auto-migration renames fetched remote candy files too. See CHANGELOG.md.
+// auto-migration renames fetched remote candy files too. See CHANGELOG/.
 
 import (
 	"bytes"

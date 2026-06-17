@@ -25,7 +25,7 @@ package main
 // is a no-op); per-file .bak.<unix-ts> backup on the charly.yml rewrite. File/dir
 // moves use os.Rename so git rename-detection preserves history. TouchesHost is
 // false, so remote-cache auto-migration renames fetched remote candy files too.
-// See CHANGELOG.md.
+// See CHANGELOG/.
 
 import (
 	"bytes"

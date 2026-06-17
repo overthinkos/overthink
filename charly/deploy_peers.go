@@ -174,7 +174,7 @@ func tearDownPeers(node *DeploymentNode) {
 		if err != nil {
 			// Best-effort teardown never fails the owner's teardown — but a
 			// silent discard once hid a flag-parse abort that leaked the peer
-			// (see CHANGELOG), so surface it as a warning instead of swallowing.
+			// (see CHANGELOG/), so surface it as a warning instead of swallowing.
 			fmt.Fprintf(os.Stderr, "warning: peer %q teardown: %v\n", peerKey, err)
 		}
 	}

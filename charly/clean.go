@@ -89,7 +89,7 @@ func imageLabelCalVer(im LocalImageInfo) (CalVer, bool) {
 // the id alive and the just-built (newest) tag is always retained. (The earlier
 // per-entry form removed an entry's whole Names array, which deleted kept tags
 // and could wipe the just-built image when content-stable rebuilds piled many
-// tags onto one id — see CHANGELOG.) Tags whose image is referenced by a
+// tags onto one id — see CHANGELOG/.) Tags whose image is referenced by a
 // container are skipped, and `rmi` runs WITHOUT `-f` as a backstop. keepN <= 0
 // disables (no-op). Returns the refs removed (or that would be, when dryRun).
 // imageTagInfo is one locally stored tag of a charly-labeled image —

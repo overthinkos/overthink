@@ -95,7 +95,7 @@ type DeployDelCmd struct {
 // (the `long:"yes"` tag is a Kong no-op in the separate-tag form), with `-y` as
 // the short form. A `--yes`/`--force` drift — neither of which Kong accepts —
 // once aborted teardown at arg-parse and silently leaked the resource (see
-// CHANGELOG); the deploy-del-flag regression test guards this.
+// CHANGELOG/); the deploy-del-flag regression test guards this.
 func deployDelArgv(name string) []string {
 	return []string{"deploy", "del", name, "--assume-yes"}
 }

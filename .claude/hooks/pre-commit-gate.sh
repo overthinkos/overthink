@@ -16,7 +16,17 @@
 #     pointer bump whose own old..new diff is itself all-documentation), or
 #   - uses an inline -m message with NO `Assisted-by: Claude (<tier>)` trailer
 #     (every commit Claude is involved in — in ANY way — must attribute; a
-#     pure-human hand-commit does not pass through this PreToolUse gate).
+#     pure-human hand-commit does not pass through this PreToolUse gate), or
+#   - carries a RUNTIME tier (`fully tested and validated` / `analysed on a live
+#     system`) in a repo that TRACKS a CHANGELOG/ directory yet stages no
+#     CHANGELOG/<YYYY-MM>.md entry (history lives in each repo's per-repo monthly
+#     CHANGELOG/; a runtime-tier cutover must record it). Exempt: a repo with no
+#     CHANGELOG/ (hasn't adopted the structure), and a commit whose staged diff
+#     is EXCLUSIVELY submodule pointer bumps (the entry lives in the submodule).
+#     Fires only when a tier is parsed from the command string (inline -m or a
+#     heredoc body — both ARE scanned), NOT for a tier delivered via an external
+#     -F/--file message; and skipped for --amend (the amended commit already
+#     recorded its entry).
 # It does NOT judge whether the tier is JUSTIFIED by the proof — that is the
 # AI's job (testing-validator + the pasted-proof rule). Hooks gate mechanical
 # invariants; agents judge proof. See CLAUDE.md "Agents, Workflows & Teams"
@@ -38,6 +48,11 @@ except Exception:
     sys.exit(0)
 
 LEGAL = {"fully tested and validated", "analysed on a live system", "documentation reviewed"}
+RUNTIME_TIERS = {"fully tested and validated", "analysed on a live system"}
+# A per-repo monthly changelog entry file: top-level CHANGELOG/<YYYY-MM>.md (NOT
+# the README, and NOT a nested sub/CHANGELOG/... path — anchored to repo root to
+# match the top-level `git ls-files CHANGELOG/` adoption check).
+CHANGELOG_ENTRY = re.compile(r'^CHANGELOG/[0-9]{4}-[0-9]{2}\.md$')
 
 def block(msg):
     sys.stderr.write("pre-commit-gate BLOCKED: " + msg + "\n")
@@ -77,13 +92,14 @@ def changed_lines_all_comments(path, repo=None, rangespec=None):
     marker = LINE_COMMENT.get(ext)
     if marker is None:
         return False  # unknown / binary type — cannot certify comment-only
-    diffargs = (["diff", "-U0", rangespec, "--", path] if rangespec
-                else ["diff", "--cached", "-U0", "--", path])
+    diffargs = (["diff", "--no-renames", "-U0", rangespec, "--", path] if rangespec
+                else ["diff", "--cached", "--no-renames", "-U0", "--", path])
     diff = _git(diffargs, cwd=repo)
     if diff is None:
         return False
     if "Binary files" in diff:
         return False
+    saw_content = False
     for line in diff.splitlines():
         if line.startswith('+++') or line.startswith('---'):
             continue
@@ -91,9 +107,12 @@ def changed_lines_all_comments(path, repo=None, rangespec=None):
             content = line[1:].strip()
             if content == '':
                 continue
+            saw_content = True
             if not content.startswith(marker):
                 return False
-    return True
+    # An EMPTY changeset (no +/- content lines) means the path matched no staged
+    # hunk — cannot certify it as comment-only, so do NOT pass it as documentation.
+    return saw_content
 
 def _is_doc(path, repo=None, rangespec=None):
     if DOC_PATH.search(path):
@@ -111,7 +130,7 @@ def submodule_bad_files(sub, old, new, repo=None):
         return None
     subrepo = os.path.join(repo, sub) if repo else sub
     rangespec = old + ".." + new
-    names = _git(["diff", "--name-only", rangespec], cwd=subrepo)
+    names = _git(["diff", "--no-renames", "--name-only", rangespec], cwd=subrepo)
     if names is None:
         return None
     bad = []
@@ -127,7 +146,7 @@ def assert_docs_only_diff(repo=None):
     # bump whose own old..new diff is itself all-documentation (recursed one
     # level). `--raw` exposes the gitlink mode (160000) + the old/new SHAs needed
     # to inspect the bumped submodule commit.
-    raw = _git(["diff", "--cached", "--raw"], cwd=repo)
+    raw = _git(["diff", "--cached", "--no-renames", "--raw"], cwd=repo)
     if raw is None:
         block('the "documentation reviewed" tier requires inspecting the staged diff, but '
               '`git diff --cached --raw` failed. Stage the documentation changes and retry, or use '
@@ -161,6 +180,51 @@ def assert_docs_only_diff(repo=None):
               'changes staged: %s. The change touches code/config — use a runtime tier, or split the '
               'docs into their own commit.' % ', '.join(bad))
 
+def assert_changelog_entry(repo=None):
+    # A runtime-tier commit lands a behavioral cutover; in a repo that keeps a
+    # per-repo monthly CHANGELOG/ the history MUST be recorded. Require a
+    # CHANGELOG/<YYYY-MM>.md entry in the staged diff. Exemptions (fail-open, a
+    # discipline backstop not a security boundary):
+    #   - the repo tracks no CHANGELOG/ (hasn't adopted the structure) -> pass;
+    #   - nothing inspectable / not a repo -> pass;
+    #   - the staged diff is EXCLUSIVELY submodule gitlink bumps (mode 160000) ->
+    #     pass (the substance is recorded in the submodule's own CHANGELOG).
+    tracked = _git(["ls-files", "CHANGELOG/"], cwd=repo)
+    if not tracked or not tracked.strip():
+        return  # repo has no CHANGELOG/ -> not gated
+    raw = _git(["diff", "--cached", "--no-renames", "--raw"], cwd=repo)
+    if raw is None:
+        return  # cannot inspect the staged diff -> do not block on this check
+    any_entry = entry_staged = False
+    only_gitlinks = True
+    for line in raw.splitlines():
+        if not line.startswith(':'):
+            continue
+        any_entry = True
+        meta, _tab, rest = line.partition('\t')
+        fields = meta[1:].split()
+        modeA = fields[0] if fields else ''
+        modeB = fields[1] if len(fields) > 1 else ''
+        status = fields[4] if len(fields) > 4 else ''
+        if not (modeA == '160000' or modeB == '160000'):
+            only_gitlinks = False
+        # Count an entry only when a TOP-LEVEL CHANGELOG/<YYYY-MM>.md is ADDED or
+        # MODIFIED: a deletion does not "record" history, README.md is not an entry,
+        # and --no-renames keeps each path on its own --raw line so the ^-anchor holds.
+        if status[:1] in ('A', 'M') and CHANGELOG_ENTRY.search(rest.strip()):
+            entry_staged = True
+    if not any_entry:
+        return  # nothing staged (--allow-empty) -> not our concern
+    if only_gitlinks:
+        # Pure submodule pointer bump: the substance AND its own CHANGELOG entry were
+        # recorded — and independently gated — in the submodule's own commit. Fail-open
+        # here by design; do not double-require a superproject entry for a bare bump.
+        return
+    if not entry_staged:
+        block("runtime-tier commit lands a cutover but stages no CHANGELOG/<YYYY-MM>.md entry "
+              "in this repo — record it (history -> this repo's CHANGELOG/, one file per month), "
+              "or use a non-runtime tier if this is not a behavioral change.")
+
 # git in command position (start / after ;&| / after a shell keyword),
 # optional global opts, then `commit`, then capture the invocation's arg span
 # up to the next shell separator.
@@ -170,6 +234,7 @@ INVOKE = re.compile(
 
 found = False
 has_inline_msg = False
+is_amend = False
 commit_cwd = None
 for m in INVOKE.finditer(cmd):
     found = True
@@ -190,6 +255,10 @@ for m in INVOKE.finditer(cmd):
     mC = re.search(r'(?:^|\s)-C\s+(\S+)', glob_opts)
     if mC:
         commit_cwd = mC.group(1)
+    # --amend re-touches the commit at HEAD; its CHANGELOG entry (if runtime-tier)
+    # was already recorded in that commit, so the staged delta need not re-add one.
+    if re.search(r'(?:^|\s)--amend(?:\s|$)', args):
+        is_amend = True
     # inline-message detection is scoped to THIS commit invocation's arg span,
     # so a foreign -m elsewhere on the line (grep -m 1 ...; git commit -F f)
     # never triggers the absent-trailer check.
@@ -218,6 +287,10 @@ if found:
             block('illegal AI-attribution tier "%s". Legal on a commit: %s. ("theoretical suggestion" is forbidden for shipped code.)' % (tier, sorted(LEGAL)))
         if tier == "documentation reviewed":
             assert_docs_only_diff(commit_cwd)
+    # Runtime-tier commits land behavioral cutovers -> must record per-repo history.
+    # (--amend re-touches an existing commit whose entry was already recorded -> skip.)
+    if not is_amend and any(t.strip() in RUNTIME_TIERS for t in tiers):
+        assert_changelog_entry(commit_cwd)
     if has_inline_msg and not tiers and '$(' not in cmd and '<<' not in cmd:
         block("commit message has no `Assisted-by: Claude (<tier>)` trailer (every commit Claude is involved in must attribute; add it inline with the tier your R10 proof supports — docs-only commits use `documentation reviewed`).")
 

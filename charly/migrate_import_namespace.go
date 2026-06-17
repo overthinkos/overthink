@@ -13,7 +13,7 @@ package main
 //
 // Repo-specific reshaping (combining arch-base.yml + fedora-base.yml into
 // base.yml, mounting the cachyos namespace, the deploy→eval bed move) is NOT
-// done here — it is hand-authored in the cutover and recorded in CHANGELOG.md.
+// done here — it is hand-authored in the cutover and recorded in CHANGELOG/.
 // A third-party config that only flat-includes its own files migrates cleanly
 // to flat imports with no behavior change.
 

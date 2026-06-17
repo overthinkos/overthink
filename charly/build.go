@@ -671,7 +671,7 @@ func (c *BuildCmd) pushImage(dir string, tags []string) error {
 // absent from project config. The operative ceiling is
 // charly.yml `defaults.podman_jobs_cap`; this conservative constant just
 // keeps configs that don't declare the key on a safe value. The per-build
-// override is --podman-jobs / CHARLY_PODMAN_JOBS. (See CHANGELOG.md for the
+// override is --podman-jobs / CHARLY_PODMAN_JOBS. (See CHANGELOG/ for the
 // podman-5.7.x blob-reuse SIGABRT race that originally motivated a hard cap.)
 const podmanJobsCapFallback = 4
 

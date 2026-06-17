@@ -143,7 +143,7 @@ func applyTargetLocalRewrites(src string, templates map[string]bool) string {
 			// destination. A real deploy `host:` is always a plain scalar (a
 			// hostname / user@host / template name), so a structured value is
 			// never disambiguated. (Omitting this guard wrongly stacked AMBIGUOUS
-			// comments onto build.yml's install templates — see CHANGELOG.)
+			// comments onto build.yml's install templates — see CHANGELOG/.)
 			if strings.HasPrefix(rest, "|") || strings.HasPrefix(rest, ">") ||
 				strings.HasPrefix(rest, "{") || strings.HasPrefix(rest, "[") {
 				continue

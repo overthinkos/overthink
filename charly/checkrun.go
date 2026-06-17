@@ -124,10 +124,14 @@ type Runner struct {
 	// anchor a relative committed-APK path in an `adb: install` / `appium:
 	// install-app` check (apk: ./tests/data/...) against the authoring candy's
 	// source tree, so a check resolves the same way whether the candy is local
-	// or fetched via @github (mirrors the deploy resolveApkPath, R3). Best-effort:
-	// empty when the project context isn't available; the apk path then stays
-	// cwd-relative (existing behaviour, no regression).
+	// or fetched via @github (the SAME walk-up the deploy path uses, R3).
 	CandyDirs map[string]string
+
+	// CandyScanErr is the error (if any) from building CandyDirs. It is NOT
+	// fatal on its own — only an apk-anchoring check consults it, and only then
+	// does resolveCheckApk fail HARD with this as the root cause. An apk-free
+	// check run is unaffected.
+	CandyScanErr error
 
 	// VerifyOnly, when true, restricts a RunPlan walk to the idempotent
 	// verification steps (check:/agent-check:) and SKIPS mutating steps

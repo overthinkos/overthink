@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -118,21 +121,24 @@ func TestPopulateCandyApk(t *testing.T) {
 
 // TestResolveApkPath checks committed-APK path resolution: absolute verbatim,
 // candy-relative when present, project-root-relative via walk-up (the @github
-// fetched-candy case), else verbatim ref when nothing resolves.
+// fetched-candy case), and a HARD ERROR when nothing resolves (no silent
+// cwd-relative pass-through).
 func TestResolveApkPath(t *testing.T) {
-	if got := resolveApkPath("/abs/x.apk", "/layers/foo"); got != "/abs/x.apk" {
-		t.Errorf("absolute path = %q, want verbatim", got)
+	if got, err := resolveApkPath("/abs/x.apk", "/layers/foo"); err != nil || got != "/abs/x.apk" {
+		t.Errorf("absolute path = (%q,%v), want (/abs/x.apk,nil)", got, err)
 	}
-	// No anchor resolves (candyDir + ancestors lack the file) → verbatim ref.
-	if got := resolveApkPath("tests/data/x.apk", "/nonexistent-layer-dir"); got != "tests/data/x.apk" {
-		t.Errorf("relative fallback = %q, want tests/data/x.apk", got)
+	// No anchor resolves (candyDir + ancestors lack the file) → HARD ERROR.
+	if _, err := resolveApkPath("tests/data/x.apk", "/nonexistent-layer-dir"); err == nil {
+		t.Error("missing file under candyDir must error, got nil")
+	}
+	// No candy dir at all → HARD ERROR (cannot anchor a relative ref).
+	if _, err := resolveApkPath("tests/data/x.apk", ""); err == nil {
+		t.Error("empty candyDir for a relative ref must error, got nil")
 	}
 
 	// Fetched-candy layout: <repo>/tests/data/x.apk exists, candyDir is
 	// <repo>/candy/android-apidemos (the file is NOT under candyDir). The walk-up
 	// must resolve the project-root-relative ref to <repo>/tests/data/x.apk.
-	// Without the walk-up this returns the bare ref (cwd-relative) → install
-	// fails with "open tests/data/x.apk: no such file or directory".
 	repo := t.TempDir()
 	candyDir := filepath.Join(repo, "candy", "android-apidemos")
 	if err := os.MkdirAll(candyDir, 0o755); err != nil {
@@ -145,8 +151,8 @@ func TestResolveApkPath(t *testing.T) {
 	if err := os.WriteFile(apk, []byte("PK\x03\x04"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := resolveApkPath("tests/data/x.apk", candyDir); got != apk {
-		t.Errorf("project-root walk-up = %q, want %q", got, apk)
+	if got, err := resolveApkPath("tests/data/x.apk", candyDir); err != nil || got != apk {
+		t.Errorf("project-root walk-up = (%q,%v), want (%q,nil)", got, err, apk)
 	}
 
 	// Candy-relative takes priority (closest anchor wins) when the file sits
@@ -155,15 +161,16 @@ func TestResolveApkPath(t *testing.T) {
 	if err := os.WriteFile(localApk, []byte("PK\x03\x04"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := resolveApkPath("local.apk", candyDir); got != localApk {
-		t.Errorf("candy-relative = %q, want %q", got, localApk)
+	if got, err := resolveApkPath("local.apk", candyDir); err != nil || got != localApk {
+		t.Errorf("candy-relative = (%q,%v), want (%q,nil)", got, err, localApk)
 	}
 }
 
 // TestResolveCheckApk covers the check-verb path resolution (adb: install /
-// appium: install-app), which anchors a relative committed-APK ref against a
-// resolved candy's source tree — including the fallback used when the AUTHORING
-// candy wasn't collected into the check-live candy map (the reachability gap).
+// appium: install-app). It anchors a relative committed-APK ref against the
+// AUTHORING candy's source dir (CandyDirs[origin-key]) and FAILS HARD on every
+// condition where it cannot — a non-candy origin, an absent CandyDirs entry, or
+// a missing file. There is NO fallback and NO silent cwd-relative pass-through.
 func TestResolveCheckApk(t *testing.T) {
 	repo := t.TempDir()
 	apk := filepath.Join(repo, "tests", "data", "x.apk") // project-root fixture
@@ -183,29 +190,69 @@ func TestResolveCheckApk(t *testing.T) {
 
 	// LOCAL candy: map key == bare name. Origin "candy:<name>" → resolves.
 	r := &Runner{CandyDirs: map[string]string{"android-emulator-layer": authorDir, "sshd": siblingDir}}
-	if got := r.resolveCheckApk("./tests/data/x.apk", "candy:android-emulator-layer"); got != apk {
-		t.Errorf("local-candy resolve = %q, want %q", got, apk)
+	if got, err := r.resolveCheckApk("./tests/data/x.apk", "candy:android-emulator-layer"); err != nil || got != apk {
+		t.Errorf("local-candy resolve = (%q,%v), want (%q,nil)", got, err, apk)
 	}
-	// FETCHED candy: map key == bare @github ref, and CollectDescriptions stamps Origin
-	// with that same ref. CandyDirs[origin-key] must match (the real bug — keying
-	// by bare NAME instead of the ref form left the lookup empty → install failed).
+	// FETCHED candy: map key == bare @github ref, and the step Origin is stamped
+	// with that same ref (description_run.go op.Origin = fs.origin). CandyDirs[ref]
+	// must match.
 	const ref = "github.com/owner/repo/candy/android-emulator-layer"
 	rRemote := &Runner{CandyDirs: map[string]string{ref: authorDir}}
-	if got := rRemote.resolveCheckApk("./tests/data/x.apk", "candy:"+ref); got != apk {
-		t.Errorf("fetched-candy (ref-keyed) resolve = %q, want %q", got, apk)
+	if got, err := rRemote.resolveCheckApk("./tests/data/x.apk", "candy:"+ref); err != nil || got != apk {
+		t.Errorf("fetched-candy (ref-keyed) resolve = (%q,%v), want (%q,nil)", got, err, apk)
 	}
-	// Authoring candy NOT in CandyDirs → ref left verbatim (no black-magic
-	// fallback to a different candy).
+	// Authoring candy NOT in CandyDirs → HARD ERROR (no fallback to a sibling).
 	r2 := &Runner{CandyDirs: map[string]string{"sshd": siblingDir}}
-	if got := r2.resolveCheckApk("./tests/data/x.apk", "candy:android-emulator-layer"); got != "./tests/data/x.apk" {
-		t.Errorf("unknown-candy = %q, want verbatim", got)
+	if _, err := r2.resolveCheckApk("./tests/data/x.apk", "candy:android-emulator-layer"); err == nil {
+		t.Error("unknown candy must error, got nil")
 	}
-	// Absolute passes through; no-candies leaves the ref verbatim (no regression).
-	if got := r2.resolveCheckApk("/abs/y.apk", "candy:foo"); got != "/abs/y.apk" {
-		t.Errorf("absolute = %q, want verbatim", got)
+	// A scan error surfaces as the root cause (not a misleading not-found).
+	r2.CandyScanErr = errors.New("boom")
+	if _, err := r2.resolveCheckApk("./tests/data/x.apk", "candy:android-emulator-layer"); err == nil || !strings.Contains(err.Error(), "boom") {
+		t.Errorf("scan-error path = %v, want error mentioning the scan failure", err)
 	}
-	r3 := &Runner{}
-	if got := r3.resolveCheckApk("./tests/data/x.apk", "candy:foo"); got != "./tests/data/x.apk" {
-		t.Errorf("no-candies fallthrough = %q, want verbatim", got)
+	// Non-candy origin (the step's candy Origin was lost) → HARD ERROR.
+	if _, err := r2.resolveCheckApk("./tests/data/x.apk", "box:android-emulator"); err == nil {
+		t.Error("non-candy origin must error, got nil")
+	}
+	// Absolute passes through (no anchoring needed).
+	if got, err := r2.resolveCheckApk("/abs/y.apk", "candy:foo"); err != nil || got != "/abs/y.apk" {
+		t.Errorf("absolute = (%q,%v), want (/abs/y.apk,nil)", got, err)
+	}
+}
+
+// TestRunPlan_StampsStepOrigin is the regression guard for the per-step Origin
+// propagation (description_run.go: op.Origin = fs.origin). The candy-group
+// Origin lives ONCE on the LabeledDescription and is NOT baked per-step in the
+// OCI label; RunPlan must re-stamp it onto each dispatched Op, or an adb/appium
+// committed-APK check sees an empty c.Origin and cannot anchor its fixture —
+// the live android-emulator-pod "no such file" bug.
+//
+// We drive an `adb: install` apk check whose CandyDirs is empty with a sentinel
+// CandyScanErr set. WITH the origin stamped, resolveCheckApk reaches the
+// CandyDirs-miss branch and reports the SCAN ERROR; WITHOUT it, c.Origin is
+// empty and resolveCheckApk fails with "not a candy origin" instead. Asserting
+// the sentinel appears in the step result proves the origin reached the Op.
+func TestRunPlan_StampsStepOrigin(t *testing.T) {
+	r := NewRunner(nil, nil, RunModeLive) // resolveCheckApk errors before any subprocess
+	r.Box = "android-emulator"            // satisfy the image-context guard
+	r.CandyScanErr = errors.New("scan-sentinel-boom")
+	set := &LabelDescriptionSet{
+		Candy: []LabeledDescription{{
+			Origin:      "candy:github.com/owner/repo/candy/android-emulator-layer",
+			Description: "android apps install",
+			Plan: []Step{{
+				Op: Op{ID: "adb-install-apidemos", Adb: "install", Apk: "./tests/data/ApiDemos-debug.apk"},
+			}},
+		}},
+	}
+	res := RunPlan(context.Background(), r, set, nil, false)
+	if len(res) != 1 {
+		t.Fatalf("want 1 step result, got %d", len(res))
+	}
+	msg := res[0].Result.Message
+	if !strings.Contains(msg, "scan-sentinel-boom") {
+		t.Fatalf("step Origin was not stamped onto the dispatched Op — resolveCheckApk "+
+			"did not reach the candy-keyed branch (got message: %q)", msg)
 	}
 }

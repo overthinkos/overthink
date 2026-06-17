@@ -185,8 +185,14 @@ func runUnit(ctx context.Context, r *Runner, fs flatStep, stepCtx *ScenarioConte
 		return sr
 	}
 
-	// run:/check: — stamp the keyword-derived do-mode then dispatch to runOne.
+	// run:/check: — stamp the keyword-derived do-mode + the owning entity's
+	// origin (the candy/box/deploy key this step came from), then dispatch to
+	// runOne. The per-step Op.Origin is NOT baked into the OCI label (the origin
+	// lives once on the LabeledDescription group), so it MUST be re-stamped here
+	// from the flattened group origin — runOne consumers rely on it (e.g.
+	// resolveCheckApk anchors a candy's committed APK against CandyDirs[origin]).
 	op := step.Op
+	op.Origin = fs.origin
 	op.intentDo = step.DoMode()
 	if subIdx >= 0 {
 		indexVar := op.IndexVar

@@ -224,9 +224,11 @@ func (c *CheckFeatureRunCmd) Run() error {
 	// grade agent-run:; do NOT re-run the build-time install (run:) steps —
 	// they already provisioned the image and reference build-only context.
 	runner.SkipDeterministicRun = true
-	runner.Box = c.Box
-	runner.Instance = c.Instance
-	runner.Distros = meta.Distro
+	// Shared identity + committed-APK anchoring (CandyDirs) — the SAME wiring
+	// `charly check live` uses, so an adb/appium `apk:` check resolves its fixture
+	// here too (R3). Omitting it left feature run scanning 0 candies → the apk
+	// failed to anchor only under feature run.
+	attachCheckRunnerContext(runner, c.Box, c.Instance, meta.Distro, dir, projectCfg)
 
 	// Wire the agent grader for prose-only steps unless deterministic-only.
 	if !c.NoAgent {

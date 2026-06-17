@@ -22,6 +22,45 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-06
 
+### 2026-06-17 — fix(check): committed-APK checks anchor to the authoring candy — fail hard, no fallback (`v2026.168.1403`)
+
+The android-emulator-pod bed's `adb: install` / `appium: install-app` checks
+(android-emulator-layer's `apk: ./tests/data/ApiDemos-debug.apk`) resolved the
+fixture cwd-relative and died with `open ./tests/data/...: no such file` — only
+under a `box/<distro>` bed run, never in the unit tests (which passed the Origin
+in by hand).
+
+Two root causes, both masked by a silent cwd-relative fall-through in
+`resolveCheckApk` (and by an override-fallback patch that, it turned out, never
+even executed for this bug — `resolveCheckApk` returned on the empty-origin guard
+long before reaching it):
+
+1. **The per-step `Op.Origin` was never stamped.** The authoring candy's origin
+   lives ONCE on the baked `LabeledDescription` group, not per-step in the OCI
+   label; `RunPlan`/`runUnit` dispatched each step's `Op` without re-stamping
+   `op.Origin = fs.origin`, so `resolveCheckApk` saw an empty `c.Origin` and could
+   not key `CandyDirs`.
+2. **`charly check feature run` never populated `CandyDirs`.** Only `charly check
+   live` built the candy→source-dir map, so the same committed-APK check passed
+   under check-live yet failed (`0 candies scanned`) under feature-run — cascading
+   into 36 downstream appium failures against a then-absent ApiDemos.
+
+Fix — fail hard, no obfuscating fallback:
+
+- `description_run.go`: stamp `op.Origin = fs.origin` onto every dispatched `Op`.
+- `check_cmd.go`: a shared `attachCheckRunnerContext` helper wires identity +
+  `CandyDirs` for BOTH `charly check live` AND `charly check feature run`, so the
+  two can never diverge again (R3 — one anchoring path).
+- `resolveApkPath` / `resolveCheckApk` / `candySourceDirs` now return errors and
+  FAIL HARD on any unanchorable committed APK (non-candy origin, absent
+  `CandyDirs` entry, candy-scan error, file missing under the candy tree) — no
+  silent cwd-relative pass-through, no `CHARLY_REPO_OVERRIDE` fallback.
+
+R10: `check-android-emulator-pod` PASS (15/15 steps) through the fresh-rebuild
+gate (feature-run 260 passed / 0 failed / 20 skipped); `check-selkies-kde-pod`
+PASS (shared-runner regression check). Regression guard
+`TestRunPlan_StampsStepOrigin` fails without the origin stamp.
+
 ### 2026-06-17 — fix(gpu)!: device_lock-safe group-aware GPU driver switch + wedge poisoning + `charly vm gpu recover` (`v2026.168.0526`)
 
 Root-caused and fixed the GPU driver-switch wedge that, in the prior campaign,

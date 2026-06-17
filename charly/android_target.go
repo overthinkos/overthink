@@ -87,7 +87,10 @@ func (a *AndroidDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 func (a *AndroidDeployTarget) installStep(s *ApkInstallStep, opts EmitOpts) error {
 	for _, spec := range s.Packages {
 		if spec.Apk != "" {
-			path := resolveApkPath(spec.Apk, s.CandyDir)
+			path, err := resolveApkPath(spec.Apk, s.CandyDir)
+			if err != nil {
+				return fmt.Errorf("candy %q: %w", s.CandyName, err)
+			}
 			if opts.DryRun {
 				fmt.Printf("[dry-run] android: would install committed APK %s\n", path)
 				continue
@@ -122,33 +125,35 @@ func (a *AndroidDeployTarget) installStep(s *ApkInstallStep, opts EmitOpts) erro
 	return nil
 }
 
-// resolveApkPath resolves a committed-APK reference. Absolute paths are used
-// verbatim; a relative path anchors against the candy's SOURCE tree —
-// candy-dir-relative first, then each ancestor up to the candy's project /
-// repo root (first existing match wins, so the closest anchor takes priority).
-// This resolves a path like `tests/data/ApiDemos-debug.apk` identically whether
-// the candy is LOCAL (candyDir under the consuming project root) or fetched via
+// resolveApkPath resolves a committed-APK reference against the candy's SOURCE
+// tree. Absolute paths are used verbatim; a relative path anchors candy-dir-
+// relative first, then each ancestor up to the candy's project / repo root
+// (first existing match wins, so the closest anchor takes priority). This
+// resolves a path like `tests/data/ApiDemos-debug.apk` identically whether the
+// candy is LOCAL (candyDir under the consuming project root) or fetched via
 // @github (candyDir under the cloned-repo cache, where a project-root-relative
 // file lives at <repo-root>/tests/data/... — several levels above candyDir).
-// The consuming deploy's cwd is NOT an anchor: a fetched candy's committed file
-// is never under the consumer's project.
-func resolveApkPath(ref, candyDir string) string {
+//
+// It FAILS HARD (returns an error) when a relative ref has no candy dir to
+// anchor against, or when the file is not found anywhere up the tree — the
+// caller must surface that, never silently pass an unresolvable cwd-relative
+// path downstream (which dies later as a misleading "no such file").
+func resolveApkPath(ref, candyDir string) (string, error) {
 	if filepath.IsAbs(ref) {
-		return ref
+		return ref, nil
 	}
-	if candyDir != "" {
-		for dir := candyDir; ; {
-			cand := filepath.Join(dir, ref)
-			if _, err := os.Stat(cand); err == nil {
-				return cand
-			}
-			parent := filepath.Dir(dir)
-			if parent == dir {
-				break // reached the filesystem root
-			}
-			dir = parent
+	if candyDir == "" {
+		return "", fmt.Errorf("cannot resolve relative committed APK %q: no candy source dir to anchor against", ref)
+	}
+	for dir := candyDir; ; {
+		cand := filepath.Join(dir, ref)
+		if _, err := os.Stat(cand); err == nil {
+			return cand, nil
 		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("committed APK %q not found under candy source tree %q (searched every ancestor up to the filesystem root)", ref, candyDir)
+		}
+		dir = parent
 	}
-	// Last resort: the local-project case where candyDir is unset — cwd-relative.
-	return ref
 }

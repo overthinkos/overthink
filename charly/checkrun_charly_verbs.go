@@ -808,23 +808,31 @@ func posInstallApp(c *Op) []string {
 // resolveCheckApk resolves a relative committed-APK path (adb: install /
 // appium: install-app, apk: ./tests/data/...) against the AUTHORING candy's
 // source tree, so a check resolves its fixture whether the candy is local OR
-// fetched via @github (mirrors the deploy resolveApkPath, R3). The check's
+// fetched via @github (the SAME walk-up the deploy path uses, R3). The check's
 // Origin is "candy:<key>" where <key> is the candy MAP KEY (a bare name for a
 // local candy, the bare @github ref for a fetched one) — CandyDirs is keyed by
-// that same key (candySourceDirs), so the lookup matches in both cases.
-// Absolute paths pass through; a non-candy origin or an unknown key leaves the
-// ref verbatim (cwd-relative, no regression).
-func (r *Runner) resolveCheckApk(apk, origin string) string {
+// that same key (candySourceDirs), so the single lookup matches in both cases.
+//
+// It FAILS HARD (returns an error) on every condition where the fixture cannot
+// be anchored — a non-candy origin (the step's Origin was lost upstream), an
+// absent CandyDirs entry (the candy scan failed or did not see this candy), or a
+// file missing under the candy tree. There is NO fallback and NO silent
+// cwd-relative pass-through: a wrong CandyDirs must surface here, not be patched
+// over into a misleading downstream "no such file".
+func (r *Runner) resolveCheckApk(apk, origin string) (string, error) {
 	if apk == "" || filepath.IsAbs(apk) {
-		return apk
+		return apk, nil
 	}
-	key := strings.TrimPrefix(origin, "candy:")
-	if key == origin {
-		return apk // not candy-originated
+	key, ok := strings.CutPrefix(origin, "candy:")
+	if !ok {
+		return "", fmt.Errorf("committed APK %q has origin %q, not a candy origin — cannot anchor it to a candy source tree (the step's candy Origin was not propagated)", apk, origin)
 	}
 	dir := r.CandyDirs[key]
 	if dir == "" {
-		return apk // authoring candy's source dir unknown
+		if r.CandyScanErr != nil {
+			return "", fmt.Errorf("committed APK %q (candy %q): candy source-dir scan failed: %w", apk, key, r.CandyScanErr)
+		}
+		return "", fmt.Errorf("committed APK %q: candy %q is absent from the source scan (%d candies scanned) — cannot anchor the fixture", apk, key, len(r.CandyDirs))
 	}
 	return resolveApkPath(apk, dir)
 }
@@ -1132,7 +1140,11 @@ func (r *Runner) runCharlyVerb(ctx context.Context, c *Op, verb, method string, 
 	// check authored on a candy resolves to that candy's copy — local OR fetched
 	// via @github — instead of the check cwd. Reuses the deploy walk-up (R3).
 	if c.Apk != "" {
-		if resolved := r.resolveCheckApk(c.Apk, c.Origin); resolved != c.Apk {
+		resolved, err := r.resolveCheckApk(c.Apk, c.Origin)
+		if err != nil {
+			return failf(c, "%s: %s: %v", verb, method, err)
+		}
+		if resolved != c.Apk {
 			cc := *c
 			cc.Apk = resolved
 			c = &cc

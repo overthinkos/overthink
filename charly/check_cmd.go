@@ -196,10 +196,7 @@ func (c *CheckLiveCmd) Run() error {
 
 	runner := NewRunner(ContainerChain(engine, containerName), resolver, RunModeLive)
 	runner.VerifyOnly = true // charly check live: idempotent check:/agent-check: only
-	runner.Box = c.Box
-	runner.Instance = c.Instance
-	runner.Distros = meta.Distro
-	runner.CandyDirs = candySourceDirs(dir, projectCfg)
+	attachCheckRunnerContext(runner, c.Box, c.Instance, meta.Distro, dir, projectCfg)
 	// Cross-deployment probing (a step with `on: <driver>` reaching a SEPARATE
 	// subject via ${PEER_*}): wire the live target resolver + peer vars — the
 	// ONE entry point every live path shares (R3).
@@ -591,13 +588,19 @@ func collectAddCandySteps(uf *UnifiedFile, dir string, addCandies []string) []St
 }
 
 // candySourceDirs builds a candy-name → source-dir map for anchoring relative
-// committed-APK paths in adb/appium check checks against the authoring candy's
-// tree (local or @github-fetched). Best-effort — any error yields nil, and the
-// apk path stays cwd-relative (runCharlyVerb → candyDirForOrigin → resolveApkPath).
-func candySourceDirs(dir string, cfg *Config) map[string]string {
+// committed-APK paths in adb/appium checks against the authoring candy's tree
+// (local or @github-fetched). A scan error is RETURNED, never swallowed: the
+// caller stores it on the Runner so resolveCheckApk can fail an apk check with
+// the REAL cause ("candy source-dir scan failed: …") instead of a misleading
+// "no such file" — and an apk-free check is unaffected (it never consults the
+// map).
+func candySourceDirs(dir string, cfg *Config) (map[string]string, error) {
 	candyMap, err := ScanAllCandyWithConfig(dir, cfg)
-	if err != nil || len(candyMap) == 0 {
-		return nil
+	if err != nil {
+		return nil, fmt.Errorf("scanning candy source dirs: %w", err)
+	}
+	if len(candyMap) == 0 {
+		return nil, nil
 	}
 	// Key by the candy MAP KEY — which is exactly the check's Origin form:
 	// a bare name for a local candy ("sshd"), the bare @github ref for a fetched
@@ -610,7 +613,20 @@ func candySourceDirs(dir string, cfg *Config) map[string]string {
 			out[key] = lyr.SourceDir
 		}
 	}
-	return out
+	return out, nil
+}
+
+// attachCheckRunnerContext wires the identity + committed-APK anchoring every
+// live baked-plan runner needs, so `charly check live` and `charly check feature
+// run` resolve adb/appium `apk:` checks IDENTICALLY (R3). They previously
+// diverged — only check live populated CandyDirs, so a committed-APK check
+// passed under check live yet failed to anchor ("0 candies scanned") under
+// feature run. Any RunModeLive runner that executes a baked plan MUST call this.
+func attachCheckRunnerContext(runner *Runner, box, instance string, distros []string, dir string, cfg *Config) {
+	runner.Box = box
+	runner.Instance = instance
+	runner.Distros = distros
+	runner.CandyDirs, runner.CandyScanErr = candySourceDirs(dir, cfg)
 }
 
 // isLocalTarget returns true when c.Box names a `target: local` deployment

@@ -1,9 +1,10 @@
 candy:
-    version: 2026.144.1443
+    version: 2026.167.2301
     name: thunar
     description: |
         Thunar file manager is installed and bound to $mod+e in the Sway desktop
-        Installs the Thunar Xfce file manager (the thunar Fedora package, binary at
+        Installs the Thunar Xfce file manager (the Fedora rpm is named Thunar with a
+        capital T, which provides the lowercase thunar that dnf installs by; binary at
         /usr/bin/thunar) and drops a Sway config.d snippet that binds $mod+e to launch
         it. Verifiable by the installed binary + package and by the keybinding drop-in
         whose content wires the $mod+e launcher line.
@@ -27,6 +28,8 @@ candy:
           exists: true
         - check: the thunar package is present in the package database
           package: thunar
+          package_map:
+            fedora: Thunar
           installed: true
         - check: a Sway config.d drop-in is installed for thunar
           file: ${HOME}/.config/sway/config.d/thunar.conf

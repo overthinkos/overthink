@@ -1,5 +1,5 @@
 candy:
-    version: 2026.144.1443
+    version: 2026.168.0936
     name: chrome
     description: |
         Installs the Google Chrome browser cross-distro as a runnable binary at a stable path.
@@ -9,8 +9,10 @@ candy:
         registers it as the default web browser via xdg-settings. No CDP
         scaffolding, no supervisord — for headless container CDP automation,
         compose /charly-selkies:chrome-cdp on top. Verifiable: the binary
-        exists at a fixed path, reports its version, and ships its .desktop
-        entry.
+        exists at a fixed path, the package is installed, and it ships its
+        .desktop entry. (A `--version` invocation is NOT a reliable check —
+        when chrome-cdp wraps the binary it launches a full browser instead of
+        printing a version banner, contending with the running desktop chrome.)
     env:
         CHROME_FLAGS: "--ozone-platform=wayland --enable-features=UseOzonePlatform,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks"
     env_accept:
@@ -65,11 +67,6 @@ candy:
         - check: the google-chrome-stable binary is present at its canonical path
           file: /usr/bin/google-chrome-stable
           exists: true
-        - check: invoking chrome with --version prints its Google Chrome version banner
-          command: google-chrome-stable --version
-          exit_status: 0
-          stdout:
-            - matches: "Google Chrome"
         - check: the google-chrome.desktop entry the default-browser task references is installed
           file: /usr/share/applications/google-chrome.desktop
           exists: true

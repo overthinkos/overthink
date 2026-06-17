@@ -1,5 +1,5 @@
 candy:
-    version: 2026.144.1443
+    version: 2026.168.0935
     name: direnv
     description: |
         direnv — automatic per-directory environment loading from .envrc files
@@ -7,7 +7,7 @@ candy:
         fedora/arch/debian) AND declaratively wires the per-shell hook that
         makes .envrc autoload work. At `charly box build` the shell: schema
         bakes the POSIX hook into /etc/profile.d/charly-direnv-<shell>.sh for
-        bash/zsh/sh (the generic body `check "$(direnv hook <shell>)"` with
+        bash/zsh/sh (the generic body `eval "$(direnv hook <shell>)"` with
         ${SHELL_NAME} substituted) and the fish-specific hook into
         /etc/fish/conf.d/charly-direnv.fish (`direnv hook fish | source`).
         The scenarios assert both the installed/runnable binary AND the baked
@@ -16,12 +16,12 @@ candy:
     package:
         - direnv
     # Shell hooks installed declaratively via the shell: schema (2026-05).
-    # bash/zsh/sh use the POSIX-style hook (check $(direnv hook X)) — handled
+    # bash/zsh/sh use the POSIX-style hook `eval "$(direnv hook X)"` — handled
     # by the generic body with ${SHELL_NAME} substituted at install time.
     # fish uses different syntax, so it gets a per-shell override.
     shell:
         init: |
-            check "$(direnv hook ${SHELL_NAME})"
+            eval "$(direnv hook ${SHELL_NAME})"
         fish:
             init: |
                 direnv hook fish | source
@@ -32,11 +32,16 @@ candy:
         - check: direnv reports its version without error
           command: /usr/bin/direnv version
           exit_status: 0
-        - check: the bash shell-init drop-in is baked into the image and installs the direnv hook so .envrc loads on directory change
+        - check: the bash shell-init drop-in EVALs the direnv hook so .envrc loads on directory change (a check-for-eval typo would silently break the hook and spam every login shell with a command-not-found error)
           file: /etc/profile.d/charly-direnv-bash.sh
           exists: true
           contains:
-            - "direnv hook bash"
+            - 'eval "$(direnv hook bash)"'
+        - check: sourcing the bash direnv drop-in installs the hook cleanly, with no command-not-found error from a malformed check-for-eval hook body
+          id: direnv-hook-sources-clean
+          command: bash -c '. /etc/profile.d/charly-direnv-bash.sh 2>&1' | grep -c 'command not found' || true
+          stdout:
+            - equals: "0"
         - check: the fish shell-init drop-in is baked into its conf.d and sources the direnv fish hook
           file: /etc/fish/conf.d/charly-direnv.fish
           exists: true

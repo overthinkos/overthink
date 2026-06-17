@@ -245,6 +245,16 @@ check:
         vm: k3s-vm
         disposable: true
         lifecycle: dev
+        description: >-
+            Sole deterministic proof of the VmDeployTarget->k8s end-to-end path
+            and the full 13-method k8s probe surface against a real k3s control
+            plane, and the R10 for ssh.port_auto. A disposable libvirt Arch
+            cloud VM (host 16443->guest 6443 forward, charly installed via
+            cloud-init) overlays k3s-server over SSH, then runs guest
+            command/process/port/file probes plus the full k8s suite
+            (nodes/wait-nodes/pods/wait-ready/addons/ingressclass/storageclass/raw/service)
+            against cluster vm-k3s-vm, an agent-check matching probe, and a
+            host-side charly status --json (status-shows-vm).
         add_candy:
             - k3s-server
         env:
@@ -366,7 +376,12 @@ check:
         host: local
         disposable: true
         lifecycle: dev
-        description: Fast local bed exercising kind:local layer application
+        description: >-
+            Sole proof of the kind:local layer-application path via ShellExecutor
+            + HostDeployTarget, and the fastest bed. Applies check-local-layer to
+            the operator host (host: local), dropping /etc/check-local-marker,
+            then runs host-side command/file probes plus charly status --json
+            asserting kind:local + source:ledger (status-shows-local).
         plan:
             - check: command=charly status --json
               id: status-shows-local
@@ -390,6 +405,16 @@ check:
         vm: charly-vm
         disposable: true
         lifecycle: dev
+        description: >-
+            Sole proof of the pac localpkg DEPLOY auto-resolve path on Arch —
+            opencharly-git built via makepkg and installed with pacman -U
+            auto-resolving the mandatory repo deps. A disposable libvirt Arch
+            cloud VM (ssh.port_auto) overlays the LOCAL candy/charly whose
+            localpkg builds opencharly-git on the host and pacman -U's it into
+            the guest; one command probe asserts
+            opencharly-git/podman/libvirt/tailscale/gocryptfs present, charly
+            resolves to /usr/bin/charly, and charly version runs
+            (LOCALPKG-PAC-AUTORESOLVE-OK).
         add_candy:
             - charly
         install_opts:

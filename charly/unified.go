@@ -54,8 +54,8 @@ const UnifiedFileName = "charly.yml"
 const MaxIncludeDepth = 8
 
 // UnifiedFile is the full schema of a single unified-format YAML document.
-// Every field is optional — a file with only `distros:` is valid (typical for
-// a build.yml-style include); a file with only `deployments:` is valid (typical
+// Every field is optional — a file with only `distro:` is valid (typical for
+// a build.yml-style include); a file with only `deploy:` is valid (typical
 // for a charly.yml-style include); etc.
 //
 // Schema version 2 consolidates the legacy vms.yml + charly.yml split into one
@@ -2295,7 +2295,7 @@ func (uf *UnifiedFile) projectConfigCached(cache map[*UnifiedFile]*Config) *Conf
 	return c
 }
 
-// ProjectDistroConfig returns the *DistroConfig equivalent (distros: section).
+// ProjectDistroConfig returns the *DistroConfig equivalent (distro: section).
 func (uf *UnifiedFile) ProjectDistroConfig() *DistroConfig {
 	if len(uf.Distro) == 0 {
 		return nil

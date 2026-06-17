@@ -844,7 +844,7 @@ func (c *DeployAddCmd) compileCandyPlans(ref *DeployRef, cfg *Config, distroCfg 
 		return nil, "", nil, err
 	}
 	// Expand transitive deps — a candy deploy (bare `charly deploy add <candy>`
-	// or `--add-layer <name>`) MUST pull in the candy's `requires:` graph in
+	// or `--add-layer <name>`) MUST pull in the candy's `require:` graph in
 	// topological order. Without this, candies whose tasks rely on upstream
 	// binaries (e.g. pre-commit's cargo install needing rust) fail with
 	// "command not found". Remote refs key by their bare ref (scanCandiesForRef).

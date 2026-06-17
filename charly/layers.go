@@ -220,7 +220,7 @@ type CandyYAML struct {
 	// flat top-level `packages:` is the Calamares group / module package
 	// list shape. Per-distro overrides + format-specific extras (copr,
 	// repos, options, exclude, modules, AUR sub-block) live
-	// under `distros:` keyed by distro name (or distro-version e.g.
+	// under `distro:` keyed by distro name (or distro-version e.g.
 	// `debian-13`, `ubuntu-24.04`).
 	Package []PackageItem              `yaml:"package,omitempty" json:"package,omitempty"`
 	Distro  map[string]*DistroPackages `yaml:"distro,omitempty" json:"distro,omitempty"`

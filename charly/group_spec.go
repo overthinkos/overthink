@@ -3,11 +3,11 @@ package main
 // GroupSpec is the charly authoring shape for a Calamares-style "package group"
 // (the netinstall.yaml entry shape). A group is a named, hierarchical bundle
 // of packages with selection-state metadata, optionally referencing an charly
-// candy for install logic via the `requires:` list.
+// candy for install logic via the `require:` list.
 //
 // All Calamares group fields appear at the top level so a Calamares parser
 // reading an charly group.yml sees a faithful netinstall group. charly-specific
-// extensions (`distros:` for per-distro overrides, `requires:` for candy
+// extensions (`distro:` for per-distro overrides, `require:` for candy
 // dependencies) sit alongside Calamares fields and are silently ignored by
 // Calamares' YAML parser.
 type GroupSpec struct {

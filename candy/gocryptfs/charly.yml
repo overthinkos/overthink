@@ -1,5 +1,5 @@
 candy:
-    version: 2026.144.1443
+    version: 2026.166.2011
     name: gocryptfs
     description: |
         Encrypted filesystem (gocryptfs) for charly config encrypted volume operations
@@ -17,11 +17,11 @@ candy:
         - check: the gocryptfs encrypted-filesystem binary is installed at /usr/bin/gocryptfs
           file: /usr/bin/gocryptfs
           exists: true
-        - check: gocryptfs runs and prints a version string (gocryptfs vX.Y.Z) on stdout
+        - check: gocryptfs runs and prints a version string (gocryptfs X.Y.Z) on stdout
           command: /usr/bin/gocryptfs -version
           exit_status: 0
           stdout:
-            - matches: "gocryptfs v[0-9]"
+            - matches: "gocryptfs v?[0-9]"
         - check: package=gocryptfs
           id: gocryptfs-package
           package: gocryptfs

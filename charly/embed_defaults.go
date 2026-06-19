@@ -13,7 +13,7 @@ import (
 // vocabulary or sidecar the project did not declare (project-wins), and a project
 // EXTENDS or OVERRIDES it by declaring its own node entries.
 //
-//go:embed charly_defaults.yml
+//go:embed charly.yml
 var embeddedCharlyDefaults []byte
 
 // embeddedDefaults parses the binary-embedded node-form defaults into a UnifiedFile

@@ -64,7 +64,7 @@ func rootShapeFiles() []string {
 		"../box/debian/charly.yml",
 		"../box/ubuntu/charly.yml",
 		"../box/cachyos/charly.yml",
-		"charly_defaults.yml", // the binary-embedded default (distro/builder/init/resource/sidecar vocabulary), relative to charly/
+		"charly.yml", // the binary-embedded default (distro/builder/init/resource/sidecar vocabulary), relative to charly/
 	}
 }
 

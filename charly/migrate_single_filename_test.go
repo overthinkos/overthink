@@ -51,9 +51,9 @@ vm:
   version: 2026.144.1443
 `)
 	// build.yml whose build vocabulary matches the embedded default → dropped +
-	// deleted (semantic compare: the embedded charly_defaults.yml parses to the same
+	// deleted (semantic compare: the embedded charly.yml parses to the same
 	// distro/builder/init/resource maps). The frozen legacy YAML fixture is the
-	// exact YAML form the embedded charly_defaults.yml is data-equivalent to.
+	// exact YAML form the embedded charly.yml is data-equivalent to.
 	legacyVocab, rerr := os.ReadFile("testdata/embedded_legacy.yml")
 	if rerr != nil {
 		t.Fatal(rerr)

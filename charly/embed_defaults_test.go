@@ -13,13 +13,13 @@ import (
 // validate against the unified #NodeDoc schema (per-arm closedness + kind-narrowed
 // children) — the SAME validate-before-execute gate every project charly.yml
 // passes through the loader. This is the canonical schema gate for the embedded
-// build vocabulary + sidecar templates (charly_defaults.yml).
+// build vocabulary + sidecar templates (charly.yml).
 func TestEmbeddedDefaults_SchemaConformance(t *testing.T) {
-	data, err := os.ReadFile("charly_defaults.yml")
+	data, err := os.ReadFile("charly.yml")
 	if err != nil {
 		t.Fatalf("read embedded defaults: %v", err)
 	}
-	if err := validateNodeDocCUE("charly_defaults.yml", data); err != nil {
+	if err := validateNodeDocCUE("charly.yml", data); err != nil {
 		t.Errorf("embedded defaults fail #NodeDoc validation:\n%v", err)
 	}
 }
@@ -85,7 +85,7 @@ mydistro:
 }
 
 // TestEmbeddedDefaults_SameLoaderPath proves the consolidation invariant: the
-// SINGLE binary-embedded charly_defaults.yml is compiled + parsed by the SAME unified
+// SINGLE binary-embedded charly.yml is compiled + parsed by the SAME unified
 // loader core (embeddedDefaults → mergeUnifiedDocs (node-form)) and yields
 // BOTH the build vocabulary
 // AND the sidecar-template library from one parse — no bespoke per-section
@@ -212,7 +212,7 @@ amd-gpu:
 // project's vocabulary override is validated against the SAME #Kind schemas as
 // the embedded defaults (validateVocabularyCollections — the shared helper). An
 // unknown key (typo) in a project builder override is rejected by the closed
-// #Builder, exactly as it would be in the embedded charly_defaults.yml.
+// #Builder, exactly as it would be in the embedded charly.yml.
 func TestProjectVocabOverride_IsSchemaValidated(t *testing.T) {
 	proj := []byte(`version: ` + LatestSchemaVersion().String() + `
 builder:
@@ -233,7 +233,7 @@ builder:
 
 // TestNoHardcodedYAMLFilenames is the file-agnostic invariant guard. charly.yml
 // is the ONE YAML filename the code knows. The binary-embedded default config is
-// node-form YAML (//go:embed charly_defaults.yml, embed_defaults.go), parsed by the
+// node-form YAML (//go:embed charly.yml, embed_defaults.go), parsed by the
 // same unified loader as any project charly.yml. Outside migration code (which must name legacy
 // files to migrate FROM) and tests, no source may hardcode a per-kind project
 // filename — discovery + the UnifiedFileName constant cover them all. build.yml

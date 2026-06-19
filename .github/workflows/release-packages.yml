@@ -1,6 +1,6 @@
 # Build the native `charly` package artifacts (.pkg.tar.zst / .rpm / .deb) and attach
 # them to the GitHub release on a v<CalVer> tag push. Each package is built
-# through the SAME `charly box pkg` verb + build.yml local_pkg.build_template used
+# through the SAME `charly box pkg` verb + the embedded `local_pkg.build_template` used
 # locally (`task pkg:*`) and by the deploy-time localpkg path — one build
 # definition, distro-natively.
 #

@@ -31,9 +31,9 @@ kde-desktop:
     kde-desktop-distro:
         distro:
             # Authored under `arch:`; CachyOS inherits arch's package sections
-            # (build.yml cachyos `inherit_packages: true`), so SDDM + the Plasma
-            # extras reach the cachyos container AND the cachyos VM with no
-            # per-distro duplication.
+            # (the embedded `distro:` vocabulary sets cachyos
+            # `inherit_packages: true`), so SDDM + the Plasma extras reach the
+            # cachyos container AND the cachyos VM with no per-distro duplication.
             arch:
                 package:
                     # Display manager + the systemd graphical seat.

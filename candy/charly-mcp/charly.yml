@@ -30,7 +30,7 @@ charly-mcp:
             # candy/. Deployers point this at their opencharly repo via
             # `charly config <image> --bind project=/path/to/opencharly`. When absent or
             # empty, the project-dir-dependent MCP tools return a clear error
-            # (`box.yml not found`); the session-wide tools (status, version,
+            # (`charly.yml not found`); the session-wide tools (status, version,
             # doctor, secrets, settings) continue to work.
             #
             # Volume name stays `project` (stable bind-mount API). In-container path
@@ -41,7 +41,7 @@ charly-mcp:
               path: /workspace
     charly-mcp-env:
         env:
-            # Build-mode commands resolve box.yml via os.Getwd(); the -C / --dir /
+            # Build-mode commands resolve charly.yml via os.Getwd(); the -C / --dir /
             # CHARLY_PROJECT_DIR global in charly/main.go honours this before dispatch.
             CHARLY_PROJECT_DIR: "/workspace"
     charly-mcp-service:

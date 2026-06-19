@@ -165,7 +165,7 @@ tasks:
       - cp bin/charly candy/charly/bin/charly
 
   # Release-artifact builds — thin wrappers over `charly box pkg`, which builds each
-  # native package distro-natively (in a podman container) via the SAME build.yml
+  # native package distro-natively (in a podman container) via the SAME embedded
   # local_pkg.build_template the deploy-time localpkg path uses (R3). Output → dist/.
   pkg:arch:
     desc: Build the charly .pkg.tar.zst release artifact into dist/

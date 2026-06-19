@@ -37,7 +37,7 @@ func findAndroidSpec(dir, name string) *AndroidSpec {
 // collects every apk: package id (committed-APK entries have no id and are
 // skipped — they can't be uninstalled by id). Best-effort; returns nil on
 // resolution failure.
-func androidApkPackageIDs(node *DeploymentNode, dir string) []string {
+func androidApkPackageIDs(node *BundleNode, dir string) []string {
 	cfg, err := LoadConfig(dir)
 	if err != nil {
 		return nil
@@ -76,7 +76,7 @@ func androidApkPackageIDs(node *DeploymentNode, dir string) []string {
 // the host); image devices target an in-pod emulator (apkeep in-pod). For a
 // nested deploy (dotted path), the in-pod container is the PARENT pod
 // (charly-<flat-parent-path>); for a top-level deploy it resolves by image name.
-func resolveAndroidDevice(spec *AndroidSpec, node *DeploymentNode, path string) (AndroidDevice, error) {
+func resolveAndroidDevice(spec *AndroidSpec, node *BundleNode, path string) (AndroidDevice, error) {
 	serial := spec.EffectiveSerial()
 
 	// Remote/physical endpoint — host-side apkeep + goadb.
@@ -137,7 +137,7 @@ func resolveAndroidDevice(spec *AndroidSpec, node *DeploymentNode, path string) 
 // the image-device branch uses (R3). The parent pod is derived from the deploy
 // path (path[:lastDot]), exactly like the image branch. Returns addr unchanged
 // when it carries no ${HOST_PORT:N} reference (a literal host:port endpoint).
-func resolveAndroidHostPortRef(addr, path string, node *DeploymentNode) (string, error) {
+func resolveAndroidHostPortRef(addr, path string, node *BundleNode) (string, error) {
 	const marker = "${HOST_PORT:"
 	before, after, ok := strings.Cut(addr, marker)
 	if !ok {

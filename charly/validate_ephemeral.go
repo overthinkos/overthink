@@ -13,7 +13,7 @@ import (
 // kind:deployment entities).
 
 // ValidateEphemeralOnNode applies all ephemeral-related invariants to
-// a single DeploymentNode. Errors are accumulated into errs.
+// a single BundleNode. Errors are accumulated into errs.
 //
 // Invariants enforced:
 //   - target=host with ephemeral set → schema error (host is inherently
@@ -23,7 +23,7 @@ import (
 //   - ephemeral block: ttl is parseable (or empty for default 1h).
 //   - ephemeral block: naming_pattern is parseable as Go template.
 //   - effective ttl > 0 (rejects "0s" or negative values).
-func ValidateEphemeralOnNode(name string, node *DeploymentNode, errs *ValidationError) {
+func ValidateEphemeralOnNode(name string, node *BundleNode, errs *ValidationError) {
 	if node == nil {
 		return
 	}
@@ -67,7 +67,7 @@ func ValidateEphemeralOnNode(name string, node *DeploymentNode, errs *Validation
 
 	// Reject the contradiction: explicit ephemeral + explicit
 	// disposable: false is rejected at load time. The auto-promote in
-	// LoadDeployConfig already turned Disposable=true for ephemeral
+	// LoadBundleConfig already turned Disposable=true for ephemeral
 	// nodes; this check is for the rare case where validation runs on
 	// a config that bypassed the loader (e.g., direct YAML inspection).
 	// Since Disposable is a plain bool and we can't distinguish
@@ -101,13 +101,13 @@ func ValidateImportedSource(name string, src *VmSource, errs *ValidationError) {
 }
 
 // ValidateEphemeralAcrossDeploy aggregates ephemeral / naming /
-// imported validation across an entire DeployConfig. Called from the
+// imported validation across an entire BundleConfig. Called from the
 // top-level Validate path.
-func ValidateEphemeralAcrossDeploy(dc *DeployConfig, errs *ValidationError) {
+func ValidateEphemeralAcrossDeploy(dc *BundleConfig, errs *ValidationError) {
 	if dc == nil {
 		return
 	}
-	for name, node := range dc.Deploy {
+	for name, node := range dc.Bundle {
 		ValidateEphemeralOnNode(name, &node, errs)
 	}
 }
@@ -115,10 +115,10 @@ func ValidateEphemeralAcrossDeploy(dc *DeployConfig, errs *ValidationError) {
 // validateEphemeralUnified is the unified-loader entry point for ephemeral
 // deploy handling (mirrors validatePreemptibleUnified): it auto-promotes
 // disposable:true on ephemeral entries and validates the ephemeral / vm-naming
-// invariants across a UnifiedFile's Deploy map. Both the project charly.yml's
+// invariants across a UnifiedFile's Bundle map. Both the project charly.yml's
 // inline deploy: entries AND the per-host ~/.config/charly/charly.yml flow
 // through here, so the promotion + checks apply once, one path (R3) — the old
-// LoadDeployConfig ran these only on the per-host file.
+// LoadBundleConfig ran these only on the per-host file.
 func validateEphemeralUnified(uf *UnifiedFile) error {
 	if uf == nil {
 		return nil
@@ -126,15 +126,15 @@ func validateEphemeralUnified(uf *UnifiedFile) error {
 	// Auto-promote disposable:true on ephemeral entries — the one load-bearing
 	// exception to /charly-internals:disposable's anti-derivation rule
 	// (ephemeral STRENGTHENS the disposability contract; see classification.go).
-	for name, node := range uf.Deploy {
+	for name, node := range uf.Bundle {
 		if node.IsEphemeral() && (node.Disposable == nil || !*node.Disposable) {
 			t := true
 			node.Disposable = &t
-			uf.Deploy[name] = node
+			uf.Bundle[name] = node
 		}
 	}
 	errs := &ValidationError{}
-	for name, node := range uf.Deploy {
+	for name, node := range uf.Bundle {
 		ValidateEphemeralOnNode(name, &node, errs)
 		ValidateVmNamingGuard(name, errs)
 	}

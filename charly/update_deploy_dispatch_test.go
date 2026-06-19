@@ -14,7 +14,7 @@ import (
 // entry resolves. Before the fix the dispatcher looked up the bare base
 // name and failed with `no deploy named "<base>"`.
 func TestResolveUpdateDeployNode(t *testing.T) {
-	tree := map[string]DeploymentNode{
+	tree := map[string]BundleNode{
 		"foo/bar": {Target: "pod", Box: "foo"},
 		"baz":     {Target: "pod", Box: "baz"},
 		// Nested topology — exercises the dotted-path walk, which must keep
@@ -22,7 +22,7 @@ func TestResolveUpdateDeployNode(t *testing.T) {
 		// instance is empty.
 		"stack": {
 			Target: "vm",
-			Nested: map[string]*DeploymentNode{
+			Children: map[string]*BundleNode{
 				"web": {Target: "pod", Box: "web"},
 			},
 		},
@@ -90,7 +90,7 @@ func TestNoteUpdateDisposability(t *testing.T) {
 	fDisposable := new(false)
 	cases := []struct {
 		name     string
-		node     *DeploymentNode
+		node     *BundleNode
 		image    string
 		instance string
 		wantNote bool
@@ -98,33 +98,33 @@ func TestNoteUpdateDisposability(t *testing.T) {
 	}{
 		{
 			name:     "explicit disposable true — no note",
-			node:     &DeploymentNode{Disposable: tDisposable},
+			node:     &BundleNode{Disposable: tDisposable},
 			image:    "ok-pod",
 			wantNote: false,
 		},
 		{
 			name:     "ephemeral implies disposable — no note",
-			node:     &DeploymentNode{Ephemeral: &EphemeralLifetime{}},
+			node:     &BundleNode{Ephemeral: &EphemeralLifetime{}},
 			image:    "scratch-pod",
 			wantNote: false,
 		},
 		{
 			name:     "absent disposable — note, NOT a refusal",
-			node:     &DeploymentNode{},
+			node:     &BundleNode{},
 			image:    "prod-api",
 			wantNote: true,
 			want:     []string{"prod-api", "not marked", "disposable: true", "lifecycle: (unset)", "per your explicit"},
 		},
 		{
 			name:     "explicit disposable: false — note",
-			node:     &DeploymentNode{Disposable: fDisposable, Lifecycle: "prod"},
+			node:     &BundleNode{Disposable: fDisposable, Lifecycle: "prod"},
 			image:    "locked-api",
 			wantNote: true,
 			want:     []string{"locked-api", "lifecycle: prod"},
 		},
 		{
 			name:     "instance form includes the slash key",
-			node:     &DeploymentNode{Disposable: fDisposable},
+			node:     &BundleNode{Disposable: fDisposable},
 			image:    "versa",
 			instance: "ecovoyage",
 			wantNote: true,
@@ -132,7 +132,7 @@ func TestNoteUpdateDisposability(t *testing.T) {
 		},
 		{
 			name:     "lifecycle dev alone — note (charly update still obeys)",
-			node:     &DeploymentNode{Lifecycle: "dev"},
+			node:     &BundleNode{Lifecycle: "dev"},
 			image:    "dev-bench",
 			wantNote: true,
 			want:     []string{"dev-bench", "lifecycle: dev"},

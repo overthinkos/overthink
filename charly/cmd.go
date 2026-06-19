@@ -33,7 +33,7 @@ func (c *CmdCmd) Run() error {
 	rt, rtErr := ResolveRuntime()
 	var agentEnv []string
 	if rtErr == nil {
-		var deployBox *DeploymentNode
+		var deployBox *BundleNode
 		if overlay, ok := loadDeployConfigForRead("charly cmd").Lookup(c.Box, c.Instance); ok {
 			deployBox = &overlay
 		}

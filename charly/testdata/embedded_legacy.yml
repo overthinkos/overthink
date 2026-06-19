@@ -7,7 +7,6 @@
 #  classifyDoc → mergeUnified → UnifiedFile) as every other charly.yml — it is
 #  just another charly.yml that happens to live inside the binary.
 version: 2026.165.1048
-
 # Exclusive host-resource vocabulary: maps an arbitration token (used by a
 # deploy/bed's `requires_exclusive:` and a holder's `preemptible.holds:`) to a
 # hardware selector. A `gpu:` selector lets `charly vm create` AUTO-ALLOCATE the
@@ -16,13 +15,12 @@ version: 2026.165.1048
 # present. The selector lives here in YAML, never hardcoded in Go: adding a
 # resource is a config edit. See /charly-internals:disposable (resource axis),
 # /charly-vm:vm (GPU passthrough), /charly-core:deploy (requires_exclusive).
-resource:
-    nvidia-gpu:
+nvidia-gpu:
+    resource:
         gpu:
-            vendor: "0x10de"   # NVIDIA — DetectVFIO matches this PCI vendor id
-
-builder:
-    pacstrap:
+            vendor: "0x10de" # NVIDIA — DetectVFIO matches this PCI vendor id
+pacstrap:
+    builder:
         kind: bootstrap
         privileged: true
         output_artifact: /out/rootfs.tar.gz
@@ -54,7 +52,8 @@ builder:
                     CHARLY_RUNTIME_PACMAN_CONF
                     {{- end}}
                     tar -C /target --xattrs --xattrs-include='*' --acls -czf /out/rootfs.tar.gz .
-    debootstrap:
+debootstrap:
+    builder:
         kind: bootstrap
         privileged: true
         output_artifact: /out/rootfs.tar.gz
@@ -129,7 +128,8 @@ builder:
                     done
                     umount /target/dev/pts /target/dev /target/sys /target/proc
                     tar -C /target --xattrs --xattrs-include='*' --acls -czf /out/rootfs.tar.gz .
-    aur:
+aur:
+    builder:
         detect_config: aur
         cache_mount:
             - dst: /var/cache/pacman/pkg
@@ -217,7 +217,8 @@ builder:
         copy_artifact:
             - src: /tmp/aur-pkgs/
               dst: /tmp/aur-pkgs/
-    cargo:
+cargo:
+    builder:
         detect_file:
             - Cargo.toml
         requires_src_dir: true
@@ -237,7 +238,8 @@ builder:
         install_template: |
             RUN --mount=type=bind,from={{.LayerStage}},source=/,target=/ctx \
                 {{cacheMountsOwned .CacheMounts .UID .GID}}cargo install --path /ctx
-    npm:
+npm:
+    builder:
         detect_file:
             - package.json
         cache_mount:
@@ -272,7 +274,8 @@ builder:
             - src: '{{.Home}}'
               dst: '{{.Home}}'
               chown: true
-    pixi:
+pixi:
+    builder:
         detect_file:
             - pixi.toml
             - pyproject.toml
@@ -280,9 +283,6 @@ builder:
         cache_mount:
             - dst: /tmp/pixi-cache
             - dst: /tmp/rattler-cache
-        env:
-            PIXI_CACHE_DIR: /tmp/pixi-cache
-            RATTLER_CACHE_DIR: /tmp/rattler-cache
         # Runtime env contract — emitted into the final image's ENV PATH +
         # the ai.opencharly.path_append / ai.opencharly.env_layer
         # OCI labels when any layer in the image triggers this builder.
@@ -367,8 +367,12 @@ builder:
         copy_binary:
             src: /usr/local/bin/pixi
             dst: /usr/local/bin/pixi
-distro:
-    arch:
+    pixi-env:
+        env:
+            PIXI_CACHE_DIR: /tmp/pixi-cache
+            RATTLER_CACHE_DIR: /tmp/rattler-cache
+arch:
+    distro:
         bootstrap:
             install_cmd: pacman -Syu --noconfirm
             package:
@@ -596,7 +600,8 @@ distro:
                 UUID=${ROOT_UUID}  /          {{.Rootfs}}  rw,relatime  0 1
                 UUID=${ESP_UUID}   /boot/efi  vfat  rw,relatime,fmask=0022,dmask=0022,codepage=437,iocharset=ascii,shortname=mixed,utf8,nofail  0 2
                 FSTAB
-    cachyos:
+cachyos:
+    distro:
         inherits: arch
         # CachyOS is ABI-compatible with Arch (same repos, same package names —
         # it only ADDS optimized packages + its own repo). So a layer's
@@ -672,7 +677,8 @@ distro:
                 Include = /etc/pacman.d/mirrorlist
                 [extra]
                 Include = /etc/pacman.d/mirrorlist
-    debian:
+debian:
+    distro:
         # Canonical version — feeds distroTagChain([debian:13, debian]) so a
         # target:vm deploy reaches per-version tag sections (the deb VM beds).
         version: "13"
@@ -928,7 +934,8 @@ distro:
                 UUID=${ROOT_UUID}  /          {{.Rootfs}}  rw,relatime  0 1
                 UUID=${ESP_UUID}   /boot/efi  vfat  rw,relatime,fmask=0022,dmask=0022,codepage=437,iocharset=ascii,shortname=mixed,utf8,nofail  0 2
                 FSTAB
-    fedora:
+fedora:
+    distro:
         # Canonical version — feeds distroTagChain([fedora:43, fedora]) on a
         # target:vm deploy so per-version tag sections are reachable.
         version: "43"
@@ -1044,7 +1051,8 @@ distro:
                     {{- range .Copr}} && \
                         dnf5 config-manager setopt "copr:copr.fedorainfracloud.org:{{replace . "/" ":"}}.enabled=0"
                     {{- end}}
-    ubuntu:
+ubuntu:
+    distro:
         inherits: debian
         # Ubuntu sets its OWN version (child-wins over debian's "13"), so
         # distroTagChain yields [ubuntu:24.04, ubuntu] on a target:vm deploy.
@@ -1097,8 +1105,8 @@ distro:
                 - iputils-ping
                 # bootloader: inherited verbatim from debian — update-grub /
                 # update-initramfs / chroot-grub-install are identical on Ubuntu.
-init:
-    supervisord:
+supervisord:
+    init:
         candy_field:
             - service
         depends_candy: supervisord
@@ -1206,13 +1214,12 @@ init:
                 stderr_logfile=/dev/fd/2
                 stderr_logfile_maxbytes=0
                 {{- end}}
-    systemd:
+systemd:
+    init:
         candy_field:
             - service
         candy_file:
             - '*.service'
-        requires_capability:
-            - preserve_user
         model: file_copy
         fragment_dir: systemd
         stage_name: systemd-services
@@ -1307,67 +1314,73 @@ init:
                 {{- else}}
                 WantedBy=multi-user.target
                 {{- end}}
-
-sidecar:
-  tailscale:
-    description: Tailscale VPN sidecar for exit node routing with dual networking
-    image: ghcr.io/tailscale/tailscale:latest
-    # Multi-tailnet selection (2026-05): every deploy that attaches this
-    # sidecar MUST set `parameter.tailnet` to the target tailnet's
-    # MagicDNS suffix (e.g. "armadillo-quail.ts.net"). The empty-string
-    # sentinel below means "required, must be supplied by deploy" —
-    # ResolveSidecar errors out at `charly config` time with a remediation
-    # hint pointing at `charly migrate` if it's missing.
-    #
-    # Each tailnet's auth-key lives in `.secrets` (GPG-encrypted env
-    # file, loaded by direnv) at the env var name resolved by the
-    # `env_from:` template below. Operators store keys via:
-    #   charly secrets gpg set TS_AUTHKEY_<TAILNET-NORMALIZED> tskey-auth-XXXX
-    # See /charly-automation:sidecar "Multi-tailnet auth-key store".
-    parameter:
-      tailnet: ""
-    env:
-      # State persistence — survives restarts, avoids re-authentication
-      TS_STATE_DIR: /var/lib/tailscale
-      # Only authenticate if not already logged in (persistent state)
-      TS_AUTH_ONCE: "true"
-      # Kernel mode — REQUIRED for exit node routing (routes ALL pod traffic).
-      # Userspace mode (TS_USERSPACE=true) only tunnels Tailscale-process traffic.
-      TS_USERSPACE: "false"
-      # Force nftables firewall mode. The official tailscale image defaults to
-      # iptables-legacy which fails in rootless podman ("Permission denied").
-      # Tailscale's Go nftables library works without the nft userspace binary.
-      TS_DEBUG_FIREWALL_MODE: nftables
-      # Disable Tailscale DNS takeover. TS_ACCEPT_DNS=true rewrites /etc/resolv.conf
-      # replacing aardvark-dns (10.89.0.1) with MagicDNS (100.100.100.100), which
-      # breaks container DNS and external DNS. Instead, pod-level --dns flags
-      # configure both aardvark-dns (primary) and MagicDNS (secondary).
-      TS_ACCEPT_DNS: "false"
-      # Health check endpoint at TS_LOCAL_ADDR_PORT/healthz
-      TS_ENABLE_HEALTH_CHECK: "true"
-      TS_LOCAL_ADDR_PORT: "[::]:9002"
-    volume:
-      - name: state
-        path: /var/lib/tailscale
-    security:
-      # NET_ADMIN: iptables/nftables rules, IP forwarding, tun device management
-      # SYS_MODULE: kernel module loading for tun/tap device
-      cap_add: [NET_ADMIN, SYS_MODULE]
-      # TUN/TAP virtual network device (kernel mode only)
-      devices: ["/dev/net/tun:/dev/net/tun"]
-    secret:
-      - name: ts-authkey
-        # Container env var — what tailscale's binary reads from its
-        # process env. ALWAYS TS_AUTHKEY (the canonical name the daemon
-        # expects); never templated.
-        env: TS_AUTHKEY
-        # HOST-side env var the operator stores the value under in
-        # `.secrets`. Templated against the resolved parameter.tailnet
-        # via the `tailnetEnvSuffix` helper, which uppercases + replaces
-        # every non-alphanumeric char with '_'. Example resolution:
-        #   parameter.tailnet=armadillo-quail.ts.net
-        #   env_from -> TS_AUTHKEY_ARMADILLO_QUAIL_TS_NET
-        # The operator then stores:
-        #   charly secrets gpg set TS_AUTHKEY_ARMADILLO_QUAIL_TS_NET tskey-auth-XXXX
-        env_from: "TS_AUTHKEY_{{.Parameter.tailnet | tailnetEnvSuffix}}"
-        description: Tailscale auth key for the selected tailnet (per-tailnet env var)
+    systemd-requires_capability:
+        requires_capability:
+            - preserve_user
+tailscale:
+    sidecar:
+        description: Tailscale VPN sidecar for exit node routing with dual networking
+        image: ghcr.io/tailscale/tailscale:latest
+        # Multi-tailnet selection (2026-05): every deploy that attaches this
+        # sidecar MUST set `parameter.tailnet` to the target tailnet's
+        # MagicDNS suffix (e.g. "armadillo-quail.ts.net"). The empty-string
+        # sentinel below means "required, must be supplied by deploy" —
+        # ResolveSidecar errors out at `charly config` time with a remediation
+        # hint pointing at `charly migrate` if it's missing.
+        #
+        # Each tailnet's auth-key lives in `.secrets` (GPG-encrypted env
+        # file, loaded by direnv) at the env var name resolved by the
+        # `env_from:` template below. Operators store keys via:
+        #   charly secrets gpg set TS_AUTHKEY_<TAILNET-NORMALIZED> tskey-auth-XXXX
+        # See /charly-automation:sidecar "Multi-tailnet auth-key store".
+        parameter:
+            tailnet: ""
+    tailscale-env:
+        env:
+            # State persistence — survives restarts, avoids re-authentication
+            TS_STATE_DIR: /var/lib/tailscale
+            # Only authenticate if not already logged in (persistent state)
+            TS_AUTH_ONCE: "true"
+            # Kernel mode — REQUIRED for exit node routing (routes ALL pod traffic).
+            # Userspace mode (TS_USERSPACE=true) only tunnels Tailscale-process traffic.
+            TS_USERSPACE: "false"
+            # Force nftables firewall mode. The official tailscale image defaults to
+            # iptables-legacy which fails in rootless podman ("Permission denied").
+            # Tailscale's Go nftables library works without the nft userspace binary.
+            TS_DEBUG_FIREWALL_MODE: nftables
+            # Disable Tailscale DNS takeover. TS_ACCEPT_DNS=true rewrites /etc/resolv.conf
+            # replacing aardvark-dns (10.89.0.1) with MagicDNS (100.100.100.100), which
+            # breaks container DNS and external DNS. Instead, pod-level --dns flags
+            # configure both aardvark-dns (primary) and MagicDNS (secondary).
+            TS_ACCEPT_DNS: "false"
+            # Health check endpoint at TS_LOCAL_ADDR_PORT/healthz
+            TS_ENABLE_HEALTH_CHECK: "true"
+            TS_LOCAL_ADDR_PORT: "[::]:9002"
+    tailscale-volume:
+        volume:
+            - name: state
+              path: /var/lib/tailscale
+    tailscale-security:
+        security:
+            # NET_ADMIN: iptables/nftables rules, IP forwarding, tun device management
+            # SYS_MODULE: kernel module loading for tun/tap device
+            cap_add: [NET_ADMIN, SYS_MODULE]
+            # TUN/TAP virtual network device (kernel mode only)
+            devices: ["/dev/net/tun:/dev/net/tun"]
+    tailscale-secret:
+        secret:
+            - name: ts-authkey
+              # Container env var — what tailscale's binary reads from its
+              # process env. ALWAYS TS_AUTHKEY (the canonical name the daemon
+              # expects); never templated.
+              env: TS_AUTHKEY
+              # HOST-side env var the operator stores the value under in
+              # `.secrets`. Templated against the resolved parameter.tailnet
+              # via the `tailnetEnvSuffix` helper, which uppercases + replaces
+              # every non-alphanumeric char with '_'. Example resolution:
+              #   parameter.tailnet=armadillo-quail.ts.net
+              #   env_from -> TS_AUTHKEY_ARMADILLO_QUAIL_TS_NET
+              # The operator then stores:
+              #   charly secrets gpg set TS_AUTHKEY_ARMADILLO_QUAIL_TS_NET tskey-auth-XXXX
+              env_from: "TS_AUTHKEY_{{.Parameter.tailnet | tailnetEnvSuffix}}"
+              description: Tailscale auth key for the selected tailnet (per-tailnet env var)

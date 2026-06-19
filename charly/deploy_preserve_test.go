@@ -22,21 +22,23 @@ func TestCharlyUpdatePreservesPerHostDeployFields(t *testing.T) {
 	}
 	// Per-host overlay keyed as `charly vm destroy`/`charly vm create` key it (vm:<name>):
 	// preemptible + env + tunnel — operator-authored local state.
-	yml := `version: 2026.165.1048
-deploy:
-  vm:cachyos-gpu:
-    target: vm
-    vm: cachyos-gpu
-    preemptible:
-      holds: [nvidia-gpu]
-    env:
-      - EDITOR=nvim
-    tunnel:
-      provider: tailscale
-      private: all
-    vm_state:
-      instance_id: original-uuid
-      ssh_port: 2222
+	yml := `version: 2026.169.0004
+vm:cachyos-gpu:
+    bundle:
+        vm: cachyos-gpu
+        vm_state:
+            instance_id: original-uuid
+            ssh_port: 2222
+    vm:cachyos-gpu-preemptible:
+        preemptible:
+            holds: [nvidia-gpu]
+    vm:cachyos-gpu-env:
+        env:
+            - EDITOR=nvim
+    vm:cachyos-gpu-tunnel:
+        tunnel:
+            provider: tailscale
+            private: all
 `
 	if err := os.WriteFile(filepath.Join(cfgDir, "charly.yml"), []byte(yml), 0o600); err != nil {
 		t.Fatal(err)
@@ -52,11 +54,11 @@ deploy:
 	}
 
 	// Reload and assert NOTHING operator-authored was dropped by the cycle.
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil {
-		t.Fatalf("LoadDeployConfig: %v", err)
+		t.Fatalf("LoadBundleConfig: %v", err)
 	}
-	node, ok := dc.Deploy["vm:cachyos-gpu"]
+	node, ok := dc.Bundle["vm:cachyos-gpu"]
 	if !ok {
 		t.Fatal("vm:cachyos-gpu entry vanished after charly update destroy→create")
 	}
@@ -86,14 +88,13 @@ func TestVmDestroyRemovesPureAutoEntry(t *testing.T) {
 	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	yml := `version: 2026.165.1048
-deploy:
-  vm:check-cachyos-gpu-vm:
-    target: vm
-    vm: check-cachyos-gpu-vm
-    vm_state:
-      instance_id: bed-uuid
-      ssh_port: 12227
+	yml := `version: 2026.169.0004
+vm:check-cachyos-gpu-vm:
+    bundle:
+        vm: check-cachyos-gpu-vm
+        vm_state:
+            instance_id: bed-uuid
+            ssh_port: 12227
 `
 	if err := os.WriteFile(filepath.Join(cfgDir, "charly.yml"), []byte(yml), 0o600); err != nil {
 		t.Fatal(err)
@@ -101,11 +102,11 @@ deploy:
 	if err := removeVmDeployEntry("vm:check-cachyos-gpu-vm"); err != nil {
 		t.Fatalf("removeVmDeployEntry: %v", err)
 	}
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil {
-		t.Fatalf("LoadDeployConfig: %v", err)
+		t.Fatalf("LoadBundleConfig: %v", err)
 	}
-	if _, ok := dc.Deploy["vm:check-cachyos-gpu-vm"]; ok {
+	if _, ok := dc.Bundle["vm:check-cachyos-gpu-vm"]; ok {
 		t.Error("pure auto-created bed VM entry should be deleted on destroy (else entries accumulate)")
 	}
 }
@@ -118,11 +119,10 @@ deploy:
 func TestGatherDeployNodesPerHostWins(t *testing.T) {
 	proj := t.TempDir()
 	// Committed project: cachyos-gpu, NO preemptible.
-	projYml := `version: 2026.165.1048
-deploy:
-  cachyos-gpu:
-    target: vm
-    vm: cachyos-gpu
+	projYml := `version: 2026.169.0004
+cachyos-gpu:
+    bundle:
+        vm: cachyos-gpu
 `
 	if err := os.WriteFile(filepath.Join(proj, "charly.yml"), []byte(projYml), 0o644); err != nil {
 		t.Fatal(err)
@@ -133,13 +133,13 @@ deploy:
 	if err := os.MkdirAll(filepath.Join(cfg, "charly"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	hostYml := `version: 2026.165.1048
-deploy:
-  cachyos-gpu:
-    target: vm
-    vm: cachyos-gpu
-    preemptible:
-      holds: [nvidia-gpu]
+	hostYml := `version: 2026.169.0004
+cachyos-gpu:
+    bundle:
+        vm: cachyos-gpu
+    cachyos-gpu-preemptible:
+        preemptible:
+            holds: [nvidia-gpu]
 `
 	if err := os.WriteFile(filepath.Join(cfg, "charly", "charly.yml"), []byte(hostYml), 0o600); err != nil {
 		t.Fatal(err)
@@ -164,22 +164,22 @@ deploy:
 // committed project profile (no preemptible) merged with the per-host overlay
 // (preemptible) must keep the per-host flag, regardless of merge order.
 func TestMergeDeployConfigsPreservesPreemptible(t *testing.T) {
-	project := &DeployConfig{Deploy: map[string]DeploymentNode{
+	project := &BundleConfig{Bundle: map[string]BundleNode{
 		"cachyos-gpu": {Target: "vm", Vm: "cachyos-gpu"}, // committed: NO preemptible
 	}}
-	perHost := &DeployConfig{Deploy: map[string]DeploymentNode{
+	perHost := &BundleConfig{Bundle: map[string]BundleNode{
 		"cachyos-gpu": {Preemptible: &PreemptibleConfig{Holds: []string{"nvidia-gpu"}}}, // local opt-in
 	}}
 	for _, tc := range []struct {
 		name    string
-		configs []*DeployConfig
+		configs []*BundleConfig
 	}{
-		{"project then per-host", []*DeployConfig{project, perHost}},
-		{"per-host then project", []*DeployConfig{perHost, project}},
+		{"project then per-host", []*BundleConfig{project, perHost}},
+		{"per-host then project", []*BundleConfig{perHost, project}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			merged := MergeDeployConfigs(tc.configs...)
-			node := merged.Deploy["cachyos-gpu"]
+			node := merged.Bundle["cachyos-gpu"]
 			if node.Preemptible == nil || len(node.Preemptible.Holds) != 1 {
 				t.Errorf("merge DROPPED per-host preemptible: got %+v", node.Preemptible)
 			}

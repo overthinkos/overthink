@@ -12,8 +12,8 @@ import (
 // HasPrefix(name, "charly-<image>-") which over-matched Pattern-A
 // instance quadlets and unrelated bases sharing the prefix
 // (jupyter ⇒ over-matched jupyter-pod and jupyter/concurrency-test).
-// The new sweep enumerates EXACT sidecar names from deploy.yml; this
-// test pins the enumeration contract.
+// The new sweep enumerates EXACT sidecar names from the per-host
+// charly.yml overlay; this test pins the enumeration contract.
 func TestResolveSidecarNames(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -24,10 +24,9 @@ func TestResolveSidecarNames(t *testing.T) {
 	}{
 		{
 			name: "no entry — returns nil",
-			deployYAML: `version: 2026.165.1048
-deploy:
-  other:
-    target: pod
+			deployYAML: `version: 2026.169.0004
+other:
+  bundle:
     box: other
 `,
 			image:    "missing",
@@ -36,10 +35,9 @@ deploy:
 		},
 		{
 			name: "entry without sidecars — returns nil",
-			deployYAML: `version: 2026.165.1048
-deploy:
-  foo:
-    target: pod
+			deployYAML: `version: 2026.169.0004
+foo:
+  bundle:
     box: foo
 `,
 			image:    "foo",
@@ -48,10 +46,9 @@ deploy:
 		},
 		{
 			name: "entry with one sidecar — single-name slice",
-			deployYAML: `version: 2026.165.1048
-deploy:
-  foo:
-    target: pod
+			deployYAML: `version: 2026.169.0004
+foo:
+  bundle:
     box: foo
     sidecar:
       tailscale: {}
@@ -62,10 +59,9 @@ deploy:
 		},
 		{
 			name: "entry with multiple sidecars — sorted",
-			deployYAML: `version: 2026.165.1048
-deploy:
-  foo:
-    target: pod
+			deployYAML: `version: 2026.169.0004
+foo:
+  bundle:
     box: foo
     sidecar:
       vault: {}
@@ -77,10 +73,9 @@ deploy:
 		},
 		{
 			name: "Pattern-A instance entry with sidecar",
-			deployYAML: `version: 2026.165.1048
-deploy:
-  foo/inst1:
-    target: pod
+			deployYAML: `version: 2026.169.0004
+foo/inst1:
+  bundle:
     box: foo
     sidecar:
       tailscale: {}
@@ -99,7 +94,7 @@ deploy:
 				t.Fatalf("creating charly config dir: %v", err)
 			}
 			if err := os.WriteFile(filepath.Join(dir, "charly", "charly.yml"), []byte(tc.deployYAML), 0600); err != nil {
-				t.Fatalf("writing deploy.yml: %v", err)
+				t.Fatalf("writing charly.yml: %v", err)
 			}
 
 			got := resolveSidecarNames(tc.image, tc.instance)

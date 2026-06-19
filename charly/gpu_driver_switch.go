@@ -6,6 +6,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -32,22 +36,23 @@ import (
 //
 // THE DEVICE-LOCK HAZARD (root cause, source-confirmed + RDD-proven 2026-06-17,
 // memory gpu-driver-switch-wedge-rca.md):
-//   The nvidia driver's PCI `.remove` (nv_pci_remove, kernel-open nv-pci.c) is
-//   reached by a sysfs `unbind`. With a non-zero `usage_count` (any open
-//   /dev/nvidia* fd, live CUDA context, or nvidia_uvm/modeset/drm still
-//   attached) it BLOCKS FOREVER in an `os_delay` poll loop — while the kernel
-//   PCI core holds the per-device `device_lock` across the whole `.remove`. That
-//   wedges every later bind/reset/remove on the device in unkillable D-state →
-//   recovery is REBOOT-ONLY (no userspace primitive releases a held device_lock).
 //
-//   THE FIX: never sysfs-`unbind` a busy nvidia. `modprobe -r` is refcount-
-//   guarded — it returns EBUSY *immediately* if any client holds the GPU and
-//   NEVER reaches the blocking loop — so module-unload IS the safe, deterministic
-//   detach gate. switchScriptToVfio() detaches nvidia via `modprobe -r` (EBUSY =>
-//   refuse, exit 3, NEVER force-unbind), and runGPUSwitchScript bounds the whole
-//   operation (context deadline + WaitDelay) as defense-in-depth so a rare
-//   GSP-teardown stall frees charly + the arbiter lock instead of blocking
-//   forever; a confirmed wedge poisons the resource (preempt.go) until reboot.
+//	The nvidia driver's PCI `.remove` (nv_pci_remove, kernel-open nv-pci.c) is
+//	reached by a sysfs `unbind`. With a non-zero `usage_count` (any open
+//	/dev/nvidia* fd, live CUDA context, or nvidia_uvm/modeset/drm still
+//	attached) it BLOCKS FOREVER in an `os_delay` poll loop — while the kernel
+//	PCI core holds the per-device `device_lock` across the whole `.remove`. That
+//	wedges every later bind/reset/remove on the device in unkillable D-state →
+//	recovery is REBOOT-ONLY (no userspace primitive releases a held device_lock).
+//
+//	THE FIX: never sysfs-`unbind` a busy nvidia. `modprobe -r` is refcount-
+//	guarded — it returns EBUSY *immediately* if any client holds the GPU and
+//	NEVER reaches the blocking loop — so module-unload IS the safe, deterministic
+//	detach gate. switchScriptToVfio() detaches nvidia via `modprobe -r` (EBUSY =>
+//	refuse, exit 3, NEVER force-unbind), and runGPUSwitchScript bounds the whole
+//	operation (context deadline + WaitDelay) as defense-in-depth so a rare
+//	GSP-teardown stall frees charly + the arbiter lock instead of blocking
+//	forever; a confirmed wedge poisons the resource (preempt.go) until reboot.
 //
 // Tooling + permissions: sudo + sysfs is the only reliable primitive (rootless
 // qemu:///session libvirt cannot rebind — nodedev-reattach fails Permission
@@ -79,6 +84,13 @@ const (
 	// shell, so a leaked D-state grandchild holding the pipe cannot hang charly.
 	gpuSwitchTimeout   = 90 * time.Second
 	gpuSwitchWaitDelay = 5 * time.Second
+
+	// nvidiaInUseMarker is the stable substring switchScriptToVfio prints (and
+	// switchGPUDriverMode detects) when `modprobe -r nvidia` returns EBUSY — the
+	// card is still held by a client. ONE source for the bash echo + the Go
+	// detection so they never drift (R3). When detected, switchGPUDriverMode
+	// enriches the refusal with the actual holding process(es).
+	nvidiaInUseMarker = "nvidia module still in use"
 )
 
 // errGPUSwitchWedged signals that a switch did not complete because the nvidia
@@ -206,7 +218,7 @@ func switchScriptToVfio(gpu VFIOGpu) string {
 	b.WriteString("modprobe -r nvidia_drm nvidia_modeset nvidia_uvm nvidia_peermem 2>/dev/null || true\n")
 	b.WriteString("if lsmod | grep -q '^nvidia '; then\n")
 	b.WriteString("  if ! modprobe -r nvidia 2>/dev/null; then\n")
-	b.WriteString("    echo \"switch-to-vfio REFUSED: nvidia module still in use (a GPU client holds the card) — refusing to force-unbind (would wedge the device_lock)\" >&2\n")
+	fmt.Fprintf(&b, "    echo \"switch-to-vfio REFUSED: %s (a GPU client holds the card) — refusing to force-unbind (would wedge the device_lock)\" >&2\n", nvidiaInUseMarker)
 	b.WriteString("    exit 3\n")
 	b.WriteString("  fi\n")
 	b.WriteString("fi\n")
@@ -256,7 +268,86 @@ func switchGPUDriverMode(gpu VFIOGpu, mode string) error {
 	if errors.Is(err, errGPUSwitchWedged) || strings.Contains(string(out), "WEDGED") {
 		return fmt.Errorf("%w\n%s", errGPUSwitchWedged, strings.TrimSpace(string(out)))
 	}
+	// EBUSY refusal (exit 3): nvidia is still held. The arbiter auto-preempts
+	// charly-managed GPU holders BEFORE this switch, so any remaining holder is
+	// necessarily EXTERNAL (btop, nvidia-smi -l, a desktop GPU widget, …) — name
+	// it so the refusal is actionable instead of cryptic. Exit 3 + no-force are
+	// unchanged; this only enriches the message.
+	if mode == gpuModeVfio && strings.Contains(string(out), nvidiaInUseMarker) {
+		return nvidiaInUseRefusal(discoverNvidiaHolders())
+	}
 	return fmt.Errorf("switching GPU %s to %s mode: %w\n%s", gpu.Addr, mode, err, strings.TrimSpace(string(out)))
+}
+
+// NvidiaHolder is one process holding an /dev/nvidia* device open — discovered
+// when a vfio switch is REFUSED because the card is still in use. Since the
+// arbiter auto-preempts charly-managed GPU pods before the switch, a holder
+// found here is necessarily an EXTERNAL / non-charly client.
+type NvidiaHolder struct {
+	PID  int
+	Comm string
+}
+
+// discoverNvidiaHolders enumerates processes with an open /dev/nvidia* fd by
+// walking /proc/<pid>/fd symlinks. Best-effort + never errors (it only enriches
+// a refusal message): a process that exited mid-scan, or a root-owned fd
+// unreadable without privilege, is silently skipped. Deduped by PID, sorted for
+// deterministic output. Package var so tests inject a fixture without /proc.
+var discoverNvidiaHolders = defaultDiscoverNvidiaHolders
+
+func defaultDiscoverNvidiaHolders() []NvidiaHolder {
+	fdDirs, _ := filepath.Glob("/proc/[0-9]*/fd")
+	var holders []NvidiaHolder
+	for _, fdDir := range fdDirs {
+		pid, err := strconv.Atoi(filepath.Base(filepath.Dir(fdDir)))
+		if err != nil {
+			continue
+		}
+		fds, _ := os.ReadDir(fdDir)
+		for _, fd := range fds {
+			target, lerr := os.Readlink(filepath.Join(fdDir, fd.Name()))
+			if lerr == nil && strings.HasPrefix(target, "/dev/nvidia") {
+				holders = append(holders, NvidiaHolder{PID: pid, Comm: procComm(pid)})
+				break // one entry per process even if it holds several nvidia fds
+			}
+		}
+	}
+	sort.Slice(holders, func(i, j int) bool { return holders[i].PID < holders[j].PID })
+	return holders
+}
+
+// procComm reads a process's command name from /proc/<pid>/comm ("?" when gone).
+func procComm(pid int) string {
+	b, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid))
+	if err != nil {
+		return "?"
+	}
+	return strings.TrimSpace(string(b))
+}
+
+// formatNvidiaHolders renders the holder list into the actionable clause of a
+// vfio-switch refusal. Empty (none identified) → a generic clause; one or many
+// → "external process(es): <comm> (pid N), …". Pure + unit-tested; the discovery
+// (defaultDiscoverNvidiaHolders) is best-effort and may legitimately return none
+// (a holder that exited between the EBUSY and the scan).
+func formatNvidiaHolders(holders []NvidiaHolder) string {
+	if len(holders) == 0 {
+		return "an external GPU client (the holding process could not be identified)"
+	}
+	parts := make([]string, 0, len(holders))
+	for _, h := range holders {
+		parts = append(parts, fmt.Sprintf("%s (pid %d)", h.Comm, h.PID))
+	}
+	return "external process(es): " + strings.Join(parts, ", ")
+}
+
+// nvidiaInUseRefusal builds the actionable error returned when a vfio switch is
+// refused because a NON-charly process still holds the card. The arbiter
+// auto-preempts charly-managed GPU pods BEFORE the switch, so the holder is
+// external — point the operator at it. Force-unbind stays REFUSED (it would
+// wedge the device_lock); this message only tells them what to close.
+func nvidiaInUseRefusal(holders []NvidiaHolder) error {
+	return fmt.Errorf("switch-to-vfio REFUSED: nvidia still held by %s. charly auto-preempts its own GPU pods; close these external GPU clients and retry (refusing to force-unbind — would wedge the device_lock)", formatNvidiaHolders(holders))
 }
 
 // ensureCDIRoot (re)generates the nvidia CDI spec at /etc/cdi/nvidia.yaml as
@@ -283,13 +374,104 @@ func ensureCDIRoot() {
 // currently vfio-bound, because the arbiter flips it to nvidia at start. This is
 // the config-time analogue of live `DetectHostDevices().GPU`, which would be
 // false while the card is still in vfio mode.
-func deployNodeSharesGPU(node DeploymentNode, resources map[string]*ResourceDef) bool {
+func deployNodeSharesGPU(node BundleNode, resources map[string]*ResourceDef) bool {
 	for _, tok := range node.RequiredShared() {
 		if rdef := resources[tok]; rdef != nil && rdef.Gpu != nil {
 			return true
 		}
 	}
 	return false
+}
+
+// nvidiaTokenFromResources returns the `resource:` token whose gpu selector
+// matches the NVIDIA PCI vendor (0x10de) — the arbitration token that the
+// auto-detected nvidia GPU device (engine.go's `--device nvidia.com/gpu=all`)
+// maps onto. "" when no gpu-backed nvidia token is configured (then there is no
+// arbitration label to claim). Lowest token name wins on the degenerate
+// multi-match case (determinism). Derived from build.yml `resource:` config —
+// never hardcoded; the vendor match mirrors requiredGPUResource (gpu_allocate.go,
+// R3).
+func nvidiaTokenFromResources(resources map[string]*ResourceDef) string {
+	best := ""
+	for tok, rdef := range resources {
+		if rdef != nil && rdef.Gpu != nil && normalizePCIVendor(rdef.Gpu.Vendor) == nvidiaVendorID {
+			if best == "" || tok < best {
+				best = tok
+			}
+		}
+	}
+	return best
+}
+
+// nodeSecurityListsNvidiaDevice reports whether a node's security.devices
+// explicitly references the NVIDIA GPU — the CDI name (`nvidia.com/gpu`) or a
+// `/dev/nvidia*` node. A node-intrinsic "this deploy consumes the GPU" signal,
+// independent of host auto-detection.
+func nodeSecurityListsNvidiaDevice(node BundleNode) bool {
+	if node.Security == nil {
+		return false
+	}
+	for _, d := range node.Security.Devices {
+		if strings.Contains(d, "nvidia.com/gpu") || strings.HasPrefix(d, "/dev/nvidia") {
+			return true
+		}
+	}
+	return false
+}
+
+// nodeConsumesNvidiaGPU reports whether a deploy node WOULD receive the nvidia
+// GPU device at bring-up: either the host presents a usable nvidia GPU
+// (DetectGPU — the SAME signal config_image uses to emit
+// `--device nvidia.com/gpu=all` on every pod of a GPU host), or the node
+// explicitly lists an nvidia device in security.devices. The card being usable
+// via the nvidia driver is exactly the state in which an untracked GPU pod grabs
+// `/dev/nvidia*` and blocks a later vfio claim — so it is the state in which the
+// pod MUST become a tracked, preemptable shared claimant.
+func nodeConsumesNvidiaGPU(node BundleNode) bool {
+	return DetectGPU() || nodeSecurityListsNvidiaDevice(node)
+}
+
+// impliedGPUSharedToken returns the gpu-backed `resource:` token a node
+// implicitly claims as SHARED because it consumes the auto-detected nvidia GPU
+// device — "" when the node is not a GPU consumer, claims a resource
+// exclusively, or no gpu token is configured. This is what makes EVERY
+// GPU-using deployment a tracked, preemptable shared claimant with NO per-deploy
+// config: AcquireShared registers a refcount lease for the token, and
+// AcquireExclusive can then stop the pod to free the card for a vfio claimant.
+// An EXCLUSIVE claimant (a VM via vfio passthrough — it gets a PCI <hostdev>,
+// never the pod `--device`) is never treated as a pod GPU consumer.
+func impliedGPUSharedToken(node BundleNode, resources map[string]*ResourceDef) string {
+	if len(node.RequiredExclusive()) > 0 {
+		return ""
+	}
+	if !nodeConsumesNvidiaGPU(node) {
+		return ""
+	}
+	return nvidiaTokenFromResources(resources)
+}
+
+// applyImpliedGPUShared returns node with its RequiresShared unioned with the
+// implied gpu token (impliedGPUSharedToken) — a no-op copy when nothing is
+// implied OR the node already claims the token (no double-claim). Pure (resources
+// injected) so it is unit-testable without touching disk.
+func applyImpliedGPUShared(node BundleNode, resources map[string]*ResourceDef) BundleNode {
+	tok := impliedGPUSharedToken(node, resources)
+	if tok == "" || slices.Contains(node.RequiresShared, tok) {
+		return node
+	}
+	// node is a value (passed by value to the arbiter); a fresh slice avoids
+	// aliasing the caller's RequiresShared.
+	node.RequiresShared = append(append([]string(nil), node.RequiresShared...), tok)
+	return node
+}
+
+// withImpliedGPUShared is the disk-backed wrapper of applyImpliedGPUShared used
+// at the single arbiter-claim entry point (acquireResourceForClaimant): it loads
+// the project resource map and unions the implied gpu token onto node, so a
+// GPU-consuming pod that declared NO explicit claim still acquires a shared lease
+// and becomes preemptable by an exclusive claimant.
+func withImpliedGPUShared(node BundleNode) BundleNode {
+	return applyImpliedGPUShared(node, gatherResources())
 }
 
 // gpuSwitchModeTolerant detects the GPU matching `vendor` (PCI vendor hex, e.g.

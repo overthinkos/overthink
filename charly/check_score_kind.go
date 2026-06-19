@@ -4,10 +4,10 @@ package main
 //
 // The AI-loop orchestration — the agent list, plateau policy, prompt,
 // sandbox, MCP endpoint, notes toggle, env — lives in an `IterateConfig`
-// carried on a `deploy:` entry or a `kind: check` bed (DeploymentNode.Iterate).
+// carried on a `bundle:` entry (a `disposable: true` bundle is a check bed) (BundleNode.Iterate).
 // `charly check run <entity>`: when the entity carries an `iterate:` block the
 // AI loop drives it (scoring the entity's own `plan:` check:/agent-check:
-// steps); otherwise the entity is a plain `kind: check` bed and runs the
+// steps); otherwise the entity is a plain check bed (a `disposable: true` bundle) and runs the
 // deterministic R10 sequence.
 //
 // The scored content is the entity's OWN `plan:` (baked + include:'d + inline)
@@ -85,7 +85,7 @@ const (
 )
 
 // ResolveIterateSandbox classifies the iterate sandbox's target kind by
-// looking up the named deployment in the project's Deploy map. A bare host
+// looking up the named deployment in the project's Bundle map. A bare host
 // sandbox (target: local with host: local) resolves to TargetKindHost; an
 // explicit vm: deploy → TargetKindVM; everything else (the default pod) →
 // TargetKindPod. The returned name is the sandbox deploy name (empty for a
@@ -95,20 +95,17 @@ func ResolveIterateSandbox(uf *UnifiedFile, sandbox string) (TargetKind, string)
 		return TargetKindHost, ""
 	}
 	if uf != nil {
-		// foldCheckBeds copies kind:check beds into Deploy, so one lookup
-		// covers both deploys and beds.
-		if node, ok := uf.Deploy[sandbox]; ok {
-			return targetKindForNode(&node), sandbox
-		}
-		if node, ok := uf.Check[sandbox]; ok {
+		// A check bed is a disposable bundle in Deploy, so one lookup covers
+		// both deploys and beds.
+		if node, ok := uf.Bundle[sandbox]; ok {
 			return targetKindForNode(&node), sandbox
 		}
 	}
 	return TargetKindPod, sandbox
 }
 
-// targetKindForNode maps a DeploymentNode's target to a TargetKind.
-func targetKindForNode(node *DeploymentNode) TargetKind {
+// targetKindForNode maps a BundleNode's target to a TargetKind.
+func targetKindForNode(node *BundleNode) TargetKind {
 	switch node.Target {
 	case "vm":
 		return TargetKindVM

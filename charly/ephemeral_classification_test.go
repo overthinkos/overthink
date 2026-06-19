@@ -4,48 +4,48 @@ import (
 	"testing"
 )
 
-// TestDeploymentNode_LifecycleAloneDoesNotAuthorize verifies the
+// TestBundleNode_LifecycleAloneDoesNotAuthorize verifies the
 // long-standing anti-derivation invariant: lifecycle: dev does NOT
 // imply disposable: true.
-func TestDeploymentNode_LifecycleAloneDoesNotAuthorize(t *testing.T) {
+func TestBundleNode_LifecycleAloneDoesNotAuthorize(t *testing.T) {
 	for _, tier := range []string{"scratch", "dev", "test", "qa", "staging", "prod"} {
-		node := DeploymentNode{Lifecycle: tier}
+		node := BundleNode{Lifecycle: tier}
 		if node.IsDisposable() {
 			t.Errorf("lifecycle=%q must NOT make a deploy disposable", tier)
 		}
 	}
 }
 
-// TestDeploymentNode_EphemeralImpliesDisposable verifies the load-
+// TestBundleNode_EphemeralImpliesDisposable verifies the load-
 // bearing exception: ephemeral: ... DOES imply disposable: true.
-func TestDeploymentNode_EphemeralImpliesDisposable(t *testing.T) {
+func TestBundleNode_EphemeralImpliesDisposable(t *testing.T) {
 	tests := []struct {
 		name string
-		node DeploymentNode
+		node BundleNode
 		want bool
 	}{
 		{
 			name: "ephemeral block-form implies disposable",
-			node: DeploymentNode{
+			node: BundleNode{
 				Ephemeral: &EphemeralLifetime{TTL: "30m"},
 			},
 			want: true,
 		},
 		{
 			name: "ephemeral with all defaults still implies disposable",
-			node: DeploymentNode{
+			node: BundleNode{
 				Ephemeral: &EphemeralLifetime{},
 			},
 			want: true,
 		},
 		{
 			name: "no ephemeral block, no disposable → not disposable",
-			node: DeploymentNode{},
+			node: BundleNode{},
 			want: false,
 		},
 		{
 			name: "explicit disposable + no ephemeral → disposable",
-			node: DeploymentNode{Disposable: new(true)},
+			node: BundleNode{Disposable: new(true)},
 			want: true,
 		},
 	}
@@ -58,17 +58,17 @@ func TestDeploymentNode_EphemeralImpliesDisposable(t *testing.T) {
 	}
 }
 
-// TestDeploymentNode_IsEphemeral verifies the IsEphemeral check tracks
+// TestBundleNode_IsEphemeral verifies the IsEphemeral check tracks
 // EphemeralLifetime presence.
-func TestDeploymentNode_IsEphemeral(t *testing.T) {
+func TestBundleNode_IsEphemeral(t *testing.T) {
 	tests := []struct {
 		name string
-		node DeploymentNode
+		node BundleNode
 		want bool
 	}{
-		{name: "no block", node: DeploymentNode{}, want: false},
-		{name: "block with ttl", node: DeploymentNode{Ephemeral: &EphemeralLifetime{TTL: "1h"}}, want: true},
-		{name: "block with empty fields", node: DeploymentNode{Ephemeral: &EphemeralLifetime{}}, want: true},
+		{name: "no block", node: BundleNode{}, want: false},
+		{name: "block with ttl", node: BundleNode{Ephemeral: &EphemeralLifetime{TTL: "1h"}}, want: true},
+		{name: "block with empty fields", node: BundleNode{Ephemeral: &EphemeralLifetime{}}, want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

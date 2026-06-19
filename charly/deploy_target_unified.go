@@ -9,7 +9,7 @@ package main
 // with the per-verb methods, plus LifecycleTarget for the live-runtime
 // targets.
 //
-// Every `charly deploy add` / `charly deploy del` / `charly update` dispatches through
+// Every `charly bundle add` / `charly bundle del` / `charly update` dispatches through
 // ResolveTarget (unified_targets.go) → an UnifiedDeployTarget adapter. The
 // adapter CONSTRUCTS its live embedded legacy target (SSHExecutor + VmDeployTarget
 // for vm, Generator + PodDeployTarget for pod, LocalDeployTarget for local,
@@ -22,7 +22,7 @@ import (
 )
 
 // DeployContext carries everything an Add needs from the generic
-// dispatchNode pre-stage: the dispatch-merged DeploymentNode (the
+// dispatchNode pre-stage: the dispatch-merged BundleNode (the
 // project+operator field-level merge from resolveTreeRoot — the SINGLE
 // source of truth for node fields like Nested/Env/ephemeral/disposable,
 // NEVER re-read via loadDeployConfigForRead inside an Add), the deploy
@@ -31,9 +31,9 @@ import (
 // each adapter constructs its live embedded target without re-resolving
 // config that dispatchNode already loaded.
 type DeployContext struct {
-	// Node is the dispatch-merged DeploymentNode. nil for a ref-based
-	// deploy with no charly.yml entry (e.g. `charly deploy add host ./x.yml`).
-	Node *DeploymentNode
+	// Node is the dispatch-merged BundleNode. nil for a ref-based
+	// deploy with no charly.yml entry (e.g. `charly bundle add host ./x.yml`).
+	Node *BundleNode
 
 	// Name is the deploy key (the bed key / charly.yml map key, e.g.
 	// "check-k3s-vm"). Distinct from the kind:vm entity name (node.Vm).
@@ -56,7 +56,7 @@ type DeployContext struct {
 
 // UnifiedDeployTarget is the unified contract all four deploy methods
 // (host, vm, pod, k8s) implement uniformly. Each method corresponds to
-// an `charly deploy …` subcommand, so the dispatcher in resolve_target.go
+// an `charly bundle …` subcommand, so the dispatcher in resolve_target.go
 // can route purely on target.Kind() without per-cmd switches.
 type UnifiedDeployTarget interface {
 	// Name is the deployment's identifier from charly.yml (e.g.
@@ -81,14 +81,14 @@ type UnifiedDeployTarget interface {
 	Executor() DeployExecutor
 
 	// Add applies the given plans to the target. Equivalent to
-	// `charly deploy add <name>`. Idempotent: re-applying the same plan
+	// `charly bundle add <name>`. Idempotent: re-applying the same plan
 	// is safe. dctx carries the dispatch-merged node + loaded configs;
 	// the adapter constructs its live embedded target from it (never
 	// re-reading the node from disk — see DeployContext).
 	Add(ctx context.Context, dctx *DeployContext, plans []*InstallPlan, opts EmitOpts) error
 
 	// Del reverses every candy currently recorded for this target
-	// and removes the deploy record. Equivalent to `charly deploy del
+	// and removes the deploy record. Equivalent to `charly bundle del
 	// <name>`. Only recorded ReverseOps are replayed — never an
 	// ad-hoc computation from the candy manifest.
 	Del(ctx context.Context, opts DelOpts) error
@@ -100,7 +100,7 @@ type UnifiedDeployTarget interface {
 
 	// Update re-applies the plan diff between the currently-recorded
 	// candy set and the plan set derived from fresh charly.yml.
-	// Equivalent to `charly deploy update <name>` (new command; today's
+	// Equivalent to `charly bundle update <name>` (new command; today's
 	// `charly update` is image-focused and will be separate).
 	Update(ctx context.Context, plans []*InstallPlan, opts UpdateOpts) error
 }
@@ -143,7 +143,7 @@ type LifecycleTarget interface {
 // Opts types — one per method.
 // ---------------------------------------------------------------------------
 
-// DelOpts parameterizes `charly deploy del`.
+// DelOpts parameterizes `charly bundle del`.
 type DelOpts struct {
 	// DryRun prints what would happen without executing.
 	DryRun bool
@@ -174,7 +174,7 @@ type TestOpts struct {
 	StopOnFail bool
 }
 
-// UpdateOpts parameterizes `charly deploy update`.
+// UpdateOpts parameterizes `charly bundle update`.
 type UpdateOpts struct {
 	DryRun           bool
 	AssumeYes        bool

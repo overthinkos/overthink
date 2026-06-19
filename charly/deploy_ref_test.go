@@ -10,13 +10,13 @@ import (
 
 func TestResolveDeployRefLocalImage(t *testing.T) {
 	dir := t.TempDir()
-	// Schema v4: ResolveDeployRef calls LoadUnified which reads
-	// charly.yml as the entry point. Fixture must use the unified
-	// shape with version: 2026.165.1048 and the singular box: kind map.
+	// ResolveDeployRef calls LoadUnified, which accepts ONLY the unified
+	// node-form `<name>: {<kind>: <scalars>}`. Fixture uses the inline
+	// node-form box (version: 2026.169.0004).
 	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(`
-version: 2026.165.1048
-box:
-  myimg:
+version: 2026.169.0004
+myimg:
+  box:
     base: fedora
 `), 0644); err != nil {
 		t.Fatal(err)
@@ -44,7 +44,7 @@ candy:
 	}
 	// Also create charly.yml so the local-name resolver has something
 	// to search — but we don't add "ripgrep" to it, so it's candy-only.
-	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.165.1048\nimage: {}\n"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.169.0004\nimage: {}\n"), 0644)
 
 	got, err := ResolveDeployRef("ripgrep", dir)
 	if err != nil {
@@ -65,10 +65,14 @@ candy:
 // reachable via explicit paths.
 func TestResolveDeployRefCrossKindNameReuse(t *testing.T) {
 	dir := t.TempDir()
+	// Inline node-form box `dup` in charly.yml + a node-form candy `dup` in
+	// candy/dup/. Cross-kind reuse of the SAME name across the box: namespace
+	// and a candy directory is permitted; box-first vs candy-first precedence
+	// is decided by the caller, not a uniqueness error.
 	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(`
-version: 2026.165.1048
-box:
-  dup:
+version: 2026.169.0004
+dup:
+  box:
     base: fedora
 `), 0644); err != nil {
 		t.Fatal(err)
@@ -77,8 +81,16 @@ box:
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "candy", "dup", "charly.yml"), []byte(`
-candy:
-  package: [foo]
+dup:
+  candy:
+    version: "2026.150.0000"
+    description: dup candy
+  dup-package:
+    package:
+      - foo
+  dup-step-0:
+    check: present
+    command: "true"
 `), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +116,7 @@ candy:
 
 func TestResolveDeployRefUnknownName(t *testing.T) {
 	dir := t.TempDir()
-	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.165.1048\nimage: {}\n"), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "charly.yml"), []byte("version: 2026.169.0004\nimage: {}\n"), 0644)
 	_, err := ResolveDeployRef("nope", dir)
 	if err == nil {
 		t.Fatalf("expected not-found error, got nil")
@@ -180,7 +192,7 @@ func TestResolveDeployRefRemoteGitHubLegacy(t *testing.T) {
 
 // TestResolveDeployRefRemoteCandy covers the post-2026-06-rebrand `candy/<n>`
 // subpath: a remote candy ref must classify as a CANDY (not a box), so
-// `charly deploy add --add-layer @github.../candy/charly:vTAG` (the form a kind:check
+// `charly bundle add --add-layer @github.../candy/charly:vTAG` (the form a kind:check
 // bed's add_candy compiles to) is accepted instead of hitting the "remote image
 // refs are not supported" guard. Without the /candy/ classification this fails.
 func TestResolveDeployRefRemoteCandy(t *testing.T) {

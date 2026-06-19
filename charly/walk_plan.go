@@ -32,7 +32,7 @@ import (
 //
 // Returning an error aborts the plan walk and propagates to the caller.
 // Returning nil records ReverseOps from step.Reverse() into the
-// CandyRecord so `charly deploy del` can replay them.
+// CandyRecord so `charly bundle del` can replay them.
 type StepExecutor interface {
 	ExecSystemPackages(ctx context.Context, s *SystemPackagesStep, plan *InstallPlan, opts EmitOpts) error
 	ExecTask(ctx context.Context, s *OpStep, plan *InstallPlan, opts EmitOpts) error

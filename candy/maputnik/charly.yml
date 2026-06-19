@@ -1,59 +1,64 @@
-candy:
-    version: 2026.144.1443
-    name: maputnik
-    description: |
-        Visual MapLibre GL style editor (Maputnik SPA) built from upstream source and served as a static dist over HTTP on port 8000
-        Clones the upstream maplibre/maputnik repo at image-build time, runs
-        `npm ci` + `npm run build -- --base=/`, and copies Vite's emitted
-        dist/ to /opt/maputnik/build/. The --base=/ override keeps asset URLs
-        root-relative so they resolve under the serve path instead of 404ing
-        at /maputnik/assets/*. The stdlib `python3 -m http.server 8000
-        --directory /opt/maputnik/build` runs as the always-restart maputnik
-        service. It pairs with the osm-tools martin tile server (the editor at
-        :8000 points at the tile catalog at :3000). Every fact below is
-        observable: the built SPA dist + index.html, the node build
-        toolchain, the running service, the HTTP 200 the editor returns, and
-        the absence of the /maputnik/ asset prefix in the served HTML.
-    require:
-        - supervisord
-    distro:
-        arch:
-            package:
-                # Arch ships nodejs (currently 24+) and npm in extra; package names
-                # match Fedora exactly. The supervisor RPM/PAC pulls python3 in as
-                # a runtime dep on both distros, so /usr/bin/python3 is present
-                # for the http.server service exec below.
-                - nodejs
-                - npm
-                - git
-        fedora:
-            package:
-                # nodejs ships nodejs 22 + npm 10 on Fedora 43 — sufficient for current
-                # maputnik upstream. If an upstream node-version-specific build break
-                # surfaces, switch to `nodejs:20` module stream (the codebase already
-                # has prior art for distro module streams).
-                - nodejs
-                - npm
-                # git is needed to clone the maputnik source at build time.
-                - git
-    port:
-        - 8000 # maputnik static-dist HTTP server
-    service:
-        - name: maputnik
-          # System python3 (from the supervisor RPM's own dependency) — keeps
-          # this layer free of any pixi-env coupling. http.server is in stdlib;
-          # --directory pins the served root to the build artifact.
-          exec: /usr/bin/python3 -m http.server 8000 --directory /opt/maputnik/build
-          restart: always
-          working_directory: /opt/maputnik
-          priority: 34
-          enable: true
-          scope: system
-    plan:
-        - run: mkdir=/opt/maputnik
-          mkdir: /opt/maputnik
-          run_as: root
-        - run: |
+maputnik:
+    candy:
+        version: 2026.144.1443
+        description: |
+            Visual MapLibre GL style editor (Maputnik SPA) built from upstream source and served as a static dist over HTTP on port 8000
+            Clones the upstream maplibre/maputnik repo at image-build time, runs
+            `npm ci` + `npm run build -- --base=/`, and copies Vite's emitted
+            dist/ to /opt/maputnik/build/. The --base=/ override keeps asset URLs
+            root-relative so they resolve under the serve path instead of 404ing
+            at /maputnik/assets/*. The stdlib `python3 -m http.server 8000
+            --directory /opt/maputnik/build` runs as the always-restart maputnik
+            service. It pairs with the osm-tools martin tile server (the editor at
+            :8000 points at the tile catalog at :3000). Every fact below is
+            observable: the built SPA dist + index.html, the node build
+            toolchain, the running service, the HTTP 200 the editor returns, and
+            the absence of the /maputnik/ asset prefix in the served HTML.
+    maputnik-require:
+        require:
+            - supervisord
+    maputnik-distro:
+        distro:
+            arch:
+                package:
+                    # Arch ships nodejs (currently 24+) and npm in extra; package names
+                    # match Fedora exactly. The supervisor RPM/PAC pulls python3 in as
+                    # a runtime dep on both distros, so /usr/bin/python3 is present
+                    # for the http.server service exec below.
+                    - nodejs
+                    - npm
+                    - git
+            fedora:
+                package:
+                    # nodejs ships nodejs 22 + npm 10 on Fedora 43 — sufficient for current
+                    # maputnik upstream. If an upstream node-version-specific build break
+                    # surfaces, switch to `nodejs:20` module stream (the codebase already
+                    # has prior art for distro module streams).
+                    - nodejs
+                    - npm
+                    # git is needed to clone the maputnik source at build time.
+                    - git
+    maputnik-port:
+        port:
+            - 8000 # maputnik static-dist HTTP server
+    maputnik-service:
+        service:
+            - name: maputnik
+              # System python3 (from the supervisor RPM's own dependency) — keeps
+              # this layer free of any pixi-env coupling. http.server is in stdlib;
+              # --directory pins the served root to the build artifact.
+              exec: /usr/bin/python3 -m http.server 8000 --directory /opt/maputnik/build
+              restart: always
+              working_directory: /opt/maputnik
+              priority: 34
+              enable: true
+              scope: system
+    maputnik-step-0:
+        run: mkdir=/opt/maputnik
+        mkdir: /opt/maputnik
+        run_as: root
+    maputnik-step-1:
+        run: |
             command=set -euo pipefail
             # Clone shallow + most recent tag's tip. The maputnik repo has no
             # binary releases on GitHub — source build is the canonical install.
@@ -87,7 +92,7 @@ candy:
             rm -rf /tmp/maputnik
             # Drop npm cache to shrink image (~150-300 MB delta).
             rm -rf /root/.npm
-          command: |
+        command: |
             set -euo pipefail
             # Clone shallow + most recent tag's tip. The maputnik repo has no
             # binary releases on GitHub — source build is the canonical install.
@@ -121,40 +126,48 @@ candy:
             rm -rf /tmp/maputnik
             # Drop npm cache to shrink image (~150-300 MB delta).
             rm -rf /root/.npm
-          run_as: root
-        - check: the maputnik static dist directory was built from upstream source
-          file: /opt/maputnik/build
-          filetype: directory
-          exists: true
-        - check: the SPA entrypoint index.html is present in the served dist
-          file: /opt/maputnik/build/index.html
-          exists: true
-        - check: the node runtime used to build the SPA is installed and runnable
-          command: node --version
-          exit_status: 0
-        - check: the maputnik service is running under the init system
-          service: maputnik
-          running: true
-          context:
+        run_as: root
+    maputnik-step-2:
+        check: the maputnik static dist directory was built from upstream source
+        file: /opt/maputnik/build
+        filetype: directory
+        exists: true
+    maputnik-step-3:
+        check: the SPA entrypoint index.html is present in the served dist
+        file: /opt/maputnik/build/index.html
+        exists: true
+    maputnik-step-4:
+        check: the node runtime used to build the SPA is installed and runnable
+        command: node --version
+        exit_status: 0
+    maputnik-step-5:
+        check: the maputnik service is running under the init system
+        service: maputnik
+        running: true
+        context:
             - runtime
-        - check: the static SPA answers HTTP 200 at the container root on the published port
-          http: http://127.0.0.1:${HOST_PORT:8000}/
-          status: 200
-          timeout: 10s
-          context:
+    maputnik-step-6:
+        check: the static SPA answers HTTP 200 at the container root on the published port
+        http: http://127.0.0.1:${HOST_PORT:8000}/
+        status: 200
+        timeout: 10s
+        context:
             - runtime
-        - check: the served HTML carries no /maputnik/ asset prefix, so asset URLs resolve at the serve root
-          command: |
+    maputnik-step-7:
+        check: the served HTML carries no /maputnik/ asset prefix, so asset URLs resolve at the serve root
+        command: |
             ! curl -fsS http://localhost:8000/ | grep -q '"/maputnik/'
-          in_container: true
-          exit_status: 0
-          context:
+        in_container: true
+        exit_status: 0
+        context:
             - runtime
-        - agent-check: the loaded SPA presents the Maputnik visual style editor interface (layer list and map canvas), not a blank page
-        - check: addr=127.0.0.1:${HOST_PORT:8000}
-          id: maputnik-port-reachable
-          addr: "127.0.0.1:${HOST_PORT:8000}"
-          reachable: true
-          timeout: 10s
-          context:
+    maputnik-step-8:
+        agent-check: the loaded SPA presents the Maputnik visual style editor interface (layer list and map canvas), not a blank page
+    maputnik-port-reachable:
+        check: addr=127.0.0.1:${HOST_PORT:8000}
+        id: maputnik-port-reachable
+        addr: "127.0.0.1:${HOST_PORT:8000}"
+        reachable: true
+        timeout: 10s
+        context:
             - runtime

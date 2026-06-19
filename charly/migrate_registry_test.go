@@ -127,7 +127,9 @@ func TestMigrateCalverSchema_EdgeCases(t *testing.T) {
 // hint pointing at the single `charly migrate` command.
 func TestLoadUnified_CalVerGateRejectsLegacy(t *testing.T) {
 	dir := t.TempDir()
-	regWrite(t, filepath.Join(dir, "charly.yml"), "version: 4\nimage: {}\n")
+	// (legacy `image: {}` filler dropped — `image:` is a removed key as of the
+	// candy/box rename; the gate is what this test exercises.)
+	regWrite(t, filepath.Join(dir, "charly.yml"), "version: 4\n")
 	_, _, err := LoadUnified(dir)
 	if err == nil {
 		t.Fatal("expected schema-gate error for version: 4, got nil")
@@ -136,7 +138,7 @@ func TestLoadUnified_CalVerGateRejectsLegacy(t *testing.T) {
 		t.Errorf("gate error should point at `charly migrate`, got: %v", err)
 	}
 	// A file stamped to HEAD loads cleanly.
-	regWrite(t, filepath.Join(dir, "charly.yml"), "version: "+LatestSchemaVersion().String()+"\nimage: {}\n")
+	regWrite(t, filepath.Join(dir, "charly.yml"), "version: "+LatestSchemaVersion().String()+"\n")
 	if _, _, err := LoadUnified(dir); err != nil {
 		t.Errorf("HEAD-stamped config should load, got: %v", err)
 	}

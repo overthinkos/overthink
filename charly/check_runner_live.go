@@ -1,11 +1,12 @@
 package main
 
 // check_runner_live.go — score a plan's check:/agent-check: steps against the
-// live deployments they target via the step-level Op.Pod field.
+// live deployments they target via the step's loader-derived Op.venue field.
 //
-// Each scored step carries an Op.Pod naming the container its probe runs
-// against. The scorer groups steps by Pod, runs each group against
-// `charly-<pod>` (or a dotted deploy chain), and classifies pass/fail. run:
+// Each scored step carries an Op.venue (stamped from its bundle-tree position
+// by flattenBundleVenues) naming the container its probe runs against. The
+// scorer groups steps by venue, runs each group against
+// `charly-<venue>` (or a dotted deploy chain), and classifies pass/fail. run:
 // steps in the plan provision (executed in order) but are not scored;
 // check:/agent-check: steps are the scored success criteria.
 
@@ -68,8 +69,8 @@ func RunCheckLive(ctx context.Context, deployment, scoreName string, plan []Step
 
 	// Defensive pod check on scored steps (validator catches earlier).
 	for _, e := range entries {
-		if isScored(e.step) && e.step.Pod == "" {
-			return nil, fmt.Errorf("scored step %q has empty pod field — refusing to score", e.id)
+		if isScored(e.step) && e.step.venue == "" {
+			return nil, fmt.Errorf("scored step %q has empty venue (no tree position resolved) — refusing to score", e.id)
 		}
 	}
 
@@ -96,7 +97,7 @@ func RunCheckLive(ctx context.Context, deployment, scoreName string, plan []Step
 		}
 		out.Step = append(out.Step, StepScore{
 			ID:            e.id,
-			Origin:        "pod:" + e.step.Pod,
+			Origin:        "pod:" + e.step.venue,
 			Text:          e.step.KeywordText(),
 			Tag:           EffectiveTags(e.step.Tag),
 			Status:        "fail",
@@ -115,14 +116,14 @@ func RunCheckLive(ctx context.Context, deployment, scoreName string, plan []Step
 // bucket's runner, then runs each step — appending verdicts to out and
 // recording them in verdictByID. Split out of RunCheckLive, which keeps the
 // outer pod-grouping loop.
-func scoreOnePodBucket(ctx context.Context, bucket []scoredStep, deployRoots map[string]DeploymentNode, opts RunScoringOpts, out *CheckRunResults, verdictByID map[string]string) {
-	pod := bucket[0].step.Pod
+func scoreOnePodBucket(ctx context.Context, bucket []scoredStep, deployRoots map[string]BundleNode, opts RunScoringOpts, out *CheckRunResults, verdictByID map[string]string) {
+	pod := bucket[0].step.venue
 
 	var ephemeralCleanup func(bool)
 	if pod != "" && isEphemeralDeploy(deployRoots, pod) {
-		fmt.Fprintf(os.Stderr, "score live: ephemeral wrap — charly deploy add %s\n", pod)
+		fmt.Fprintf(os.Stderr, "score live: ephemeral wrap — charly bundle add %s\n", pod)
 		exe, _ := os.Executable()
-		addCmd := exec.Command(exe, "deploy", "add", pod)
+		addCmd := exec.Command(exe, "bundle", "add", pod)
 		addCmd.Stderr = os.Stderr
 		addCmd.Stdout = os.Stdout
 		if err := addCmd.Run(); err != nil {
@@ -169,7 +170,7 @@ func scoreOnePodBucket(ctx context.Context, bucket []scoredStep, deployRoots map
 		}
 		runner.ValidateAiArtifacts = opts.ValidateAiArtifacts
 		runner.IterStartTime = opts.IterStartTime
-		applyPeerVarsSteps(runner, bucketSteps(bucket), "")
+		applyHostVarsSteps(runner, bucketSteps(bucket), "")
 	}
 
 	for _, e := range bucket {
@@ -250,7 +251,7 @@ func scoreOnePodBucket(ctx context.Context, bucket []scoredStep, deployRoots map
 		ephemeralCleanup(bucketFailed)
 	}
 	if runner != nil {
-		runner.ClosePeers()
+		runner.CloseHosts()
 	}
 }
 
@@ -316,15 +317,15 @@ func groupScoredByPod(sorted []scoredStep) [][]scoredStep {
 	}
 	var buckets [][]scoredStep
 	cur := []scoredStep{sorted[0]}
-	curPod := sorted[0].step.Pod
+	curPod := sorted[0].step.venue
 	for _, e := range sorted[1:] {
-		if e.step.Pod == curPod {
+		if e.step.venue == curPod {
 			cur = append(cur, e)
 			continue
 		}
 		buckets = append(buckets, cur)
 		cur = []scoredStep{e}
-		curPod = e.step.Pod
+		curPod = e.step.venue
 	}
 	buckets = append(buckets, cur)
 	return buckets
@@ -351,7 +352,7 @@ func skippedStepScore(e scoredStep, pod, blockedBy string) StepScore {
 }
 
 // resolveScoringChain returns the DeployExecutor chain that reaches `pod`.
-func resolveScoringChain(roots map[string]DeploymentNode, pod string) (DeployExecutor, error) {
+func resolveScoringChain(roots map[string]BundleNode, pod string) (DeployExecutor, error) {
 	if strings.Contains(pod, ".") && roots != nil {
 		_, chain, err := ResolveDeployChain(roots, pod, ShellExecutor{})
 		if err == nil {
@@ -383,7 +384,7 @@ func synthesizeScoreBaseline(scoreName string, plan []Step) ([]StepScore, map[st
 		id := EffectiveStepID(&s, scoredPlanOrigin, i)
 		out = append(out, StepScore{
 			ID:      id,
-			Origin:  "pod:" + s.Pod,
+			Origin:  "pod:" + s.venue,
 			Text:    s.KeywordText(),
 			Tag:     EffectiveTags(s.Tag),
 			Keyword: string(keywordOf(&s)),
@@ -412,7 +413,7 @@ func RenderPlanYAML(plan []Step) string {
 
 // isEphemeralDeploy reports whether the named pod resolves to a charly.yml
 // entry marked ephemeral.
-func isEphemeralDeploy(roots map[string]DeploymentNode, pod string) bool {
+func isEphemeralDeploy(roots map[string]BundleNode, pod string) bool {
 	if pod == "" {
 		return false
 	}
@@ -427,11 +428,11 @@ func isEphemeralDeploy(roots map[string]DeploymentNode, pod string) bool {
 
 // ephemeralKeepOnFailure returns the keep_on_failure flag from the named
 // ephemeral deploy's lifetime block.
-func ephemeralKeepOnFailure(roots map[string]DeploymentNode, pod string) bool {
+func ephemeralKeepOnFailure(roots map[string]BundleNode, pod string) bool {
 	if pod == "" {
 		return false
 	}
-	resolve := func(node *DeploymentNode) bool {
+	resolve := func(node *BundleNode) bool {
 		if node == nil || node.Ephemeral == nil {
 			return false
 		}

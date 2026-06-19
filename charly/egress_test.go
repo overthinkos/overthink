@@ -71,9 +71,9 @@ func TestValidateEgressValue_K8sObject(t *testing.T) {
 	}
 	// teeth: empty kind, and missing metadata.name, must be rejected.
 	for name, bad := range map[string]map[string]any{
-		"empty-kind":  {"apiVersion": "v1", "kind": "", "metadata": map[string]any{"name": "x"}},
-		"no-name":     {"apiVersion": "v1", "kind": "Service", "metadata": map[string]any{}},
-		"no-apiVer":   {"kind": "Service", "metadata": map[string]any{"name": "x"}},
+		"empty-kind": {"apiVersion": "v1", "kind": "", "metadata": map[string]any{"name": "x"}},
+		"no-name":    {"apiVersion": "v1", "kind": "Service", "metadata": map[string]any{}},
+		"no-apiVer":  {"kind": "Service", "metadata": map[string]any{"name": "x"}},
 	} {
 		if err := ValidateEgressValue("k8s_object", name, bad); err == nil {
 			t.Fatalf("malformed k8s object %q must be REJECTED, got nil", name)
@@ -142,12 +142,12 @@ func TestValidateEgress_TraefikRoutes(t *testing.T) {
 
 func TestValidateTextEgress_RenderedText(t *testing.T) {
 	good := "FROM fedora:43\nRUN dnf install -y git\nUSER 1000\n"
-	if err := validateTextEgress("rendered_text", "good containerfile", good); err != nil {
+	if err := validateTextEgress("good containerfile", good); err != nil {
 		t.Fatalf("clean rendered text should pass, got: %v", err)
 	}
 	// teeth: a Go text/template nil-field marker means a render failure.
 	bad := "[Service]\nExecStart=<no value>\nRestart=always\n"
-	if err := validateTextEgress("rendered_text", "broken unit", bad); err == nil {
+	if err := validateTextEgress("broken unit", bad); err == nil {
 		t.Fatal("rendered text containing the template-failure marker <no value> must be REJECTED, got nil")
 	}
 }

@@ -1,32 +1,37 @@
-candy:
-    version: 2026.144.1443
-    name: himalaya
-    description: |
-        Himalaya IMAP/SMTP email CLI compiled into the image
-        Builds and installs the himalaya email CLI from crates.io via
-        `cargo install himalaya --locked`, run as the image user so the
-        binary lands in the user's cargo bin (~/.cargo/bin, which the
-        required `rust` candy puts on PATH). himalaya is a single
-        self-contained Rust binary that speaks IMAP and SMTP to manage
-        accounts, folders, envelopes and messages from the command line.
-        The install is fully verifiable at build scope: the binary file is
-        present, runs `--version` cleanly, and its `--help` advertises the
-        email-management subcommands.
-    require:
-        - rust
-    plan:
-        - run: command=cargo install himalaya --locked
-          command: cargo install himalaya --locked
-          run_as: "${USER}"
-        - check: the himalaya binary is installed into the user's cargo bin directory
-          file: ${HOME}/.cargo/bin/himalaya
-          exists: true
-        - check: the installed himalaya binary runs --version and exits cleanly
-          command: ${HOME}/.cargo/bin/himalaya --version
-          exit_status: 0
-        - check: himalaya --help advertises the IMAP/SMTP email-management subcommands
-          command: ${HOME}/.cargo/bin/himalaya --help
-          exit_status: 0
-          stdout:
+himalaya:
+    candy:
+        version: 2026.144.1443
+        description: |
+            Himalaya IMAP/SMTP email CLI compiled into the image
+            Builds and installs the himalaya email CLI from crates.io via
+            `cargo install himalaya --locked`, run as the image user so the
+            binary lands in the user's cargo bin (~/.cargo/bin, which the
+            required `rust` candy puts on PATH). himalaya is a single
+            self-contained Rust binary that speaks IMAP and SMTP to manage
+            accounts, folders, envelopes and messages from the command line.
+            The install is fully verifiable at build scope: the binary file is
+            present, runs `--version` cleanly, and its `--help` advertises the
+            email-management subcommands.
+    himalaya-require:
+        require:
+            - rust
+    himalaya-step-0:
+        run: command=cargo install himalaya --locked
+        command: cargo install himalaya --locked
+        run_as: "${USER}"
+    himalaya-step-1:
+        check: the himalaya binary is installed into the user's cargo bin directory
+        file: ${HOME}/.cargo/bin/himalaya
+        exists: true
+    himalaya-step-2:
+        check: the installed himalaya binary runs --version and exits cleanly
+        command: ${HOME}/.cargo/bin/himalaya --version
+        exit_status: 0
+    himalaya-step-3:
+        check: himalaya --help advertises the IMAP/SMTP email-management subcommands
+        command: ${HOME}/.cargo/bin/himalaya --help
+        exit_status: 0
+        stdout:
             - matches: "account|folder|envelope|message"
-        - agent-check: given valid IMAP/SMTP account credentials, himalaya lists folders and fetches message envelopes from the configured remote mailbox
+    himalaya-step-4:
+        agent-check: given valid IMAP/SMTP account credentials, himalaya lists folders and fetches message envelopes from the configured remote mailbox

@@ -76,7 +76,7 @@ func (c *LogsCmd) Run() error {
 // VM/local/pod targets all dispatch from here) OR a bare image name
 // (for direct image updates not tied to a deploy).
 //
-// Key semantic: this verb NEVER calls `charly deploy add` to regenerate
+// Key semantic: this verb NEVER calls `charly bundle add` to regenerate
 // the user-overlay deploy
 // entry. User-overlay configuration (port overrides, volume bindings,
 // env, tunnel) is preserved across updates. Per the user's directive:
@@ -320,11 +320,11 @@ func resolveBoxName(box string) string {
 // but not "which sidecars are attached to THIS deploy on THIS host".
 // Returns nil when nothing is attached.
 func resolveSidecarNames(boxName, instance string) []string {
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil || dc == nil {
 		return nil
 	}
-	entry, ok := dc.Deploy[deployKey(boxName, instance)]
+	entry, ok := dc.Bundle[deployKey(boxName, instance)]
 	if !ok || len(entry.Sidecar) == 0 {
 		return nil
 	}

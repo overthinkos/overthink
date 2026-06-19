@@ -47,7 +47,7 @@ func MigrateHostCharlyYml(ctx *MigrateContext) (bool, error) {
 		return changed, nil
 	}
 
-	// Per-host deploy configs predate per-file versioning (the old DeployConfig
+	// Per-host deploy configs predate per-file versioning (the old BundleConfig
 	// carried no `version:` field), so a just-renamed file has no top-level
 	// version line — and stampVersionField (calver-schema, the next step) only
 	// REWRITES an existing line, never adds one. Without this the renamed

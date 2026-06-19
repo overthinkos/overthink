@@ -7,7 +7,7 @@ import (
 )
 
 // nestedRecordingExec is a DeployExecutor that records the RunUser scripts
-// deployNestedPodsInGuest issues (the in-guest `charly deploy from-box` calls) and
+// deployNestedPodsInGuest issues (the in-guest `charly bundle from-box` calls) and
 // the PutFile destinations (the host-charly delivery), so the test can assert the
 // nested-pod-in-VM orchestration without a real guest.
 type nestedRecordingExec struct {
@@ -42,7 +42,7 @@ func (e *nestedRecordingExec) ResolveHome(context.Context, string) (string, erro
 // TestDeployNestedPodsInGuest_DeploysOnlyPodChildren proves the nested-pod-in-VM
 // capability's deploy orchestration: each nested target:pod child is built on the
 // host, cp-box'd into the guest as localhost/charly-<key>:latest, and brought up via
-// the guest's own project-free `charly deploy from-box <ref> <key>` as a PERSISTENT
+// the guest's own project-free `charly bundle from-box <ref> <key>` as a PERSISTENT
 // (lingering) quadlet — in sorted order — while non-pod children (android/k8s) and
 // image-less entries are skipped. Without the capability the helper does not exist
 // / does nothing and these assertions fail; this is the check-coverage gate for the
@@ -66,8 +66,8 @@ func TestDeployNestedPodsInGuest_DeploysOnlyPodChildren(t *testing.T) {
 	BuildCalVer = "2026.154.0943"
 
 	exec := &nestedRecordingExec{}
-	node := &DeploymentNode{
-		Nested: map[string]*DeploymentNode{
+	node := &BundleNode{
+		Children: map[string]*BundleNode{
 			"selkies-kde": {Target: "pod", Box: "selkies-kde-nvidia"},
 			"alpha-pod":   {Target: "", Box: "alpha-img"},               // default target == pod
 			"droid":       {Target: "android", Box: "android-emulator"}, // skipped (not in-guest)
@@ -122,10 +122,10 @@ func TestDeployNestedPodsInGuest_DeploysOnlyPodChildren(t *testing.T) {
 	if len(exec.userScripts) != 2 {
 		t.Fatalf("expected 2 in-guest from-box deploys, got %d: %v", len(exec.userScripts), exec.userScripts)
 	}
-	if !strings.Contains(exec.userScripts[0], wantCharlyPath+" deploy from-box localhost/charly-alpha-pod:latest alpha-pod") {
+	if !strings.Contains(exec.userScripts[0], wantCharlyPath+" bundle from-box localhost/charly-alpha-pod:latest alpha-pod") {
 		t.Errorf("script[0] missing alpha-pod from-box deploy via host /tmp charly: %q", exec.userScripts[0])
 	}
-	if !strings.Contains(exec.userScripts[1], wantCharlyPath+" deploy from-box localhost/charly-selkies-kde:latest selkies-kde") {
+	if !strings.Contains(exec.userScripts[1], wantCharlyPath+" bundle from-box localhost/charly-selkies-kde:latest selkies-kde") {
 		t.Errorf("script[1] missing selkies-kde from-box deploy via host /tmp charly: %q", exec.userScripts[1])
 	}
 	// Lingering is enabled so the --user quadlet auto-starts at boot — the
@@ -162,7 +162,7 @@ func TestDeployNestedPodsInGuest_NoNested(t *testing.T) {
 	if err := deployNestedPodsInGuest("vm", nil, exec, EmitOpts{}); err != nil {
 		t.Fatalf("nil node: %v", err)
 	}
-	if err := deployNestedPodsInGuest("vm", &DeploymentNode{}, exec, EmitOpts{}); err != nil {
+	if err := deployNestedPodsInGuest("vm", &BundleNode{}, exec, EmitOpts{}); err != nil {
 		t.Fatalf("empty nested: %v", err)
 	}
 	if charlyCalls != 0 || len(exec.userScripts) != 0 {
@@ -171,7 +171,7 @@ func TestDeployNestedPodsInGuest_NoNested(t *testing.T) {
 }
 
 // TestDeriveDeploymentName covers the default-name derivation the source-less
-// `charly deploy from-box <ref>` (pod + k8s) uses when no explicit name is given:
+// `charly bundle from-box <ref>` (pod + k8s) uses when no explicit name is given:
 // strip the tag, take the last path component.
 func TestDeriveDeploymentName(t *testing.T) {
 	cases := []struct{ ref, want string }{
@@ -201,17 +201,17 @@ func TestDeriveDeploymentName(t *testing.T) {
 // end-to-end consumption proof is the live `charly check live cachyos-gpu.selkies-kde`
 // R10.
 func TestMergeDeployConfigs_VMNestedSurvivesNestedlessOverlay(t *testing.T) {
-	project := &DeployConfig{Deploy: map[string]DeploymentNode{
+	project := &BundleConfig{Bundle: map[string]BundleNode{
 		"cachyos-gpu": {
 			Target: "vm",
 			Vm:     "cachyos-gpu",
-			Nested: map[string]*DeploymentNode{
+			Children: map[string]*BundleNode{
 				"selkies-kde": {Target: "pod", Box: "selkies-kde-nvidia"},
 			},
 		},
 	}}
 	// Operator per-host overlay: per-host field set, NO nested: block.
-	operator := &DeployConfig{Deploy: map[string]DeploymentNode{
+	operator := &BundleConfig{Bundle: map[string]BundleNode{
 		"cachyos-gpu": {
 			Target:    "vm",
 			Vm:        "cachyos-gpu",
@@ -220,7 +220,7 @@ func TestMergeDeployConfigs_VMNestedSurvivesNestedlessOverlay(t *testing.T) {
 	}}
 
 	merged := MergeDeployConfigs(project, operator)
-	node := merged.Deploy["cachyos-gpu"]
+	node := merged.Bundle["cachyos-gpu"]
 
 	// The operator overlay's non-zero field won (proves the overlay DID merge,
 	// not that we merely read the project node)...
@@ -229,10 +229,10 @@ func TestMergeDeployConfigs_VMNestedSurvivesNestedlessOverlay(t *testing.T) {
 	}
 	// ...AND the project's nested child PASSED THROUGH the nestedless overlay.
 	// A whole-node replace (the old re-read bug shape) would drop it here.
-	if len(node.Nested) != 1 || node.Nested["selkies-kde"] == nil {
-		t.Fatalf("project nested: dropped by nestedless operator overlay: %#v", node.Nested)
+	if len(node.Children) != 1 || node.Children["selkies-kde"] == nil {
+		t.Fatalf("project nested: dropped by nestedless operator overlay: %#v", node.Children)
 	}
-	if got := node.Nested["selkies-kde"].Box; got != "selkies-kde-nvidia" {
+	if got := node.Children["selkies-kde"].Box; got != "selkies-kde-nvidia" {
 		t.Errorf("nested child box: got %q, want selkies-kde-nvidia", got)
 	}
 }

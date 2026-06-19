@@ -6,8 +6,8 @@ import (
 )
 
 // sharedNode is a SHARED-claim (refcounted, pod) claimant of the given tokens.
-func sharedNode(tokens []string) DeploymentNode {
-	return DeploymentNode{Target: "pod", RequiresShared: tokens}
+func sharedNode(tokens []string) BundleNode {
+	return BundleNode{Target: "pod", RequiresShared: tokens}
 }
 
 // gpuResources is the token map a GPU-backed arbiter sees (drives mode flips).
@@ -18,7 +18,7 @@ func gpuResources() map[string]*ResourceDef {
 // S1. The FIRST shared claim flips the gpu-backed token to nvidia mode + CDI.
 func TestArbiter_SharedAcquireFlipsNvidia(t *testing.T) {
 	w := &fakeWorld{running: map[string]bool{"pod1": true}, resources: gpuResources()}
-	a := newTestArbiter(t, map[string]DeploymentNode{}, w)
+	a := newTestArbiter(t, map[string]BundleNode{}, w)
 
 	lease, err := a.AcquireShared("pod1", sharedNode([]string{"nvidia-gpu"}), false)
 	if err != nil {
@@ -40,7 +40,7 @@ func TestArbiter_SharedAcquireFlipsNvidia(t *testing.T) {
 // S2. Two shared claims coexist (refcount); the last release flips back to vfio.
 func TestArbiter_TwoSharedCoexist_LastReleaseRestoresVfio(t *testing.T) {
 	w := &fakeWorld{running: map[string]bool{"pod1": true, "pod2": true}, resources: gpuResources()}
-	a := newTestArbiter(t, map[string]DeploymentNode{}, w)
+	a := newTestArbiter(t, map[string]BundleNode{}, w)
 
 	l1, err := a.AcquireShared("pod1", sharedNode([]string{"nvidia-gpu"}), false)
 	if err != nil {
@@ -79,7 +79,7 @@ func TestArbiter_TwoSharedCoexist_LastReleaseRestoresVfio(t *testing.T) {
 // leases) and flips the token to vfio.
 func TestArbiter_ExclusivePreemptsShared(t *testing.T) {
 	w := &fakeWorld{running: map[string]bool{"pod1": true, "vm": true}, resources: gpuResources()}
-	a := newTestArbiter(t, map[string]DeploymentNode{}, w)
+	a := newTestArbiter(t, map[string]BundleNode{}, w)
 
 	if _, err := a.AcquireShared("pod1", sharedNode([]string{"nvidia-gpu"}), false); err != nil {
 		t.Fatalf("pod1 shared acquire: %v", err)
@@ -107,7 +107,7 @@ func TestArbiter_ExclusivePreemptsShared(t *testing.T) {
 // S4. A shared claim is REFUSED while an exclusive claim holds the token.
 func TestArbiter_SharedRefusedUnderExclusive(t *testing.T) {
 	w := &fakeWorld{running: map[string]bool{"vm": true, "pod1": true}, resources: gpuResources()}
-	a := newTestArbiter(t, map[string]DeploymentNode{}, w)
+	a := newTestArbiter(t, map[string]BundleNode{}, w)
 
 	if _, err := a.AcquireExclusive("vm", claimantNode([]string{"nvidia-gpu"}), false); err != nil {
 		t.Fatalf("vm exclusive acquire: %v", err)
@@ -122,7 +122,7 @@ func TestArbiter_SharedRefusedUnderExclusive(t *testing.T) {
 // last shared release RESTORES it (+ flips back to vfio).
 func TestArbiter_SharedPreemptsHolder_ReleaseRestores(t *testing.T) {
 	w := &fakeWorld{running: map[string]bool{"h1": true, "pod1": true}, resources: gpuResources()}
-	holders := map[string]DeploymentNode{"h1": holderNode([]string{"nvidia-gpu"}, "")}
+	holders := map[string]BundleNode{"h1": holderNode([]string{"nvidia-gpu"}, "")}
 	a := newTestArbiter(t, holders, w)
 
 	lease, err := a.AcquireShared("pod1", sharedNode([]string{"nvidia-gpu"}), false)
@@ -149,7 +149,7 @@ func TestArbiter_SharedPreemptsHolder_ReleaseRestores(t *testing.T) {
 // S7. A node may not claim a resource BOTH exclusively and shared (the arbiter
 // dispatches on one or the other; the driver modes are mutually exclusive).
 func TestValidate_BothExclusiveAndShared_Errors(t *testing.T) {
-	node := DeploymentNode{
+	node := BundleNode{
 		RequiresExclusive: []string{"nvidia-gpu"},
 		RequiresShared:    []string{"nvidia-gpu"},
 	}
@@ -163,7 +163,7 @@ func TestValidate_BothExclusiveAndShared_Errors(t *testing.T) {
 // S6. A selector-less (abstract) shared token refcounts WITHOUT any device flip.
 func TestArbiter_SharedAbstractTokenNoFlip(t *testing.T) {
 	w := &fakeWorld{running: map[string]bool{"pod1": true}, resources: map[string]*ResourceDef{"abstract": {}}}
-	a := newTestArbiter(t, map[string]DeploymentNode{}, w)
+	a := newTestArbiter(t, map[string]BundleNode{}, w)
 
 	if _, err := a.AcquireShared("pod1", sharedNode([]string{"abstract"}), false); err != nil {
 		t.Fatalf("acquire: %v", err)

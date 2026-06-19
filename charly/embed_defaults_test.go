@@ -4,76 +4,23 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"strings"
 	"testing"
 )
 
-// TestEmbeddedCUE_DataEquivalentToLegacyYAML is the data-equivalence gate for the
-// YAML→CUE embed migration. The hand-authored idiomatic charly/charly.cue must
-// produce a UnifiedFile byte-for-byte identical to the frozen pre-migration
-// charly.yml (testdata/embedded_legacy.yml). Guards every step of the idiomatic
-// refactor AND any future drift between the CUE source and the legacy data.
-func TestEmbeddedCUE_DataEquivalentToLegacyYAML(t *testing.T) {
-	legacy, err := os.ReadFile("testdata/embedded_legacy.yml")
-	if err != nil {
-		t.Fatalf("read frozen legacy fixture: %v", err)
-	}
-	var ufYAML UnifiedFile
-	if _, err := mergeUnifiedDocs(&ufYAML, legacy, "embedded_legacy.yml", ""); err != nil {
-		t.Fatalf("parse legacy fixture: %v", err)
-	}
-
-	cueSrc, err := os.ReadFile("charly.cue")
-	if err != nil {
-		t.Fatalf("read charly.cue: %v", err)
-	}
-	yb, err := compileCUEToYAML(cueSrc, "charly.cue")
-	if err != nil {
-		t.Fatalf("compileCUEToYAML(charly.cue): %v", err)
-	}
-	var ufCUE UnifiedFile
-	if _, err := mergeUnifiedDocs(&ufCUE, yb, "charly.cue", ""); err != nil {
-		t.Fatalf("parse charly.cue export: %v", err)
-	}
-	if !reflect.DeepEqual(ufCUE, ufYAML) {
-		t.Errorf("charly.cue is NOT data-equivalent to the frozen legacy YAML")
-	}
-
-	// The real consumed path (embeddedDefaults) must also equal the legacy data —
-	// holds pre-flip (identical bytes) and post-flip (via equivalence above).
-	def, err := embeddedDefaults()
-	if err != nil {
-		t.Fatalf("embeddedDefaults: %v", err)
-	}
-	if !reflect.DeepEqual(*def, ufYAML) {
-		t.Errorf("embeddedDefaults() is NOT data-equivalent to the frozen legacy YAML")
-	}
-}
-
-// TestEmbeddedDefaults_SchemaConformance proves the embedded vocabulary validates
-// against charly/schema: every distro/builder/init/resource/sidecar entity in
-// charly.cue unifies concretely with its registered #Kind, through the SAME
-// validateVocabularyCollections path `charly box validate` uses for project files
-// (R3). This is the canonical schema-validation gate for the embedded charly.cue.
+// TestEmbeddedDefaults_SchemaConformance proves the node-form embedded defaults
+// validate against the unified #NodeDoc schema (per-arm closedness + kind-narrowed
+// children) — the SAME validate-before-execute gate every project charly.yml
+// passes through the loader. This is the canonical schema gate for the embedded
+// build vocabulary + sidecar templates (charly_defaults.yml).
 func TestEmbeddedDefaults_SchemaConformance(t *testing.T) {
-	cueSrc, err := os.ReadFile("charly.cue")
+	data, err := os.ReadFile("charly_defaults.yml")
 	if err != nil {
-		t.Fatalf("read charly.cue: %v", err)
+		t.Fatalf("read embedded defaults: %v", err)
 	}
-	v := cueSchemaCtx.CompileBytes(cueSrc)
-	if v.Err() != nil {
-		t.Fatalf("compile charly.cue: %v", v.Err())
-	}
-	var viol []string
-	validateVocabularyCollections(v,
-		[]string{"distro", "builder", "init", "resource", "sidecar"},
-		"charly.cue",
-		func(format string, args ...any) { viol = append(viol, fmt.Sprintf(format, args...)) })
-	if len(viol) > 0 {
-		t.Errorf("embedded charly.cue has %d #Kind schema violations:\n%s",
-			len(viol), strings.Join(viol, "\n"))
+	if err := validateNodeDocCUE("charly_defaults.yml", data); err != nil {
+		t.Errorf("embedded defaults fail #NodeDoc validation:\n%v", err)
 	}
 }
 
@@ -107,12 +54,13 @@ defaults:
 func TestEmbeddedBuildDefaults_ProjectWins(t *testing.T) {
 	dir := t.TempDir()
 	writeFixture(t, dir, "charly.yml", `version: `+LatestSchemaVersion().String()+`
-distro:
-  fedora:
-    version: "marker99"
+fedora:
+  distro:
+    version: "99"
     bootstrap:
       install_cmd: custom-fedora
-  mydistro:
+mydistro:
+  distro:
     bootstrap:
       install_cmd: custom-mine
 `)
@@ -120,8 +68,10 @@ distro:
 	if err != nil {
 		t.Fatalf("LoadUnified: %v", err)
 	}
-	// Override: the project's fedora WINS over the embedded fedora.
-	if uf.Distro["fedora"] == nil || uf.Distro["fedora"].Version != "marker99" {
+	// Override: the project's fedora (version "99") WINS over the embedded fedora
+	// (version "43"). The marker is a valid #Distro.version (numeric per the schema
+	// regex) — the legacy "marker99" was rejected by the node-form load gate.
+	if uf.Distro["fedora"] == nil || uf.Distro["fedora"].Version != "99" {
 		t.Errorf("project fedora override lost (embed wrongly won); got %+v", uf.Distro["fedora"])
 	}
 	// Extend: the project's new distro coexists with the embedded ones.
@@ -135,8 +85,8 @@ distro:
 }
 
 // TestEmbeddedDefaults_SameLoaderPath proves the consolidation invariant: the
-// SINGLE binary-embedded charly.cue is compiled + parsed by the SAME unified
-// loader core (embeddedDefaults → compileCUEToYAML → mergeUnifiedDocs) and yields
+// SINGLE binary-embedded charly_defaults.yml is compiled + parsed by the SAME unified
+// loader core (embeddedDefaults → mergeUnifiedDocs (node-form)) and yields
 // BOTH the build vocabulary
 // AND the sidecar-template library from one parse — no bespoke per-section
 // loader. This is the core "parse its own charly.yml with exactly the same code
@@ -174,8 +124,8 @@ func TestEmbeddedDefaults_SameLoaderPath(t *testing.T) {
 func TestEmbeddedDefaults_SidecarProjectWins(t *testing.T) {
 	dir := t.TempDir()
 	writeFixture(t, dir, "charly.yml", `version: `+LatestSchemaVersion().String()+`
-sidecar:
-  tailscale:
+tailscale:
+  sidecar:
     image: example.com/custom-tailscale:pinned
 `)
 	uf, _, err := LoadUnified(dir)
@@ -193,25 +143,28 @@ sidecar:
 // and resource each stay project-charly.yml OVERRIDABLE (project wins wholesale
 // via the gap-filling applyEmbeddedDefaults merge) AND EXTENDABLE (a new entry
 // coexists), while untouched embedded entries survive — independent of the
-// embedded config now being authored in CUE.
+// embedded config now being node-form YAML.
 func TestEmbeddedDefaults_AllVocabKindsOverridable(t *testing.T) {
 	dir := t.TempDir()
 	writeFixture(t, dir, "charly.yml", `version: `+LatestSchemaVersion().String()+`
-builder:
-  pixi:
+pixi:
+  builder:
     detect_config: marker99
-  mybuilder:
+mybuilder:
+  builder:
     detect_config: custom
-init:
-  systemd:
+systemd:
+  init:
     model: file_copy
-  myinit:
+myinit:
+  init:
     model: file_copy
-resource:
-  nvidia-gpu:
+nvidia-gpu:
+  resource:
     gpu:
       vendor: marker-vendor
-  amd-gpu:
+amd-gpu:
+  resource:
     gpu:
       vendor: "0x1002"
 `)
@@ -259,7 +212,7 @@ resource:
 // project's vocabulary override is validated against the SAME #Kind schemas as
 // the embedded defaults (validateVocabularyCollections — the shared helper). An
 // unknown key (typo) in a project builder override is rejected by the closed
-// #Builder, exactly as it would be in the embedded charly.cue.
+// #Builder, exactly as it would be in the embedded charly_defaults.yml.
 func TestProjectVocabOverride_IsSchemaValidated(t *testing.T) {
 	proj := []byte(`version: ` + LatestSchemaVersion().String() + `
 builder:
@@ -280,8 +233,8 @@ builder:
 
 // TestNoHardcodedYAMLFilenames is the file-agnostic invariant guard. charly.yml
 // is the ONE YAML filename the code knows. The binary-embedded default config is
-// authored in CUE (//go:embed charly.cue, embed_defaults.go) and compiled to data
-// by the CUE-source front-end. Outside migration code (which must name legacy
+// node-form YAML (//go:embed charly_defaults.yml, embed_defaults.go), parsed by the
+// same unified loader as any project charly.yml. Outside migration code (which must name legacy
 // files to migrate FROM) and tests, no source may hardcode a per-kind project
 // filename — discovery + the UnifiedFileName constant cover them all. build.yml
 // and sidecar.yml are now legacy filenames (named only in migration + tests);

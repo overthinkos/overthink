@@ -1,48 +1,53 @@
-candy:
-    version: 2026.144.1443
-    name: k8s-layer
-    description: |
-        harness-k8s-fixture — fake Kubernetes API surface for harness phase 5
-        Stands in for a real k3s cluster. Real k3s cannot run inside the
-        check-sandbox because the rootless user-namespace slice does not
-        delegate the `cpuset` cgroup controller — k3s aborts with
-        "failed to find cpuset cgroup (v2)" before kubelet starts.
-        Instead, this layer runs a minimal Python http.server that
-        replays just the GET endpoints `charly check k8s` (client-go dynamic)
-        reaches: nodes, services, storageclasses, ingressclasses, the
-        three k3s addons (traefik / local-path-provisioner /
-        svclb-traefik). Every list returns a single Ready object so the
-        harness's wait-nodes / addons rollups exit 0. Listens on
-        0.0.0.0:6443 over plain HTTP — the matching kubeconfig sets
-        `insecure-skip-tls-verify: true` and uses an `http://` server
-        URL, which client-go honors.
-    require:
-        - supervisord
-    distro:
-        fedora:
-            package:
-                - python3
-                - iproute
-                - procps-ng
-    port:
-        - 6443
-    service:
-        - name: harness-k8s-fixture
-          exec: "/usr/bin/python3 -u /opt/harness-k8s/fake_apiserver.py"
-          restart: always
-          priority: 50
-          enable: true
-          scope: system
-    plan:
-        - run: mkdir=/opt/harness-k8s
-          mkdir: /opt/harness-k8s
-          run_as: root
-          mode: "0755"
-        - run: write=/opt/harness-k8s/fake_apiserver.py
-          write: /opt/harness-k8s/fake_apiserver.py
-          run_as: root
-          mode: "0755"
-          content: |
+k8s-layer:
+    candy:
+        version: 2026.144.1443
+        description: |
+            harness-k8s-fixture — fake Kubernetes API surface for harness phase 5
+            Stands in for a real k3s cluster. Real k3s cannot run inside the
+            check-sandbox because the rootless user-namespace slice does not
+            delegate the `cpuset` cgroup controller — k3s aborts with
+            "failed to find cpuset cgroup (v2)" before kubelet starts.
+            Instead, this layer runs a minimal Python http.server that
+            replays just the GET endpoints `charly check k8s` (client-go dynamic)
+            reaches: nodes, services, storageclasses, ingressclasses, the
+            three k3s addons (traefik / local-path-provisioner /
+            svclb-traefik). Every list returns a single Ready object so the
+            harness's wait-nodes / addons rollups exit 0. Listens on
+            0.0.0.0:6443 over plain HTTP — the matching kubeconfig sets
+            `insecure-skip-tls-verify: true` and uses an `http://` server
+            URL, which client-go honors.
+    k8s-layer-require:
+        require:
+            - supervisord
+    k8s-layer-distro:
+        distro:
+            fedora:
+                package:
+                    - python3
+                    - iproute
+                    - procps-ng
+    k8s-layer-port:
+        port:
+            - 6443
+    k8s-layer-service:
+        service:
+            - name: harness-k8s-fixture
+              exec: "/usr/bin/python3 -u /opt/harness-k8s/fake_apiserver.py"
+              restart: always
+              priority: 50
+              enable: true
+              scope: system
+    k8s-layer-step-0:
+        run: mkdir=/opt/harness-k8s
+        mkdir: /opt/harness-k8s
+        run_as: root
+        mode: "0755"
+    k8s-layer-step-1:
+        run: write=/opt/harness-k8s/fake_apiserver.py
+        write: /opt/harness-k8s/fake_apiserver.py
+        run_as: root
+        mode: "0755"
+        content: |
             #!/usr/bin/env python3
             """Minimal fake Kubernetes apiserver for the harness phase 5 recipe.
 
@@ -323,51 +328,60 @@ candy:
                 srv = ThreadingHTTPServer(("0.0.0.0", 6443), FakeAPIHandler)
                 sys.stderr.write("fake-apiserver: listening on 0.0.0.0:6443\n")
                 srv.serve_forever()
-        - check: the fake Kubernetes apiserver script is installed and executable at /opt/harness-k8s/fake_apiserver.py
-          file: /opt/harness-k8s/fake_apiserver.py
-          exists: true
-          mode: "0755"
-        - check: a GET to /api/v1/nodes returns HTTP 200 carrying the Ready fixture node charly-fixture-k8s
-          http: http://127.0.0.1:${HOST_PORT:6443}/api/v1/nodes
-          status: 200
-          body:
+    k8s-layer-step-2:
+        check: the fake Kubernetes apiserver script is installed and executable at /opt/harness-k8s/fake_apiserver.py
+        file: /opt/harness-k8s/fake_apiserver.py
+        exists: true
+        mode: "0755"
+    k8s-layer-step-3:
+        check: a GET to /api/v1/nodes returns HTTP 200 carrying the Ready fixture node charly-fixture-k8s
+        http: http://127.0.0.1:${HOST_PORT:6443}/api/v1/nodes
+        status: 200
+        body:
             - contains: charly-fixture-k8s
-          context:
+        context:
             - runtime
-        - agent-check: the harness `charly check k8s` wait-nodes and addon rollups exit 0 against the fixture (nodes, storageclasses, ingressclasses, and the traefik / local-path-provisioner / svclb-traefik addons all report Ready)
-        - check: file=/usr/bin/python3
-          id: harness-k8s-python3
-          file: /usr/bin/python3
-          exists: true
-        - check: package=python3
-          id: harness-k8s-python3-package
-          package: python3
-          installed: true
-        - check: service=harness-k8s-fixture
-          id: harness-k8s-service-running
-          service: harness-k8s-fixture
-          running: true
-          context:
+    k8s-layer-step-4:
+        agent-check: the harness `charly check k8s` wait-nodes and addon rollups exit 0 against the fixture (nodes, storageclasses, ingressclasses, and the traefik / local-path-provisioner / svclb-traefik addons all report Ready)
+    harness-k8s-python3:
+        check: file=/usr/bin/python3
+        id: harness-k8s-python3
+        file: /usr/bin/python3
+        exists: true
+    harness-k8s-python3-package:
+        check: package=python3
+        id: harness-k8s-python3-package
+        package: python3
+        installed: true
+    harness-k8s-service-running:
+        check: service=harness-k8s-fixture
+        id: harness-k8s-service-running
+        service: harness-k8s-fixture
+        running: true
+        context:
             - runtime
-        - check: port=6443
-          id: harness-k8s-port-listening
-          port: 6443
-          listening: true
-          context:
+    harness-k8s-port-listening:
+        check: port=6443
+        id: harness-k8s-port-listening
+        port: 6443
+        listening: true
+        context:
             - runtime
-        - check: http=http://127.0.0.1:${HOST_PORT:6443}/apis/storage.k8s.io/v1/storageclasses
-          id: harness-k8s-storageclass-endpoint
-          http: http://127.0.0.1:${HOST_PORT:6443}/apis/storage.k8s.io/v1/storageclasses
-          status: 200
-          body:
+    harness-k8s-storageclass-endpoint:
+        check: http=http://127.0.0.1:${HOST_PORT:6443}/apis/storage.k8s.io/v1/storageclasses
+        id: harness-k8s-storageclass-endpoint
+        http: http://127.0.0.1:${HOST_PORT:6443}/apis/storage.k8s.io/v1/storageclasses
+        status: 200
+        body:
             - contains: local-path
-          context:
+        context:
             - runtime
-        - check: http=http://127.0.0.1:${HOST_PORT:6443}/version
-          id: harness-k8s-version-endpoint
-          http: http://127.0.0.1:${HOST_PORT:6443}/version
-          status: 200
-          body:
+    harness-k8s-version-endpoint:
+        check: http=http://127.0.0.1:${HOST_PORT:6443}/version
+        id: harness-k8s-version-endpoint
+        http: http://127.0.0.1:${HOST_PORT:6443}/version
+        status: 200
+        body:
             - contains: v1.31.0-fake-fixture
-          context:
+        context:
             - runtime

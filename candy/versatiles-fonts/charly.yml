@@ -1,32 +1,35 @@
-candy:
-    version: 2026.144.1443
-    name: versatiles-fonts
-    description: |
-        Pre-rendered SDF glyph PBFs for the 10 VersaTiles font families, installed locally for MapLibre GL JS label rendering.
-        Installs the versatiles-org/versatiles-fonts release bundle
-        (fonts.tar.gz — all 10 families: Fira Sans, Lato, Libre Baskerville,
-        Merriweather Sans, Noto Sans, Nunito, Open Sans, PT Sans, Roboto,
-        Source Sans 3) into /opt/versatiles-fonts as signed-distance-field
-        PBFs laid out per MapLibre's {fontstack}/{range}.pbf glyph-URL
-        convention. Serving the glyphs locally lets the shortbread MapLibre
-        cell render labels without hitting tiles.versatiles.org as a runtime
-        font CDN; the bundle is re-exported by versatiles-frontend at /fonts/.
-    require:
-        - supervisord
-    distro:
-        arch:
-            package:
-                - curl
-                - jq
-        fedora:
-            package:
-                - curl
-                - jq
-    plan:
-        - run: mkdir=/opt/versatiles-fonts
-          mkdir: /opt/versatiles-fonts
-          run_as: root
-        - run: |
+versatiles-fonts:
+    candy:
+        version: 2026.144.1443
+        description: |
+            Pre-rendered SDF glyph PBFs for the 10 VersaTiles font families, installed locally for MapLibre GL JS label rendering.
+            Installs the versatiles-org/versatiles-fonts release bundle
+            (fonts.tar.gz — all 10 families: Fira Sans, Lato, Libre Baskerville,
+            Merriweather Sans, Noto Sans, Nunito, Open Sans, PT Sans, Roboto,
+            Source Sans 3) into /opt/versatiles-fonts as signed-distance-field
+            PBFs laid out per MapLibre's {fontstack}/{range}.pbf glyph-URL
+            convention. Serving the glyphs locally lets the shortbread MapLibre
+            cell render labels without hitting tiles.versatiles.org as a runtime
+            font CDN; the bundle is re-exported by versatiles-frontend at /fonts/.
+    versatiles-fonts-require:
+        require:
+            - supervisord
+    versatiles-fonts-distro:
+        distro:
+            arch:
+                package:
+                    - curl
+                    - jq
+            fedora:
+                package:
+                    - curl
+                    - jq
+    versatiles-fonts-step-0:
+        run: mkdir=/opt/versatiles-fonts
+        mkdir: /opt/versatiles-fonts
+        run_as: root
+    versatiles-fonts-step-1:
+        run: |
             command=set -euo pipefail
             ASSET=$(curl -fsSL "https://api.github.com/repos/versatiles-org/versatiles-fonts/releases/latest" \
               | jq -r '.assets[].browser_download_url' \
@@ -44,7 +47,7 @@ candy:
             tar -xzf fonts.tar.gz -C /opt/versatiles-fonts
             cd /
             rm -rf "$TMPDIR"
-          command: |
+        command: |
             set -euo pipefail
             ASSET=$(curl -fsSL "https://api.github.com/repos/versatiles-org/versatiles-fonts/releases/latest" \
               | jq -r '.assets[].browser_download_url' \
@@ -62,28 +65,35 @@ candy:
             tar -xzf fonts.tar.gz -C /opt/versatiles-fonts
             cd /
             rm -rf "$TMPDIR"
-          run_as: root
-        - check: the install directory /opt/versatiles-fonts exists
-          file: /opt/versatiles-fonts
-          filetype: directory
-        - check: at least one signed-distance-field glyph PBF was unpacked from the release tarball
-          command: |
+        run_as: root
+    versatiles-fonts-step-2:
+        check: the install directory /opt/versatiles-fonts exists
+        file: /opt/versatiles-fonts
+        filetype: directory
+    versatiles-fonts-step-3:
+        check: at least one signed-distance-field glyph PBF was unpacked from the release tarball
+        command: |
             find /opt/versatiles-fonts -name '*.pbf' -size +1c | head -1 | grep -q .
-          exit_status: 0
-        - check: the default MapLibre font Noto Sans Regular is present
-          command: |
+        exit_status: 0
+    versatiles-fonts-step-4:
+        check: the default MapLibre font Noto Sans Regular is present
+        command: |
             find /opt/versatiles-fonts -path '*noto_sans_regular*' -name '*.pbf' | head -1 | grep -q .
-          exit_status: 0
-        - check: glyphs follow MapLibre's {range}.pbf naming so the base 0-255.pbf range file exists
-          command: |
+        exit_status: 0
+    versatiles-fonts-step-5:
+        check: glyphs follow MapLibre's {range}.pbf naming so the base 0-255.pbf range file exists
+        command: |
             find /opt/versatiles-fonts -name '0-255.pbf' | head -1 | grep -q .
-          exit_status: 0
-        - agent-check: a MapLibre GL JS client can fetch any installed family's glyph ranges via the standard {fontstack}/{range}.pbf glyph-URL template
-        - check: package=curl
-          id: versatiles-fonts-curl
-          package: curl
-          installed: true
-        - check: package=jq
-          id: versatiles-fonts-jq
-          package: jq
-          installed: true
+        exit_status: 0
+    versatiles-fonts-step-6:
+        agent-check: a MapLibre GL JS client can fetch any installed family's glyph ranges via the standard {fontstack}/{range}.pbf glyph-URL template
+    versatiles-fonts-curl:
+        check: package=curl
+        id: versatiles-fonts-curl
+        package: curl
+        installed: true
+    versatiles-fonts-jq:
+        check: package=jq
+        id: versatiles-fonts-jq
+        package: jq
+        installed: true

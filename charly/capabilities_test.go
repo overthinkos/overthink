@@ -8,7 +8,7 @@ import (
 // BoxMetadata (aliased as Capabilities) has a CapabilityLabelMap entry.
 // Adding a new capability field without a label mapping is a build break —
 // enforces the Part G invariant "every capability lives in an OCI label" so
-// that `charly deploy from-box` (Part F.10) can reconstruct the full contract
+// that `charly bundle from-box` (Part F.10) can reconstruct the full contract
 // from a pushed image.
 func TestCapabilityLabelCompleteness(t *testing.T) {
 	if err := checkCapabilityLabelCompleteness(); err != nil {

@@ -111,6 +111,15 @@ func validateProjectCUESchemas(cfg *Config, dir string, opts ResolveOpts, errs *
 		if err != nil {
 			continue
 		}
+		// validateVocabularyCollections is the LEGACY root-shape collection
+		// validator (`k8s: {entity: …}` → each entity against #K8s). A node-form
+		// file whose NODE is named after a collection kind (a box named `k8s`:
+		// `k8s: {box: …}`) would be misread as a `k8s`-kind collection. Node-form
+		// files are validated at load (validateNodeDocCUE) and via the resolved
+		// cfg.Box path above, so skip them here.
+		if isNodeFormFile(data) {
+			continue
+		}
 		doc, derr := cueDocFromYAML(f, data)
 		if derr != nil {
 			errs.Add("%s: CUE ingest: %v", f, derr)
@@ -143,6 +152,24 @@ func validateVocabularyCollections(doc cue.Value, kinds []string, srcLabel strin
 			}
 		}
 	}
+}
+
+// isNodeFormFile reports whether any document in a YAML file is unified
+// node-form (classifyDoc → docShapeNode). Used to skip the legacy root-shape
+// collection validator on node-form manifests (whose entities are validated at
+// load + via the resolved cfg.Box path).
+func isNodeFormFile(data []byte) bool {
+	dec := yaml.NewDecoder(strings.NewReader(string(data)))
+	for {
+		var node yaml.Node
+		if err := dec.Decode(&node); err != nil {
+			break
+		}
+		if shape, err := classifyDoc(&node); err == nil && shape == docShapeNode {
+			return true
+		}
+	}
+	return false
 }
 
 // boxEntityWireYAML marshals a resolved BoxConfig back to the authored `box:`
@@ -359,11 +386,11 @@ func validateLocalDeployments(dir string, errs *ValidationError) {
 	if err != nil || uf == nil {
 		return
 	}
-	dc := uf.ProjectDeployConfig()
+	dc := uf.ProjectBundleConfig()
 	if dc == nil {
 		return
 	}
-	for name, node := range dc.Deploy {
+	for name, node := range dc.Bundle {
 		if node.Target != "local" && node.Target != "" {
 			continue
 		}
@@ -1220,7 +1247,7 @@ func validateBuilders(cfg *Config, layers map[string]*Candy, builderCfg *Builder
 }
 
 // validateDNS is a no-op in schema v4. DNS and AcmeEmail moved off
-// BoxConfig to DeploymentNode (they're deployment choices). Deploy-side
+// BoxConfig to BundleNode (they're deployment choices). Deploy-side
 // validation of these fields is handled by validateDeployConfig.
 func validateDNS(cfg *Config, errs *ValidationError) {
 	// intentionally empty — schema v4 removed image-level dns/acme_email

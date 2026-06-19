@@ -15,7 +15,7 @@ package main
 // The `pluralToSingularYAMLKeys` map is the single source of truth for
 // (a) the migrator's substitution table, AND (b) the loader-rejection
 // helper `RejectLegacyPluralKeys` used by parseCandyYAML / LoadUnified
-// / LoadDeployConfig (R3 no-duplication).
+// / LoadBundleConfig (R3 no-duplication).
 
 import (
 	"bytes"

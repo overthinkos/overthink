@@ -7,7 +7,7 @@ tasks:
     cmds:
       - |
         set -e
-        command -v cue >/dev/null || { echo "cue CLI not found — deploy the cue candy: charly deploy add cue cue --target local"; exit 1; }
+        command -v cue >/dev/null || { echo "cue CLI not found — deploy the cue candy: charly bundle add cue cue --target local"; exit 1; }
         cd charly/schema/vendor
         # cloud-init cloud-config (Canonical, Draft-04) -> #CloudConfig
         cue import -f -p schema -l '#CloudConfig:' -o cloud_config.cue jsonschema: sources/cloud-config-v1.json

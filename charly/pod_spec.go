@@ -25,7 +25,7 @@ type PodSpec struct {
 	Sidecar []SidecarConfig `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
 
 	// Secret entries are secret requirements that apply to any deployment
-	// using this template. Same type as DeploymentNode.Secret — deployment
+	// using this template. Same type as BundleNode.Secret — deployment
 	// entries can add additional secrets on top.
 	Secret []DeploySecretConfig `yaml:"secret,omitempty" json:"secret,omitempty"`
 

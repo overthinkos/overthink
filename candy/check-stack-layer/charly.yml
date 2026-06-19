@@ -1,78 +1,87 @@
-candy:
-    version: 2026.161.2302
-    name: check-stack-layer
-    # The check listener's container port. Boxes composing this candy inherit it
-    # (CollectBoxPorts) and auto-publish it on a free 127.0.0.1 host port — the
-    # check-pod box no longer declares `port: 18794:18794` itself.
-    port:
-        - 18794
-    description: |
-        Combined kind:layer + kind:pod + DeployTarget smoke on top of check-base-layer
-        The second (and final) layer of the check-pod stack. In one layer it
-        proves three mechanisms the combined check-pod bed
-        (`charly check run check-pod`) covers beyond the build smoke:
-          * layer composition order — asserts /etc/check-base-marker (written by
-            the prior check-base-layer) is still present;
-          * kind:pod runtime — runs `nc -lk 18794` under the configured init
-            system and probes the listening port (harness + in-container ss);
-          * DeployTarget rendering — runs `sleep infinity` under supervisord and
-            probes the service is running.
-        Installs ncat + iproute (port listener) + coreutils (sleep) + supervisor.
-        Both services are custom exec entries — fedora-minimal ships no systemd
-        units for nc/sleep, so the layer is supervisord-only on container targets.
-    distro:
-        fedora:
-            package:
-                - iproute
-                - ncat
-                - coreutils
-                - supervisor
-    service:
-        - name: check-listener
-          exec: "/usr/bin/nc -lk 18794"
-          restart: always
-          priority: 20
-          auto_start: true
-          enable: true
-          scope: system
-        - name: check-sleep
-          exec: "/usr/bin/sleep infinity"
-          restart: always
-          priority: 20
-          auto_start: true
-          enable: true
-          scope: system
-    plan:
-        - run: write=/etc/check-stack-marker
-          write: /etc/check-stack-marker
-          run_as: root
-          mode: "0644"
-          content: |
+check-stack-layer:
+    candy:
+        version: 2026.161.2302
+        description: |
+            Combined kind:layer + kind:pod + DeployTarget smoke on top of check-base-layer
+            The second (and final) layer of the check-pod stack. In one layer it
+            proves three mechanisms the combined check-pod bed
+            (`charly check run check-pod`) covers beyond the build smoke:
+              * layer composition order — asserts /etc/check-base-marker (written by
+                the prior check-base-layer) is still present;
+              * kind:pod runtime — runs `nc -lk 18794` under the configured init
+                system and probes the listening port (harness + in-container ss);
+              * DeployTarget rendering — runs `sleep infinity` under supervisord and
+                probes the service is running.
+            Installs ncat + iproute (port listener) + coreutils (sleep) + supervisor.
+            Both services are custom exec entries — fedora-minimal ships no systemd
+            units for nc/sleep, so the layer is supervisord-only on container targets.
+    check-stack-layer-port:
+        # The check listener's container port. Boxes composing this candy inherit it
+        # (CollectBoxPorts) and auto-publish it on a free 127.0.0.1 host port — the
+        # check-pod box no longer declares `port: 18794:18794` itself.
+        port:
+            - 18794
+    check-stack-layer-distro:
+        distro:
+            fedora:
+                package:
+                    - iproute
+                    - ncat
+                    - coreutils
+                    - supervisor
+    check-stack-layer-service:
+        service:
+            - name: check-listener
+              exec: "/usr/bin/nc -lk 18794"
+              restart: always
+              priority: 20
+              auto_start: true
+              enable: true
+              scope: system
+            - name: check-sleep
+              exec: "/usr/bin/sleep infinity"
+              restart: always
+              priority: 20
+              auto_start: true
+              enable: true
+              scope: system
+    check-stack-layer-step-0:
+        run: write=/etc/check-stack-marker
+        write: /etc/check-stack-marker
+        run_as: root
+        mode: "0644"
+        content: |
             check-stack v1
-        - check: the check-stack marker file is present at /etc/check-stack-marker
-          file: /etc/check-stack-marker
-          exists: true
-        - agent-check: the check listener accepts a TCP connection on port 18794 from inside the deployment
-        - check: file=/etc/check-base-marker
-          id: check-compose-order
-          file: /etc/check-base-marker
-          exists: true
-        - check: port=18794
-          id: check-port-listening
-          port: 18794
-          listening: true
-          context:
+    check-stack-layer-step-1:
+        check: the check-stack marker file is present at /etc/check-stack-marker
+        file: /etc/check-stack-marker
+        exists: true
+    check-stack-layer-step-2:
+        agent-check: the check listener accepts a TCP connection on port 18794 from inside the deployment
+    check-compose-order:
+        check: file=/etc/check-base-marker
+        id: check-compose-order
+        file: /etc/check-base-marker
+        exists: true
+    check-port-listening:
+        check: port=18794
+        id: check-port-listening
+        port: 18794
+        listening: true
+        context:
             - runtime
-        - check: command=ss -tlnp 2>/dev/null | grep ':18794'
-          id: check-ss-listening
-          command: "ss -tlnp 2>/dev/null | grep ':18794'"
-          exit_status: 0
-          in_container: true
-          context:
+    check-ss-listening:
+        check: command=ss -tlnp 2>/dev/null | grep ':18794'
+        id: check-ss-listening
+        command: "ss -tlnp 2>/dev/null | grep ':18794'"
+        exit_status: 0
+        in_container: true
+        context:
             - runtime
-        - check: service=check-sleep
-          id: check-service-running
-          service: check-sleep
-          running: true
-          context:
+    check-service-running:
+        check: service=check-sleep
+        id: check-service-running
+        service: check-sleep
+        running: true
+        context:
             - runtime

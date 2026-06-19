@@ -313,7 +313,7 @@ func RenderService(entry *ServiceEntry, initDef *InitDef, ctx ServiceRenderConte
 	// Egress gate: a template render failure leaves the "<no value>" marker in the
 	// unit body — reject it before the unit is written (see /charly-internals:egress).
 	if out.UnitText != "" {
-		if err := validateTextEgress("rendered_text", "service-unit:"+entry.Name, out.UnitText); err != nil {
+		if err := validateTextEgress("service-unit:"+entry.Name, out.UnitText); err != nil {
 			return nil, err
 		}
 	}

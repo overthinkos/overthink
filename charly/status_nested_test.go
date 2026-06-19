@@ -11,11 +11,11 @@ import (
 // overlay must leave alone.
 func nestedUnified() *UnifiedFile {
 	return &UnifiedFile{
-		Deploy: map[string]DeploymentNode{
+		Bundle: map[string]BundleNode{
 			"check-android-emulator-pod": {
 				Target: "pod",
 				Box:    "android-emulator",
-				Nested: map[string]*DeploymentNode{
+				Children: map[string]*BundleNode{
 					"device":     {Target: "android", Android: "pixel9a-36", AddCandy: []string{"android-test-apps"}},
 					"device-net": {Target: "android", Android: "pixel9a-endpoint", AddCandy: []string{"android-apidemos"}},
 				},
@@ -117,11 +117,11 @@ func TestNestedOverlay_NoParentRowNoPhantom(t *testing.T) {
 func TestNestedOverlay_MovesFlatPodRow(t *testing.T) {
 	const parent = "stack-vm"
 	uf := &UnifiedFile{
-		Deploy: map[string]DeploymentNode{
+		Bundle: map[string]BundleNode{
 			parent: {
 				Target: "vm",
 				Vm:     "stack-vm",
-				Nested: map[string]*DeploymentNode{
+				Children: map[string]*BundleNode{
 					"web": {Target: "pod", Box: "nginx"},
 				},
 			},

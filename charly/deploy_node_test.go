@@ -5,17 +5,17 @@ import (
 	"testing"
 )
 
-// deploy_node_test.go — tests for DeploymentNode tree walking and
+// deploy_node_test.go — tests for BundleNode tree walking and
 // dotted-path resolution.
 
-func makeTree() map[string]DeploymentNode {
-	return map[string]DeploymentNode{
+func makeTree() map[string]BundleNode {
+	return map[string]BundleNode{
 		"stack": {
 			Target: "container",
-			Nested: map[string]*DeploymentNode{
+			Children: map[string]*BundleNode{
 				"web": {
 					Target: "container",
-					Nested: map[string]*DeploymentNode{
+					Children: map[string]*BundleNode{
 						"db": {Target: "host"},
 					},
 				},
@@ -33,7 +33,7 @@ func TestWalkPreOrder_RootThenChildren(t *testing.T) {
 	tree := makeTree()
 	root := tree["stack"]
 	var paths []string
-	err := root.WalkPreOrder("stack", func(path string, node *DeploymentNode) error {
+	err := root.WalkPreOrder("stack", func(path string, node *BundleNode) error {
 		paths = append(paths, path)
 		return nil
 	})
@@ -50,7 +50,7 @@ func TestWalkPostOrder_ChildrenThenRoot(t *testing.T) {
 	tree := makeTree()
 	root := tree["stack"]
 	var paths []string
-	err := root.WalkPostOrder("stack", func(path string, node *DeploymentNode) error {
+	err := root.WalkPostOrder("stack", func(path string, node *BundleNode) error {
 		paths = append(paths, path)
 		return nil
 	})
@@ -106,7 +106,7 @@ func TestResolveNodePath_MalformedDots(t *testing.T) {
 }
 
 func TestValidateDeploymentTree_RejectsDotInName(t *testing.T) {
-	deploy := map[string]DeploymentNode{
+	deploy := map[string]BundleNode{
 		"bad.name": {Target: "host"},
 	}
 	err := validateDeploymentTree(deploy)
@@ -119,7 +119,7 @@ func TestValidateDeploymentTree_RejectsDotInName(t *testing.T) {
 }
 
 func TestSortedChildKeys_Deterministic(t *testing.T) {
-	kids := map[string]*DeploymentNode{"z": {}, "a": {}, "m": {}}
+	kids := map[string]*BundleNode{"z": {}, "a": {}, "m": {}}
 	got := sortedNestedKeys(kids)
 	if !equalSlices(got, []string{"a", "m", "z"}) {
 		t.Errorf("got %v, want [a m z]", got)
@@ -127,11 +127,11 @@ func TestSortedChildKeys_Deterministic(t *testing.T) {
 }
 
 func TestHasChildren(t *testing.T) {
-	empty := &DeploymentNode{}
+	empty := &BundleNode{}
 	if empty.HasChildren() {
 		t.Error("empty node should not report HasChildren")
 	}
-	withKids := &DeploymentNode{Nested: map[string]*DeploymentNode{"k": {}}}
+	withKids := &BundleNode{Children: map[string]*BundleNode{"k": {}}}
 	if !withKids.HasChildren() {
 		t.Error("node with children should report HasChildren")
 	}
@@ -148,7 +148,7 @@ func TestHasChildren(t *testing.T) {
 // in the 2026-05 cross-kind name reuse cutover; the entry itself relocated to
 // the overthinkos/cachyos submodule in the 2026-05 CachyOS migration).
 func TestMergeDeployConfigsLocalCutoverFields(t *testing.T) {
-	project := &DeployConfig{Deploy: map[string]DeploymentNode{
+	project := &BundleConfig{Bundle: map[string]BundleNode{
 		"charly-cachyos": {
 			Target:  "local",
 			Local:   "charly-cachyos",
@@ -158,7 +158,7 @@ func TestMergeDeployConfigsLocalCutoverFields(t *testing.T) {
 		},
 	}}
 	merged := MergeDeployConfigs(project, nil)
-	got, ok := merged.Deploy["charly-cachyos"]
+	got, ok := merged.Bundle["charly-cachyos"]
 	if !ok {
 		t.Fatal("charly-cachyos dropped by MergeDeployConfigs")
 	}
@@ -172,11 +172,11 @@ func TestMergeDeployConfigsLocalCutoverFields(t *testing.T) {
 		t.Errorf("SSHArgs field lost: got %v", got.SSHArgs)
 	}
 	// Per-machine overlay wins on collision (mirrors Host's behavior).
-	overlay := &DeployConfig{Deploy: map[string]DeploymentNode{
+	overlay := &BundleConfig{Bundle: map[string]BundleNode{
 		"charly-cachyos": {Local: "ci-runner", User: "bob", SSHArgs: []string{"-o", "ProxyJump=bastion"}},
 	}}
 	merged = MergeDeployConfigs(project, overlay)
-	got = merged.Deploy["charly-cachyos"]
+	got = merged.Bundle["charly-cachyos"]
 	if got.Local != "ci-runner" {
 		t.Errorf("overlay Local should win: got %q", got.Local)
 	}
@@ -202,7 +202,7 @@ func equalSlices(a, b []string) bool {
 
 // TestMergeDeployConfigsPreservesAllFields locks in the 2026-05 regression
 // fix: pre-fix MergeDeployConfigs hand-rolled per-field copies and silently
-// dropped 19+ DeploymentNode fields (ResolvedPort, Description, Secret,
+// dropped 19+ BundleNode fields (ResolvedPort, Description, Secret,
 // Sidecar, Shell, Kubernetes, ForwardGpgAgent, ForwardSshAgent, Kind,
 // Replica, Restart, Schedule, Resources, Expose, Storage, Probes, Cpus,
 // Ram, DiskSize). Any future addition of a struct field would silently
@@ -224,7 +224,7 @@ func TestMergeDeployConfigsPreservesAllFields(t *testing.T) {
 	storage := []DeployStorage{{Name: "s"}}
 	probes := &DeployProbes{}
 
-	src := DeploymentNode{
+	src := BundleNode{
 		ResolvedPort:    rp,
 		Description:     desc,
 		Secret:          sec,
@@ -245,9 +245,9 @@ func TestMergeDeployConfigsPreservesAllFields(t *testing.T) {
 		Ram:             "16G",
 		DiskSize:        "40G",
 	}
-	cfg := &DeployConfig{Deploy: map[string]DeploymentNode{"x": src}}
+	cfg := &BundleConfig{Bundle: map[string]BundleNode{"x": src}}
 	merged := MergeDeployConfigs(cfg, nil)
-	got := merged.Deploy["x"]
+	got := merged.Bundle["x"]
 
 	checks := []struct {
 		name string

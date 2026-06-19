@@ -1,45 +1,51 @@
-candy:
-    version: 2026.144.1443
-    name: mcp-layer
-    description: |
-        harness-mcp-fixture — minimal Streamable-HTTP MCP server stub for harness phase 4
-        Implements the MCP Streamable HTTP protocol surface that
-        `charly check mcp` probes: initialize, ping, tools/list, tools/call.
-        Advertises three jupyter-named tools (list_notebooks, insert_cell,
-        execute_cell) so the mcp-protocol-probe recipe's matchers all
-        satisfy. Stdlib-only Python (no fastmcp install) keeps the image
-        small and the build fast.
-    require:
-        - supervisord
-    distro:
-        fedora:
-            package:
-                - python3
-                - iproute
-                - procps-ng
-    port:
-        - 8888
-    mcp_provide:
-        - name: jupyter
-          url: "http://{{.ContainerName}}:8888/mcp"
-          transport: http
-    service:
-        - name: harness-mcp-fixture
-          exec: "/usr/bin/python3 -u /opt/harness-mcp/mcp_server.py"
-          restart: always
-          priority: 50
-          enable: true
-          scope: system
-    plan:
-        - run: mkdir=/opt/harness-mcp
-          mkdir: /opt/harness-mcp
-          run_as: root
-          mode: "0755"
-        - run: write=/opt/harness-mcp/mcp_server.py
-          write: /opt/harness-mcp/mcp_server.py
-          run_as: root
-          mode: "0755"
-          content: |
+mcp-layer:
+    candy:
+        version: 2026.144.1443
+        description: |
+            harness-mcp-fixture — minimal Streamable-HTTP MCP server stub for harness phase 4
+            Implements the MCP Streamable HTTP protocol surface that
+            `charly check mcp` probes: initialize, ping, tools/list, tools/call.
+            Advertises three jupyter-named tools (list_notebooks, insert_cell,
+            execute_cell) so the mcp-protocol-probe recipe's matchers all
+            satisfy. Stdlib-only Python (no fastmcp install) keeps the image
+            small and the build fast.
+    mcp-layer-require:
+        require:
+            - supervisord
+    mcp-layer-distro:
+        distro:
+            fedora:
+                package:
+                    - python3
+                    - iproute
+                    - procps-ng
+    mcp-layer-port:
+        port:
+            - 8888
+    mcp-layer-mcp_provide:
+        mcp_provide:
+            - name: jupyter
+              url: "http://{{.ContainerName}}:8888/mcp"
+              transport: http
+    mcp-layer-service:
+        service:
+            - name: harness-mcp-fixture
+              exec: "/usr/bin/python3 -u /opt/harness-mcp/mcp_server.py"
+              restart: always
+              priority: 50
+              enable: true
+              scope: system
+    mcp-layer-step-0:
+        run: mkdir=/opt/harness-mcp
+        mkdir: /opt/harness-mcp
+        run_as: root
+        mode: "0755"
+    mcp-layer-step-1:
+        run: write=/opt/harness-mcp/mcp_server.py
+        write: /opt/harness-mcp/mcp_server.py
+        run_as: root
+        mode: "0755"
+        content: |
             #!/usr/bin/env python3
             """Minimal MCP Streamable HTTP server stub.
 
@@ -226,30 +232,37 @@ candy:
             if __name__ == "__main__":
                 srv = ThreadingHTTPServer(("0.0.0.0", 8888), MCPHandler)
                 srv.serve_forever()
-        - check: the stdlib MCP server script is baked into the image at /opt/harness-mcp/mcp_server.py
-          file: /opt/harness-mcp/mcp_server.py
-          exists: true
-        - check: the python3 interpreter that runs the stub is installed at /usr/bin/python3
-          file: /usr/bin/python3
-          exists: true
-        - check: the python3 package providing the interpreter is installed
-          package: python3
-          installed: true
-        - check: the running fixture answers an MCP ping over its Streamable HTTP endpoint
-          mcp: ping
-          context:
+    mcp-layer-step-2:
+        check: the stdlib MCP server script is baked into the image at /opt/harness-mcp/mcp_server.py
+        file: /opt/harness-mcp/mcp_server.py
+        exists: true
+    mcp-layer-step-3:
+        check: the python3 interpreter that runs the stub is installed at /usr/bin/python3
+        file: /usr/bin/python3
+        exists: true
+    mcp-layer-step-4:
+        check: the python3 package providing the interpreter is installed
+        package: python3
+        installed: true
+    mcp-layer-step-5:
+        check: the running fixture answers an MCP ping over its Streamable HTTP endpoint
+        mcp: ping
+        context:
             - runtime
-        - check: a tools/list call advertises the three jupyter-named tools
-          mcp: list-tools
-          stdout:
+    mcp-layer-step-6:
+        check: a tools/list call advertises the three jupyter-named tools
+        mcp: list-tools
+        stdout:
             - contains: list_notebooks
             - contains: insert_cell
             - contains: execute_cell
-          context:
+        context:
             - runtime
-        - check: the server port accepts a TCP connection from the host
-          addr: 127.0.0.1:${HOST_PORT:8888}
-          reachable: true
-          context:
+    mcp-layer-step-7:
+        check: the server port accepts a TCP connection from the host
+        addr: 127.0.0.1:${HOST_PORT:8888}
+        reachable: true
+        context:
             - runtime
-        - agent-check: a tools/call invocation of list_notebooks returns a notebook listing, and insert_cell / execute_cell respond without a JSON-RPC protocol error against the live fixture
+    mcp-layer-step-8:
+        agent-check: a tools/call invocation of list_notebooks returns a notebook listing, and insert_cell / execute_cell respond without a JSON-RPC protocol error against the live fixture

@@ -4,7 +4,7 @@ package main
 //
 // K8s doesn't consume the InstallPlan IR — K8sDeployTarget.Emit is a
 // no-op by design. The real work is GenerateK8sKustomize, which reads
-// (Capabilities, DeploymentNode, cluster) and emits a Kustomize tree.
+// (Capabilities, BundleNode, cluster) and emits a Kustomize tree.
 // Add wraps that with the ephemeral lifecycle hook; Del runs `kubectl
 // delete -k` then removes the tree. Bodies lifted from the former
 // per-kind k8s add/del paths.
@@ -129,7 +129,7 @@ func (t *K8sUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 	// Ephemeral lifecycle teardown. Read from charly.yml here (teardown
 	// runs without a dispatch-merged node in hand — Del's contract is
 	// node-free), matching every other kind's Del.
-	if node, ok := loadDeployConfigForRead("charly deploy del k8s ephemeral-teardown").LookupKey(t.NodeName); ok && node.IsEphemeral() {
+	if node, ok := loadDeployConfigForRead("charly bundle del k8s ephemeral-teardown").LookupKey(t.NodeName); ok && node.IsEphemeral() {
 		if tdErr := TeardownEphemeralLifecycle(&node, t.NodeName); tdErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: ephemeral lifecycle teardown: %v\n", tdErr)
 		}

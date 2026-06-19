@@ -12,7 +12,7 @@ package main
 //
 // Called from charly/deploy_add_cmd.go after target.Emit succeeds and any
 // deploy-scope tests pass — this is the finalization step that ends a
-// successful `charly deploy add`.
+// successful `charly bundle add`.
 
 import (
 	"context"

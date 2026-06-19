@@ -1,5 +1,5 @@
 // CUE schema for the `deploy` AND `check` kinds. Both validate ONE
-// DeploymentNode (charly/deploy.go): a `deploy:` map entry, or a `kind: check`
+// BundleNode (charly/deploy.go): a `deploy:` map entry, or a `kind: check`
 // bed (disposable:true + usually iterate:/plan:). #Deploy is the base node;
 // #Check narrows it to the bed invariants. CLOSED. Shared defs REFERENCED, not
 // redefined (R3): #Step/#Op/#Security/#EnvVar/#InstallOpts/#Duration/#CalVer/
@@ -9,7 +9,17 @@
 	version?:     #CalVer
 	description?: string & !=""
 
-	target: *"pod" | "vm" | "k8s" | "local" | "android"
+	// target is DERIVED from the node's discriminator kind + cross-ref at load
+	// (buildBundleNode/inferBundleTarget) — NOT authored in node-form. Optional
+	// here so #Check's arms can pin it; the #BundleValue arm (node.cue) rejects an
+	// authored `target:` outright. The former default `*"pod"` is dropped (Go's
+	// classifyTarget supplies the empty→pod default).
+	target?: "pod" | "vm" | "k8s" | "local" | "android"
+
+	// agent_provisioned marks a resource member/child the AI deploys at run time
+	// (the iterate-benchmark contract): image-less (no box:), not folded to a
+	// top-level entry, exempt from the box-required validators. See deploy.go.
+	agent_provisioned?: bool
 
 	box?:     string & !=""
 	pod?:     #EntityRef
@@ -138,7 +148,7 @@
 	seed_iso?:                    string
 	ssh_port?:                    int
 	ssh_user?:                    string
-	backend?:                     "qemu" | "libvirt"
+	backend?:                     "auto" | "qemu" | "libvirt" // "auto" persisted pre-resolution (unified_targets_vm.go)
 	cloud_init_rendered_digest?:  string
 	charly_install_strategy?:     "auto" | "scp" | "url" | "skip"
 	...

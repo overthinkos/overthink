@@ -32,7 +32,7 @@ const (
 	LabelNetwork  = "ai.opencharly.network"
 	// Schema v4: LabelTunnel / LabelDNS / LabelAcmeEmail / LabelEngine
 	// removed — these are deployment choices with no image-declaration
-	// meaning. Deploy-time values flow through DeploymentNode →
+	// meaning. Deploy-time values flow through BundleNode →
 	// BoxMetadata, not through OCI labels.
 	LabelEnv  = "ai.opencharly.env"
 	LabelHook = "ai.opencharly.hook"
@@ -72,14 +72,14 @@ const (
 	// CollectHooks. Subject to a 256 KiB soft cap with narrative truncation.
 	LabelDescription = "ai.opencharly.description"
 	// LabelService — structured JSON array of CapabilityService (full
-	// per-entry spec, not just names). Source-less deploy (`charly deploy from-box`)
+	// per-entry spec, not just names). Source-less deploy (`charly bundle from-box`)
 	// reads this to reconstruct every service's config without the repo.
 	LabelService = "ai.opencharly.service"
 	// LabelShell — three-section JSON shell-init manifest.
 	// Each section (candy/box/deploy) carries an ordered list of
 	// ShellEntry contributions (origin = candy name / "box" / "deploy",
 	// id, generic body, per-shell ByShell map). Source of truth for
-	// `charly box inspect`, `charly deploy from-box`, and the charly.yml
+	// `charly box inspect`, `charly bundle from-box`, and the charly.yml
 	// `shell:` overlay merge — same shape as LabelDescription.
 	LabelShell = "ai.opencharly.shell"
 	// LabelCheckLevel — the per-box acceptance-depth rung (none|build|noagent|
@@ -104,7 +104,7 @@ type LabelRouteEntry struct {
 // CapabilityService is the full structured spec of a single service entry
 // baked into an OCI label. Mirrors ServiceEntry's fields plus two origin
 // annotations (Init, Candy) so a source-less consumer can reconstruct
-// everything `charly deploy` needs without the source repo.
+// everything `charly bundle` needs without the source repo.
 type CapabilityService struct {
 	Name             string            `json:"name"`
 	Scope            string            `json:"scope,omitempty"`

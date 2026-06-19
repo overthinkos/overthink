@@ -1,13 +1,13 @@
 package main
 
 // -----------------------------------------------------------------------------
-// K8sDeployConfig — the `kubernetes:` sub-block on DeploymentNode. Part F.
+// K8sDeployConfig — the `kubernetes:` sub-block on BundleNode. Part F.
 //
 // Schema v4: deploy-side K8s knobs (namespace, workload kind override,
 // patches, raw manifests) stay here. Cluster-wide policy (kubeconfig
 // context, admission policy, storage, ingress defaults, etc.) MOVED to
 // K8sSpec (kind:k8s template) in charly/k8s_spec.go. The Cluster string field
-// below is deprecated — use DeploymentNode.K8s (template ref) instead.
+// below is deprecated — use BundleNode.K8s (template ref) instead.
 // -----------------------------------------------------------------------------
 
 // K8sDeployConfig holds K8s-specific fields that genuinely can't be

@@ -35,7 +35,7 @@ func (c *StartCmd) Run() error {
 	// charly/preempt.go.
 	if dc := loadDeployConfigForRead("charly start"); dc != nil {
 		key := deployKey(c.Box, c.Instance)
-		if node, ok := dc.Deploy[key]; ok {
+		if node, ok := dc.Bundle[key]; ok {
 			// Resource arbitration: an EXCLUSIVE claim (sole use — a VM) preempts
 			// holders + shared pods; a SHARED claim (refcounted — a GPU shared
 			// across pods via CDI) flips the resource into shared mode (GPU ->
@@ -183,7 +183,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	}
 
 	// Inject agent forwarding mounts and env (direct mode only)
-	var deployBox *DeploymentNode
+	var deployBox *BundleNode
 	if overlay, ok := dc.Lookup(c.Box, c.Instance); ok {
 		deployBox = &overlay
 	}

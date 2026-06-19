@@ -26,20 +26,23 @@ func TestEncMount_ShortCircuit_AllMounted(t *testing.T) {
 		return true
 	}
 
-	// Deploy.yml fixture: one image with two encrypted volumes.
-	// The deployment map key is `deploy:` singular,
-	// not legacy `images:` plural. Per the 2026-05-12 require-image
-	// cutover, every pod-target deploy must declare `box:` — without
-	// it LoadDeployConfig returns an error and loadEncryptedVolume
-	// swallowing-the-error path returns 0 mounts, defeating the
-	// short-circuit and triggering a hang in resolveEncPassphraseForMount.
+	// Node-form fixture: one bundle with two encrypted volumes.
+	// Each entity flattens to a top-level `<name>: {<kind>: …}` node;
+	// non-scalar fields (the `volume:` list) move to a `<name>-volume`
+	// child node. The bundle value carries `box:` so the inferred target
+	// is exactly `pod` — the "pod-target deploy must declare box" rule
+	// fires only when the inferred target is `pod` (an empty-target
+	// bundle is a group, not a pod). Without `box:` LoadBundleConfig
+	// would return an error and loadEncryptedVolume's swallow-the-error
+	// path would return 0 mounts, defeating the short-circuit and
+	// triggering a hang in resolveEncPassphraseForMount.
 	dir := t.TempDir()
 	deployPath := filepath.Join(dir, "deploy.yml")
-	deployYAML := `version: 2026.165.1048
-deploy:
-  testimg:
-    target: pod
+	deployYAML := `version: 2026.169.0004
+testimg:
+  bundle:
     box: testimg
+  testimg-volume:
     volume:
       - name: vol-a
         type: encrypted
@@ -104,11 +107,11 @@ func TestEncMount_NoShortCircuit_WhenOneUnmounted(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	deployYAML := `version: 2026.165.1048
-deploy:
-  testimg:
-    target: pod
+	deployYAML := `version: 2026.169.0004
+testimg:
+  bundle:
     box: testimg
+  testimg-volume:
     volume:
       - name: vol-a
         type: encrypted

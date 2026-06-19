@@ -116,13 +116,13 @@ func (l *Lease) ReleaseFailed() error {
 // without real deployments; newResourceArbiter wires the production ones.
 type ResourceArbiter struct {
 	ledgerPath string
-	gather     func() map[string]DeploymentNode // candidate preemptible holders
-	running    func(addr holderAddr) bool       // is this deployment running?
-	stop       func(addr holderAddr) error      // graceful stop
-	start      func(addr holderAddr) error      // start an already-configured deployment
-	resources  func() map[string]*ResourceDef   // token -> ResourceDef (gpu selector for the mode flip)
-	switchMode func(vendor, mode string) error  // flip a gpu-backed token's host driver (vfio<->nvidia)
-	ensureCDI  func()                           // (re)generate the nvidia CDI spec after a flip to nvidia
+	gather     func() map[string]BundleNode    // candidate preemptible holders
+	running    func(addr holderAddr) bool      // is this deployment running?
+	stop       func(addr holderAddr) error     // graceful stop
+	start      func(addr holderAddr) error     // start an already-configured deployment
+	resources  func() map[string]*ResourceDef  // token -> ResourceDef (gpu selector for the mode flip)
+	switchMode func(vendor, mode string) error // flip a gpu-backed token's host driver (vfio<->nvidia)
+	ensureCDI  func()                          // (re)generate the nvidia CDI spec after a flip to nvidia
 	nowUTC     func() string
 }
 
@@ -231,7 +231,7 @@ func (a *ResourceArbiter) stopHolders(toStop []preemptedHolder, claimant string)
 
 // envPreemptLeaseHeld is set by the OUTERMOST claim-bringing `charly` invocation
 // (runCheckBed, or a standalone `charly vm create`/`charly start`) so that the nested
-// `charly` subprocesses it spawns (the bed's `charly vm create`/`charly deploy add`/
+// `charly` subprocesses it spawns (the bed's `charly vm create`/`charly bundle add`/
 // `charly vm destroy`, etc.) do NOT independently acquire or release the lease —
 // the owner manages it. An env channel, not config: it scopes to one process
 // tree, mirroring the codebase's existing env-as-IPC idioms (CHARLY_PROJECT_DIR,
@@ -246,7 +246,7 @@ const envPreemptLeaseHeld = "CHARLY_PREEMPT_LEASE"
 // whose Release()/ReleaseFailed() the caller must invoke (defer); a no-op
 // lease is safe to Release. transient=true for check-bed claims (auto-released
 // at run end), false for persistent claims (charly vm create / charly start).
-func acquireExclusiveForClaimant(claimant string, node DeploymentNode, transient bool) (*Lease, error) {
+func acquireExclusiveForClaimant(claimant string, node BundleNode, transient bool) (*Lease, error) {
 	if len(node.RequiredExclusive()) == 0 {
 		return &Lease{}, nil
 	}
@@ -268,7 +268,7 @@ func acquireExclusiveForClaimant(claimant string, node DeploymentNode, transient
 // — UNLESS an outer orchestrator already owns the lease (envPreemptLeaseHeld
 // set). Mirrors acquireExclusiveForClaimant; the release path is shared
 // (releaseResourceClaim). A no-op lease when nothing shared is claimed.
-func acquireSharedForClaimant(claimant string, node DeploymentNode, transient bool) (*Lease, error) {
+func acquireSharedForClaimant(claimant string, node BundleNode, transient bool) (*Lease, error) {
 	if len(node.RequiredShared()) == 0 {
 		return &Lease{}, nil
 	}
@@ -290,7 +290,16 @@ func acquireSharedForClaimant(claimant string, node DeploymentNode, transient bo
 // requires_shared (a node declares at most one — enforced by validation), a
 // no-op lease when it claims nothing. The single entry point for the start +
 // check-bed paths (R3), so both honor the same exclusive/shared semantics.
-func acquireResourceForClaimant(claimant string, node DeploymentNode, transient bool) (*Lease, error) {
+//
+// A node that USES the nvidia GPU device but declared NO explicit claim is
+// auto-promoted to a SHARED claimant of the gpu token here (withImpliedGPUShared):
+// EVERY GPU-consuming deployment becomes a tracked, preemptable shared claimant
+// with no per-deploy config, so an exclusive claimant (a vfio VM) can stop it to
+// free the card. The promotion never touches an exclusive claimant (a VM gets a
+// PCI hostdev, not the pod device) and never double-claims a token the node
+// already lists.
+func acquireResourceForClaimant(claimant string, node BundleNode, transient bool) (*Lease, error) {
+	node = withImpliedGPUShared(node)
 	if len(node.RequiredExclusive()) > 0 {
 		return acquireExclusiveForClaimant(claimant, node, transient)
 	}
@@ -385,7 +394,7 @@ func (a *ResourceArbiter) acquireArbiterLock() (func() error, error) {
 // false marks a persistent claim (charly vm create / charly start) released only when
 // the claimant itself is torn down. A claimant that requires nothing exclusive
 // gets a no-op lease.
-func (a *ResourceArbiter) AcquireExclusive(claimant string, claimantNode DeploymentNode, transient bool) (*Lease, error) {
+func (a *ResourceArbiter) AcquireExclusive(claimant string, claimantNode BundleNode, transient bool) (*Lease, error) {
 	tokens := dedupeNonEmpty(claimantNode.RequiredExclusive())
 	if len(tokens) == 0 {
 		return &Lease{}, nil
@@ -509,7 +518,7 @@ func (a *ResourceArbiter) AcquireExclusive(claimant string, claimantNode Deploym
 // any running preemptible holder; subsequent claims just refcount (the device is
 // already nvidia, the holder already stopped). A shared claim is refused only
 // when an EXCLUSIVE claim already holds the token.
-func (a *ResourceArbiter) AcquireShared(claimant string, claimantNode DeploymentNode, transient bool) (*Lease, error) {
+func (a *ResourceArbiter) AcquireShared(claimant string, claimantNode BundleNode, transient bool) (*Lease, error) {
 	tokens := dedupeNonEmpty(claimantNode.RequiredShared())
 	if len(tokens) == 0 {
 		return &Lease{}, nil
@@ -629,10 +638,7 @@ func (a *ResourceArbiter) ReleaseClaimant(claimant string, success bool) error {
 	// Apply the teardown side-effects (restore freed holders, carry the rest onto
 	// a survivor, recompute each touched token's driver mode) — shared with
 	// reconcileStranded so an owner release and a crashed-owner GC behave identically (R3).
-	ok, err := a.releaseLeaseEffects(lease, remaining, success)
-	if err != nil {
-		return err
-	}
+	ok := a.releaseLeaseEffects(lease, remaining, success)
 	if !ok {
 		// Partial restore → keep the lease untouched so a later reconcile /
 		// `charly preempt restore` retries; mode/ledger left unmutated. (on-success
@@ -654,7 +660,7 @@ func (a *ResourceArbiter) ReleaseClaimant(claimant string, success bool) error {
 // ReleaseClaimant (owner/explicit release) and reconcileStranded (crashed-owner
 // GC) so both honor identical restore + mode semantics (R3) — in particular a
 // crashed shared-GPU bed flips the card back instead of leaving it nvidia.
-func (a *ResourceArbiter) releaseLeaseEffects(lease preemptLease, remaining []preemptLease, success bool) (bool, error) {
+func (a *ResourceArbiter) releaseLeaseEffects(lease preemptLease, remaining []preemptLease, success bool) bool {
 	var toRestore, carry []preemptedHolder
 	for _, ph := range lease.Preempted {
 		if !success && ph.Restore == PreemptRestoreSuccess {
@@ -670,7 +676,7 @@ func (a *ResourceArbiter) releaseLeaseEffects(lease preemptLease, remaining []pr
 		}
 	}
 	if !a.restoreHolders(toRestore) {
-		return false, nil
+		return false
 	}
 	if len(carry) > 0 {
 		attachPreemptedToSurvivor(remaining, carry)
@@ -681,7 +687,7 @@ func (a *ResourceArbiter) releaseLeaseEffects(lease preemptLease, remaining []pr
 			fmt.Fprintf(os.Stderr, "preempt: could not set %q to %s mode after releasing %q: %v\n", tok, mode, lease.Claimant, err)
 		}
 	}
-	return true, nil
+	return true
 }
 
 // reconcileStranded restores holders for any lease whose OWNER is gone (a crashed
@@ -706,10 +712,7 @@ func (a *ResourceArbiter) reconcileStranded() error {
 		remaining := make([]preemptLease, 0, len(ledger.Leases)-1)
 		remaining = append(remaining, ledger.Leases[:i]...)
 		remaining = append(remaining, ledger.Leases[i+1:]...)
-		ok, rerr := a.releaseLeaseEffects(lz, remaining, true)
-		if rerr != nil {
-			return rerr
-		}
+		ok := a.releaseLeaseEffects(lz, remaining, true)
 		if !ok {
 			i++ // partial restore → retain, retry on a later reconcile
 			continue
@@ -869,18 +872,18 @@ func (a *ResourceArbiter) Status() (*preemptLedger, []string, error) {
 // properties (above all `preemptible:`, a PER-HOST decision about whether THIS
 // host's VM may be stopped to free an exclusive resource) that must override
 // the committed profile, never be overwritten by it. The merge is per-field
-// (MergeDeploymentNode), so a per-host `preemptible` AUGMENTS the committed node
+// (MergeBundleNode), so a per-host `preemptible` AUGMENTS the committed node
 // (keeping its target/vm/…) rather than the two clobbering each other. (The
 // prior order let the project node wholesale-overwrite the per-host overlay, so
 // a per-host preemptible silently never took effect for the arbiter.)
-func gatherDeployNodes() map[string]DeploymentNode {
-	out := map[string]DeploymentNode{}
+func gatherDeployNodes() map[string]BundleNode {
+	out := map[string]BundleNode{}
 	if uf, ok, err := LoadUnified("."); err == nil && ok && uf != nil {
-		maps.Copy(out, uf.Deploy)
+		maps.Copy(out, uf.Bundle)
 	}
 	if dc := loadDeployConfigForRead("charly preempt"); dc != nil {
-		for name, node := range dc.Deploy {
-			out[name] = MergeDeploymentNode(out[name], node)
+		for name, node := range dc.Bundle {
+			out[name] = MergeBundleNode(out[name], node)
 		}
 	}
 	return out
@@ -888,8 +891,8 @@ func gatherDeployNodes() map[string]DeploymentNode {
 
 // gatherPreemptibleHolders is gatherDeployNodes filtered to the preemptible
 // holders (the candidate set the arbiter may stop).
-func gatherPreemptibleHolders() map[string]DeploymentNode {
-	out := map[string]DeploymentNode{}
+func gatherPreemptibleHolders() map[string]BundleNode {
+	out := map[string]BundleNode{}
 	for name, node := range gatherDeployNodes() {
 		if node.IsPreemptible() {
 			out[name] = node
@@ -903,16 +906,16 @@ func gatherPreemptibleHolders() map[string]DeploymentNode {
 // standalone `charly vm create/stop/destroy <entity>` should acquire/release an
 // exclusive lease. Returns the deploy key (claimant name) + node; ok=false
 // when no such node exists (then VM lifecycle does not touch the arbiter).
-func lookupVMClaimant(vmEntity string) (string, DeploymentNode, bool) {
+func lookupVMClaimant(vmEntity string) (string, BundleNode, bool) {
 	for name, node := range gatherDeployNodes() {
 		if node.Target == "vm" && node.Vm == vmEntity && len(node.RequiredExclusive()) > 0 {
 			return name, node, true
 		}
 	}
-	return "", DeploymentNode{}, false
+	return "", BundleNode{}, false
 }
 
-func holderAddrFor(name string, node DeploymentNode) holderAddr {
+func holderAddrFor(name string, node BundleNode) holderAddr {
 	base, instance := parseDeployKey(name)
 	target := node.Target
 	if target == "" {
@@ -1034,7 +1037,7 @@ func intersect(a, b []string) []string {
 	return out
 }
 
-func sortedHolderKeys(m map[string]DeploymentNode) []string {
+func sortedHolderKeys(m map[string]BundleNode) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)

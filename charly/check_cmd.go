@@ -48,8 +48,9 @@ func (e *CheckFailedError) Error() string {
 //   - `charly check run <name>` — overloaded by the resolved kind: a
 //     kind:check bed runs the full R10 sequence (build → check box →
 //     deploy → check live → fresh update → tear down); a kind:score
-//     drives an AI through iteration cycles. `--all-beds` runs every
-//     kind:check bed. (Replaces the retired `charly check kind <subkind>`,
+//     drives an AI through iteration cycles. ONE bed per invocation —
+//     run a whole roster concurrently via the /verify-beds workflow
+//     (one agent per bed). (Replaces the retired `charly check kind <subkind>`,
 //     whose hardcoded per-kind bed table moved into check.yml as
 //     kind:check entities.)
 //
@@ -117,8 +118,8 @@ func (c *CheckLiveCmd) Run() error {
 	// through SSH instead of podman exec. VM deploys don't have an OCI image
 	// to pull labels from, so tests come exclusively from the charly.yml
 	// overlay. This keeps the same declarative `tests:` authoring surface
-	// working for `charly deploy add vm:<name>` flows, and also works for bare VMs
-	// created via `charly vm create` before `charly deploy add` has been run.
+	// working for `charly bundle add vm:<name>` flows, and also works for bare VMs
+	// created via `charly vm create` before `charly bundle add` has been run.
 	if c.isVmTarget() {
 		return c.runVm()
 	}
@@ -126,9 +127,18 @@ func (c *CheckLiveCmd) Run() error {
 	// Local dispatch: a `target: local` deploy is a host filesystem apply, not
 	// a container, so its deploy-scope probes run on the host (or over SSH for
 	// host: <remote>) via a ShellExecutor/SSHExecutor — the SAME target-dispatch
-	// `charly deploy add` uses — instead of the podman-exec container path below.
+	// `charly bundle add` uses — instead of the podman-exec container path below.
 	if c.isLocalTarget() {
 		return c.runLocalCheck()
+	}
+
+	// Group dispatch: a GROUP check bed (no workload cross-ref + sibling
+	// Members — the §3 group+siblings cross-deployment shape) has no root
+	// container. Its flattened, venue-stamped plan dispatches each step to its
+	// member, so it runs through runGroupCheck instead of the container path
+	// below (which would fail at resolveContainer / ExtractMetadata).
+	if c.isGroupTarget() {
+		return c.runGroupCheck()
 	}
 
 	engine, containerName, err := resolveContainer(c.Box, c.Instance)
@@ -148,17 +158,17 @@ func (c *CheckLiveCmd) Run() error {
 	// this lookup always finds a non-empty value.
 	dir, _ := os.Getwd()
 	var localPlan []Step
-	var deployOverlay *DeploymentNode
+	var deployOverlay *BundleNode
 	var projectCfg *Config
 	if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
 		projectCfg = uf.ProjectConfig()
 	}
 	dc := loadDeployConfigForRead("charly check live")
 	if dc != nil {
-		if entry, ok := dc.Deploy[deployKey(c.Box, c.Instance)]; ok {
+		if entry, ok := dc.Bundle[deployKey(c.Box, c.Instance)]; ok {
 			localPlan = entry.Plan
 			deployOverlay = &entry
-		} else if entry, ok := dc.Deploy[c.Box]; ok {
+		} else if entry, ok := dc.Bundle[c.Box]; ok {
 			localPlan = entry.Plan
 			deployOverlay = &entry
 		}
@@ -198,12 +208,12 @@ func (c *CheckLiveCmd) Run() error {
 	runner.VerifyOnly = true // charly check live: idempotent check:/agent-check: only
 	attachCheckRunnerContext(runner, c.Box, c.Instance, meta.Distro, dir, projectCfg)
 	// Cross-deployment probing (a step with `on: <driver>` reaching a SEPARATE
-	// subject via ${PEER_*}): wire the live target resolver + peer vars — the
+	// subject via ${HOST:<member>}): wire the live target resolver + peer vars — the
 	// ONE entry point every live path shares (R3).
 	runner.TargetResolver = liveTargetResolver(c.Instance)
 	for _, sec := range [][]LabeledDescription{set.Candy, set.Box, set.Deploy} {
 		for _, ld := range sec {
-			applyPeerVarsSteps(runner, ld.Plan, c.Instance)
+			applyHostVarsSteps(runner, ld.Plan, c.Instance)
 		}
 	}
 
@@ -238,8 +248,8 @@ func (c *CheckLiveCmd) isVmTarget() bool {
 }
 
 // resolveNestedNode walks a dotted path through the Nested tree rooted at
-// the top-level deployment, returning the leaf DeploymentNode.
-func resolveNestedNode(roots map[string]DeploymentNode, path string) *DeploymentNode {
+// the top-level deployment, returning the leaf BundleNode.
+func resolveNestedNode(roots map[string]BundleNode, path string) *BundleNode {
 	parts := strings.Split(path, ".")
 	if len(parts) == 0 {
 		return nil
@@ -250,10 +260,10 @@ func resolveNestedNode(roots map[string]DeploymentNode, path string) *Deployment
 	}
 	current := &entry
 	for _, p := range parts[1:] {
-		if current.Nested == nil {
+		if current.Children == nil {
 			return nil
 		}
-		next, ok := current.Nested[p]
+		next, ok := current.Children[p]
 		if !ok || next == nil {
 			return nil
 		}
@@ -268,7 +278,7 @@ func resolveNestedNode(roots map[string]DeploymentNode, path string) *Deployment
 //  1. Start from VmSpec defaults (resolveVmSshUser / resolveVmSshPort / the
 //     conventional key path under ~/.local/share/charly/vm/charly-<name>/).
 //  2. Overlay any VmState-materialized fields from charly.yml (user, port,
-//     key path) so VMs whose candies have been applied via `charly deploy add vm:`
+//     key path) so VMs whose candies have been applied via `charly bundle add vm:`
 //     honor the exact state the deploy wrote.
 //
 // VMs have no OCI image labels, so no candy/box test section exists —
@@ -371,7 +381,7 @@ func (c *CheckLiveCmd) runVm() error {
 		// against (the check-cachyos-gpu-vm false-green that motivated this var).
 		"VM_HOSTDEV_COUNT": strconv.Itoa(vmHostdevCount(spec)),
 		// DEPLOY_NAME — the sanitized VM deploy name (vm:<vmName> -> vm-<vmName>),
-		// the SAME identifier `charly deploy add vm:<vmName>` feeds to K3sPostProvision
+		// the SAME identifier `charly bundle add vm:<vmName>` feeds to K3sPostProvision
 		// for the kubeconfig context + ClusterProfile. Lets a candy's deploy-scope
 		// k8s checks address their own cluster generically via cluster:
 		// "${DEPLOY_NAME}" instead of hard-coding the bed's cluster name.
@@ -427,15 +437,15 @@ func (c *CheckLiveCmd) runVm() error {
 	runner.Box = c.Box
 	runner.Instance = c.Instance
 	// Cross-deployment support for a VM SUBJECT (the `on:` driver dispatch +
-	// ${PEER_HOST}/${PEER_ENDPOINT} resolution) — the SAME wiring the pod
+	// ${HOST}/${HOST} resolution) — the SAME wiring the pod
 	// (CheckLiveCmd.Run) and local (runLocalCheck) paths already do (R3). Without
 	// it, a VM bed whose check drives a peer (e.g. check-cross-vm-http: a local
-	// host-driver curls the guest via ${PEER_ENDPOINT}'s ssh -L forward) leaves
-	// ${PEER_ENDPOINT} unresolved → the check FAILS "peer unreachable". ClosePeers
+	// host-driver curls the guest via ${HOST}'s ssh -L forward) leaves
+	// ${HOST} unresolved → the check FAILS "peer unreachable". CloseHosts
 	// tears down any ssh -L forwards at run end.
 	runner.TargetResolver = liveTargetResolver(c.Instance)
-	applyPeerVarsSteps(runner, plan, c.Instance)
-	defer runner.ClosePeers()
+	applyHostVarsSteps(runner, plan, c.Instance)
+	defer runner.CloseHosts()
 	results := RunPlan(context.Background(), runner, set, nil, false)
 
 	fmt.Fprintf(os.Stderr, "VM: charly-%s (ssh %s@%s:%d)\n", c.Box, user, host, port)
@@ -449,7 +459,7 @@ func (c *CheckLiveCmd) runVm() error {
 // resolveVmTarget resolves the VM check request (c.Box) to its kind:vm entity
 // name, an optional nested-leaf node (for a dotted "parent.child" path), and the
 // VmSpec.
-func (c *CheckLiveCmd) resolveVmTarget(uf *UnifiedFile) (vmName string, nestedLeaf *DeploymentNode, spec *VmSpec) {
+func (c *CheckLiveCmd) resolveVmTarget(uf *UnifiedFile) (vmName string, nestedLeaf *BundleNode, spec *VmSpec) {
 	// Schema v4: c.Box may be
 	//   (a) a kind:vm entity name directly (e.g. "arch"),
 	//   (b) a kind:deployment name with target:vm (e.g. "arch-vm") whose
@@ -458,16 +468,16 @@ func (c *CheckLiveCmd) resolveVmTarget(uf *UnifiedFile) (vmName string, nestedLe
 	//       deployment and `child` is a nested node whose tests run in
 	//       the parent's SSH substrate.
 	vmName = c.Box
-	if uf.Deploy != nil {
-		if entry, ok := uf.Deploy[c.Box]; ok && entry.Target == "vm" && entry.Vm != "" {
+	if uf.Bundle != nil {
+		if entry, ok := uf.Bundle[c.Box]; ok && entry.Target == "vm" && entry.Vm != "" {
 			vmName = entry.Vm
 		} else if idx := strings.Index(c.Box, "."); idx > 0 {
 			root := c.Box[:idx]
-			if parent, present := uf.Deploy[root]; present && parent.Target == "vm" {
+			if parent, present := uf.Bundle[root]; present && parent.Target == "vm" {
 				if parent.Vm != "" {
 					vmName = parent.Vm
 				}
-				nestedLeaf = resolveNestedNode(uf.Deploy, c.Box)
+				nestedLeaf = resolveNestedNode(uf.Bundle, c.Box)
 			}
 		}
 	}
@@ -480,13 +490,13 @@ func (c *CheckLiveCmd) resolveVmTarget(uf *UnifiedFile) (vmName string, nestedLe
 // loadVmCheckPlans aggregates the VM deployment's check plan from the project
 // and per-machine deploy sources plus add_candy deploy-scope steps, returning
 // the merged plan and the SSH user/port (possibly overridden by local VmState).
-func (c *CheckLiveCmd) loadVmCheckPlans(uf *UnifiedFile, dir, vmName string, nestedLeaf *DeploymentNode, user string, port int) (plan []Step, outUser string, outPort int) {
+func (c *CheckLiveCmd) loadVmCheckPlans(uf *UnifiedFile, dir, vmName string, nestedLeaf *BundleNode, user string, port int) (plan []Step, outUser string, outPort int) {
 	outUser, outPort = user, port
 	// Two deploy sources for VMs:
 	//   - project-level: charly.yml / charly.yml `deployments.images["vm:<name>"]`
 	//     → holds the authored `tests:` list (part of the repo).
 	//   - per-machine:   ~/.config/charly/charly.yml `images["vm:<name>"]`
-	//     → holds VmState written by `charly deploy add vm:<name>` and any local
+	//     → holds VmState written by `charly bundle add vm:<name>` and any local
 	//       overrides/additions.
 	//
 	// Schema v3: also accept plain-identifier deployment entries whose
@@ -495,7 +505,7 @@ func (c *CheckLiveCmd) loadVmCheckPlans(uf *UnifiedFile, dir, vmName string, nes
 	// `arch-vm` that don't carry the legacy `vm:` prefix in the key.
 	// Merge by id (local replaces project); same rules as MergeDeployDescriptions.
 	// Resolve the VM's deploy entry via THE shared findVmDeployNode (deploy.go)
-	// — the same lookup `charly deploy add` uses — by deploy NAME (c.Box) first,
+	// — the same lookup `charly bundle add` uses — by deploy NAME (c.Box) first,
 	// then the vm entity (vmName). Keying by name first means a bed whose key
 	// differs from its vm entity (check-k3s-vm -> vm: k3s-vm) resolves to its
 	// own entry rather than being mis-matched via the vm entity name.
@@ -506,14 +516,14 @@ func (c *CheckLiveCmd) loadVmCheckPlans(uf *UnifiedFile, dir, vmName string, nes
 	if nestedLeaf != nil {
 		projectPlan = nestedLeaf.Plan
 		addCandies = nestedLeaf.AddCandy
-	} else if pc := uf.ProjectDeployConfig(); pc != nil {
-		if entry, ok := findVmDeployNode(pc.Deploy, c.Box, vmName); ok {
+	} else if pc := uf.ProjectBundleConfig(); pc != nil {
+		if entry, ok := findVmDeployNode(pc.Bundle, c.Box, vmName); ok {
 			projectPlan = entry.Plan
 			addCandies = entry.AddCandy
 		}
 	}
 	if dc := loadDeployConfigForRead("charly check vm"); dc != nil {
-		if entry, ok := findVmDeployNode(dc.Deploy, c.Box, vmName); ok {
+		if entry, ok := findVmDeployNode(dc.Bundle, c.Box, vmName); ok {
 			localPlan = entry.Plan
 			if entry.VmState != nil {
 				if entry.VmState.SshUser != "" {
@@ -670,16 +680,16 @@ func (c *CheckLiveCmd) runLocalCheck() error {
 	// Resolve the target node (leaf for a dotted path; the entry otherwise)
 	// and the root-segment node (whose host: selects the chain's root venue).
 	dotted := strings.Contains(c.Box, ".")
-	var node, rootNode *DeploymentNode
-	if uf.Deploy != nil {
+	var node, rootNode *BundleNode
+	if uf.Bundle != nil {
 		if dotted {
-			node = resolveNestedNode(uf.Deploy, c.Box)
+			node = resolveNestedNode(uf.Bundle, c.Box)
 			root, _, _ := strings.Cut(c.Box, ".")
-			if entry, ok := uf.Deploy[root]; ok {
+			if entry, ok := uf.Bundle[root]; ok {
 				rn := entry
 				rootNode = &rn
 			}
-		} else if entry, ok := uf.Deploy[c.Box]; ok {
+		} else if entry, ok := uf.Bundle[c.Box]; ok {
 			n := entry
 			node = &n
 			rootNode = &n
@@ -723,10 +733,10 @@ func (c *CheckLiveCmd) runLocalCheck() error {
 // kind:local template `check:` (base) merged with the deploy entry `check:`
 // (extends/overrides) and the per-host charly.yml overlay — and runs them on
 // `exec`. Shared by `charly check live <local>` (runLocalCheck) and
-// `charly deploy add <local> --verify` (LocalDeployTarget) so the two surfaces
+// `charly bundle add <local> --verify` (LocalDeployTarget) so the two surfaces
 // source + run probes identically (R3). Host-context vars only (no
 // HOST_PORT:<N> / CONTAINER_IP). Returns the failure count.
-func checkLocalDeployScope(dir string, node *DeploymentNode, image, instance, _ string, _ []string, exec DeployExecutor, format string) (int, error) { //nolint:unparam // error return kept for symmetry with sibling deploy-scope checks
+func checkLocalDeployScope(dir string, node *BundleNode, image, instance, _ string, _ []string, exec DeployExecutor, format string) (int, error) { //nolint:unparam // error return kept for symmetry with sibling deploy-scope checks
 	var plan []Step
 	if node != nil && strings.TrimSpace(node.Local) != "" {
 		if spec := findLocalSpec(dir, strings.TrimSpace(node.Local)); spec != nil {
@@ -737,9 +747,9 @@ func checkLocalDeployScope(dir string, node *DeploymentNode, image, instance, _ 
 		plan = append(plan, node.Plan...)
 	}
 	if dc := loadDeployConfigForRead("charly check live"); dc != nil {
-		if entry, ok := dc.Deploy[deployKey(image, instance)]; ok {
+		if entry, ok := dc.Bundle[deployKey(image, instance)]; ok {
 			plan = append(plan, entry.Plan...)
-		} else if entry, ok := dc.Deploy[image]; ok {
+		} else if entry, ok := dc.Bundle[image]; ok {
 			plan = append(plan, entry.Plan...)
 		}
 	}
@@ -765,12 +775,78 @@ func checkLocalDeployScope(dir string, node *DeploymentNode, image, instance, _ 
 	runner.VerifyOnly = true
 	runner.Box = image
 	runner.Instance = instance
-	// Generic cross-deployment support (on: driver + ${PEER_*}) — a local
+	// Generic cross-deployment support (on: driver + ${HOST:<member>}) — a local
 	// SUBJECT bed can drive a peer too (R3).
 	runner.TargetResolver = liveTargetResolver(instance)
-	applyPeerVarsSteps(runner, plan, instance)
+	applyHostVarsSteps(runner, plan, instance)
 	results := RunPlan(context.Background(), runner, set, nil, false)
 	return reportSteps(os.Stdout, results, format), nil
+}
+
+// isGroupTarget reports whether c.Box is a GROUP check bed — a bundle with no
+// workload cross-ref (Target == "") that carries sibling Members (the §3
+// group+siblings cross-deployment shape: subject + driver as peers on the shared
+// charly net). Such a bed has no root container; flattenBundleVenues stamped each
+// plan step with its member venue. Shares the LoadUnified lookup style with
+// isVmTarget/isLocalTarget (R3).
+func (c *CheckLiveCmd) isGroupTarget() bool {
+	dir, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	uf, ok, err := LoadUnified(dir)
+	if err != nil || !ok || uf == nil {
+		return false
+	}
+	entry, present := uf.Bundle[c.Box]
+	return present && entry.IsGroup()
+}
+
+// runGroupCheck executes a GROUP check bed's flattened, venue-stamped plan.
+// A group bed has no root container (no box/vm/local cross-ref) — its members
+// are sibling subdeployments (subject + driver) brought up on the shared charly
+// net, and every plan step carries its member venue (flattenBundleVenues). So
+// there is nothing to exec into at the root: the runner's base executor is a
+// placeholder and EVERY step dispatches to its member via the venue swap
+// (liveTargetResolver), while cross-member ${HOST:<member>} addresses resolve via
+// applyHostVarsSteps. Mirrors runLocalCheck's plan-run shape (R3).
+func (c *CheckLiveCmd) runGroupCheck() error {
+	dir, _ := os.Getwd()
+	uf, _, err := LoadUnified(dir)
+	if err != nil {
+		return err
+	}
+	entry, ok := uf.Bundle[c.Box]
+	if !ok {
+		return fmt.Errorf("check live: group bed %q not found", c.Box)
+	}
+	plan := entry.Plan
+	if len(plan) == 0 {
+		fmt.Fprintln(os.Stderr, "No plan steps to run.")
+		return nil
+	}
+	fmt.Fprintf(os.Stderr, "Group bed: %s [%d sibling member(s); venue-dispatched, no root container]\n", c.Box, len(entry.Members))
+
+	resolver := &CheckVarResolver{Env: map[string]string{
+		"IMAGE":    c.Box,
+		"INSTANCE": c.Instance,
+	}, HasRuntime: true}
+	runner := NewRunner(ShellExecutor{}, resolver, RunModeLive)
+	runner.Box = c.Box
+	runner.Instance = c.Instance
+	// Every step venue-dispatches to its member (its venue != the group root
+	// name), so the placeholder base executor above is never used.
+	// liveTargetResolver performs the per-step swap; ${HOST:<member>} addresses
+	// resolve through applyHostVarsSteps.
+	runner.TargetResolver = liveTargetResolver(c.Instance)
+	applyHostVarsSteps(runner, plan, c.Instance)
+	defer runner.CloseHosts()
+	set := &LabelDescriptionSet{Deploy: []LabeledDescription{{Origin: "group:" + c.Box, Plan: plan}}}
+	results := RunPlan(context.Background(), runner, set, nil, false)
+	if fails := reportSteps(os.Stdout, results, c.Format); fails > 0 {
+		return &CheckFailedError{Failed: fails}
+	}
+	return nil
 }
 
 // CheckBoxCmd runs PURE-BOX check against a disposable container.

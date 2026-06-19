@@ -234,26 +234,38 @@ func TestMigrateLocalDeploy_FullExample(t *testing.T) {
 		t.Errorf("expected exactly 1 backup file, got %d", len(matches))
 	}
 
-	// Rewritten file must now LOAD via LoadDeployConfig without error.
+	// Rewritten file must now LOAD via LoadBundleConfig without error.
 	// Use a per-test XDG_CONFIG_HOME so we don't read the real user file.
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "xdg"))
 	if err := os.MkdirAll(filepath.Join(dir, "xdg", "charly"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// Simulate the rest of the migrate chain that runs after MigrateLocalDeploy:
-	// calver-schema stamps the file to HEAD and host-charly-yml renames it to
-	// charly.yml — both required before LoadDeployConfig (the unified path) accepts it.
+	// Simulate the rest of the migrate chain that runs after MigrateLocalDeploy
+	// before the per-host file LOADS through the unified node-form loader:
+	//   - field-singular: the v4 plural `volumes:` (asserted above) → singular
+	//     `volume:` (a distinct backup suffix avoids colliding with the
+	//     MigrateLocalDeploy backup minted in the same wall-clock second; the
+	//     discover list keys on the pre-rename `deploy.yml` filename);
+	//   - calver-schema + host-charly-yml: stamp HEAD + rename deploy.yml → charly.yml;
+	//   - unified-node: the kind-keyed `deploy:` map → name-first node-form.
+	if _, err := MigrateFieldSingular(MigrateFieldSingularOpts{Dir: dir, BackupSuffix: ".bak.fieldsingular"}); err != nil {
+		t.Fatalf("field-singular: %v", err)
+	}
 	migrated, _ := os.ReadFile(path)
 	migrated = []byte(strings.Replace(string(migrated), "version: 4", "version: "+LatestSchemaVersion().String(), 1))
-	if err := os.WriteFile(filepath.Join(dir, "xdg", "charly", "charly.yml"), migrated, 0o600); err != nil {
+	hostDir := filepath.Join(dir, "xdg", "charly")
+	if err := os.WriteFile(filepath.Join(hostDir, "charly.yml"), migrated, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	dc, err := LoadDeployConfig()
-	if err != nil {
-		t.Fatalf("LoadDeployConfig on migrated file: %v", err)
+	if _, err := MigrateUnifiedNode(hostDir, false); err != nil {
+		t.Fatalf("unified-node: %v", err)
 	}
-	if dc == nil || dc.Deploy["immich"].Target != "pod" {
-		t.Errorf("LoadDeployConfig returned wrong shape: %+v", dc)
+	dc, err := LoadBundleConfig()
+	if err != nil {
+		t.Fatalf("LoadBundleConfig on migrated file: %v", err)
+	}
+	if dc == nil || dc.Bundle["immich"].Target != "pod" {
+		t.Errorf("LoadBundleConfig returned wrong shape: %+v", dc)
 	}
 }
 
@@ -318,10 +330,10 @@ func TestMigrateLocalDeploy_DryRun(t *testing.T) {
 	}
 }
 
-// TestLoadDeployConfig_LegacySchemaErrors exercises the load-time guard:
+// TestLoadBundleConfig_LegacySchemaErrors exercises the load-time guard:
 // a deploy.yml with `images:` at top level errors with a remediation hint
 // pointing at `charly migrate`.
-func TestLoadDeployConfig_LegacySchemaErrors(t *testing.T) {
+func TestLoadBundleConfig_LegacySchemaErrors(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "xdg")
 	if err := os.MkdirAll(filepath.Join(configDir, "charly"), 0o700); err != nil {
@@ -334,9 +346,9 @@ func TestLoadDeployConfig_LegacySchemaErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := LoadDeployConfig()
+	_, err := LoadBundleConfig()
 	if err == nil {
-		t.Fatal("LoadDeployConfig accepted legacy schema; want error")
+		t.Fatal("LoadBundleConfig accepted legacy schema; want error")
 	}
 	msg := err.Error()
 	if !strings.Contains(msg, "legacy `deploy.yml` filename") {

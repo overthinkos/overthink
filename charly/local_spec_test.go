@@ -12,13 +12,16 @@ import (
 // expected fields.
 func TestLoadUnified_LocalMap_Inline(t *testing.T) {
 	dir := t.TempDir()
-	src := `version: 2026.165.1048
-local:
-  dev-workstation:
-    candy: [ripgrep, direnv]
-    install_opts: {with_services: false, allow_repo_changes: true}
-    env: [EDITOR=vim]
+	src := `version: 2026.169.0004
+dev-workstation:
+  local:
     description: Dev workstation
+  dev-workstation-candy:
+    candy: [ripgrep, direnv]
+  dev-workstation-install_opts:
+    install_opts: {with_services: false, allow_repo_changes: true}
+  dev-workstation-env:
+    env: [EDITOR=vim]
 `
 	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(src), 0o644); err != nil {
 		t.Fatalf("write charly.yml: %v", err)
@@ -52,7 +55,7 @@ local:
 // on a deployment that still uses the legacy target:host spelling.
 func TestLoadUnified_RejectLegacyTargetHost(t *testing.T) {
 	dir := t.TempDir()
-	src := `version: 2026.165.1048
+	src := `version: 2026.169.0004
 deploy:
   my-laptop:
     target: host

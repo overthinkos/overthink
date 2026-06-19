@@ -26,9 +26,8 @@ var namespaceAliasRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 // android/deploy + any build-vocabulary overrides). Boxes and candies are
 // DISCOVERED per name as box/<name>/charly.yml and candy/<name>/charly.yml. The
 // default distro/builder/init/resource build vocabulary AND sidecar templates
-// are embedded in the binary (charly/charly.cue, //go:embed — the CUE-source
-// front-end compiles it to data, parsed by the SAME loader as any project
-// charly.yml); a project
+// are embedded in the binary (charly/charly_defaults.yml, //go:embed — unified
+// node-form, parsed by the SAME loader as any project charly.yml); a project
 // declares distro:/builder:/init:/resource:/sidecar: only to extend or override
 // it. Legacy per-kind files (box.yml/vm.yml/...) still LOAD as flat `import:`
 // items, never the canonical layout.
@@ -90,11 +89,11 @@ type UnifiedFile struct {
 	Candy map[string]*InlineCandy `yaml:"candy,omitempty" json:"candy,omitempty"`
 	VM    map[string]*VmSpec      `yaml:"vm,omitempty" json:"vm,omitempty"`
 	// Field-singular cutover: legacy `Deploys *DeploymentsSection
-	// yaml:"deployments"` deleted. The flat `Deploy yaml:"deploy"` map is
+	// yaml:"deployments"` deleted. The flat `Bundle yaml:"deploy"` map is
 	// the canonical singular surface; the wrapper's `Provides` migrates
 	// to UnifiedFile root (next field).
-	Deploy   map[string]DeploymentNode `yaml:"deploy,omitempty" json:"deploy,omitempty"`
-	Provides *ProvidesConfig           `yaml:"provides,omitempty" json:"provides,omitempty"`
+	Bundle   map[string]BundleNode `yaml:"deploy,omitempty" json:"deploy,omitempty"`
+	Provides *ProvidesConfig       `yaml:"provides,omitempty" json:"provides,omitempty"`
 
 	// Schema v4: first-class target template maps (singular keys).
 	Pod   map[string]*PodSpec   `yaml:"pod,omitempty" json:"pod,omitempty"`
@@ -111,13 +110,10 @@ type UnifiedFile struct {
 	// See agent_config.go.
 	Agent map[string]*AgentConfig `yaml:"agent,omitempty" json:"agent,omitempty"`
 
-	// Check (kind:check) — disposable R10 test beds. A deploy-shaped map
-	// (bed-name → DeploymentNode) authored in check.yml. foldCheckBeds()
-	// copies each entry into the
-	// Deploy map (CheckBed=true) at load time so every deploy verb resolves
-	// a bed by name through the SAME path as any deploy; `charly check run <bed>`
-	// drives the full R10 sequence. CheckBeds() enumerates them.
-	Check map[string]DeploymentNode `yaml:"check,omitempty" json:"check,omitempty"`
+	// A check bed is a `disposable: true` bundle in the Bundle map (the separate
+	// kind:check block was removed in the node-form cutover); CheckBeds() derives
+	// the R10 bed set from those disposable bundles. `charly check run <bed>`
+	// drives the full R10 sequence.
 
 	// Calamares-aligned kinds (2026-05 cutover). `group:` ↔ Calamares
 	// netinstall package group; `target:` ↔ Calamares settings.conf
@@ -133,12 +129,12 @@ type UnifiedFile struct {
 	// name (matching requires_exclusive: / preemptible.holds:) → an optional
 	// hardware selector (e.g. gpu.vendor) that drives GPU auto-allocation at
 	// `charly vm create`. Build-vocab VALUE map; the binary-embedded default
-	// set lives in the embedded charly.cue (embed_defaults.go).
+	// set lives in the embedded charly_defaults.yml (embed_defaults.go).
 	Resource map[string]*ResourceDef `yaml:"resource,omitempty" json:"resource,omitempty"`
 
 	// Sidecar — the reusable sidecar-container template library (sidecar name
 	// → SidecarDef). The binary-embedded default set (e.g. `tailscale`) lives
-	// in the embedded charly.cue (embed_defaults.go) and is merged UNDER a
+	// in the embedded charly_defaults.yml (embed_defaults.go) and is merged UNDER a
 	// project's own entries by applyEmbeddedDefaults (project-wins). A deploy
 	// references a template by name under `deploy.<name>.sidecar:` and overrides
 	// per-instance. See /charly-automation:sidecar.
@@ -292,9 +288,9 @@ type InlineCandy struct {
 // root level. The type definition is kept (not deleted) because
 // migrate_unified.go still references it for legacy migration history.
 type DeploymentsSection struct {
-	Defaults *DeploymentNode           `yaml:"defaults,omitempty" json:"defaults,omitempty"`
-	Provides *ProvidesConfig           `yaml:"provides,omitempty" json:"provides,omitempty"`
-	Box      map[string]DeploymentNode `yaml:"box,omitempty" json:"box,omitempty"`
+	Defaults *BundleNode           `yaml:"defaults,omitempty" json:"defaults,omitempty"`
+	Provides *ProvidesConfig       `yaml:"provides,omitempty" json:"provides,omitempty"`
+	Box      map[string]BundleNode `yaml:"box,omitempty" json:"box,omitempty"`
 }
 
 // -----------------------------------------------------------------------------
@@ -379,10 +375,10 @@ type BoxDoc struct {
 	BoxConfig `yaml:",inline"`
 }
 
-// DeployDoc wraps a single DeploymentNode.
+// DeployDoc wraps a single BundleNode.
 type DeployDoc struct {
-	Name           string `yaml:"name" json:"name"`
-	DeploymentNode `yaml:",inline"`
+	Name       string `yaml:"name" json:"name"`
+	BundleNode `yaml:",inline"`
 }
 
 // BuilderDoc wraps a single BuilderDef.
@@ -445,7 +441,7 @@ var kindKeys = []string{
 // used a separate vms.yml + plural `vms:` root key; `charly migrate`
 // produces a v2 layout in one shot.
 // rejectLegacyLocalSurface refuses to load any project that still
-// carries kind:host, target:host, or DeploymentNode `host: <template>`
+// carries kind:host, target:host, or BundleNode `host: <template>`
 // references against templates that no longer exist (the new `host:`
 // field is destination-only). All three are fixed by
 // `charly migrate` in one pass.
@@ -492,7 +488,7 @@ func rejectLegacyDeploymentRefs(dir string) error {
 			// Case C: kind-keyed wrapper `kind: deployment` scalar.
 			if v := findMappingValue(root, "kind"); v != nil && v.Kind == yaml.ScalarNode && v.Value == "deployment" {
 				return fmt.Errorf(
-					"%s (doc %d): `kind: deployment` is retired (2026-05 kind-files cutover).\n  Renamed to `kind: deploy`. Run: charly migrate",
+					"%s (doc %d): `kind: deployment` is retired (2026-05 kind-files cutover).\n  Renamed to `bundle:`. Run: charly migrate",
 					path, docIdx)
 			}
 		}
@@ -552,7 +548,7 @@ var legacyTestVocabKeys = map[string]string{
 	"task":     "the imperative install list folded into plan: as run: steps",
 	"scenario": "scenario: folded into the flat plan: list",
 	"recipe":   "kind: recipe is deleted (composition is now an include: step)",
-	"score":    "kind: score is deleted (the AI loop is now a deploy iterate: block)",
+	"score":    "kind: score is deleted (the AI loop is now a `bundle` iterate: block)",
 	"example":  "scenario-outline example: rows are deleted (use count:)",
 	"setup":    "the setup: phase list is deleted (run: steps in plan: order)",
 	"teardown": "the teardown: phase list is deleted (run: steps in plan: order)",
@@ -635,8 +631,8 @@ func rejectLegacyLocalSurface(root string, merged *UnifiedFile) error {
 	if merged == nil {
 		return nil
 	}
-	var walk func(name string, node *DeploymentNode) error
-	walk = func(name string, node *DeploymentNode) error {
+	var walk func(name string, node *BundleNode) error
+	walk = func(name string, node *BundleNode) error {
 		if node == nil {
 			return nil
 		}
@@ -645,7 +641,7 @@ func rejectLegacyLocalSurface(root string, merged *UnifiedFile) error {
 				"%s: deployment %q uses legacy `target: host` — schema renamed to `target: local`. Run: charly migrate",
 				root, name)
 		}
-		for childName, child := range node.Nested {
+		for childName, child := range node.Children {
 			fullName := name + "." + childName
 			if err := walk(fullName, child); err != nil {
 				return err
@@ -653,15 +649,15 @@ func rejectLegacyLocalSurface(root string, merged *UnifiedFile) error {
 		}
 		return nil
 	}
-	if merged.Deploy != nil {
-		for name, node := range merged.Deploy {
+	if merged.Bundle != nil {
+		for name, node := range merged.Bundle {
 			n := node
 			if err := walk(name, &n); err != nil {
 				return err
 			}
 		}
 	}
-	for name, node := range merged.Deploy {
+	for name, node := range merged.Bundle {
 		n := node
 		if err := walk(name, &n); err != nil {
 			return err
@@ -687,8 +683,8 @@ func rejectLegacyMarimoMl(root string, merged *UnifiedFile) error {
 			"%s: box entry %q is retired (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa` (cross-kind name reuse). Run: charly migrate",
 			root, "marimo-ml")
 	}
-	var walk func(name string, node *DeploymentNode) error
-	walk = func(name string, node *DeploymentNode) error {
+	var walk func(name string, node *BundleNode) error
+	walk = func(name string, node *BundleNode) error {
 		if node == nil {
 			return nil
 		}
@@ -702,7 +698,7 @@ func rejectLegacyMarimoMl(root string, merged *UnifiedFile) error {
 				"%s: deployment %q references retired box %q (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa`. Run: charly migrate",
 				root, name, "marimo-ml")
 		}
-		for childName, child := range node.Nested {
+		for childName, child := range node.Children {
 			fullName := name + "." + childName
 			if err := walk(fullName, child); err != nil {
 				return err
@@ -710,7 +706,7 @@ func rejectLegacyMarimoMl(root string, merged *UnifiedFile) error {
 		}
 		return nil
 	}
-	for name, node := range merged.Deploy {
+	for name, node := range merged.Bundle {
 		n := node
 		if err := walk(name, &n); err != nil {
 			return err
@@ -744,6 +740,29 @@ func rejectLegacyBoxPort(root string, merged *UnifiedFile) error {
 	return nil
 }
 
+// gateSchemaVersion enforces the load-time schema-version contract: a config
+// NEWER than this binary supports → "update charly"; an OLDER/absent/non-CalVer
+// version → the `charly migrate` hint. Shared by the early pre-parse gate (root's
+// raw version) and the post-merge gate (merged version) so both speak identically.
+func gateSchemaVersion(root, version string) error {
+	fileVer, verOK := ParseCalVer(version)
+	switch {
+	case verOK && LatestSchemaVersion().Less(fileVer):
+		// Written for a NEWER schema than this binary understands; `charly migrate`
+		// only moves forward to THIS binary's HEAD, so the binary itself is behind.
+		return fmt.Errorf(
+			"%s: config schema %s is newer than this charly supports (max %s). Update charly (reinstall the latest opencharly package, or run 'task build:charly' from a fresh checkout)",
+			root, version, LatestSchemaVersion(),
+		)
+	case !verOK || fileVer.Less(LatestSchemaVersion()):
+		return fmt.Errorf(
+			"%s: schema %s is required (found %q). Run: charly migrate",
+			root, LatestSchemaVersion(), version,
+		)
+	}
+	return nil
+}
+
 func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	root := filepath.Join(dir, UnifiedFileName)
 	if !fileExists(root) {
@@ -751,7 +770,7 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	}
 	// 2026-05 kind-files cutover: hard-reject residual `deployment:` /
 	// `deployments:` / `kind: deployment` in any project YAML. These
-	// were renamed to `deploy:` / `kind: deploy`. The migration command
+	// were renamed to `bundle:`. The migration command
 	// rewrites them in-place.
 	if err := rejectLegacyDeploymentRefs(dir); err != nil {
 		return nil, true, err
@@ -775,6 +794,20 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 		if err := RejectLegacyPluralKeys(root, rootData); err != nil {
 			return nil, true, err
 		}
+		// EARLY schema-version gate: a non-HEAD root `version:` (a legacy config,
+		// e.g. `version: 4`) is rejected with the `charly migrate` hint BEFORE any
+		// shape parsing — so a legacy doc never reaches node-form CUE validation
+		// (which would surface a confusing type error instead of the migrate hint).
+		var vdoc yaml.Node
+		if yaml.Unmarshal(rootData, &vdoc) == nil {
+			ver := ""
+			if vn := mapValue(mappingRoot(&vdoc), "version"); vn != nil {
+				ver = vn.Value
+			}
+			if err := gateSchemaVersion(root, ver); err != nil {
+				return nil, true, err
+			}
+		}
 	}
 	merged := &UnifiedFile{}
 	visited := map[string]bool{}
@@ -792,24 +825,8 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 		return nil, true, err
 	}
 	normalizeV4Aliases(merged)
-	fileVer, verOK := ParseCalVer(merged.Version)
-	switch {
-	case verOK && LatestSchemaVersion().Less(fileVer):
-		// The config was written for a NEWER schema than this charly binary
-		// understands. `charly migrate` cannot help — migration only moves
-		// configs forward to THIS binary's HEAD, and the file is already
-		// past it. The binary itself is behind, so the only fix is to
-		// update charly. Hard-fail with that advice instead of letting a
-		// newer field shape silently mis-parse.
-		return nil, true, fmt.Errorf(
-			"%s: config schema %s is newer than this charly supports (max %s). Update charly (reinstall the latest opencharly package, or run 'task build:charly' from a fresh checkout)",
-			root, merged.Version, LatestSchemaVersion(),
-		)
-	case !verOK || fileVer.Less(LatestSchemaVersion()):
-		return nil, true, fmt.Errorf(
-			"%s: schema %s is required (found %q). Run: charly migrate",
-			root, LatestSchemaVersion(), merged.Version,
-		)
+	if err := gateSchemaVersion(root, merged.Version); err != nil {
+		return nil, true, err
 	}
 	// Reject any residual legacy local/host or status/info surface.
 	// `charly migrate` fixes all of these in one shot.
@@ -822,37 +839,41 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	if err := rejectLegacyBoxPort(root, merged); err != nil {
 		return nil, true, err
 	}
-	// Fold kind:check beds into the Deploy map (CheckBed=true) so every
-	// deploy verb resolves them by name through the same path as any
-	// deploy. Disjoint-name guard inside. Runs BEFORE validateDeploymentTree
-	// so folded beds get the same deploy validation (name shape, required
-	// box: on pod targets).
-	if err := foldCheckBeds(merged); err != nil {
+	// Stamp each plan step's execution VENUE from its bundle-tree position and
+	// hoist member/child steps into the root bundle's flat Plan. MUST run before
+	// foldMembers (which mutates the Bundle map by promoting members to
+	// top-level) and before validateCheckBeds/validateIterateBed (which count
+	// the root Plan's check: steps). After this, both runner entry points read
+	// the venue-stamped root Plan.
+	if err := flattenBundleVenues(merged); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
-	// Fold sibling peers (companion deployments) into the Deploy map as
+	// A check bed IS a `disposable: true` bundle in the Bundle map (the separate
+	// kind:check block was removed in the node-form cutover) — no folding needed;
+	// CheckBeds() derives the bed set from the disposable bundles directly.
+	// Fold sibling members (companion deployments) into the Bundle map as
 	// addressable top-level entries (inheriting the owner's disposability) so
-	// the SAME deploy verbs bring them up/down. Runs AFTER foldCheckBeds (so a
-	// bed's peers fold too) and BEFORE validateDeploymentTree (so folded peers
-	// get the same deploy validation).
-	if err := foldPeers(merged); err != nil {
+	// the SAME deploy verbs bring them up/down. Runs BEFORE validateDeploymentTree
+	// (so folded members get the same deploy validation). Agent-provisioned
+	// members are SKIPPED by foldMembers (the AI deploys them in-run).
+	if err := foldMembers(merged); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
 	// Auto-promote disposable on ephemeral entries + validate the ephemeral /
 	// vm-naming invariants. Consolidated here from the old per-host-only
-	// LoadDeployConfig (R3 — one path), so the project charly.yml's inline
+	// LoadBundleConfig (R3 — one path), so the project charly.yml's inline
 	// deploy: entries get the same promotion + checks. Runs after the folds so
 	// folded beds/peers are covered, before validateDeploymentTree.
 	if err := validateEphemeralUnified(merged); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
-	if err := validateDeploymentTree(merged.Deploy); err != nil {
+	if err := validateDeploymentTree(merged.Bundle); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
 	if err := validateCheckBeds(merged); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
-	if err := validatePeers(merged); err != nil {
+	if err := validateMembers(merged); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
 	if err := validatePreemptibleUnified(merged); err != nil {
@@ -878,14 +899,14 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 // deployments tree that can't be expressed in the YAML struct tags:
 //
 //   - Map keys at every level MUST NOT contain "." (dots are reserved
-//     for dotted-path CLI addressing like `charly deploy add a.b.c`).
+//     for dotted-path CLI addressing like `charly bundle add a.b.c`).
 //   - The reserved name `arch` is no longer valid — schema
 //     v2 renamed it to `arch`. This catches stale user configs that
 //     sneaked past the merge-vms migration.
 //
 // Errors include the offending path so the user sees exactly which
 // entry needs to be fixed.
-func validateDeploymentTree(deploy map[string]DeploymentNode) error {
+func validateDeploymentTree(deploy map[string]BundleNode) error {
 	if deploy == nil {
 		return nil
 	}
@@ -936,7 +957,7 @@ func validateDeploymentTree(deploy map[string]DeploymentNode) error {
 // affected deploy and injects the field, inferring the value from
 // the deploy key (`<base>` for `<base>/<instance>` keys; the key
 // itself otherwise).
-func validateDeployRequiresBox(deploy map[string]DeploymentNode) error {
+func validateDeployRequiresBox(deploy map[string]BundleNode) error {
 	for name, node := range deploy {
 		// An iterate: benchmark (the former kind:score) composes its scored
 		// subject via plan `include:` steps + the iterate.sandbox, NOT a single
@@ -945,11 +966,29 @@ func validateDeployRequiresBox(deploy map[string]DeploymentNode) error {
 		if node.Iterate != nil {
 			continue
 		}
+		// An agent-provisioned member carries NO box: by design — the AI builds
+		// its image at run time (the iterate-benchmark contract). Exempt it from
+		// the pod-target box requirement.
+		if node.AgentProvisioned {
+			continue
+		}
 		target := node.Target
-		if target != "" && target != "pod" {
+		// Only an explicit pod-target (a `pod` node, or a `bundle` that inferred pod
+		// from a box) is box-required. An EMPTY target is a group / per-host overlay
+		// entry (no workload), never a pod-leaf — in node-form a real pod always
+		// carries its box (the target is inferred FROM the box), so an empty target
+		// can only be a group, which needs no box.
+		if target != "pod" {
 			continue
 		}
 		if node.Box == "" {
+			// A bundle GROUP / venue (no own workload) carries members but no
+			// box of its own — its member nodes each declare their box and are
+			// validated as folded top-level entries. Only a LEAF pod-workload
+			// (no members) must declare box.
+			if len(node.Members) > 0 || len(node.Children) > 0 {
+				continue
+			}
 			return fmt.Errorf(
 				"deploy entry %q lacks required `box:` field (2026-05-12 schema cutover — pod-target deploys must declare `box:` explicitly so the check runner reads the operator's declared intent, not the running container's stale label).\n  Remediation: run `charly migrate` (one-shot, idempotent)",
 				name,
@@ -959,11 +998,11 @@ func validateDeployRequiresBox(deploy map[string]DeploymentNode) error {
 	return nil
 }
 
-func validateDeploymentChildren(path string, node *DeploymentNode) error {
-	if node == nil || len(node.Nested) == 0 {
+func validateDeploymentChildren(path string, node *BundleNode) error {
+	if node == nil || len(node.Children) == 0 {
 		return nil
 	}
-	for childName, child := range node.Nested {
+	for childName, child := range node.Children {
 		childPath := childName
 		if path != "" {
 			childPath = path + "." + childName
@@ -985,7 +1024,7 @@ func validateDeploymentName(name, parentPath string) error {
 	}
 	if strings.Contains(name, ".") {
 		return fmt.Errorf(
-			"deployment key %q contains '.' — the character is reserved for dotted-path addressing (charly deploy add a.b.c). Rename this entry in charly.yml",
+			"deployment key %q contains '.' — the character is reserved for dotted-path addressing (charly bundle add a.b.c). Rename this entry in charly.yml",
 			full,
 		)
 	}
@@ -1018,7 +1057,7 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 	// Parse + merge every document in the file via the SHARED routing core
 	// (mergeUnifiedDocs → classifyDoc → mergeUnified/mergeKindDoc). The SAME
 	// mergeUnifiedDocs parses the data compiled from the binary-embedded
-	// charly.cue (embeddedDefaults → compileCUEToYAML, embed_defaults.go), so the
+	// charly_defaults.yml (embeddedDefaults, embed_defaults.go), so the
 	// default config flows through EXACTLY the same code path as any project
 	// charly.yml. Imports are returned for resolution below.
 	importQueue, err := mergeUnifiedDocs(merged, data, abs, filepath.Dir(abs))
@@ -1070,7 +1109,7 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 			return fmt.Errorf("%s: %w", abs, err)
 		}
 		// Fill any distro/builder/init/resource vocabulary AND sidecar templates
-		// the project did NOT declare from the binary-embedded default charly.cue
+		// the project did NOT declare from the binary-embedded default charly_defaults.yml
 		// (project-wins; see applyEmbeddedDefaults). Runs for the root AND every
 		// namespace, so a project needs no build vocabulary of its own.
 		if err := applyEmbeddedDefaults(merged); err != nil {
@@ -1087,7 +1126,7 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 // paths. Returns the concatenated `import:` queue of every root-shape doc (the
 // caller resolves imports). This is the SINGLE document-interpretation path:
 // both loadUnifiedInto (an on-disk charly.yml) and embeddedDefaults (the data
-// compiled from the binary-embedded charly.cue) call it, so the embedded default
+// compiled from the binary-embedded charly_defaults.yml) call it, so the embedded default
 // is parsed EXACTLY like every other charly.yml.
 func mergeUnifiedDocs(merged *UnifiedFile, data []byte, srcLabel, srcDir string) (ImportList, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
@@ -1109,28 +1148,45 @@ func mergeUnifiedDocs(merged *UnifiedFile, data []byte, srcLabel, srcDir string)
 		// non-fatal warnings before the lenient decode below.
 		warnUnknownYAMLKeys(&node, shape, fmt.Sprintf("%s:doc%d", srcLabel, docIdx))
 		switch shape {
-		case docShapeRoot:
-			ufp, err := decodeRootDocViaCUE(&node, fmt.Sprintf("%s:doc%d", srcLabel, docIdx))
+		case docShapeNode:
+			label := fmt.Sprintf("%s:doc%d", srcLabel, docIdx)
+			// VALIDATE-BEFORE-EXECUTE: the whole node-form document against
+			// #NodeDoc (strict + closed) BEFORE anything is normalized.
+			raw, err := yaml.Marshal(&node)
 			if err != nil {
+				return nil, fmt.Errorf("%s: re-marshal node-form doc: %w", label, err)
+			}
+			if err := validateNodeDocCUE(label, raw); err != nil {
 				return nil, err
 			}
-			uf := *ufp
-			// Queue imports for processing after current-file merging.
-			importQueue = append(importQueue, uf.Import...)
-			// Clear before merge so they don't leak into the merged struct.
-			uf.Import = nil
-			// Discovery runs only AFTER all includes are fully merged, so
-			// discover roots collect on merged.Discover and process at end.
-			normalizeV4Aliases(&uf)
-			mergeUnified(merged, &uf, srcDir)
-		case docShapeKind:
-			var kd kindKeyedDoc
-			if err := decodeEntityViaCUE(&node, reflect.TypeOf(kindKeyedDoc{}), &kd, fmt.Sprintf("%s:doc%d", srcLabel, docIdx)); err != nil {
-				return nil, err
+			// Parse the document into its reserved directives + entity nodes.
+			directives, nodes, err := parseNodeTree(&node)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", label, err)
 			}
-			if err := mergeKindDoc(merged, &kd, srcDir); err != nil {
-				return nil, fmt.Errorf("%s:doc%d: %w", srcLabel, docIdx, err)
+			// Decode ONLY the reserved directives (import/discover via their Go
+			// unmarshalers; version/repo/defaults/provides) — NOT the entity nodes,
+			// which are normalized below. A directives-only mapping avoids decoding a
+			// node named after a kind (e.g. `vm:`) into a UnifiedFile field.
+			var sub UnifiedFile
+			if len(directives) > 0 {
+				dirMap := &yaml.Node{Kind: yaml.MappingNode}
+				for k, v := range directives {
+					dirMap.Content = append(dirMap.Content, scalarNode(k), v)
+				}
+				if derr := dirMap.Decode(&sub); derr != nil {
+					return nil, fmt.Errorf("%s: decoding node-form directives: %w", label, derr)
+				}
 			}
+			for _, gn := range nodes {
+				if err := normalizeNodeInto(gn, &sub); err != nil {
+					return nil, fmt.Errorf("%s: %w", label, err)
+				}
+			}
+			importQueue = append(importQueue, sub.Import...)
+			sub.Import = nil
+			normalizeV4Aliases(&sub)
+			mergeUnified(merged, &sub, srcDir)
 		case docShapeEmpty:
 			// Skip empty docs (YAML streams commonly end with "---\n").
 		}
@@ -1239,7 +1295,20 @@ const (
 	docShapeEmpty docShape = iota
 	docShapeRoot
 	docShapeKind
+	// docShapeNode — the unified name-first node-form: reserved document
+	// directives (version/import/discover/defaults/repo/provides) plus a flat
+	// map of arbitrary-name entity nodes (each `<name>: {<discriminator>: …}`),
+	// and NO top-level kind-map key. The one forward model; the legacy
+	// root/kind shapes are deleted once every config is migrated.
+	docShapeNode
 )
+
+// docDirectiveKeys are the reserved DOCUMENT directives (present in both the
+// legacy root shape and node-form); they configure the document, not entities.
+var docDirectiveKeys = map[string]bool{
+	"version": true, "repo": true, "import": true, "discover": true,
+	"defaults": true, "provides": true,
+}
 
 // rootShapeKeys are the top-level keys that mark a doc as root-shaped.
 // Schema v4 uses singular keys uniformly: box/pod/vm/k8s/host/deployment.
@@ -1258,7 +1327,7 @@ var rootShapeKeys = map[string]bool{
 	// addition to a valid kind-keyed form). Mirrors how box/pod/vm work.
 	"agent": true,
 	// kind:check disposable R10 beds — root-shape collection map
-	// (bed-name → DeploymentNode) authored in check.yml. The nested `check:`
+	// (bed-name → BundleNode) authored in check.yml. The nested `check:`
 	// PROBE-LIST field never appears as a top-level document key, so this
 	// only ever matches the bed collection.
 	"check": true,
@@ -1266,11 +1335,11 @@ var rootShapeKeys = map[string]bool{
 	"group": true, "target": true, "module": true,
 	// Exclusive host-resource vocabulary (token -> hardware selector) driving
 	// GPU auto-allocation. Build-vocab VALUE map, like distro:; the embedded
-	// default set lives in the binary-embedded charly.cue.
+	// default set lives in the binary-embedded charly_defaults.yml.
 	"resource": true,
 	// Sidecar-container template library (sidecar name -> SidecarDef). A
 	// root-shape collection map like resource:; the embedded default set
-	// (tailscale) lives in the binary-embedded charly.cue.
+	// (tailscale) lives in the binary-embedded charly_defaults.yml.
 	"sidecar": true,
 }
 
@@ -1282,6 +1351,30 @@ var kindKeysSet = func() map[string]bool {
 	}
 	return m
 }()
+
+// nodeShapedValue reports whether a top-level entry's VALUE is a unified node-form
+// node body — a mapping carrying a reserved discriminator (kind/step/data) and NO
+// legacy `name:` key. It distinguishes a node-form entity (`vm: {vm: …}` — value's
+// sub-key is the discriminator) from a legacy kind-keyed single entity (`candy:
+// {name: …}` — has name) and a legacy root-shape map (`vm: {myvm: …}` — no
+// discriminator sub-key). Used by classifyDoc so a node named after a kind keyword
+// is not mistaken for that kind's legacy collection map.
+func nodeShapedValue(val *yaml.Node) bool {
+	if val == nil || val.Kind != yaml.MappingNode {
+		return false
+	}
+	hasDisc := false
+	for i := 0; i+1 < len(val.Content); i += 2 {
+		k := val.Content[i].Value
+		if k == "name" {
+			return false // legacy kind-keyed single-entity form
+		}
+		if nodeEntityKinds[k] {
+			hasDisc = true
+		}
+	}
+	return hasDisc
+}
 
 // classifyDoc inspects a document's top-level keys and returns its shape. A
 // doc with any root key + any kind key is ambiguous and errors out. Empty
@@ -1308,7 +1401,8 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 		return docShapeEmpty, nil
 	}
 
-	hasRoot, hasKind := false, false
+	hasKind := false
+	hasKindMap := false // a non-directive kind-map key (box/candy/deploy/…) → legacy
 	var keys []string
 	hasLegacyBenchmarkKey := false
 	hasLegacyIncludeKey := false
@@ -1328,26 +1422,37 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 		// themselves (no `name:` key at the first level of the value).
 		val := inner.Content[i+1]
 		switch {
+		case docDirectiveKeys[k]:
+			// reserved document directive (version/import/discover/…) — fine in
+			// node-form (a directives-only doc is a valid node-form document).
+		case nodeShapedValue(val):
+			// The VALUE carries a discriminator (and no legacy `name:`) → a
+			// node-form entity, regardless of the key's NAME. This is what lets a
+			// node legitimately named after a kind (`k8s: {box: …}`) classify as
+			// node-form instead of a legacy kind-map.
 		case rootShapeKeys[k] && kindKeysSet[k]:
+			hasKindMap = true
 			if mapHasKey(val, "name") {
 				hasKind = true
-			} else {
-				hasRoot = true
 			}
 		case rootShapeKeys[k]:
-			hasRoot = true
+			hasKindMap = true
 		case kindKeysSet[k]:
+			hasKindMap = true
 			hasKind = true
+		default:
+			// arbitrary entity name → a node-form node (parseNode validates the
+			// discriminator); a node-shaped value already matched above.
 		}
 	}
 	// Legacy `benchmark:` root key — predates the 2026-04 harness→check
 	// cutover, whose forward-only migrator has since been removed. There is
 	// no automated path in the current binary; the block must be rewritten
-	// by hand as a `deploy:` (or `kind: check` bed) carrying an `iterate:`
+	// by hand as a `bundle:` (a `disposable: true` bundle is a check bed) carrying an `iterate:`
 	// block + a `plan:`.
 	if hasLegacyBenchmarkKey {
 		return 0, fmt.Errorf(
-			"the `benchmark:` root key is no longer accepted — it predates the 2026-04 harness→check cutover, whose migrator has since been removed. Rewrite the block by hand as a `deploy:` (or `kind: check` bed) carrying an `iterate:` block + a `plan:` (see /charly-check:check)",
+			"the `benchmark:` root key is no longer accepted — it predates the 2026-04 harness→check cutover, whose migrator has since been removed. Rewrite the block by hand as a `bundle:` (a `disposable: true` bundle is a check bed) carrying an `iterate:` block + a `plan:` (see /charly-check:check)",
 		)
 	}
 	// 2026-05 import-namespace cutover: `include:` was deleted in favor of
@@ -1357,16 +1462,19 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 			"the `include:` key is no longer accepted — it was replaced by `import:` (flat string items + namespaced `alias: ref` items) in the 2026-05 import-namespace cutover. Run: charly migrate",
 		)
 	}
-	switch {
-	case hasRoot && hasKind:
-		return 0, fmt.Errorf("ambiguous document: contains both root-shape and kind-keyed top-level keys %v", keys)
-	case hasRoot:
-		return docShapeRoot, nil
-	case hasKind:
-		return docShapeKind, nil
-	default:
-		return 0, fmt.Errorf("document has no recognized top-level keys (got %v)", keys)
+	// Node-form is the ONE authoring surface. A legacy kind-keyed or root-shape
+	// kind-map (box:/candy:/deploy:/vm:/… carrying entities) is a HARD error
+	// pointing at the migration — the bilingual reader was deleted.
+	if hasKindMap || hasKind {
+		return 0, fmt.Errorf(
+			"legacy kind-keyed config (top-level keys %v) is no longer accepted — the unified node-form `<name>: {<kind>: …}` is the only authoring surface. Run: charly migrate",
+			keys,
+		)
 	}
+	// Node-form: arbitrary entity-name nodes, OR a directives-only document
+	// (version/import/discover/defaults/repo/provides with no entities). Both flow
+	// through the node-form handler (parseNodeTree extracts directives + nodes).
+	return docShapeNode, nil
 }
 
 // -----------------------------------------------------------------------------
@@ -1460,8 +1568,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeModuleMap(&dst.Module, src.Module)
 	mergeResourceMap(&dst.Resource, src.Resource)
 	mergeSidecarMap(&dst.Sidecar, src.Sidecar)
-	mergeDeployMaps(&dst.Deploy, src.Deploy)
-	mergeDeployMaps(&dst.Check, src.Check)
+	mergeDeployMaps(&dst.Bundle, src.Bundle)
 	if dst.Provides == nil && src.Provides != nil {
 		dst.Provides = src.Provides
 	}
@@ -1727,12 +1834,12 @@ func mergeModuleMap(dst *map[string]*ModuleSpec, src map[string]*ModuleSpec) {
 // Field-singular cutover: replaces the legacy mergeDeployments which
 // took *DeploymentsSection wrappers. Provides now lives at UnifiedFile
 // root and is merged separately by mergeUnified.
-func mergeDeployMaps(dst *map[string]DeploymentNode, src map[string]DeploymentNode) {
+func mergeDeployMaps(dst *map[string]BundleNode, src map[string]BundleNode) {
 	if len(src) == 0 {
 		return
 	}
 	if *dst == nil {
-		*dst = make(map[string]DeploymentNode)
+		*dst = make(map[string]BundleNode)
 	}
 	for k, v := range src {
 		if _, exists := (*dst)[k]; !exists {
@@ -1741,52 +1848,33 @@ func mergeDeployMaps(dst *map[string]DeploymentNode, src map[string]DeploymentNo
 	}
 }
 
-// foldCheckBeds copies every kind:check bed (uf.Check) into the Deploy map
-// with CheckBed=true so that every deploy verb (`charly deploy add`, `charly config`,
-// `charly start`, `charly check live`, `charly update`, `charly remove`) resolves a bed by
-// name through the SAME Deploy-map path it already uses — no per-verb
-// special case. uf.Check is retained as the authoritative bed set for
-// CheckBeds() enumeration. A name present as BOTH a kind:check bed and a
-// kind:deploy entry is a hard error (disjoint namespaces by construction).
-func foldCheckBeds(uf *UnifiedFile) error {
-	if len(uf.Check) == 0 {
-		return nil
-	}
-	if uf.Deploy == nil {
-		uf.Deploy = make(map[string]DeploymentNode, len(uf.Check))
-	}
-	for name, node := range uf.Check {
-		if _, clash := uf.Deploy[name]; clash {
-			return fmt.Errorf(
-				"name %q is declared as both a kind:check bed and a kind:deploy entry — names must be unique across the two kinds; rename one",
-				name,
-			)
-		}
-		node.CheckBed = true
-		uf.Deploy[name] = node
-		uf.Check[name] = node // keep the marker on the retained bed set too
-	}
-	return nil
-}
-
-// CheckBeds returns the kind:check disposable R10 beds keyed by name. It is
-// the single enumeration source for `charly check run <bed>` / `--all-beds`;
-// every other consumer reads the folded entries from the Deploy map.
-func (uf *UnifiedFile) CheckBeds() map[string]DeploymentNode {
+// CheckBeds returns the disposable R10 beds keyed by name. In the unified
+// node-form model a bed IS a `disposable: true` bundle (the separate kind:check
+// block is gone), so the bed set is derived directly from the disposable
+// bundles in the Bundle map. Members are instruments (brought up alongside a
+// driver), never standalone beds. Single enumeration source for
+// `charly check run <bed>` (and the /verify-beds fan-out).
+func (uf *UnifiedFile) CheckBeds() map[string]BundleNode {
 	if uf == nil {
 		return nil
 	}
-	return uf.Check
+	beds := map[string]BundleNode{}
+	for name, node := range uf.Bundle {
+		if node.IsDisposable() && node.MemberOf == "" {
+			beds[name] = node
+		}
+	}
+	return beds
 }
 
 // validateCheckBeds enforces the kind:check bed-specific invariants beyond the
 // generic deploy validation (which already runs on the folded beds via
 // validateDeploymentTree → validateDeployRequiresBox, covering the pod
 // `box:` requirement). Runs at LOAD time so EVERY command that resolves a
-// bed (charly check run, charly deploy add, charly config, charly box validate, …) sees the
+// bed (charly check run, charly bundle add, charly config, charly box validate, …) sees the
 // same friendly error — not just `charly box validate`.
 func validateCheckBeds(uf *UnifiedFile) error {
-	for name, node := range uf.Check {
+	for name, node := range uf.CheckBeds() {
 		// An iterate: bed is a benchmark (the former kind:score), NOT a
 		// deterministic R10 bed: it drives the AI loop scoring its plan's
 		// check:/agent-check: steps against an operator-provisioned sandbox, so
@@ -1807,6 +1895,18 @@ func validateCheckBeds(uf *UnifiedFile) error {
 				name)
 		}
 		switch node.Target {
+		case "":
+			// A GROUP bed (no workload cross-ref) — valid ONLY when it carries
+			// sibling Members (subject + driver peers): the §3 group+siblings
+			// shape for cross-deployment probing, where the driver venue is a
+			// bare `${HOST:<subject>}` peer on the shared net (a peer requires a
+			// group root in the tree-position model). The flattened plan
+			// dispatches each step to its member venue; there is no root
+			// container. Same spirit as the iterate-bed exemption above. A group
+			// bed with neither a workload target nor members has nothing to run.
+			if len(node.Members) == 0 {
+				return fmt.Errorf("kind:check bed %q has no workload cross-ref and no sibling members — a group bed must declare member subdeployments (the subject + driver of a cross-deployment probe)", name)
+			}
 		case "pod":
 			// box: presence enforced by validateDeployRequiresBox on the
 			// folded Deploy entry — no duplicate check here.
@@ -1847,7 +1947,7 @@ func validateCheckBeds(uf *UnifiedFile) error {
 //   - the bed's plan: carries at least one `check:` step (the scored success
 //     criteria — an include: step's checks expand at collect time, so a plan of
 //     pure include: steps without a single direct check: is rejected here).
-func validateIterateBed(uf *UnifiedFile, name string, node *DeploymentNode) error {
+func validateIterateBed(uf *UnifiedFile, name string, node *BundleNode) error {
 	it := node.Iterate
 	for _, a := range it.Agent {
 		if _, ok := uf.Agent[a]; !ok {
@@ -1961,7 +2061,7 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 	case kd.Image != nil:
 		return registerKindEntity(&merged.Box, kd.Image.Name, "box", kd.Image.BoxConfig)
 	case kd.Deploy != nil:
-		return registerKindEntity(&merged.Deploy, kd.Deploy.Name, "deployment", kd.Deploy.DeploymentNode)
+		return registerKindEntity(&merged.Bundle, kd.Deploy.Name, "deployment", kd.Deploy.BundleNode)
 	case kd.Builder != nil:
 		builder := kd.Builder.BuilderDef
 		return registerKindEntity(&merged.Builder, kd.Builder.Name, "builder", &builder)
@@ -2178,9 +2278,49 @@ func (uf *UnifiedFile) applyDiscoveredManifest(dir, manifest, rootDir string) er
 			}
 			return fmt.Errorf("%s: %w", target, err)
 		}
-		switch firstKindKey(&node) {
+		// A node-form manifest whose node is NAMED after a kind keyword (e.g. a box
+		// named `k8s`: `k8s: {box: …}`) makes firstKindKey return that kind, which
+		// would mis-route to the legacy kind decode below. classifyDoc inspects the
+		// VALUE shape (a discriminator + no `name:`) and correctly reports node-form,
+		// so force the node-form branch (fkk == "") in that case.
+		fkk := firstKindKey(&node)
+		if shape, cerr := classifyDoc(&node); cerr == nil && shape == docShapeNode {
+			fkk = ""
+		}
+		switch fkk {
 		case "":
-			continue // empty / non-kind document — nothing to register
+			// No top-level kind key → either an empty/directive-only doc OR a
+			// unified node-form manifest (name-first nodes). Parse it: a `candy`
+			// node registers a lazy From ref (scanCandy parses + probes assets,
+			// keyed by dir base as the legacy scanner did); any other kind
+			// normalizes inline.
+			_, nfNodes, perr := parseNodeTree(&node)
+			if perr != nil {
+				// A malformed node-form manifest is a HARD error, never silently
+				// dropped (a swallowed parse error would discover "0 candies").
+				return fmt.Errorf("%s: %w", target, perr)
+			}
+			for _, gn := range nfNodes {
+				if gn.disc == "candy" {
+					name := filepath.Base(dir)
+					if uf.Candy == nil {
+						uf.Candy = map[string]*InlineCandy{}
+					}
+					if _, exists := uf.Candy[name]; exists {
+						continue // explicit entry wins
+					}
+					rel, relErr := filepath.Rel(rootDir, dir)
+					if relErr != nil {
+						rel = dir
+					}
+					uf.Candy[name] = &InlineCandy{From: rel, manifest: manifest}
+					continue
+				}
+				if err := normalizeNodeInto(gn, uf); err != nil {
+					return fmt.Errorf("%s: %w", target, err)
+				}
+			}
+			continue // empty / directive-only document — nothing more to register
 		case "candy":
 			// Candy: register a lazy directory reference (name = dir base, as
 			// the legacy scanner did). scanCandy does the real parse later.
@@ -2319,16 +2459,16 @@ func (uf *UnifiedFile) ProjectInitConfig() *InitConfig {
 	return &InitConfig{Init: uf.Init}
 }
 
-// ProjectDeployConfig returns the *DeployConfig equivalent (deployments: section
+// ProjectBundleConfig returns the *BundleConfig equivalent (deployments: section
 // of the authored file, independent of any per-machine ~/.config/charly/charly.yml
-// which remains loaded separately by LoadDeployConfig).
-func (uf *UnifiedFile) ProjectDeployConfig() *DeployConfig {
-	if uf == nil || (len(uf.Deploy) == 0 && uf.Provides == nil && len(uf.Sidecar) == 0) {
+// which remains loaded separately by LoadBundleConfig).
+func (uf *UnifiedFile) ProjectBundleConfig() *BundleConfig {
+	if uf == nil || (len(uf.Bundle) == 0 && uf.Provides == nil && len(uf.Sidecar) == 0) {
 		return nil
 	}
-	return &DeployConfig{
+	return &BundleConfig{
 		Provides: uf.Provides,
-		Deploy:   uf.Deploy,
+		Bundle:   uf.Bundle,
 		Sidecar:  uf.Sidecar,
 	}
 }

@@ -1,30 +1,35 @@
-candy:
-    version: 2026.144.1443
-    name: libnotify
-    description: |
-        Ships the notify-send CLI for posting desktop notifications from inside the container.
-        Installs the Fedora libnotify package, which provides the notify-send
-        command-line client plus the libnotify shared library. notify-send posts
-        desktop notifications over the D-Bus session bus to a running notification
-        daemon (such as swaync), so shell scripts and interactive users can raise
-        notifications. The binary path, its owning package, and its --version
-        handshake are all verifiable in a disposable build-scope container.
-    require:
-        - dbus
-    distro:
-        fedora:
-            package:
-                - libnotify
-    plan:
-        - check: the notify-send CLI is installed at /usr/bin/notify-send
-          file: /usr/bin/notify-send
-          exists: true
-        - check: the libnotify package providing the client is installed
-          package: libnotify
-          installed: true
-        - check: notify-send --version runs cleanly and prints its version string
-          command: notify-send --version 2>&1
-          exit_status: 0
-          stdout:
+libnotify:
+    candy:
+        version: 2026.144.1443
+        description: |
+            Ships the notify-send CLI for posting desktop notifications from inside the container.
+            Installs the Fedora libnotify package, which provides the notify-send
+            command-line client plus the libnotify shared library. notify-send posts
+            desktop notifications over the D-Bus session bus to a running notification
+            daemon (such as swaync), so shell scripts and interactive users can raise
+            notifications. The binary path, its owning package, and its --version
+            handshake are all verifiable in a disposable build-scope container.
+    libnotify-require:
+        require:
+            - dbus
+    libnotify-distro:
+        distro:
+            fedora:
+                package:
+                    - libnotify
+    libnotify-step-0:
+        check: the notify-send CLI is installed at /usr/bin/notify-send
+        file: /usr/bin/notify-send
+        exists: true
+    libnotify-step-1:
+        check: the libnotify package providing the client is installed
+        package: libnotify
+        installed: true
+    libnotify-step-2:
+        check: notify-send --version runs cleanly and prints its version string
+        command: notify-send --version 2>&1
+        exit_status: 0
+        stdout:
             - contains: notify-send
-        - agent-check: a notification sent with notify-send appears in the running notification daemon on the desktop
+    libnotify-step-3:
+        agent-check: a notification sent with notify-send appears in the running notification daemon on the desktop

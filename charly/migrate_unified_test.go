@@ -19,7 +19,7 @@ func TestMigrateUnified_IncludesSplit(t *testing.T) {
 builder:
   fedora-builder: {}
 init:
-  supervisord: {}
+  supervisord: {model: fragment_assembly}
 `)
 	writeFixture(t, root, "image.yml", `defaults:
   registry: quay.io/example

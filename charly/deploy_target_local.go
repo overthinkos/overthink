@@ -843,7 +843,7 @@ func renderDownloadScript(task *Op, candyVars map[string]string) string {
 	// shell-expansion form (e.g. `uv-${BUILD_ARCH}-unknown-linux-gnu.tar.gz`).
 	// Must match the container-build renderer in tasks.go which exports the
 	// same var — otherwise the same candy manifest download works at build time
-	// but fails under `charly deploy add host/vm:<name>`.
+	// but fails under `charly bundle add host/vm:<name>`.
 	//
 	// ARCH is the BuildKit-style triplet (amd64/arm64/arm) — same format
 	// the container-build path gets from BuildKit's TARGETARCH. Without

@@ -42,7 +42,7 @@ func TestVMCollector_Collect(t *testing.T) {
 	cases := []struct {
 		name    string
 		domains []domainInfo
-		deploy  *DeployConfig
+		deploy  *BundleConfig
 		want    []DeploymentStatus
 	}{
 		{
@@ -81,8 +81,8 @@ func TestVMCollector_Collect(t *testing.T) {
 			domains: []domainInfo{
 				{Name: "charly-cachyos-gpu", State: "running"},
 			},
-			deploy: &DeployConfig{
-				Deploy: map[string]DeploymentNode{
+			deploy: &BundleConfig{
+				Bundle: map[string]BundleNode{
 					"vm:cachyos-gpu": {
 						Target:  "vm",
 						Vm:      "cachyos-gpu",
@@ -106,8 +106,8 @@ func TestVMCollector_Collect(t *testing.T) {
 			domains: []domainInfo{
 				{Name: "charly-k3s-vm", State: "running"},
 			},
-			deploy: &DeployConfig{
-				Deploy: map[string]DeploymentNode{
+			deploy: &BundleConfig{
+				Bundle: map[string]BundleNode{
 					// deploy KEY (check-k3s-vm) != vm entity (k3s-vm).
 					"check-k3s-vm": {
 						Target:  "vm",

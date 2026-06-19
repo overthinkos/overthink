@@ -45,7 +45,7 @@ func TestMergeAndroidMap(t *testing.T) {
 func TestValidateCheckBeds_Android(t *testing.T) {
 	// android bed without an android: ref → error.
 	uf := &UnifiedFile{
-		Check: map[string]DeploymentNode{
+		Bundle: map[string]BundleNode{
 			"bed": {Target: "android", Disposable: new(true)},
 		},
 	}
@@ -55,7 +55,7 @@ func TestValidateCheckBeds_Android(t *testing.T) {
 
 	// android bed referencing an undefined device → error.
 	uf2 := &UnifiedFile{
-		Check: map[string]DeploymentNode{
+		Bundle: map[string]BundleNode{
 			"bed": {Target: "android", Android: "ghost", Disposable: new(true)},
 		},
 	}
@@ -66,7 +66,7 @@ func TestValidateCheckBeds_Android(t *testing.T) {
 	// android bed referencing a defined device → ok.
 	uf3 := &UnifiedFile{
 		Android: map[string]*AndroidSpec{"dev": {Box: "android-emulator"}},
-		Check: map[string]DeploymentNode{
+		Bundle: map[string]BundleNode{
 			"bed": {Target: "android", Android: "dev", Disposable: new(true)},
 		},
 	}

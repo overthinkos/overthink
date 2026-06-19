@@ -1,37 +1,40 @@
-candy:
-    version: 2026.144.1443
-    name: golang
-    description: |
-        Go programming language compiler — the `go` toolchain on $PATH
-        Installs the Go compiler/toolchain from each distro's package repo
-        (arch `go`, debian/ubuntu `golang-go`, fedora `golang-bin`), landing
-        the `go` driver binary at /usr/bin/go. Verifiable end to end: the
-        binary exists, `go version` reports a Go toolchain version, and the
-        toolchain actually compiles and runs a standalone Go program.
-    distro:
-        arch:
-            package:
-                - go
-        debian:
-            package:
-                - golang-go
-        fedora:
-            package:
-                - golang-bin
-        ubuntu:
-            package:
-                - golang-go
-    plan:
-        - check: the go compiler binary is installed at /usr/bin/go
-          file: /usr/bin/go
-          exists: true
-        - check: running `go version` succeeds and prints a Go toolchain version
-          command: /usr/bin/go version
-          exit_status: 0
-          stdout:
+golang:
+    candy:
+        version: 2026.144.1443
+        description: |
+            Go programming language compiler — the `go` toolchain on $PATH
+            Installs the Go compiler/toolchain from each distro's package repo
+            (arch `go`, debian/ubuntu `golang-go`, fedora `golang-bin`), landing
+            the `go` driver binary at /usr/bin/go. Verifiable end to end: the
+            binary exists, `go version` reports a Go toolchain version, and the
+            toolchain actually compiles and runs a standalone Go program.
+    golang-distro:
+        distro:
+            arch:
+                package:
+                    - go
+            debian:
+                package:
+                    - golang-go
+            fedora:
+                package:
+                    - golang-bin
+            ubuntu:
+                package:
+                    - golang-go
+    golang-step-0:
+        check: the go compiler binary is installed at /usr/bin/go
+        file: /usr/bin/go
+        exists: true
+    golang-step-1:
+        check: running `go version` succeeds and prints a Go toolchain version
+        command: /usr/bin/go version
+        exit_status: 0
+        stdout:
             - matches: "go version go[0-9]"
-        - check: the toolchain compiles and runs a standalone Go program and prints its output
-          command: |
+    golang-step-2:
+        check: the toolchain compiles and runs a standalone Go program and prints its output
+        command: |
             set -e
             d=$(mktemp -d)
             printf 'package main\nimport "fmt"\nfunc main() { fmt.Println("charly-go-build-ok") }\n' > "$d/main.go"
@@ -39,15 +42,16 @@ candy:
             export HOME="$d" GOCACHE="$d/.gocache" GOPATH="$d/.gopath" GOFLAGS=-mod=mod
             /usr/bin/go mod init charlygotest >/dev/null 2>&1 || true
             /usr/bin/go run main.go
-          exit_status: 0
-          stdout:
+        exit_status: 0
+        stdout:
             - contains: charly-go-build-ok
-        - check: package=go
-          id: go-package
-          package: go
-          package_map:
+    go-package:
+        check: package=go
+        id: go-package
+        package: go
+        package_map:
             arch: go
             debian: golang-go
             ubuntu: golang-go
             fedora: golang-bin
-          installed: true
+        installed: true

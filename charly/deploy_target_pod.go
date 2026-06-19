@@ -517,7 +517,7 @@ func (t *PodDeployTarget) stderr() *os.File {
 }
 
 // RemoveOverlayImage removes the overlay image produced by Emit. Used
-// at `charly deploy del` time unless --keep-image is set.
+// at `charly bundle del` time unless --keep-image is set.
 func (t *PodDeployTarget) RemoveOverlayImage(opts EmitOpts) error {
 	if t.overlayImageRef == "" || t.overlayImageRef == t.BaseImage {
 		return nil
@@ -534,7 +534,7 @@ func (t *PodDeployTarget) RemoveOverlayImage(opts EmitOpts) error {
 
 // translateHostPathToVenue maps a host-side absolute path to the
 // equivalent path inside a parent venue, by walking the parent
-// DeploymentNode's bind-mount volumes. Returns (venuePath, true)
+// BundleNode's bind-mount volumes. Returns (venuePath, true)
 // when a containing bind-mount is found; ("", false) otherwise.
 //
 // Used by C10' s pod-in-pod overlay build path: the nested podman
@@ -547,7 +547,7 @@ func (t *PodDeployTarget) RemoveOverlayImage(opts EmitOpts) error {
 //
 // then translateHostPathToVenue("/home/user/repo/candy/x", parent)
 // returns ("/workspace/candy/x", true).
-func translateHostPathToVenue(hostPath string, parent *DeploymentNode) (string, bool) {
+func translateHostPathToVenue(hostPath string, parent *BundleNode) (string, bool) {
 	if parent == nil || hostPath == "" {
 		return "", false
 	}

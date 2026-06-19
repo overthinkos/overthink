@@ -112,7 +112,7 @@ func (t *LocalUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 }
 
 // teardownHostDeploy reverses a single host deploy record. Free
-// function so LocalUnifiedTarget.Del can call it without a DeployDelCmd
+// function so LocalUnifiedTarget.Del can call it without a BundleDelCmd
 // instance.
 func teardownHostDeploy(paths *LedgerPaths, rec *DeployRecord, hostHome string, re ReverseExecutor) error {
 	for _, layer := range rec.Candy {
@@ -238,10 +238,10 @@ func (t *LocalUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
 // This is the host-deploy rebuild path.
 func (t *LocalUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
 	if opts.DryRun {
-		fmt.Printf("dry-run: charly deploy add %s\n", t.NodeName)
+		fmt.Printf("dry-run: charly bundle add %s\n", t.NodeName)
 		return nil
 	}
-	return runCharlySubcommand("deploy", "add", t.NodeName)
+	return runCharlySubcommand("bundle", "add", t.NodeName)
 }
 
 // Start, Stop, Logs: not applicable to the host target. The host is
@@ -332,7 +332,7 @@ func (t *LocalUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans
 
 	// --verify: run the deployment's deploy-scope check probes on the venue
 	// we just deployed to (the same `exec`). Default (Verify=false) is a
-	// no-op. Reuses checkLocalDeployScope so `charly deploy add <local> --verify`
+	// no-op. Reuses checkLocalDeployScope so `charly bundle add <local> --verify`
 	// sources + runs probes identically to `charly check live <local>` (R3).
 	if opts.Verify && !opts.DryRun {
 		fails, verr := checkLocalDeployScope(dctx.Dir, node, dctx.Name, "", "", nil, exec, "text")

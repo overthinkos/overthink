@@ -116,7 +116,7 @@ func (c *CheckRunLocalCmd) Run() error {
 		return fmt.Errorf("charly check run-local: no charly.yml in %s", projectDir)
 	}
 
-	node, found := uf.Deploy[c.Score]
+	node, found := uf.Bundle[c.Score]
 	if !found || node.Iterate == nil {
 		return fmt.Errorf("charly check run-local: entity %q has no iterate: block", c.Score)
 	}
@@ -193,7 +193,7 @@ func (c *CheckRunLocalCmd) Run() error {
 	// No in-pod preflight: the harness only owns the harness sandbox itself
 	// (rebuilt fresh per run by the host-side preflight in check_runner_cmd.go).
 	// Inside the sandbox, the AI is on its own — it builds whatever images
-	// each step needs, creates each pod a step references via `charly deploy
+	// each step needs, creates each pod a step references via `charly bundle
 	// add`, and modifies state until check: steps pass. The harness scoring
 	// code probes per step.Op.Pod after the AI exits.
 

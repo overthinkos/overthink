@@ -204,7 +204,7 @@ func readImageYaml(dir string) (*imageSections, error) {
 	}, nil
 }
 
-func readRepoRootDeployYaml(dir string) (*DeployConfig, error) {
+func readRepoRootDeployYaml(dir string) (*BundleConfig, error) {
 	path := filepath.Join(dir, "deploy.yml")
 	if !fileExists(path) {
 		return nil, nil
@@ -213,7 +213,7 @@ func readRepoRootDeployYaml(dir string) (*DeployConfig, error) {
 	if err != nil {
 		return nil, err
 	}
-	var dc DeployConfig
+	var dc BundleConfig
 	if err := yaml.Unmarshal(data, &dc); err != nil {
 		return nil, err
 	}
@@ -224,7 +224,7 @@ func readRepoRootDeployYaml(dir string) (*DeployConfig, error) {
 // Emitters.
 // -----------------------------------------------------------------------------
 
-func emitMonolithic(dir string, bs *buildSections, is *imageSections, ds *DeployConfig, dryRun bool) (string, error) {
+func emitMonolithic(dir string, bs *buildSections, is *imageSections, ds *BundleConfig, dryRun bool) (string, error) {
 	uf := &UnifiedFile{Version: LatestSchemaVersion().String()}
 	if bs != nil {
 		uf.Distro = bs.Distros
@@ -236,7 +236,7 @@ func emitMonolithic(dir string, bs *buildSections, is *imageSections, ds *Deploy
 		uf.Box = is.Images
 	}
 	if ds != nil {
-		uf.Deploy = ds.Deploy
+		uf.Bundle = ds.Bundle
 		uf.Provides = ds.Provides
 	}
 	// Auto-discover layers/ if present (the legacy dir; later rename steps move
@@ -247,7 +247,7 @@ func emitMonolithic(dir string, bs *buildSections, is *imageSections, ds *Deploy
 	return writeUnifiedFile(filepath.Join(dir, "overthink.yml"), uf, dryRun)
 }
 
-func emitWithIncludes(dir string, bs *buildSections, is *imageSections, ds *DeployConfig, dryRun bool) ([]string, error) {
+func emitWithIncludes(dir string, bs *buildSections, is *imageSections, ds *BundleConfig, dryRun bool) ([]string, error) {
 	var written []string
 
 	root := &UnifiedFile{Version: LatestSchemaVersion().String()}
@@ -291,9 +291,9 @@ func emitWithIncludes(dir string, bs *buildSections, is *imageSections, ds *Depl
 
 	// deploy.yml → deployments block.
 	deployPath := filepath.Join(dir, "deploy.yml")
-	if ds != nil && (len(ds.Deploy) > 0 || ds.Provides != nil) {
+	if ds != nil && (len(ds.Bundle) > 0 || ds.Provides != nil) {
 		depOut := &UnifiedFile{
-			Deploy:   ds.Deploy,
+			Bundle:   ds.Bundle,
 			Provides: ds.Provides,
 		}
 		p, err := writeUnifiedFile(deployPath, depOut, dryRun)

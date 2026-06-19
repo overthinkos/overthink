@@ -61,7 +61,7 @@ func (a *AndroidCollector) Collect(ctx context.Context, opts CollectOpts) ([]Dep
 // locate the in-pod parent container for a nested device.
 type androidDeployNode struct {
 	path string
-	node DeploymentNode
+	node BundleNode
 }
 
 // collectAndroidDeployNodes is the SINGLE enumeration of every `target: android`
@@ -72,13 +72,13 @@ type androidDeployNode struct {
 // root so nested devices are discovered with their full dotted path.
 func collectAndroidDeployNodes(opts CollectOpts) []androidDeployNode {
 	merged := MergeDeployConfigs(unifiedDeployConfig(opts.Unified), opts.Deploy)
-	if merged == nil || merged.Deploy == nil {
+	if merged == nil || merged.Bundle == nil {
 		return nil
 	}
 	var out []androidDeployNode
-	for _, name := range sortedDeployKeys(merged.Deploy) {
-		root := merged.Deploy[name]
-		_ = root.WalkPreOrder(name, func(path string, node *DeploymentNode) error {
+	for _, name := range sortedDeployKeys(merged.Bundle) {
+		root := merged.Bundle[name]
+		_ = root.WalkPreOrder(name, func(path string, node *BundleNode) error {
 			if node != nil && node.Target == "android" {
 				out = append(out, androidDeployNode{path: path, node: *node})
 			}
@@ -88,18 +88,18 @@ func collectAndroidDeployNodes(opts CollectOpts) []androidDeployNode {
 	return out
 }
 
-// unifiedDeployConfig projects a UnifiedFile to its DeployConfig (folded
+// unifiedDeployConfig projects a UnifiedFile to its BundleConfig (folded
 // kind:check beds included) or nil when the file is absent.
-func unifiedDeployConfig(uf *UnifiedFile) *DeployConfig {
+func unifiedDeployConfig(uf *UnifiedFile) *BundleConfig {
 	if uf == nil {
 		return nil
 	}
-	return uf.ProjectDeployConfig()
+	return uf.ProjectBundleConfig()
 }
 
 // sortedDeployKeys returns the deploy map keys in name order so the android
 // table is deterministic across runs.
-func sortedDeployKeys(m map[string]DeploymentNode) []string {
+func sortedDeployKeys(m map[string]BundleNode) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)

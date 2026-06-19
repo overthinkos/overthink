@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// DeployFromImageCmd implements `charly deploy from-box <ref> [name]` — a
+// DeployFromImageCmd implements `charly bundle from-box <ref> [name]` — a
 // SOURCE-LESS deploy driven entirely by an image's baked ai.opencharly.* OCI
 // labels, with NO charly.yml project. Two targets:
 //
@@ -22,10 +22,10 @@ import (
 //
 // This is the in-guest leg of the nested-pod-in-VM capability: a VM guest has
 // `charly` + a cp-box'd image but no project, so the host orchestrates
-// `ssh guest 'charly deploy from-box <ref> <name>'` to bring a nested pod up as a
+// `ssh guest 'charly bundle from-box <ref> <name>'` to bring a nested pod up as a
 // persistent quadlet (it survives reboot via the quadlet [Install] section once
 // the guest user has lingering enabled — the orchestrator handles that).
-type DeployFromBoxCmd struct {
+type BundleFromBoxCmd struct {
 	Ref       string   `arg:"" help:"Full image ref (local or registry), e.g. ghcr.io/overthinkos/selkies-kde-nvidia:latest"`
 	Name      string   `arg:"" optional:"" help:"Deploy name (default: the image-ref basename without tag)"`
 	Instance  string   `short:"i" long:"instance" help:"Instance name"`
@@ -35,9 +35,9 @@ type DeployFromBoxCmd struct {
 	Namespace string   `long:"namespace" help:"K8s namespace override (--cluster only)"`
 }
 
-func (c *DeployFromBoxCmd) Run() error {
+func (c *BundleFromBoxCmd) Run() error {
 	if strings.TrimSpace(c.Ref) == "" {
-		return fmt.Errorf("charly deploy from-box: a full image <ref> is required")
+		return fmt.Errorf("charly bundle from-box: a full image <ref> is required")
 	}
 	name := c.Name
 	if name == "" {

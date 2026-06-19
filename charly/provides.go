@@ -164,7 +164,7 @@ func podAwareMCPProvides(entries []MCPProvideEntry, consumerKey, ctrName string)
 // "versa/ecovoyage") for a named instance. Callers must construct this
 // via `deployKey(image, instance)` so cross-instance provides (e.g. another
 // instance's AIRFLOW_API_INTERNAL_URL) don't leak into THIS consumer's env.
-func (dc *DeployConfig) GlobalEnvForImage(consumerKey, ctrName string, acceptedEnv map[string]bool) []string {
+func (dc *BundleConfig) GlobalEnvForImage(consumerKey, ctrName string, acceptedEnv map[string]bool) []string {
 	if dc == nil || dc.Provides == nil {
 		return nil
 	}

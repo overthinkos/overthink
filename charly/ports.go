@@ -338,11 +338,11 @@ func SavePortOverride(box, instance string, ports []string) error {
 	}
 
 	key := deployKey(box, instance)
-	overlay := dc.Deploy[key]
+	overlay := dc.Bundle[key]
 	overlay.Port = ports
-	dc.Deploy[key] = overlay
+	dc.Bundle[key] = overlay
 
-	return SaveDeployConfig(dc)
+	return SaveBundleConfig(dc)
 }
 
 // containerPortsFromMappings extracts the container-side port number from
@@ -393,7 +393,7 @@ func IsAutoPort(mapping string) bool {
 // use by other deployments (so two `port: [auto]` deploys on the same
 // host don't collide). Returned mappings have BindAddr="" (default host
 // bind) and Protocol="tcp". Each successful allocation is recorded back
-// into `occupied` so subsequent calls in the same DeployConfig pass see
+// into `occupied` so subsequent calls in the same BundleConfig pass see
 // the reservation.
 //
 // Free-port discovery uses the same net.Listen("tcp","127.0.0.1:0") +

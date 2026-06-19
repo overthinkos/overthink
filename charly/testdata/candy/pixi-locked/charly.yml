@@ -1,5 +1,6 @@
-candy:
-  version: 2026.144.1443
-  name: pixi-locked
-  require:
-    - pixi
+pixi-locked:
+    candy:
+        version: 2026.144.1443
+    pixi-locked-require:
+        require:
+            - pixi

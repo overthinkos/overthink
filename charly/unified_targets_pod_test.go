@@ -29,7 +29,7 @@ func TestPodUnifiedTarget_Rebuild_RealInvocations(t *testing.T) {
 	want := [][]string{
 		{"box", "build", "x"},
 		{"check", "box", "x"}, // NOT "check image" — the verb is registered as `check box`
-		{"deploy", "add", "check-x-pod"},
+		{"bundle", "add", "check-x-pod"},
 		{"stop", "check-x-pod"},
 		{"config", "check-x-pod"},
 		{"start", "check-x-pod"},

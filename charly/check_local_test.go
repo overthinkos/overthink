@@ -19,7 +19,7 @@ func TestRootExecutorForDeployNode(t *testing.T) {
 
 	// host: "" and host: "local" → host shell.
 	for _, host := range []string{"", "local"} {
-		e, err := rootExecutorForDeployNode(&DeploymentNode{Target: "local", Host: host})
+		e, err := rootExecutorForDeployNode(&BundleNode{Target: "local", Host: host})
 		if err != nil {
 			t.Fatalf("host=%q: %v", host, err)
 		}
@@ -29,7 +29,7 @@ func TestRootExecutorForDeployNode(t *testing.T) {
 	}
 
 	// host: "user@box" → SSH with the inline user.
-	e, err := rootExecutorForDeployNode(&DeploymentNode{Target: "local", Host: "alice@box"})
+	e, err := rootExecutorForDeployNode(&BundleNode{Target: "local", Host: "alice@box"})
 	if err != nil {
 		t.Fatalf("user@box: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestRootExecutorForDeployNode(t *testing.T) {
 	}
 
 	// host: "box" + user: "u" → SSH with the node.User (Ansible-style override).
-	e, err = rootExecutorForDeployNode(&DeploymentNode{Target: "local", Host: "box", User: "u"})
+	e, err = rootExecutorForDeployNode(&BundleNode{Target: "local", Host: "box", User: "u"})
 	if err != nil {
 		t.Fatalf("box+user: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestRootExecutorForDeployNode(t *testing.T) {
 // (no error) and add NO hop — the chain stays at the passed-in root executor.
 // Pre-cutover, appendHopForFlatPath had no `local` case → "unknown target".
 func TestResolveDeployChain_LocalNoHop(t *testing.T) {
-	roots := map[string]DeploymentNode{
+	roots := map[string]BundleNode{
 		"workstation": {Target: "local"},
 	}
 	node, chain, err := ResolveDeployChain(roots, "workstation", ShellExecutor{})
@@ -78,7 +78,7 @@ func TestResolveDeployChain_LocalNoHop(t *testing.T) {
 // `target: local` node must run on the host venue, NOT a fabricated
 // charly-<pod> container. Pre-cutover this returned a podman-exec NestedExecutor.
 func TestResolveScoringChain_Local(t *testing.T) {
-	roots := map[string]DeploymentNode{
+	roots := map[string]BundleNode{
 		"localbed": {Target: "local"},
 		"podbed":   {Target: "pod"},
 	}

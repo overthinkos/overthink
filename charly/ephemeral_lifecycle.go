@@ -26,7 +26,7 @@ import (
 //       refcount (vm-target only), populates charly.yml's vm_state /
 //       pod_state / k8s_state Ephemeral block, returns a runtime
 //       handle. The timer-first ordering is panic-safe: even if the
-//       caller crashes mid-provisioning, the timer fires `charly deploy
+//       caller crashes mid-provisioning, the timer fires `charly bundle
 //       del <name> --assume-yes` after the TTL.
 //
 //   TeardownEphemeralLifecycle(node, deployName, handle) error
@@ -80,7 +80,7 @@ type EphemeralHandle struct {
 //     variable (nested-case detection).
 //  3. Compute effective TTL (clipped to parent's remaining TTL when
 //     nested).
-//  4. Register systemd transient timer that runs `charly deploy del
+//  4. Register systemd transient timer that runs `charly bundle del
 //     <deployName> --assume-yes` after the TTL.
 //  5. Increment vm-target parent-snapshot refcount when applicable.
 //  6. Persist EphemeralRuntime into charly.yml's vm_state.ephemeral
@@ -88,7 +88,7 @@ type EphemeralHandle struct {
 //
 // Returns the handle that should be passed to TeardownEphemeralLifecycle
 // at deploy del time.
-func RegisterEphemeralLifecycle(node *DeploymentNode, deployName string) (*EphemeralHandle, error) {
+func RegisterEphemeralLifecycle(node *BundleNode, deployName string) (*EphemeralHandle, error) {
 	if node == nil || !node.IsEphemeral() {
 		return nil, fmt.Errorf("RegisterEphemeralLifecycle: node %q is not marked ephemeral", deployName)
 	}
@@ -160,7 +160,7 @@ func RegisterEphemeralLifecycle(node *DeploymentNode, deployName string) (*Ephem
 //  3. Decrement snapshot refcount (vm-target only).
 //  4. Decrement parent's child-refcount (nested case).
 //  5. Clear EphemeralRuntime from charly.yml.
-func TeardownEphemeralLifecycle(node *DeploymentNode, deployName string) error {
+func TeardownEphemeralLifecycle(node *BundleNode, deployName string) error {
 	if node == nil || !node.IsEphemeral() {
 		return fmt.Errorf("TeardownEphemeralLifecycle: node %q is not marked ephemeral", deployName)
 	}
@@ -196,7 +196,7 @@ func TeardownEphemeralLifecycle(node *DeploymentNode, deployName string) error {
 
 // effectiveTTL computes the TTL for a deploy, clipping to the parent
 // ephemeral's remaining TTL when nested. parentID may be empty.
-func effectiveTTL(node *DeploymentNode, parentID string) (time.Duration, error) {
+func effectiveTTL(node *BundleNode, parentID string) (time.Duration, error) {
 	declared := node.Ephemeral.EffectiveTTL()
 	if parentID == "" {
 		return declared, nil
@@ -254,7 +254,7 @@ func newEphemeralID() (string, error) {
 }
 
 // registerTransientTimer creates a systemd-run --user --on-active=<ttl>
-// transient unit that fires `charly deploy del <deployName> --assume-yes` when
+// transient unit that fires `charly bundle del <deployName> --assume-yes` when
 // the TTL elapses. Returns the unit name (suitable for cancel).
 //
 // Falls back to a no-op when systemd-run is not available (best-effort
@@ -267,7 +267,7 @@ func registerTransientTimer(deployName string, ttl time.Duration) (string, error
 	if err != nil {
 		return "", fmt.Errorf("locating charly binary: %w", err)
 	}
-	unitName := fmt.Sprintf("charly-deploy-del-%s-%d", sanitizeUnitName(deployName), time.Now().Unix())
+	unitName := fmt.Sprintf("charly-bundle-del-%s-%d", sanitizeUnitName(deployName), time.Now().Unix())
 	args := append([]string{
 		"--user",
 		"--unit=" + unitName,
@@ -304,16 +304,16 @@ func sanitizeUnitName(s string) string {
 // persistEphemeralRuntime writes the EphemeralHandle into charly.yml's
 // vm_state.ephemeral (or pod_state / k8s_state for those targets).
 func persistEphemeralRuntime(deployName string, h *EphemeralHandle) error {
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil {
 		return err
 	}
 	if dc == nil {
-		dc = &DeployConfig{Deploy: map[string]DeploymentNode{}}
+		dc = &BundleConfig{Bundle: map[string]BundleNode{}}
 	}
-	node, ok := dc.Deploy[deployName]
+	node, ok := dc.Bundle[deployName]
 	if !ok {
-		node = DeploymentNode{}
+		node = BundleNode{}
 	}
 	if node.VmState == nil {
 		node.VmState = &VmDeployState{}
@@ -328,17 +328,17 @@ func persistEphemeralRuntime(deployName string, h *EphemeralHandle) error {
 		Status:          "active",
 		InstanceName:    h.InstanceName,
 	}
-	dc.Deploy[deployName] = node
-	return SaveDeployConfig(dc)
+	dc.Bundle[deployName] = node
+	return SaveBundleConfig(dc)
 }
 
 // clearEphemeralRuntime removes the lifecycle metadata at teardown.
 func clearEphemeralRuntime(deployName string) error {
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil || dc == nil {
 		return err
 	}
-	node, ok := dc.Deploy[deployName]
+	node, ok := dc.Bundle[deployName]
 	if !ok {
 		return nil
 	}
@@ -346,18 +346,18 @@ func clearEphemeralRuntime(deployName string) error {
 		return nil
 	}
 	node.VmState.Ephemeral = nil
-	dc.Deploy[deployName] = node
-	return SaveDeployConfig(dc)
+	dc.Bundle[deployName] = node
+	return SaveBundleConfig(dc)
 }
 
 // bumpParentChildRefcount adjusts the parent ephemeral's child counter
 // by delta (+1 on nested register, -1 on nested teardown).
 func bumpParentChildRefcount(parentID string, delta int) error {
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil || dc == nil {
 		return err
 	}
-	for name, node := range dc.Deploy {
+	for name, node := range dc.Bundle {
 		if node.VmState == nil || node.VmState.Ephemeral == nil {
 			continue
 		}
@@ -368,8 +368,8 @@ func bumpParentChildRefcount(parentID string, delta int) error {
 		if node.VmState.Ephemeral.ChildRefcount < 0 {
 			node.VmState.Ephemeral.ChildRefcount = 0
 		}
-		dc.Deploy[name] = node
-		return SaveDeployConfig(dc)
+		dc.Bundle[name] = node
+		return SaveBundleConfig(dc)
 	}
 	return nil
 }
@@ -377,11 +377,11 @@ func bumpParentChildRefcount(parentID string, delta int) error {
 // lookupEphemeralByID scans charly.yml for the ephemeral with the
 // given ID. Used for nested TTL clipping.
 func lookupEphemeralByID(id string) (*EphemeralRuntime, error) {
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil || dc == nil {
 		return nil, fmt.Errorf("loading charly.yml: %w", err)
 	}
-	for _, node := range dc.Deploy {
+	for _, node := range dc.Bundle {
 		if node.VmState == nil || node.VmState.Ephemeral == nil {
 			continue
 		}
@@ -397,12 +397,12 @@ func lookupEphemeralByID(id string) (*EphemeralRuntime, error) {
 // set guards against cycles (which would only occur via manual
 // charly.yml editing).
 func teardownChildren(deployName string) error {
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil || dc == nil {
 		return err
 	}
 	parentID := ""
-	if node, ok := dc.Deploy[deployName]; ok && node.VmState != nil && node.VmState.Ephemeral != nil {
+	if node, ok := dc.Bundle[deployName]; ok && node.VmState != nil && node.VmState.Ephemeral != nil {
 		parentID = node.VmState.Ephemeral.ID
 	}
 	if parentID == "" {
@@ -412,9 +412,9 @@ func teardownChildren(deployName string) error {
 	return teardownChildrenRec(dc, parentID, visited)
 }
 
-func teardownChildrenRec(dc *DeployConfig, parentID string, visited map[string]bool) error {
+func teardownChildrenRec(dc *BundleConfig, parentID string, visited map[string]bool) error {
 	var toDel []string
-	for name, node := range dc.Deploy {
+	for name, node := range dc.Bundle {
 		if visited[name] {
 			continue
 		}
@@ -429,12 +429,12 @@ func teardownChildrenRec(dc *DeployConfig, parentID string, visited map[string]b
 	for _, name := range toDel {
 		visited[name] = true
 		// Recurse into the child first (depth-first).
-		if node, ok := dc.Deploy[name]; ok && node.VmState != nil && node.VmState.Ephemeral != nil {
+		if node, ok := dc.Bundle[name]; ok && node.VmState != nil && node.VmState.Ephemeral != nil {
 			if err := teardownChildrenRec(dc, node.VmState.Ephemeral.ID, visited); err != nil {
 				return err
 			}
 		}
-		// Invoke `charly deploy del <child> --assume-yes`. We shell out so the
+		// Invoke `charly bundle del <child> --assume-yes`. We shell out so the
 		// child's full cleanup logic (including its own
 		// TeardownEphemeralLifecycle) runs.
 		exe, err := os.Executable()

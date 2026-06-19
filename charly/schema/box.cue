@@ -48,7 +48,7 @@
 // matchN is applied via `&` (NOT embedded) so the struct literal stays CLOSED —
 // an embedded matchN silently disables closedness.
 #Box: {
-	name:         #EntityRef
+	name?:        #EntityRef
 	version?:     #CalVer
 	description?: string & !=""
 	enabled?:     bool
@@ -83,6 +83,7 @@
 	network?:    string & !=""
 	init?:       "supervisord" | "systemd"
 	data_image?: bool
+	bootc?:      bool // image is bootc-bootable (for `charly vm build` → qcow2)
 	readiness?:  #Readiness
 
 	jobs?:            int & >=1

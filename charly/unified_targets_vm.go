@@ -5,7 +5,7 @@ package main
 //
 //   - Add: constructs the live VmDeployTarget (ssh-config stanza +
 //     auto-boot + SSHExecutor), emits the plans, and deploys nested
-//     target:pod children from the merged dctx.Node.Nested.
+//     target:pod children from the merged dctx.Node.Children.
 //   - Del: walks the host ledger, runs guest-side ReverseOps over SSH,
 //     removes the charly.yml vm: entry + managed ssh-config stanza.
 //   - Lifecycle methods that have a clean charly subcommand surface
@@ -35,7 +35,7 @@ import (
 //
 // The SSHExecutor used for ReverseOps comes from buildVmReverseRunner
 // against the VM's persisted deploy state (charly.yml's vm_state block).
-// The dispatcher (DeployDelCmd.Run) may pre-build a ReverseRunner and
+// The dispatcher (BundleDelCmd.Run) may pre-build a ReverseRunner and
 // supply it via VmUnifiedTarget.RevRunner; when nil, Del builds it itself.
 func (t *VmUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 	paths, err := DefaultLedgerPaths()
@@ -234,7 +234,7 @@ func (t *VmUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
 // Rebuild destroys + (optionally) rebuilds the disk image + recreates +
 // starts the VM, THEN re-applies the deploy node's candies to the fresh
 // guest via the shared deploy-add path — mirroring LocalUnifiedTarget.Rebuild
-// and PodUnifiedTarget.Rebuild, which both end in `charly deploy add <node>`.
+// and PodUnifiedTarget.Rebuild, which both end in `charly bundle add <node>`.
 // Without that final step the guest would come back as a bare image with the
 // deploy node's add_candy: candies (and nested pods) gone, so a config change
 // would never take effect on rebuild. This is the VM rebuild path. The
@@ -243,7 +243,7 @@ func (t *VmUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
 //
 // Ordering subtlety: `charly vm destroy` removes the libvirt/qemu domain but NOT
 // the guest ledger (charly.yml's vm_state survives), and VmUnifiedTarget.Add —
-// the path `charly deploy add <node>` routes through (dispatchNode → ResolveTarget
+// the path `charly bundle add <node>` routes through (dispatchNode → ResolveTarget
 // → Add → VmDeployTarget.Emit) — already auto-boots/waits-for-SSH and is
 // idempotent over that ledger. So re-adding after create+start is the correct
 // shared-path reuse: no bespoke SSH-emit logic is duplicated into Rebuild (R3).
@@ -256,7 +256,7 @@ func (t *VmUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
 		}
 		fmt.Printf("dry-run: charly vm create %s\n", name)
 		fmt.Printf("dry-run: charly vm start %s\n", name)
-		fmt.Printf("dry-run: charly deploy add %s\n", t.NodeName)
+		fmt.Printf("dry-run: charly bundle add %s\n", t.NodeName)
 		return nil
 	}
 	// Destroy is best-effort — the VM may not exist yet on a first build.
@@ -281,12 +281,12 @@ func (t *VmUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
 		fmt.Fprint(os.Stderr, stderr)
 	}
 	// Re-apply the deploy node's candies (and nested pods) on the fresh guest.
-	// `charly deploy add <node>` routes through dispatchNode → ResolveTarget →
+	// `charly bundle add <node>` routes through dispatchNode → ResolveTarget →
 	// VmUnifiedTarget.Add → VmDeployTarget.Emit, which SSHes in and applies the
 	// node's add_candy: candies idempotently — the SAME shared primitive
 	// LocalUnifiedTarget.Rebuild and PodUnifiedTarget.Rebuild call (R3).
-	if err := runCharlySubcommand("deploy", "add", t.NodeName); err != nil {
-		return fmt.Errorf("charly deploy add %s: %w", t.NodeName, err)
+	if err := runCharlySubcommand("bundle", "add", t.NodeName); err != nil {
+		return fmt.Errorf("charly bundle add %s: %w", t.NodeName, err)
 	}
 	return nil
 }
@@ -322,7 +322,7 @@ func (t *VmUnifiedTarget) vmDomainName() string {
 // deploy where the key != entity, e.g. check-k3s-vm → vm: k3s-vm); falls
 // back to stripping a legacy "vm:<name>" deploy-key prefix, then to the
 // leaf of a nested dotted path (stack.myvm → myvm).
-func vmEntityForAdd(node *DeploymentNode, name string) (string, error) {
+func vmEntityForAdd(node *BundleNode, name string) (string, error) {
 	if node != nil && node.Vm != "" {
 		return node.Vm, nil
 	}
@@ -340,7 +340,7 @@ func vmEntityForAdd(node *DeploymentNode, name string) (string, error) {
 // NestedExecutor under a parent), auto-boots the VM if unreachable,
 // constructs the live VmDeployTarget, emits the plans, retrieves candy
 // artifacts, deploys nested target:pod children IN the guest from the
-// MERGED dctx.Node.Nested, and writes back VmDeployState.
+// MERGED dctx.Node.Children, and writes back VmDeployState.
 //
 // THE CRUX: nested pods come from dctx.Node — the dispatch-merged node
 // (project+operator field merge from resolveTreeRoot). A whole-node
@@ -379,8 +379,8 @@ func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []
 	// path — not a node-field re-read — so it legitimately reads the
 	// operator charly.yml entry keyed by the deploy name.
 	var state *VmDeployState
-	if dc := loadDeployConfigForRead("charly deploy add vm"); dc != nil {
-		if entry, exists := dc.Deploy[deployName]; exists && entry.VmState != nil {
+	if dc := loadDeployConfigForRead("charly bundle add vm"); dc != nil {
+		if entry, exists := dc.Bundle[deployName]; exists && entry.VmState != nil {
 			state = entry.VmState
 		}
 	}
@@ -539,8 +539,8 @@ func autoBootVmIfNeeded(vmName string, sshPort int, opts EmitOpts) error {
 // kernel-driver reboot are applied). No-op on dry-run, nested VMs, --node-only,
 // and when the merged node declares no nested children. The children come from
 // the dispatch-merged dctx.Node — THE source of truth (R3).
-func (t *VmUnifiedTarget) deployNestedPodsIfNeeded(vmName string, node *DeploymentNode, exec DeployExecutor, opts EmitOpts) error {
-	if opts.DryRun || opts.ParentExec != nil || t.NodeOnly || node == nil || len(node.Nested) == 0 {
+func (t *VmUnifiedTarget) deployNestedPodsIfNeeded(vmName string, node *BundleNode, exec DeployExecutor, opts EmitOpts) error {
+	if opts.DryRun || opts.ParentExec != nil || t.NodeOnly || node == nil || len(node.Children) == 0 {
 		return nil
 	}
 	if err := deployNestedPodsInGuest(vmName, node, exec, opts); err != nil {

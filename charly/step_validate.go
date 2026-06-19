@@ -19,9 +19,12 @@ type PlanValidationContext struct {
 	//   "candy redis" / "box fedora-coder" / "iterate plan redis-bench".
 	OwnerLabel string
 
-	// RequirePod toggles enforcement of a non-empty Op.Pod on check/agent-check
-	// steps. True for scored iterate plans (where pod IS the scoring target);
-	// false for candy/box descriptions (which run against the entity itself).
+	// RequirePod toggles enforcement of a non-empty Op.venue on check/agent-check
+	// steps. True for scored iterate plans (where the venue IS the scoring
+	// target); false for candy/box descriptions (which run against the entity
+	// itself). The venue is loader-derived from each step's bundle-tree position
+	// (flattenBundleVenues), so this rule runs on the FLATTENED plan — a scored
+	// step with no resolvable tree position is the error it catches.
 	RequirePod bool
 }
 
@@ -51,8 +54,8 @@ func ValidatePlan(plan []Step, ctx PlanValidationContext) error {
 		known[id] = true
 		ids = append(ids, id)
 
-		if ctx.RequirePod && (s.Check != "" || s.AgentCheck != "") && s.Pod == "" {
-			return fmt.Errorf("%s: step %q: missing required `pod:` field — every scored check step in an iterate plan must declare the container its probe targets (the harness has no default scoring target)",
+		if ctx.RequirePod && (s.Check != "" || s.AgentCheck != "") && s.venue == "" {
+			return fmt.Errorf("%s: step %q: no execution venue resolved from tree position — every scored check step in an iterate plan must live under an agent-provisioned node (or a member/nested resource) so its venue is derived from position (run: charly migrate)",
 				ctx.OwnerLabel, id)
 		}
 	}

@@ -96,7 +96,7 @@ func acquireImageBuildLock(buildDir, image string) (func() error, error) {
 // acquireDeployConfigLock serializes the read-modify-write of the per-host
 // deploy overlay (~/.config/charly/charly.yml) across concurrent charly
 // processes. saveDeployState / cleanDeployEntry are invoked by `charly config`,
-// `charly start`, `charly deploy add`, and the check-bed runner — none of which
+// `charly start`, `charly bundle add`, and the check-bed runner — none of which
 // otherwise coordinate — so two parallel bed runs would load→modify→save the
 // shared file and silently drop each other's entry (the truncation class the
 // loadDeployConfigForWrite docstring warns about). Blocking: a config write is

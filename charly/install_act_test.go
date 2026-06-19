@@ -6,7 +6,7 @@ import (
 )
 
 // A run: package step lowers into a SystemPackagesStep whose Reverse() removes
-// the package — so `charly deploy del` undoes it. The keyword (run:) supplies
+// the package — so `charly bundle del` undoes it. The keyword (run:) supplies
 // the act intent the deleted Op.Do axis used to carry.
 func TestCompileRunStep_PackageLowersToSystemPackages(t *testing.T) {
 	layer := &Candy{Name: "x", plan: []Step{{Run: "install redis", Op: Op{Package: "redis"}}}}

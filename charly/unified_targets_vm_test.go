@@ -144,7 +144,7 @@ func captureVmStdout(t *testing.T, fn func()) string {
 
 // TestVmUnifiedTarget_Rebuild_DryRun verifies the dry-run path emits the
 // expected ordered sequence — and, critically, that it ENDS in
-// `charly deploy add <node>` so the deploy node's candies are re-applied to the
+// `charly bundle add <node>` so the deploy node's candies are re-applied to the
 // fresh guest, exactly like LocalUnifiedTarget/PodUnifiedTarget.Rebuild. A
 // VM Rebuild that recreates the domain but skips the candy re-apply (the #42
 // bug) would not emit this line, and this test would fail.
@@ -164,7 +164,7 @@ func TestVmUnifiedTarget_Rebuild_DryRun(t *testing.T) {
 	})
 
 	// The candy re-apply step (the fix) must be present, keyed on NodeName.
-	deployAdd := "dry-run: charly deploy add k3s-vm"
+	deployAdd := "dry-run: charly bundle add k3s-vm"
 	if !strings.Contains(out, deployAdd) {
 		t.Errorf("Rebuild dry-run missing candy re-apply step %q in:\n%s", deployAdd, out)
 	}
@@ -225,7 +225,7 @@ func TestVmUnifiedTarget_Rebuild_ReappliesCandies(t *testing.T) {
 		t.Fatal("Rebuild recorded no subcommand calls")
 	}
 	last := calls[len(calls)-1]
-	want := []string{"deploy", "add", "k3s-vm"}
+	want := []string{"bundle", "add", "k3s-vm"}
 	if len(last) != len(want) || last[0] != want[0] || last[1] != want[1] || last[2] != want[2] {
 		t.Errorf("Rebuild last call = %v, want %v (full sequence: %v)", last, want, calls)
 	}

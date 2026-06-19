@@ -2,7 +2,7 @@ package main
 
 // VmCloudInit is the structured cloud-init intent for a VM. Rendered
 // into a NoCloud seed ISO (user-data / meta-data / network-config) at
-// `charly vm build` / `charly deploy add vm:…` time by RenderCloudInit.
+// `charly vm build` / `charly bundle add vm:…` time by RenderCloudInit.
 //
 // No raw user_data YAML string — users declare intent here, charly produces
 // the cloud-config YAML at run time. The cloud-init candy, network

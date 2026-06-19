@@ -19,7 +19,7 @@ type Collector struct {
 	rt      *ResolvedRuntime
 	engine  *EngineClient
 	quadlet string
-	deploy  *DeployConfig
+	deploy  *BundleConfig
 	unified *UnifiedFile // best-effort charly.yml projection (may be nil)
 }
 
@@ -31,7 +31,7 @@ func NewCollector(rt *ResolvedRuntime) (*Collector, error) { //nolint:unparam //
 		rt:     rt,
 		engine: NewEngineClient(rt.RunEngine),
 	}
-	if dc, err := LoadDeployConfig(); err != nil {
+	if dc, err := LoadBundleConfig(); err != nil {
 		fmt.Fprintf(os.Stderr, "WARNING: charly.yml has validation errors:\n  %v\n", err)
 		fmt.Fprintln(os.Stderr, "(showing image-label-driven results below; resolve the errors to see charly.yml-driven state)")
 		fmt.Fprintln(os.Stderr, "")
@@ -337,23 +337,23 @@ func (c *Collector) enabledQuadlets(seen map[string]bool) []ContainerSnapshot {
 // lookupDeploy resolves the charly.yml entry for one image+instance. Tries
 // the canonical deployKey() shape first, then a few legacy fallbacks for
 // bed-rolled keys (joined container name minus charly- prefix).
-func (c *Collector) lookupDeploy(box, instance, joinedContainerName string) (DeploymentNode, bool) {
-	if c.deploy == nil || c.deploy.Deploy == nil {
-		return DeploymentNode{}, false
+func (c *Collector) lookupDeploy(box, instance, joinedContainerName string) (BundleNode, bool) {
+	if c.deploy == nil || c.deploy.Bundle == nil {
+		return BundleNode{}, false
 	}
 	if box != "" {
-		if dn, ok := c.deploy.Deploy[deployKey(box, instance)]; ok {
+		if dn, ok := c.deploy.Bundle[deployKey(box, instance)]; ok {
 			return dn, true
 		}
-		if dn, ok := c.deploy.Deploy[box]; ok && instance == "" {
+		if dn, ok := c.deploy.Bundle[box]; ok && instance == "" {
 			return dn, true
 		}
 	}
 	stripped := strings.TrimPrefix(joinedContainerName, "charly-")
-	if dn, ok := c.deploy.Deploy[stripped]; ok {
+	if dn, ok := c.deploy.Bundle[stripped]; ok {
 		return dn, true
 	}
-	return DeploymentNode{}, false
+	return BundleNode{}, false
 }
 
 // resolveSystemdState consults systemctl + the quadlet dir to decide whether

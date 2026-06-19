@@ -70,12 +70,12 @@ func MigrateQuadlets(quadletDir string, dryRun bool) ([]string, error) {
 // encrypted volumes via deploy.yml, but does NOT carry an
 // `ExecStartPre=… config mount <name>` directive.
 //
-// Exported for tests. Reads deploy.yml via LoadDeployConfig — that
+// Exported for tests. Reads deploy.yml via LoadBundleConfig — that
 // implicitly runs the legacy-schema guard (see C2), so calling this
 // against a pre-2026-04 deploy.yml fails loud rather than silently
 // returning zero hits.
 func DetectStaleEncryptedQuadlets(quadletDir string) ([]string, error) {
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func DetectStaleEncryptedQuadlets(quadletDir string) ([]string, error) {
 		return nil, nil
 	}
 	var stale []string
-	for name, node := range dc.Deploy {
+	for name, node := range dc.Bundle {
 		// Only container-class deploys have quadlets.
 		switch node.Target {
 		case "", "pod", "container":

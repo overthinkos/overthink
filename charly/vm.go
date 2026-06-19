@@ -370,7 +370,7 @@ func (c *VmCreateCmd) Run() error {
 		// RenderQemuArgv for qemu. Uses output/qcow2/{disk,seed} produced
 		// by `charly vm build` (the cloud_image branch of vm_build.go).
 		// claimantNode + resources drive GPU auto-allocation (gpu_allocate.go).
-		var claimantPtr *DeploymentNode
+		var claimantPtr *BundleNode
 		if hasClaimant {
 			claimantPtr = &claimantNode
 		}
@@ -675,7 +675,7 @@ func (c *VmDestroyCmd) Run() error {
 	}
 
 	// Remove the charly.yml vm:<name> entry — the inverse of the saveVmDeployState
-	// that `charly deploy add vm:<name>` (and the ssh.port_auto vm-create persist)
+	// that `charly bundle add vm:<name>` (and the ssh.port_auto vm-create persist)
 	// wrote. Destroying the VM removes the deployment, so its config must not
 	// linger; this is what made disposable check-bed VM entries accumulate (the
 	// bed cleanup tears down via `charly vm destroy`). --keep-deploy preserves it for

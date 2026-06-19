@@ -553,7 +553,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 // writeContainerfile validates the rendered Containerfile (catching Go-template
 // render failures via #RenderedText — see /charly-internals:egress) and writes it.
 func writeContainerfile(path, content string) error {
-	if err := validateTextEgress("rendered_text", path, content); err != nil {
+	if err := validateTextEgress(path, content); err != nil {
 		return err
 	}
 	// Atomic write: a concurrent build reading this Containerfile (parallel
@@ -1275,7 +1275,7 @@ func (g *Generator) generateTraefikRoutes(boxName string, candyOrder []string, _
 	for _, r := range routes {
 		// Schema v4: DNS removed from ResolvedBox (deploy-only choice).
 		// Traefik route hostnames come from the candy's host declaration.
-		// Deploy-time DNS override via DeploymentNode.DNS applies separately.
+		// Deploy-time DNS override via BundleNode.DNS applies separately.
 		host := r.cfg.Host
 
 		fmt.Fprintf(&b, "    %s:\n", r.name)
@@ -1832,7 +1832,7 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 	}
 	// Schema v4: LabelEngine / LabelDNS / LabelAcmeEmail removed —
 	// deployment choices, not image declarations. Deploy-time values
-	// flow through DeploymentNode → BoxMetadata.
+	// flow through BundleNode → BoxMetadata.
 
 	// Platform identity + builder-pool coordination labels.
 	// No serialized selector union — derive as ["all"] ∪ distro ∪ formats at read time.
@@ -2203,9 +2203,9 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 	if len(infoParts) > 0 {
 		// Collapse block-scalar newlines so the value is one valid LABEL line,
 		// then single-quote (NOT %q): a description may legitimately mention a
-		// ${VAR} (e.g. ${PEER_HOST:<subject>}), and the %q double-quoted form
+		// ${VAR} (e.g. ${HOST:<subject>}), and the %q double-quoted form
 		// lets buildah try to expand it — which fails with "Unsupported modifier"
-		// on, e.g., the `<` in ${PEER_HOST:<subject>}. shellSingleQuote matches
+		// on, e.g., the `<` in ${HOST:<subject>}. shellSingleQuote matches
 		// how every JSON label is emitted (no shell/Dockerfile expansion).
 		combinedInfo := strings.ReplaceAll(strings.Join(infoParts, "; "), "\n", " ")
 		fmt.Fprintf(b, "LABEL %s=%s\n", LabelInfo, shellSingleQuote(combinedInfo))

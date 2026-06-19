@@ -15,7 +15,7 @@ func TestMigrateHostCharlyYml(t *testing.T) {
 	dir := t.TempDir()
 	old := filepath.Join(dir, "deploy.yml")
 	newp := filepath.Join(dir, "charly.yml")
-	// No version: line — the realistic legacy per-host shape (old DeployConfig
+	// No version: line — the realistic legacy per-host shape (old BundleConfig
 	// had no version field).
 	content := "deploy:\n    web:\n        target: pod\n        box: web\n"
 	if err := os.WriteFile(old, []byte(content), 0600); err != nil {

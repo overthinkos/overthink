@@ -759,7 +759,7 @@ func loadEncryptedVolume(boxName, instance string) ([]DeployVolumeConfig, string
 		return nil, "", err
 	}
 
-	// Propagate LoadDeployConfig errors instead of swallowing them. A
+	// Propagate LoadBundleConfig errors instead of swallowing them. A
 	// schema error (e.g. the 2026-05-12 require-image cutover rejecting
 	// pre-cutover deploy.yml entries) used to silently degrade to "no
 	// encrypted volumes", which broke the encMount short-circuit and
@@ -767,7 +767,7 @@ func loadEncryptedVolume(boxName, instance string) ([]DeployVolumeConfig, string
 	// password → indefinite hang waiting for stdin. Surfacing the error
 	// turns that hang into a clean error message with a remediation
 	// hint pointing at `charly migrate`.
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil {
 		return nil, "", fmt.Errorf("loading deploy config for encrypted volumes: %w", err)
 	}
@@ -775,7 +775,7 @@ func loadEncryptedVolume(boxName, instance string) ([]DeployVolumeConfig, string
 		return nil, rt.EncryptedStoragePath, nil
 	}
 
-	overlay, ok := dc.Deploy[deployKey(boxName, instance)]
+	overlay, ok := dc.Bundle[deployKey(boxName, instance)]
 	if !ok {
 		return nil, rt.EncryptedStoragePath, nil
 	}

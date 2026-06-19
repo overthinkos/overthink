@@ -138,7 +138,7 @@ func (c *ShellCmd) Run() error {
 	}
 
 	// Resolve agent forwarding (SSH/GPG socket mounts)
-	var deployBox *DeploymentNode
+	var deployBox *BundleNode
 	if overlay, ok := dc.Lookup(c.Box, c.Instance); ok {
 		deployBox = &overlay
 	}

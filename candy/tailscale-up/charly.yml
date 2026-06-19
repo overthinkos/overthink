@@ -1,23 +1,24 @@
-candy:
-    version: 2026.144.1443
-    name: tailscale-up
-    description: |
-        Deploy-time tailscale runtime wiring — start the daemon, set --operator + --hostname.
-        Runtime-config sibling of the tailscale install candy, which it
-        `require:`s — so any image composing this layer carries the
-        tailscale CLI + tailscaled daemon it drives. On a target:local host
-        its single deploy task starts tailscaled, sets --operator (uid 1000)
-        so user-systemd ExecStartPost can `tailscale serve` without sudo,
-        and keeps the tailnet device name in sync with /etc/hostname across
-        hostname changes. Every step self-gates on
-        `systemctl is-active tailscaled`, so it is a no-op in image-build /
-        bootc-assembly contexts where systemd isn't PID 1 — which is exactly
-        why the build-scope composition facts (CLI + daemon present) are
-        verifiable independently of the conditional runtime operator wiring.
-    require:
-        - tailscale
-    plan:
-        - run: |
+tailscale-up:
+    candy:
+        version: 2026.144.1443
+        description: |
+            Deploy-time tailscale runtime wiring — start the daemon, set --operator + --hostname.
+            Runtime-config sibling of the tailscale install candy, which it
+            `require:`s — so any image composing this layer carries the
+            tailscale CLI + tailscaled daemon it drives. On a target:local host
+            its single deploy task starts tailscaled, sets --operator (uid 1000)
+            so user-systemd ExecStartPost can `tailscale serve` without sudo,
+            and keeps the tailnet device name in sync with /etc/hostname across
+            hostname changes. Every step self-gates on
+            `systemctl is-active tailscaled`, so it is a no-op in image-build /
+            bootc-assembly contexts where systemd isn't PID 1 — which is exactly
+            why the build-scope composition facts (CLI + daemon present) are
+            verifiable independently of the conditional runtime operator wiring.
+    tailscale-up-require:
+        require:
+            - tailscale
+    tailscale-up-step-0:
+        run: |
             command=set -eu
             # Start the daemon. The /charly-infrastructure:tailscale layer's
             # cmd task is `systemctl enable` only (no --now) because that
@@ -55,7 +56,7 @@ candy:
             if [ -n "$hn" ]; then
               tailscale set --hostname="$hn" 2>/dev/null || true
             fi
-          command: |
+        command: |
             set -eu
             # Start the daemon. The /charly-infrastructure:tailscale layer's
             # cmd task is `systemctl enable` only (no --now) because that
@@ -93,30 +94,36 @@ candy:
             if [ -n "$hn" ]; then
               tailscale set --hostname="$hn" 2>/dev/null || true
             fi
-          run_as: root
-          comment: Start tailscaled + wire operator (non-root serve) + hostname matching
-        - check: the tailscale CLI is composed into the image at /usr/bin/tailscale via require:tailscale
-          file: /usr/bin/tailscale
-          exists: true
-        - check: the tailscaled daemon the deploy task starts is present at /usr/sbin/tailscaled
-          file: /usr/sbin/tailscaled
-          exists: true
-        - check: the composed tailscale CLI runs offline so the deploy task can call `tailscale set`
-          command: tailscale version
-          exit_status: 0
-        - check: on a logged-in tailnet member the operator user is set so `tailscale debug prefs` succeeds without sudo; skip-passes when the daemon is down or logged out
-          command: |
+        run_as: root
+        comment: Start tailscaled + wire operator (non-root serve) + hostname matching
+    tailscale-up-step-1:
+        check: the tailscale CLI is composed into the image at /usr/bin/tailscale via require:tailscale
+        file: /usr/bin/tailscale
+        exists: true
+    tailscale-up-step-2:
+        check: the tailscaled daemon the deploy task starts is present at /usr/sbin/tailscaled
+        file: /usr/sbin/tailscaled
+        exists: true
+    tailscale-up-step-3:
+        check: the composed tailscale CLI runs offline so the deploy task can call `tailscale set`
+        command: tailscale version
+        exit_status: 0
+    tailscale-up-step-4:
+        check: on a logged-in tailnet member the operator user is set so `tailscale debug prefs` succeeds without sudo; skip-passes when the daemon is down or logged out
+        command: |
             systemctl is-active --quiet tailscaled || exit 0
             if tailscale status --peers=false 2>/dev/null | head -1 | grep -q "Logged out"; then
               exit 0
             fi
             tailscale debug prefs 2>/dev/null | grep -E '"OperatorUser":[[:space:]]*"[^"]+"' >/dev/null
-          exit_status: 0
-        - check: package=tailscale
-          id: tailscale-up-package-composed
-          package: tailscale
-          installed: true
-        - check: |
+        exit_status: 0
+    tailscale-up-package-composed:
+        check: package=tailscale
+        id: tailscale-up-package-composed
+        package: tailscale
+        installed: true
+    tailscale-up-operator-readable:
+        check: |
             command=# Three-state probe:
             #   (a) daemon down → skip (image-build, fresh test bed pre-deploy)
             #   (b) daemon up + logged out → skip (test bed post-deploy)
@@ -129,8 +136,8 @@ candy:
               exit 0
             fi
             tailscale debug prefs 2>/dev/null | grep -E '"OperatorUser":[[:space:]]*"[^"]+"' >/dev/null
-          id: tailscale-up-operator-readable
-          command: |
+        id: tailscale-up-operator-readable
+        command: |
             # Three-state probe:
             #   (a) daemon down → skip (image-build, fresh test bed pre-deploy)
             #   (b) daemon up + logged out → skip (test bed post-deploy)
@@ -143,10 +150,11 @@ candy:
               exit 0
             fi
             tailscale debug prefs 2>/dev/null | grep -E '"OperatorUser":[[:space:]]*"[^"]+"' >/dev/null
-          exit_status: 0
-          context:
+        exit_status: 0
+        context:
             - runtime
-        - check: |
+    tailscale-up-hostname-tracks-system:
+        check: |
             command=# Same three-state pattern as operator-readable.
             systemctl is-active --quiet tailscaled || exit 0
             if tailscale status --peers=false 2>/dev/null | head -1 | grep -q "Logged out"; then
@@ -161,8 +169,8 @@ candy:
             # always be set after a successful task run).
             [ -z "$ts_name" ] && exit 0
             [ "$ts_name" = "$sys_name" ]
-          id: tailscale-up-hostname-tracks-system
-          command: |
+        id: tailscale-up-hostname-tracks-system
+        command: |
             # Same three-state pattern as operator-readable.
             systemctl is-active --quiet tailscaled || exit 0
             if tailscale status --peers=false 2>/dev/null | head -1 | grep -q "Logged out"; then
@@ -177,10 +185,11 @@ candy:
             # always be set after a successful task run).
             [ -z "$ts_name" ] && exit 0
             [ "$ts_name" = "$sys_name" ]
-          exit_status: 0
-          context:
+        exit_status: 0
+        context:
             - runtime
-        - check: |
+    tailscale-up-device-name-matches-hostname:
+        check: |
             command=# Device-name divergence detector. The tailscale control plane
             # treats device names as sticky from initial registration —
             # `tailscale set --hostname=X` updates local prefs but does NOT
@@ -204,8 +213,8 @@ candy:
               echo "tailscale-up: 'sudo tailscale up --reset --hostname=$sys_name' (clobbers other prefs)" >&2
               exit 1
             fi
-          id: tailscale-up-device-name-matches-hostname
-          command: |
+        id: tailscale-up-device-name-matches-hostname
+        command: |
             # Device-name divergence detector. The tailscale control plane
             # treats device names as sticky from initial registration —
             # `tailscale set --hostname=X` updates local prefs but does NOT
@@ -229,6 +238,6 @@ candy:
               echo "tailscale-up: 'sudo tailscale up --reset --hostname=$sys_name' (clobbers other prefs)" >&2
               exit 1
             fi
-          exit_status: 0
-          context:
+        exit_status: 0
+        context:
             - runtime

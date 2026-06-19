@@ -1,7 +1,7 @@
 package main
 
-// deploy_add_cmd.go — `charly deploy add <name> [<ref>]` and
-// `charly deploy del <name>`. Generic wiring on top of the unified deploy
+// deploy_add_cmd.go — `charly bundle add <name> [<ref>]` and
+// `charly bundle del <name>`. Generic wiring on top of the unified deploy
 // targets: this file does ref resolution, plan compilation, deployID
 // stamping, and dry-run printing, then routes through ResolveTarget →
 // target.Add / target.Del. There is NO per-kind dispatch switch — every
@@ -25,8 +25,8 @@ import (
 	"strings"
 )
 
-// DeployAddCmd implements `charly deploy add <name> [<ref>]`.
-type DeployAddCmd struct {
+// BundleAddCmd implements `charly bundle add <name> [<ref>]`.
+type BundleAddCmd struct {
 	Name string `arg:"" help:"Deploy name ('host' for local system; any other string is a container deploy name)"`
 	Ref  string `arg:"" optional:"" help:"Box or candy reference (local name, ./path.yml, or github.com/org/repo[/box/<n>|/candy/<n>][@ref])"`
 
@@ -60,14 +60,14 @@ type DeployAddCmd struct {
 	// vmEntity is the resolved kind:vm entity name this deploy targets,
 	// populated per-node by dispatchNode from the node's `vm:` cross-ref
 	// (kind:check beds + charly.yml target:vm entries) OR the "vm:<name>"
-	// deploy-key prefix (the CLI `charly deploy add vm:<name>` form). The candy
+	// deploy-key prefix (the CLI `charly bundle add vm:<name>` form). The candy
 	// compiler reads it to build plans against the GUEST's distro/format
 	// (apt/dnf), not the operator host's. Not a Kong flag.
 	vmEntity string `kong:"-"`
 }
 
-// DeployDelCmd implements `charly deploy del <name>`.
-type DeployDelCmd struct {
+// BundleDelCmd implements `charly bundle del <name>`.
+type BundleDelCmd struct {
 	Name string `arg:"" help:"Deploy name (literal 'host' or a container deploy name)"`
 
 	AssumeYes       bool `long:"yes" short:"y" help:"Skip confirmation prompts"`
@@ -84,23 +84,23 @@ type DeployDelCmd struct {
 }
 
 // deployDelArgv returns the argv (everything AFTER the charly binary) for a
-// non-interactive `charly deploy del <name>`: the verb, the name, and the ONE valid
+// non-interactive `charly bundle del <name>`: the verb, the name, and the ONE valid
 // skip-confirmation flag. Every programmatic teardown builds its command through
 // this single helper — in-process (runCharlySubcommand), out-of-process
 // (exec.Command), and the systemd-run TTL timer — so the flag can never drift
 // across call sites again.
 //
-// The flag is `--assume-yes`, NOT `--yes`/`--force`: DeployDelCmd.AssumeYes
+// The flag is `--assume-yes`, NOT `--yes`/`--force`: BundleDelCmd.AssumeYes
 // renders as --assume-yes because Kong derives the long name from the FIELD
 // (the `long:"yes"` tag is a Kong no-op in the separate-tag form), with `-y` as
 // the short form. A `--yes`/`--force` drift — neither of which Kong accepts —
 // once aborted teardown at arg-parse and silently leaked the resource (see
 // CHANGELOG/); the deploy-del-flag regression test guards this.
 func deployDelArgv(name string) []string {
-	return []string{"deploy", "del", name, "--assume-yes"}
+	return []string{"bundle", "del", name, "--assume-yes"}
 }
 
-// Run executes `charly deploy add`.
+// Run executes `charly bundle add`.
 //
 // For a schema-v2 config, c.Name may be a dotted path (foo.bar.baz)
 // pointing into the deployments tree. The root segment (foo) is
@@ -110,7 +110,7 @@ func deployDelArgv(name string) []string {
 //
 // For a flat name (no children, no dots) the behavior is unchanged —
 // exactly one target's Emit() call.
-func (c *DeployAddCmd) Run() error {
+func (c *BundleAddCmd) Run() error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("getwd: %w", err)
@@ -119,15 +119,15 @@ func (c *DeployAddCmd) Run() error {
 	// Resolve the named root + any dotted-path subtree the user
 	// targeted. Supports three call shapes:
 	//
-	//   charly deploy add host                   — legacy; root = "host"
-	//   charly deploy add openclaw-stack         — v2 root with children
-	//   charly deploy add openclaw-stack.web.db  — v2 subtree
+	//   charly bundle add host                   — legacy; root = "host"
+	//   charly bundle add openclaw-stack         — v2 root with children
+	//   charly bundle add openclaw-stack.web.db  — v2 subtree
 	targetPath := c.Name
 	tree, _ := resolveTreeRoot(dir)
-	var rootNode *DeploymentNode
+	var rootNode *BundleNode
 	var resolvedPath string
 	// parentExec is the executor chain derived from any ANCESTORS the
-	// dotted path walks through. Without this, `charly deploy add a.b.c`
+	// dotted path walks through. Without this, `charly bundle add a.b.c`
 	// would run c's dispatch locally — ignoring a/b's substrate.
 	var parentExec DeployExecutor
 	if tree != nil {
@@ -154,7 +154,7 @@ func (c *DeployAddCmd) Run() error {
 	// executor derived from the parent chain.
 	//
 	// When rootNode is nil (ref-based deploy with no charly.yml entry
-	// e.g. `charly deploy add foo ./path/to/box.yml`) we fall through
+	// e.g. `charly bundle add foo ./path/to/box.yml`) we fall through
 	// to the single-dispatch path.
 	if rootNode == nil {
 		return c.dispatchNode(resolvedPath, nil, nil, dir)
@@ -163,7 +163,7 @@ func (c *DeployAddCmd) Run() error {
 	// --node-only dispatches just the resolved node, skipping the nested
 	// tree walk. Used when a parent substrate (e.g. a pod) must be started
 	// before its children can deploy — the caller deploys the children
-	// explicitly afterwards via dotted-path `charly deploy add parent.child`.
+	// explicitly afterwards via dotted-path `charly bundle add parent.child`.
 	//
 	// A VM root is ALSO dispatched node-only: its nested target:pod children
 	// deploy IN the guest (the host can't tree-walk a pod-in-VM), so the VM
@@ -174,7 +174,7 @@ func (c *DeployAddCmd) Run() error {
 		return c.dispatchNode(resolvedPath, rootNode, parentExec, dir)
 	}
 
-	if err := WalkDeploymentTree(resolvedPath, rootNode, parentExec, func(path string, node *DeploymentNode, parentExec DeployExecutor) (DeployExecutor, error) {
+	if err := WalkDeploymentTree(resolvedPath, rootNode, parentExec, func(path string, node *BundleNode, parentExec DeployExecutor) (DeployExecutor, error) {
 		if err := c.dispatchNode(path, node, parentExec, dir); err != nil {
 			return nil, err
 		}
@@ -183,16 +183,16 @@ func (c *DeployAddCmd) Run() error {
 		return err
 	}
 
-	// Operator deploy path: bring up any sibling peers (companion deployments)
-	// ALONGSIDE the root on the shared `charly` network — the SAME bringUpPeers
+	// Operator deploy path: bring up any sibling members (companion deployments)
+	// ALONGSIDE the root on the shared `charly` network — the SAME bringUpMembers
 	// helper the kind:check bed runner uses (R3). The bed runner takes its own
-	// `--node-only` path above and brings peers up itself after `charly start`, so
+	// `--node-only` path above and brings members up itself after `charly start`, so
 	// peers are never double-deployed. A dry-run skips bring-up (nothing real
 	// was deployed to companion).
 	if c.DryRun {
 		return nil
 	}
-	return bringUpPeers(rootNode)
+	return bringUpMembers(rootNode)
 }
 
 // dispatchNode compiles plans for a single node and runs the
@@ -203,13 +203,13 @@ func (c *DeployAddCmd) Run() error {
 // "openclaw-stack.web.db"). It's propagated via opts.Path so the
 // target's logging can identify which node is executing.
 //
-// node is the resolved DeploymentNode; nil when the caller provided
+// node is the resolved BundleNode; nil when the caller provided
 // an explicit ref (Ref != "") with no matching charly.yml entry.
 //
 // parentExec is the DeployExecutor of the enclosing environment; nil
 // at the root. Non-nil means "this node is a child of something" —
 // its target composes a NestedExecutor over parentExec.
-func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExec DeployExecutor, dir string) error {
+func (c *BundleAddCmd) dispatchNode(path string, node *BundleNode, parentExec DeployExecutor, dir string) error {
 	opts, refStr, addCandies, tag, err := c.resolveNodeOverlays(path, node, parentExec)
 	if err != nil {
 		return err
@@ -297,10 +297,10 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 
 	// ResolveTarget needs a node carrying target:. For a ref-based deploy
 	// with no charly.yml entry (node == nil), synthesize one from the
-	// classified target so `charly deploy add host ./x.yml` still resolves.
+	// classified target so `charly bundle add host ./x.yml` still resolves.
 	resolveNode := node
 	if resolveNode == nil {
-		resolveNode = &DeploymentNode{Target: target}
+		resolveNode = &BundleNode{Target: target}
 	}
 
 	utgt, err := ResolveTarget(resolveNode, deployName)
@@ -335,7 +335,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 // CLI flags. On the root this matches the pre-v2 behavior; on children the
 // fields come from the child node (not c.Name's top-level entry). Returns an
 // error only when neither a <ref> nor a charly.yml entry resolves a ref.
-func (c *DeployAddCmd) resolveNodeOverlays(path string, node *DeploymentNode, parentExec DeployExecutor) (EmitOpts, string, []string, string, error) {
+func (c *BundleAddCmd) resolveNodeOverlays(path string, node *BundleNode, parentExec DeployExecutor) (EmitOpts, string, []string, string, error) {
 	opts := c.emitOpts()
 	opts.ParentExec = parentExec
 	opts.Path = path
@@ -357,7 +357,7 @@ func (c *DeployAddCmd) resolveNodeOverlays(path string, node *DeploymentNode, pa
 	}
 	if refStr == "" {
 		if node == nil {
-			return opts, "", addCandies, tag, fmt.Errorf("charly deploy add: no <ref> and charly.yml has no entry for %q", path)
+			return opts, "", addCandies, tag, fmt.Errorf("charly bundle add: no <ref> and charly.yml has no entry for %q", path)
 		}
 		// Schema v3: prefer the explicit `box:` cross-ref when set,
 		// so deployment names like "sway-pod" don't need to match a
@@ -377,7 +377,7 @@ func (c *DeployAddCmd) resolveNodeOverlays(path string, node *DeploymentNode, pa
 // precedence is CLI > deployment > template — because InstallOptsConfig.ApplyTo
 // is fill-empty, so applying the template's opts after the deployment's leaves
 // the deployment's values intact and only fills the gaps.
-func resolveNodeTemplate(target, path, dir string, node *DeploymentNode, addCandies []string, opts EmitOpts) ([]string, EmitOpts, error) {
+func resolveNodeTemplate(target, path, dir string, node *BundleNode, addCandies []string, opts EmitOpts) ([]string, EmitOpts, error) {
 	if target == "local" && node != nil && node.Local != "" {
 		tmpl := findLocalSpec(dir, node.Local)
 		if tmpl == nil {
@@ -401,7 +401,7 @@ func resolveNodeTemplate(target, path, dir string, node *DeploymentNode, addCand
 // …) rather than the operator host's context — otherwise the candy's install
 // tasks pick the wrong distro section and the overlay build fails. Returns the
 // plans, the base identity, and the candy set.
-func (c *DeployAddCmd) compileNodePlans(target, refStr, tag, path string, addCandies []string, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
+func (c *BundleAddCmd) compileNodePlans(target, refStr, tag, path string, addCandies []string, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
 	var plans []*InstallPlan
 	var base string
 	var candySet []string
@@ -475,12 +475,12 @@ func (c *DeployAddCmd) compileNodePlans(target, refStr, tag, path string, addCan
 // migrate deploy-v3` command converts them to the canonical values
 // on-disk.
 //
-// For ref-based deploys with no charly.yml entry (e.g. `charly deploy add
+// For ref-based deploys with no charly.yml entry (e.g. `charly bundle add
 // foo ./box.yml` where foo isn't declared), the deploy name itself
 // is the hint: literal `host` → host target; anything else → pod.
 // The legacy `vm:<name>` name-prefix heuristic was removed — VM
 // deploys are now always tree-backed with explicit target:vm.
-func classifyNodeTarget(node *DeploymentNode, path string) string {
+func classifyNodeTarget(node *BundleNode, path string) string {
 	if node != nil && node.Target != "" {
 		switch node.Target {
 		case "container":
@@ -515,7 +515,7 @@ func pathLeaf(path string) string {
 // that supplies the current node's flattened container name (derived
 // from the dotted path) when the node's target is container. Keeps
 // the pure-function deriveChildExecutor free of path-awareness.
-func deriveChildExecutorForPath(path string, node *DeploymentNode, parentExec DeployExecutor) (DeployExecutor, error) {
+func deriveChildExecutorForPath(path string, node *BundleNode, parentExec DeployExecutor) (DeployExecutor, error) {
 	if node == nil {
 		return parentExec, nil
 	}
@@ -551,13 +551,13 @@ func deriveChildExecutorForPath(path string, node *DeploymentNode, parentExec De
 	return parentExec, nil
 }
 
-// Run executes `charly deploy del`. Dispatch resolves the deployment node
+// Run executes `charly bundle del`. Dispatch resolves the deployment node
 // (when present in charly.yml) and routes through ResolveTarget →
 // target.Del. Legacy name-prefix routing (`host` literal, `vm:<name>`)
 // still works for ref-based deploys without a charly.yml entry: a node
 // is synthesized from the classified target so the resolver has a
 // target: to dispatch on.
-func (c *DeployDelCmd) Run() error {
+func (c *BundleDelCmd) Run() error {
 	paths, err := DefaultLedgerPaths()
 	if err != nil {
 		return err
@@ -598,11 +598,11 @@ func (c *DeployDelCmd) Run() error {
 	}
 	_ = kind // kind is informational; the adapter type already encodes it.
 
-	// Tear down any sibling peers (companion deployments) FIRST — the reverse
-	// of bringUpPeers (root up → peers up; peers down → root down). Best-effort
+	// Tear down any sibling members (companion deployments) FIRST — the reverse
+	// of bringUpMembers (root up → members up; members down → root down). Best-effort
 	// + the SAME helper the bed runner uses (R3). Skipped on a dry-run.
 	if !c.DryRun {
-		tearDownPeers(node)
+		tearDownMembers(node)
 	}
 
 	return utgt.Del(context.Background(), DelOpts{
@@ -611,8 +611,8 @@ func (c *DeployDelCmd) Run() error {
 	})
 }
 
-// resolveDelNode resolves the DeploymentNode + canonical kind for a
-// `charly deploy del` invocation. Precedence:
+// resolveDelNode resolves the BundleNode + canonical kind for a
+// `charly bundle del` invocation. Precedence:
 //   - literal "host" name → synthetic local node (legacy)
 //   - "vm:<name>" prefix  → synthetic vm node (legacy ref-based del)
 //   - charly.yml entry    → the merged node, target normalized
@@ -620,14 +620,14 @@ func (c *DeployDelCmd) Run() error {
 //
 // The returned node always carries a non-empty Target so ResolveTarget
 // can dispatch — for ref-based deploys with no charly.yml entry the node
-// is synthesized, preserving `charly deploy del host` / `charly deploy del
+// is synthesized, preserving `charly bundle del host` / `charly bundle del
 // vm:<name>` without a stored entry.
-func (c *DeployDelCmd) resolveDelNode() (*DeploymentNode, string) {
+func (c *BundleDelCmd) resolveDelNode() (*BundleNode, string) {
 	if c.Name == "host" {
-		return &DeploymentNode{Target: "local"}, "local"
+		return &BundleNode{Target: "local"}, "local"
 	}
 	if strings.HasPrefix(c.Name, "vm:") {
-		return &DeploymentNode{Target: "vm"}, "vm"
+		return &BundleNode{Target: "vm"}, "vm"
 	}
 	if cwd, _ := os.Getwd(); cwd != "" {
 		if tree, _ := resolveTreeRoot(cwd); tree != nil {
@@ -638,7 +638,7 @@ func (c *DeployDelCmd) resolveDelNode() (*DeploymentNode, string) {
 			}
 		}
 	}
-	return &DeploymentNode{Target: "pod"}, "pod"
+	return &BundleNode{Target: "pod"}, "pod"
 }
 
 // findContainerDeploy locates the deploy record with matching Target.
@@ -688,7 +688,7 @@ func runPodmanCommand(engine string, args ...string) error {
 // Helpers
 // ---------------------------------------------------------------------------
 
-func (c *DeployAddCmd) emitOpts() EmitOpts {
+func (c *BundleAddCmd) emitOpts() EmitOpts {
 	return EmitOpts{
 		DryRun:               c.DryRun,
 		FormatJSON:           c.Format == "json",
@@ -707,9 +707,9 @@ func (c *DeployAddCmd) emitOpts() EmitOpts {
 // each. For image refs: walk the image's candies in topological order.
 // For candy refs: compile a single plan. For remote refs: fetch and
 // proceed (remote fetch is handled by existing EnsureRepoDownloaded).
-func (c *DeployAddCmd) compilePlans(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
+func (c *BundleAddCmd) compilePlans(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
 	if ref.Source == RefSourceRemote && ref.Kind == RefKindBox {
-		return nil, "", nil, fmt.Errorf("remote image refs are not supported by deploy add (ref=%s)", ref.Raw)
+		return nil, "", nil, fmt.Errorf("remote image refs are not supported by bundle add (ref=%s)", ref.Raw)
 	}
 	if ref.Kind == RefKindBox {
 		return c.compileBoxPlans(ref, cfg, distroCfg, builderCfg, dir)
@@ -725,9 +725,9 @@ func (c *DeployAddCmd) compilePlans(ref *DeployRef, cfg *Config, distroCfg *Dist
 // A REMOTE ref (`@host/org/repo/candy/<name>:ver`) is fetched + scanned with
 // its transitive deps — by augmenting cfg with a synthetic image that carries
 // the ref, so the existing CollectRemoteRefs/ScanAllCandy machinery pulls it —
-// and keys by its bare ref. This makes `charly deploy add --add-layer <remote>`
+// and keys by its bare ref. This makes `charly bundle add --add-layer <remote>`
 // (e.g. the VM check beds' add_candy:) fully automatic with no manual pre-fetch.
-func (c *DeployAddCmd) scanCandiesForRef(ref *DeployRef, cfg *Config, dir string) (map[string]*Candy, string, error) {
+func (c *BundleAddCmd) scanCandiesForRef(ref *DeployRef, cfg *Config, dir string) (map[string]*Candy, string, error) {
 	scanCfg := cfg
 	candyKey := ref.Name
 	if ref.Source == RefSourceRemote {
@@ -748,7 +748,7 @@ func (c *DeployAddCmd) scanCandiesForRef(ref *DeployRef, cfg *Config, dir string
 	return layers, candyKey, nil
 }
 
-func (c *DeployAddCmd) compileBoxPlans(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
+func (c *BundleAddCmd) compileBoxPlans(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
 	_ = distroCfg
 	_ = builderCfg
 	img, err := cfg.ResolveBox(ref.Name, c.Tag, dir, ResolveOpts{})
@@ -808,7 +808,7 @@ func pruneContainerInitForSystemd(order []string, hostCtx HostContext) []string 
 // the provided *ResolvedBox as the compile context (so add_candy for
 // a pod/k8s deployment compile against the base image's distro/user
 // context, not the operator host's).
-func (c *DeployAddCmd) compileCandyPlansWithContext(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string, ctx *ResolvedBox) ([]*InstallPlan, string, []string, error) {
+func (c *BundleAddCmd) compileCandyPlansWithContext(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string, ctx *ResolvedBox) ([]*InstallPlan, string, []string, error) {
 	_ = builderCfg
 	layers, candyKey, err := c.scanCandiesForRef(ref, cfg, dir)
 	if err != nil {
@@ -837,13 +837,13 @@ func (c *DeployAddCmd) compileCandyPlansWithContext(ref *DeployRef, cfg *Config,
 	return plans, ref.Name, order, nil
 }
 
-func (c *DeployAddCmd) compileCandyPlans(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
+func (c *BundleAddCmd) compileCandyPlans(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
 	_ = builderCfg
 	layers, candyKey, err := c.scanCandiesForRef(ref, cfg, dir)
 	if err != nil {
 		return nil, "", nil, err
 	}
-	// Expand transitive deps — a candy deploy (bare `charly deploy add <candy>`
+	// Expand transitive deps — a candy deploy (bare `charly bundle add <candy>`
 	// or `--add-layer <name>`) MUST pull in the candy's `require:` graph in
 	// topological order. Without this, candies whose tasks rely on upstream
 	// binaries (e.g. pre-commit's cargo install needing rust) fail with
@@ -897,7 +897,7 @@ func (c *DeployAddCmd) compileCandyPlans(ref *DeployRef, cfg *Config, distroCfg 
 	return plans, ref.Name, order, nil
 }
 
-func (c *DeployAddCmd) printPlans(plans []*InstallPlan, opts EmitOpts) error {
+func (c *BundleAddCmd) printPlans(plans []*InstallPlan, opts EmitOpts) error {
 	if opts.FormatJSON {
 		return json.NewEncoder(os.Stdout).Encode(plans)
 	}
@@ -929,7 +929,7 @@ func detectHostContext() HostContext {
 
 // syntheticHostBox returns a minimal ResolvedBox suitable for
 // compiling a single-candy plan against the host. Used when the user
-// invokes `charly deploy add host <candy-ref>` without a containing image.
+// invokes `charly bundle add host <candy-ref>` without a containing image.
 //
 // UID/GID/User/Home come from the operator's own process so a candy
 // task carrying `user: ${USER}` resolves to the operator (not root).
@@ -960,10 +960,10 @@ func syntheticHostBox() *ResolvedBox {
 // resolveVmEntity returns the kind:vm entity a deploy targets, or "" when it
 // targets no VM. A node's explicit `vm:` cross-ref wins (kind:check beds and
 // charly.yml target:vm entries, whose names are NOT "vm:"-prefixed); otherwise
-// the "vm:<name>" deploy-key prefix (the CLI `charly deploy add vm:<name>` form).
+// the "vm:<name>" deploy-key prefix (the CLI `charly bundle add vm:<name>` form).
 // This is the single signal the candy compiler uses to pick syntheticVmBox
 // over syntheticHostBox — the prefix alone missed bed/target:vm deploys.
-func resolveVmEntity(deployName string, node *DeploymentNode) string {
+func resolveVmEntity(deployName string, node *BundleNode) string {
 	if node != nil && node.Vm != "" {
 		return node.Vm
 	}
@@ -975,7 +975,7 @@ func resolveVmEntity(deployName string, node *DeploymentNode) string {
 	return ""
 }
 
-// syntheticVmBox returns a ResolvedBox tuned for `charly deploy add
+// syntheticVmBox returns a ResolvedBox tuned for `charly bundle add
 // vm:<name>` — the User/UID/GID/Home fields come from the VM spec's SSH
 // config (not the host's env), so `${USER}` in a candy's `user:` field
 // resolves to the GUEST user (e.g. `arch`) and task scope classification

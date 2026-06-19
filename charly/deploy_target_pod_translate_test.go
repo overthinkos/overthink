@@ -3,12 +3,12 @@ package main
 import "testing"
 
 // TestTranslateHostPathToVenue covers the C10 pod-in-pod build-context
-// path translator. The translator walks the parent DeploymentNode's
+// path translator. The translator walks the parent BundleNode's
 // `volumes:` block, finds a bind-mount that contains the host path, and
 // returns the equivalent venue-side path so a nested podman build can
 // reach the same files.
 func TestTranslateHostPathToVenue(t *testing.T) {
-	parent := &DeploymentNode{
+	parent := &BundleNode{
 		Volume: []DeployVolumeConfig{
 			{Name: "project", Type: "bind", Host: "/home/user/repo", Path: "/workspace"},
 			{Name: "cache", Type: "bind", Host: "/home/user/.cache", Path: "/cache"},
@@ -60,7 +60,7 @@ func TestTranslateHostPathToVenue_NilParent(t *testing.T) {
 // TestTranslateHostPathToVenue_EmptyVolumes: parent with no volumes
 // also returns (false).
 func TestTranslateHostPathToVenue_EmptyVolumes(t *testing.T) {
-	got, ok := translateHostPathToVenue("/home/user/repo", &DeploymentNode{})
+	got, ok := translateHostPathToVenue("/home/user/repo", &BundleNode{})
 	if ok {
 		t.Errorf("empty volumes: ok=true, want false (got=%q)", got)
 	}

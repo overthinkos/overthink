@@ -18,12 +18,12 @@ import (
 func TestPrintDebugRetentionNotice(t *testing.T) {
 	cases := []struct {
 		name     string
-		node     DeploymentNode
+		node     BundleNode
 		wantSubs []string
 	}{
-		{"pod", DeploymentNode{Target: "pod"}, []string{"left running for debugging", "podman exec charly-bed1", "charly remove bed1"}},
-		{"vm", DeploymentNode{Target: "vm", Vm: "k3s-vm"}, []string{"VM \"k3s-vm\" left running", "charly vm destroy k3s-vm"}},
-		{"local", DeploymentNode{Target: "local"}, []string{"local apply left in place", "charly remove bed1"}},
+		{"pod", BundleNode{Target: "pod"}, []string{"left running for debugging", "podman exec charly-bed1", "charly remove bed1"}},
+		{"vm", BundleNode{Target: "vm", Vm: "k3s-vm"}, []string{"VM \"k3s-vm\" left running", "charly vm destroy k3s-vm"}},
+		{"local", BundleNode{Target: "local"}, []string{"local apply left in place", "charly remove bed1"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -76,72 +76,32 @@ func TestCheckFailedError(t *testing.T) {
 	}
 }
 
-// TestFoldCheckBeds_FoldsIntoDeploy asserts kind:check beds are folded into
-// the Deploy map with CheckBed=true (so every deploy verb resolves them by
-// name through the same path) while CheckBeds() returns them as the single
-// enumeration source. This is the config-driven replacement for the old
-// hardcoded bedTable coverage tests.
-func TestFoldCheckBeds_FoldsIntoDeploy(t *testing.T) {
+// TestCheckBeds_DerivesFromDisposableBundles asserts the R10 bed set is derived
+// from the `disposable: true` bundles in the Deploy map (the separate kind:check
+// block was removed — a bed IS a disposable bundle); a non-disposable deploy is
+// NOT a bed.
+func TestCheckBeds_DerivesFromDisposableBundles(t *testing.T) {
 	uf := &UnifiedFile{
-		Check: map[string]DeploymentNode{
+		Bundle: map[string]BundleNode{
 			"sample-pod-bed":   {Target: "pod", Box: "sample-image", Disposable: new(true)},
 			"sample-vm-bed":    {Target: "vm", Vm: "sample-vm", Disposable: new(true)},
 			"sample-local-bed": {Target: "local", Local: "sample-local", Disposable: new(true)},
+			"plain-deploy":     {Target: "pod", Box: "prod"}, // not disposable → not a bed
 		},
 	}
-	if err := foldCheckBeds(uf); err != nil {
-		t.Fatalf("foldCheckBeds: %v", err)
+	beds := uf.CheckBeds()
+	if got := len(beds); got != 3 {
+		t.Errorf("CheckBeds() = %d entries, want 3 (only disposable bundles)", got)
 	}
-	for _, name := range []string{"sample-pod-bed", "sample-vm-bed", "sample-local-bed"} {
-		d, ok := uf.Deploy[name]
-		if !ok {
-			t.Errorf("bed %q not folded into Deploy", name)
-			continue
-		}
-		if !d.CheckBed {
-			t.Errorf("bed %q folded without CheckBed marker", name)
-		}
-	}
-	if got := len(uf.CheckBeds()); got != 3 {
-		t.Errorf("CheckBeds() = %d entries, want 3", got)
-	}
-}
-
-// TestFoldCheckBeds_DisjointNameGuard asserts a name declared as BOTH a
-// kind:check bed and a kind:deploy entry is a hard error.
-func TestFoldCheckBeds_DisjointNameGuard(t *testing.T) {
-	uf := &UnifiedFile{
-		Deploy: map[string]DeploymentNode{
-			"clash": {Target: "pod", Box: "x"},
-		},
-		Check: map[string]DeploymentNode{
-			"clash": {Target: "pod", Box: "y", Disposable: new(true)},
-		},
-	}
-	err := foldCheckBeds(uf)
-	if err == nil || !strings.Contains(err.Error(), "both a kind:check bed and a kind:deploy entry") {
-		t.Fatalf("expected disjoint-name error, got %v", err)
-	}
-}
-
-// TestValidateCheckBeds_DisposableRequired asserts a bed without
-// disposable:true is rejected (it can't be R10-rebuilt unattended).
-func TestValidateCheckBeds_DisposableRequired(t *testing.T) {
-	uf := &UnifiedFile{
-		Check: map[string]DeploymentNode{
-			"sample-pod-bed": {Target: "pod", Box: "sample-image"}, // not disposable
-		},
-	}
-	err := validateCheckBeds(uf)
-	if err == nil || !strings.Contains(err.Error(), "disposable: true") {
-		t.Fatalf("expected disposable-required error, got %v", err)
+	if _, ok := beds["plain-deploy"]; ok {
+		t.Error("a non-disposable deploy must NOT be enumerated as a bed")
 	}
 }
 
 // TestValidateCheckBeds_TargetEnum asserts an unsupported target is rejected.
 func TestValidateCheckBeds_TargetEnum(t *testing.T) {
 	uf := &UnifiedFile{
-		Check: map[string]DeploymentNode{
+		Bundle: map[string]BundleNode{
 			"check-weird": {Target: "k8s", Disposable: new(true)},
 		},
 	}
@@ -155,7 +115,7 @@ func TestValidateCheckBeds_TargetEnum(t *testing.T) {
 // entity is undefined is rejected, and that a defined entity passes.
 func TestValidateCheckBeds_VmRefMustResolve(t *testing.T) {
 	missing := &UnifiedFile{
-		Check: map[string]DeploymentNode{
+		Bundle: map[string]BundleNode{
 			"check-k3s-vm": {Target: "vm", Vm: "k3s-vm", Disposable: new(true)},
 		},
 	}
@@ -164,7 +124,7 @@ func TestValidateCheckBeds_VmRefMustResolve(t *testing.T) {
 	}
 	ok := &UnifiedFile{
 		VM: map[string]*VmSpec{"k3s-vm": {}},
-		Check: map[string]DeploymentNode{
+		Bundle: map[string]BundleNode{
 			"check-k3s-vm": {Target: "vm", Vm: "k3s-vm", Disposable: new(true)},
 		},
 	}
@@ -177,7 +137,7 @@ func TestValidateCheckBeds_VmRefMustResolve(t *testing.T) {
 // local: template is undefined is rejected, and that a defined one passes.
 func TestValidateCheckBeds_LocalRefMustResolve(t *testing.T) {
 	missing := &UnifiedFile{
-		Check: map[string]DeploymentNode{
+		Bundle: map[string]BundleNode{
 			"check-local": {Target: "local", Local: "check-local", Disposable: new(true)},
 		},
 	}
@@ -186,7 +146,7 @@ func TestValidateCheckBeds_LocalRefMustResolve(t *testing.T) {
 	}
 	ok := &UnifiedFile{
 		Local: map[string]*LocalSpec{"check-local": {}},
-		Check: map[string]DeploymentNode{
+		Bundle: map[string]BundleNode{
 			"check-local": {Target: "local", Local: "check-local", Disposable: new(true)},
 		},
 	}
@@ -198,7 +158,7 @@ func TestValidateCheckBeds_LocalRefMustResolve(t *testing.T) {
 // TestPersistBedDeployOverrides_SeedsPortBeforeConfig pins the fix for the
 // bug class where a kind:check pod bed's project-declared deploy-shaped fields
 // (port:/volume:/env:/tunnel:) never reached the per-host deploy.yml: charly check
-// run shelled out `charly deploy add`/`charly config` with just the bed NAME, and both
+// run shelled out `charly bundle add`/`charly config` with just the bed NAME, and both
 // source port/security/network from the IMAGE LABELS (gating port writes behind
 // an operator -p), so the bed's `port: 45434:11434` remap silently fell back to
 // the image default and collided with a same-image production deploy at start.
@@ -211,11 +171,12 @@ func TestPersistBedDeployOverrides_SeedsPortBeforeConfig(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 	// A pre-existing unrelated deploy must survive the seed (merge, not clobber).
-	initialYAML := `version: 2026.165.1048
-deploy:
-    ollama:
-        target: pod
+	// Node-form: the bundle target is inferred from box (→ pod); port is a child node.
+	initialYAML := `version: 2026.169.0004
+ollama:
+    bundle:
         box: ollama
+    ollama-port:
         port:
             - 11434:11434
 `
@@ -226,7 +187,7 @@ deploy:
 
 	// A bed whose key differs from its image and whose port remaps off the
 	// image default — exactly the check-cachyos-ollama-pod shape.
-	bed := DeploymentNode{
+	bed := BundleNode{
 		Target:     "pod",
 		Box:        "ollama",
 		Port:       []string{"45434:11434"},
@@ -235,11 +196,11 @@ deploy:
 	}
 	persistBedDeployOverrides("check-cachyos-ollama-pod", bed)
 
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil {
 		t.Fatalf("reload after seed: %v", err)
 	}
-	entry, ok := dc.Deploy["check-cachyos-ollama-pod"]
+	entry, ok := dc.Bundle["check-cachyos-ollama-pod"]
 	if !ok {
 		t.Fatal("bed entry not seeded into deploy.yml")
 	}
@@ -253,7 +214,7 @@ deploy:
 		t.Error("bed disposable not seeded (the check-runner requires it to authorize the unattended fresh-rebuild)")
 	}
 	// The sibling production deploy must be untouched (distinct key).
-	sib, ok := dc.Deploy["ollama"]
+	sib, ok := dc.Bundle["ollama"]
 	if !ok || len(sib.Port) != 1 || sib.Port[0] != "11434:11434" {
 		t.Errorf("sibling 'ollama' deploy clobbered: got %+v", sib)
 	}
@@ -269,7 +230,7 @@ func TestBedCheckLiveRefs(t *testing.T) {
 		t.Fatalf("flat bed: got %v, want [check-pod]", got)
 	}
 	// Nested bed: substrate first, then each child as a sorted dotted path.
-	nested := map[string]*DeploymentNode{
+	nested := map[string]*BundleNode{
 		"selkies-kde": {Target: "pod"},
 		"cuda-pod":    {Target: "pod"},
 	}
@@ -295,7 +256,7 @@ func TestBedCheckLiveRefs(t *testing.T) {
 	// still does. This is the check-coverage gate for the e740430 defect: a hop
 	// for an android child wrongly resolved to a non-existent
 	// `charly-<parent>.device` container, failing every nested pod→android bed's R10.
-	androidNested := map[string]*DeploymentNode{
+	androidNested := map[string]*BundleNode{
 		"web":    {Target: "pod"},
 		"device": {Target: "android"},
 	}

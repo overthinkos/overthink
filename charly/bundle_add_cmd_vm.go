@@ -13,7 +13,7 @@ import (
 // child it (1) builds the child image on the host, (2) cp-boxes it into the
 // guest as localhost/charly-<childKey>:latest (offline; preserves nothing but the
 // loaded ref), and (3) runs the guest's own project-free
-// `charly deploy from-box <ref> <childKey>` over SSH as the guest user — which
+// `charly bundle from-box <ref> <childKey>` over SSH as the guest user — which
 // generates + starts a quadlet from the image's baked OCI labels (ports,
 // services, GPU device auto-detected in the guest). `loginctl enable-linger`
 // makes the --user quadlet start at boot, so the pod survives a guest reboot.
@@ -22,9 +22,9 @@ import (
 // `charly update`. The host never needs the project for the child (the guest reads
 // the labels). nil node / no nested pods → no-op. Shared by
 // VmUnifiedTarget.Add (auto-deploy after Emit) and the dotted-path dispatch
-// `charly deploy add <vm-bed>.<child>`.
-func deployNestedPodsInGuest(vmName string, node *DeploymentNode, exec DeployExecutor, opts EmitOpts) error {
-	if node == nil || len(node.Nested) == 0 {
+// `charly bundle add <vm-bed>.<child>`.
+func deployNestedPodsInGuest(vmName string, node *BundleNode, exec DeployExecutor, opts EmitOpts) error {
+	if node == nil || len(node.Children) == 0 {
 		return nil
 	}
 	// The from-box delegation runs the HOST's OWN charly in the guest — not the
@@ -43,8 +43,8 @@ func deployNestedPodsInGuest(vmName string, node *DeploymentNode, exec DeployExe
 			return fmt.Errorf("delivering host charly into guest %s for from-box delegation: %w", vmName, err)
 		}
 	}
-	for _, childKey := range sortedNestedKeys(node.Nested) {
-		child := node.Nested[childKey]
+	for _, childKey := range sortedNestedKeys(node.Children) {
+		child := node.Children[childKey]
 		if child == nil || child.Box == "" {
 			continue
 		}
@@ -70,14 +70,14 @@ func deployNestedPodsInGuest(vmName string, node *DeploymentNode, exec DeployExe
 		// deploy itself runs unprivileged so the quadlet lands in the user's
 		// systemd, matching how the operator's interactive session runs it.
 		// XDG_RUNTIME_DIR must be exported so the `systemctl --user` calls inside
-		// `charly deploy from-box` reach the lingering user bus over this non-login
+		// `charly bundle from-box` reach the lingering user bus over this non-login
 		// SSH session — the same pattern VmDeployTarget uses for user services.
 		// charlyCmd is the explicit /tmp path to the host's own charly delivered above
 		// (the from-box authority), never the guest's PATH charly.
 		script := fmt.Sprintf(
 			"sudo loginctl enable-linger \"$(id -un)\" >/dev/null 2>&1 || true\n"+
 				"export XDG_RUNTIME_DIR=\"/run/user/$(id -u)\"\n"+
-				"%s deploy from-box %s %s",
+				"%s bundle from-box %s %s",
 			charlyCmd, asRef, childKey)
 		if err := exec.RunUser(context.Background(), script, opts); err != nil {
 			return fmt.Errorf("deploy nested pod %s in guest: %w", childKey, err)
@@ -224,20 +224,20 @@ func resolveVmSshPort(spec *VmSpec, vmName string) (int, error) {
 // overwrites the deploy.<name>.vm_state block.
 func saveVmDeployState(deployName string, state *VmDeployState, _ *VmSpec) error {
 	// Load existing charly.yml (or start fresh).
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil {
 		return fmt.Errorf("loading charly.yml: %w", err)
 	}
 	if dc == nil {
-		dc = &DeployConfig{}
+		dc = &BundleConfig{}
 	}
-	if dc.Deploy == nil {
-		dc.Deploy = map[string]DeploymentNode{}
+	if dc.Bundle == nil {
+		dc.Bundle = map[string]BundleNode{}
 	}
 
-	entry, exists := dc.Deploy[deployName]
+	entry, exists := dc.Bundle[deployName]
 	if !exists {
-		entry = DeploymentNode{}
+		entry = BundleNode{}
 	}
 	entry.Target = "vm"
 	// deployName may be a legacy "vm:<entity>" key (from charly vm create) OR a
@@ -250,21 +250,21 @@ func saveVmDeployState(deployName string, state *VmDeployState, _ *VmSpec) error
 		entry.Vm = vmName
 	}
 	entry.VmState = state
-	dc.Deploy[deployName] = entry
+	dc.Bundle[deployName] = entry
 
-	return SaveDeployConfig(dc)
+	return SaveBundleConfig(dc)
 }
 
 // removeVmDeployEntry strips deploy.<deployName> from charly.yml.
 func removeVmDeployEntry(deployName string) error {
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil {
 		return err
 	}
-	if dc == nil || dc.Deploy == nil {
+	if dc == nil || dc.Bundle == nil {
 		return nil
 	}
-	entry, ok := dc.Deploy[deployName]
+	entry, ok := dc.Bundle[deployName]
 	if !ok {
 		return nil
 	}
@@ -284,11 +284,11 @@ func removeVmDeployEntry(deployName string) error {
 	// now-stateless entry so its operator config survives.
 	entry.VmState = nil
 	if isAutoVmDeployEntry(entry) {
-		delete(dc.Deploy, deployName)
+		delete(dc.Bundle, deployName)
 	} else {
-		dc.Deploy[deployName] = entry
+		dc.Bundle[deployName] = entry
 	}
-	return SaveDeployConfig(dc)
+	return SaveBundleConfig(dc)
 }
 
 // hostArchRuntime returns runtime.GOARCH translated to the libvirt/

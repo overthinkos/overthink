@@ -92,7 +92,7 @@ func secretKeyForDep(dep EnvDependency) (service, key string) {
 //   - removes KEY=VAL from the in-memory dc.Env slice
 //   - creates a charly.yml.bak.<unix-timestamp> backup before the first
 //     mutation (one backup per call, even if multiple entries are migrated)
-//   - persists the cleaned dc via SaveDeployConfig
+//   - persists the cleaned dc via SaveBundleConfig
 //   - logs a per-entry informational notice to stderr
 //
 // Returns (migrated int, err error) where migrated is the number of entries
@@ -103,8 +103,8 @@ func secretKeyForDep(dep EnvDependency) (service, key string) {
 // This is idempotent: running it a second time on a now-clean charly.yml is
 // a no-op. Running it on a host that never had plaintext credentials is a
 // no-op.
-func MigratePlaintextEnvSecret(dc *DeployConfig, meta *BoxMetadata, image, instance string) (int, error) {
-	if dc == nil || dc.Deploy == nil {
+func MigratePlaintextEnvSecret(dc *BundleConfig, meta *BoxMetadata, image, instance string) (int, error) {
+	if dc == nil || dc.Bundle == nil {
 		return 0, nil
 	}
 	declared := secretDeclaredOnBox(meta)
@@ -113,7 +113,7 @@ func MigratePlaintextEnvSecret(dc *DeployConfig, meta *BoxMetadata, image, insta
 	}
 
 	key := deployKey(image, instance)
-	entry, ok := dc.Deploy[key]
+	entry, ok := dc.Bundle[key]
 	if !ok || len(entry.Env) == 0 {
 		return 0, nil
 	}
@@ -180,8 +180,8 @@ func MigratePlaintextEnvSecret(dc *DeployConfig, meta *BoxMetadata, image, insta
 	}
 
 	entry.Env = staying
-	dc.Deploy[key] = entry
-	if err := SaveDeployConfig(dc); err != nil {
+	dc.Bundle[key] = entry
+	if err := SaveBundleConfig(dc); err != nil {
 		return migrated, fmt.Errorf("persisting cleaned charly.yml after migration: %w (backup at %s)", err, backupPath)
 	}
 	fmt.Fprintf(os.Stderr, "Backed up previous charly.yml to %s (rollback: mv %s %s)\n", backupPath, backupPath, deployConfigPathOrEmpty())

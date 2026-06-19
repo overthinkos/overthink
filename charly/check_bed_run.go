@@ -1,24 +1,24 @@
 package main
 
-// check_bed_run.go — the R10 acceptance-sequence engine for `kind: check`
-// disposable test beds, driven by `charly check run <bed>` / `--all-beds`.
+// check_bed_run.go — the R10 acceptance-sequence engine for disposable
+// test beds, driven by `charly check run <bed>` (fan a roster out via /verify-beds).
 //
-// A `kind: check` bed is a DeploymentNode (folded into the Deploy map with
-// CheckBed=true by foldCheckBeds) describing a disposable target. runCheckBed
-// drives the canonical sequence against it:
+// A check bed is a `disposable: true` BundleNode in the Bundle map (CheckBeds()
+// derives the bed set from the disposable bundles) describing a disposable target.
+// runCheckBed drives the canonical sequence against it:
 //
 //	build → check box → deploy add → config → start → check live →
 //	fresh update (R10 acceptance gate) → tear down
 //
-// Every parameter is read from the bed's DeploymentNode — there is NO
+// Every parameter is read from the bed's BundleNode — there is NO
 // hardcoded bed table. The target kind selects the bring-up/tear-down path:
 //
-//	target: pod   → charly box build + charly check box + charly deploy add +
+//	target: pod   → charly box build + charly check box + charly bundle add +
 //	                charly config + charly start + charly check live
-//	target: vm    → charly vm build + charly vm create + charly deploy add + charly check
+//	target: vm    → charly vm build + charly vm create + charly bundle add + charly check
 //	                live (image build / check box skipped — the substrate
 //	                is a cloud_image, not an charly box)
-//	target: local → charly deploy add only (kind:local applies candies in place;
+//	target: local → charly bundle add only (kind:local applies candies in place;
 //	                no container/VM to exec check live against)
 //
 // The dispatcher SHELLS OUT to the same `charly` binary the caller invoked, so
@@ -47,7 +47,7 @@ type bedRunOpts struct {
 // bedCheckLevel resolves the acceptance-depth rung for a bed from its box's
 // authored check_level (none → DefaultCheckLevel). VM / local beds carry no box
 // image, so they always run at the default rung.
-func bedCheckLevel(uf *UnifiedFile, node DeploymentNode) string {
+func bedCheckLevel(uf *UnifiedFile, node BundleNode) string {
 	if node.Box == "" {
 		return DefaultCheckLevel
 	}
@@ -103,7 +103,7 @@ func summaryStatus(ok bool) string {
 // commands. Pod/local beds tear down with `charly remove`; VM beds with
 // `charly vm destroy`. The next `charly check run` best-effort clears the lingering
 // target before rebuilding, so leaving it up never blocks a re-run.
-func printDebugRetentionNotice(w io.Writer, name string, node DeploymentNode) {
+func printDebugRetentionNotice(w io.Writer, name string, node BundleNode) {
 	switch node.Target {
 	case "vm":
 		fmt.Fprintf(w, "\n[charly check run] bed %q FAILED — VM %q left running for debugging.\n"+
@@ -123,7 +123,7 @@ func printDebugRetentionNotice(w io.Writer, name string, node DeploymentNode) {
 // bed's project-declared deploy-shaped fields (port / volume / env / tunnel /
 // security / network) plus its disposable/lifecycle classification, BEFORE the
 // bed's `charly config` step runs. The folded bed node is the source of truth, but
-// `charly deploy add` / `charly config` otherwise source those fields from the IMAGE
+// `charly bundle add` / `charly config` otherwise source those fields from the IMAGE
 // LABELS and gate port writes behind an operator `-p` — so a bed's declared
 // `port:` remap would never reach the quadlet (it would fall back to the image
 // default and collide with any same-image deploy already bound to that port).
@@ -132,7 +132,18 @@ func printDebugRetentionNotice(w io.Writer, name string, node DeploymentNode) {
 // logic; `charly config`'s own SetPorts-gated save then leaves the seeded port
 // untouched (it passes no `-p`). saveDeployState's per-field guards make
 // unset bed fields no-ops, so this is safe for beds that declare only a subset.
-func persistBedDeployOverrides(name string, node DeploymentNode) {
+func persistBedDeployOverrides(name string, node BundleNode) {
+	// A GROUP bed (boxless root + sibling Members — the §3 cross-deployment
+	// shape) has NO root deployment to seed: its members each carry their own
+	// port/volume/env overrides (bringUpMembers persists every member), and the
+	// boxless root is never `charly config`'d. Persisting the group root here would
+	// write a MEMBERLESS bed (no box, no members — saveDeployState carries no
+	// member fields) that validateCheckBeds then HARD-REJECTS on the next overlay
+	// load ("no workload cross-ref and no sibling members"), poisoning every
+	// subsequent saveDeployState. So never persist a group bed root.
+	if node.IsGroup() {
+		return
+	}
 	saveDeployState(name, "", SaveDeployStateInput{
 		Ports:         node.Port,
 		SetPorts:      len(node.Port) > 0,
@@ -151,14 +162,20 @@ func persistBedDeployOverrides(name string, node DeploymentNode) {
 	})
 }
 
-// runCheckBed executes the canonical R10 sequence for one `kind: check` bed
+// runCheckBed executes the canonical R10 sequence for one check bed (a `disposable: true` bundle)
 // and writes per-step logs + summary.yml to .check/<name>/<calver>/. Returns
 // the result struct (always non-nil) and the first error encountered.
 //
 //nolint:gocyclo // canonical R10 bed sequence (build→check→deploy→check-live→update→teardown) woven from 6 interdependent inline closures (step/stepReady/fail/checkLiveTree/recoverVMIfDown/cleanup) over a shared mutable deployed flag + defer-bound preempt lease; contiguous-block extraction is not behavior-preserving
-func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRunResult, error) {
+func runCheckBed(exe, name string, node BundleNode, opts bedRunOpts) (*bedRunResult, error) {
 	isVM := node.Target == "vm"
 	isLocal := node.Target == "local"
+	// A GROUP bed (the §3 cross-deployment shape): no root box/vm/local cross-ref,
+	// but sibling Members (subject + driver) that ARE the deployment. It has no
+	// root container, so its R10 sequence builds/deploys/rebuilds the MEMBERS
+	// (via bringUpMembers) and check-lives the flattened venue-stamped plan
+	// (runGroupCheck), instead of the workload-root build→deploy→update path.
+	isGroup := node.IsGroup()
 	image := node.Box
 	vmTemplate := node.Vm
 	localRef := node.Local
@@ -218,7 +235,7 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 	// development). Auto-point those refs at the local superproject working tree
 	// (the `:vTAG` is ignored) so EVERY bed tests the latest local candies. An
 	// explicit operator CHARLY_REPO_OVERRIDE entry for the same repo still wins
-	// (mergeRepoOverrides places it first). Scoped + restored so --all-beds and
+	// (mergeRepoOverrides places it first). Scoped + restored so concurrent bed runs and
 	// the test suite don't leak the env.
 	if pair := selfSuperprojectOverridePair("."); pair != "" {
 		old, had := os.LookupEnv(RepoOverrideEnv)
@@ -240,7 +257,7 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 	// running preemptible holder; for shared, flipping the GPU to nvidia + CDI)
 	// and restores it AFTER teardown. The lease is owned HERE (the outermost
 	// orchestrator) and CHARLY_PREEMPT_LEASE suppresses the nested `charly vm create`/
-	// `charly deploy add`/`charly vm destroy` subprocesses from touching it. The defer
+	// `charly bundle add`/`charly vm destroy` subprocesses from touching it. The defer
 	// guarantees restore on EVERY exit path (success, failure, early return);
 	// crash-recovery beyond the defer is handled by the ledger + `charly preempt
 	// restore`. See charly/preempt.go.
@@ -382,7 +399,7 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 		}
 		// Tear down any sibling peer deployments (companion driver pods) the
 		// bed brought up alongside its root. Best-effort; never blocks teardown.
-		tearDownPeers(&node)
+		tearDownMembers(&node)
 	}
 
 	// fail is the SINGLE failure tail shared by every step: record the
@@ -426,8 +443,42 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 		}
 	}
 
-	// Step 3: bring up the bed.
-	if isVM {
+	// Group bed: no root image — build EACH member's substrate (the same set
+	// bringUpMembers brings up). A pod member builds its box image; a VM member
+	// builds its disk (vm build) so bringUpMembers' vm create has a disk to boot;
+	// a kind:local member carries no image to build (it applies candies in place).
+	if isGroup {
+		for _, memberKey := range sortedMemberKeys(node.Members) {
+			m := node.Members[memberKey]
+			if m == nil {
+				continue
+			}
+			if isVmMember(m) {
+				// VM member: build its disk here; bringUpMembers does vm create + ssh-wait.
+				startLibvirtUserSession()
+				if err := step("vm-build-"+memberKey, []string{"vm", "build", m.Vm}); err != nil {
+					return fail("vm build member %s (%s): %w", memberKey, m.Vm, err)
+				}
+				continue
+			}
+			if m.Box == "" {
+				continue // kind:local member — applies candies in place, no image
+			}
+			if err := step("image-build-"+memberKey, []string{"box", "build", m.Box, "--dev-local-pkg"}); err != nil {
+				return fail("image build member %s (%s): %w", memberKey, m.Box, err)
+			}
+			if runBuildCheck {
+				if err := step("check-image-"+memberKey, []string{"check", "box", m.Box}); err != nil {
+					return fail("check box member %s (%s): %w", memberKey, m.Box, err)
+				}
+			}
+		}
+	}
+
+	// Step 3: bring up the bed. switch-true (not an if/else chain) over the
+	// substrate kind: VM, GROUP (boxless sibling members), or pod/local default.
+	switch {
+	case isVM:
 		// VM beds need libvirt's user-session daemon for the check probes
 		// (`charly check libvirt …`, `charly check spice …`) AND for the
 		// `backend: libvirt` resolver. Best-effort start before any VM step;
@@ -451,12 +502,12 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 		// The VM target's Add applies the candies over SSH (incl. any kernel-driver
 		// reboot), then deploys each nested pod as a PERSISTENT in-guest quadlet via
 		// deployNestedPodsInGuest (build + cp-box into the guest + the guest's
-		// own project-free `charly deploy from-box`). The dispatch routes a VM root
+		// own project-free `charly bundle from-box`). The dispatch routes a VM root
 		// node-only (its pod children deploy in-guest, never via a host tree
 		// walk), so no --node-only flag is needed and no separate image-transfer
 		// step is required.
-		if err := step("deploy-add", []string{"deploy", "add", name, vmTemplate}); err != nil {
-			return fail("deploy add %s: %w", name, err)
+		if err := step("deploy-add", []string{"bundle", "add", name, vmTemplate}); err != nil {
+			return fail("bundle add %s: %w", name, err)
 		}
 		// deployNestedPodsInGuest (inside the VM deploy-add above) brings up
 		// nested target:pod children as in-guest quadlets, but it SKIPS
@@ -465,16 +516,25 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 		// which applies the child's local-deploy candies into the guest over the
 		// NestedExecutor (SSH). Without this, checkLiveTree below would check an
 		// un-deployed child and fail. Mirrors the pod-bed nested-child loop.
-		for _, childKey := range sortedNestedKeys(node.Nested) {
-			child := node.Nested[childKey]
+		for _, childKey := range sortedNestedKeys(node.Children) {
+			child := node.Children[childKey]
 			if child == nil || (child.Target != "local" && child.Target != "host") {
 				continue // pod children handled in-guest by deployNestedPodsInGuest
 			}
-			if err := step("deploy-"+childKey, []string{"deploy", "add", name + "." + childKey}); err != nil {
+			if err := step("deploy-"+childKey, []string{"bundle", "add", name + "." + childKey}); err != nil {
 				return fail("deploy nested local child %s.%s: %w", name, childKey, err)
 			}
 		}
-	} else {
+	case isGroup:
+		// Group bed: no root container — the members (subject + driver) ARE the
+		// deployment. Clear any lingering bed + stale members from a prior run;
+		// bringUpMembers (in the runtime-check block below) then deploys each
+		// member (config+start per pod member, bundle add per local member). There
+		// is no root deploy-add/config/start.
+		_ = exec.Command(exe, "remove", name, "--purge").Run()
+		tearDownMembers(&node)
+		deployed = true // members will be brought up — keep state on a later failure
+	default:
 		// Pod beds → image ref; kind:local beds → local template ref.
 		ref := image
 		if isLocal {
@@ -492,11 +552,11 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 		// Clear any sibling peers left over from a previous interrupted run
 		// (symmetry with the bed remove above) so kept-alive peer state never
 		// blocks a fresh deploy.
-		tearDownPeers(&node)
+		tearDownMembers(&node)
 		// Seed the per-host charly.yml with the bed's project-declared
 		// deploy-shaped overrides (port / volume / env / tunnel / security /
 		// network) BEFORE charly config runs. The folded bed node is the source of
-		// truth, but charly deploy add / charly config otherwise source those fields
+		// truth, but charly bundle add / charly config otherwise source those fields
 		// from the IMAGE LABELS (and gate port writes behind an operator -p), so
 		// a bed's declared port: remap would silently fall back to the image
 		// default and collide with any same-image deploy already bound to it.
@@ -507,8 +567,8 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 		// packages onto the running emulator) can't deploy yet — they're
 		// deployed after start (see the nested-child loop below). Harmless
 		// for childless beds (the no-op is identical to a full walk).
-		if err := step("deploy-add", []string{"deploy", "add", name, ref, "--node-only"}); err != nil {
-			return fail("deploy add %s: %w", name, err)
+		if err := step("deploy-add", []string{"bundle", "add", name, ref, "--node-only"}); err != nil {
+			return fail("bundle add %s: %w", name, err)
 		}
 		deployed = true // target registered — keep it on any later failure
 		// Pod beds: deploy add registers the entry but does not generate the
@@ -529,10 +589,10 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 			// Now the substrate is up: deploy any nested children onto it,
 			// pre-order. The canonical case is a `target: android` device
 			// child whose candies' apk: packages install onto the running
-			// emulator (`charly deploy add <bed>.<child>` resolves the child
+			// emulator (`charly bundle add <bed>.<child>` resolves the child
 			// against the started pod's executor). Childless beds skip this.
-			for _, childKey := range sortedNestedKeys(node.Nested) {
-				if err := step("deploy-"+childKey, []string{"deploy", "add", name + "." + childKey}); err != nil {
+			for _, childKey := range sortedNestedKeys(node.Children) {
+				if err := step("deploy-"+childKey, []string{"bundle", "add", name + "." + childKey}); err != nil {
 					return fail("deploy nested child %s.%s: %w", name, childKey, err)
 				}
 			}
@@ -549,7 +609,7 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 	// `podman exec <child>` probes. For a flat bed (no children) it is exactly
 	// the prior parent-only check. stepLabel disambiguates initial vs rebuild.
 	checkLiveTree := func(stepLabel string) error {
-		for i, ref := range bedCheckLiveRefs(name, node.Nested) {
+		for i, ref := range bedCheckLiveRefs(name, node.Children) {
 			label := stepLabel
 			if i > 0 {
 				label = stepLabel + "-" + ref[len(name)+1:] // childKey after "<name>."
@@ -571,17 +631,17 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 	// first-run DB migration runs minutes before the API binds). stepReady
 	// polls check-live until it passes or the deadline, so we wait for real
 	// readiness instead of racing a fixed sleep.
-	// Bring up sibling peers (companion DRIVER deployments — e.g. a Chrome pod)
+	// Bring up sibling members (companion DRIVER deployments — e.g. a Chrome pod)
 	// ALONGSIDE the substrate, ONCE, regardless of substrate kind (pod / vm /
-	// local) — the subject's `on: <peer>` checks drive through them. Peers are
+	// local) — the subject's `on: <member>` checks drive through them. Members are
 	// instruments, NEVER check-live'd (excluded from bedCheckLiveRefs). The SAME
-	// bringUpPeers helper serves the operator deploy path (R3). One call, not
+	// bringUpMembers helper serves the operator deploy path (R3). One call, not
 	// one per kind.
 	// Deploy/runtime acceptance — gated out at check_level: none|build (the bed
-	// then proves only that the image builds + deploys). Peers are instruments
+	// then proves only that the image builds + deploys). Members are instruments
 	// for the runtime probes, so bring-up is gated with them.
 	if runRuntimeCheck {
-		if err := bringUpPeers(&node); err != nil {
+		if err := bringUpMembers(&node); err != nil {
 			return fail("bring up peers for %s: %w", name, err)
 		}
 		if err := checkLiveTree("check-live"); err != nil {
@@ -604,7 +664,29 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 
 	// Step 5: fresh-update re-verify (the R10 acceptance gate). Suppressed
 	// by --no-rebuild for fast smoke that exercises the dispatcher only.
-	if !opts.NoRebuild {
+	if !opts.NoRebuild && isGroup {
+		// Group bed: no root container to `charly update`. The R10 fresh-rebuild
+		// gate re-builds each member image, re-brings-up the members, and
+		// re-check-lives — mirroring the initial group deploy.
+		for _, memberKey := range sortedMemberKeys(node.Members) {
+			m := node.Members[memberKey]
+			if m == nil || m.Box == "" {
+				continue
+			}
+			if err := step("update-image-"+memberKey, []string{"box", "build", m.Box, "--dev-local-pkg"}); err != nil {
+				return fail("rebuild member image %s (%s): %w", memberKey, m.Box, err)
+			}
+		}
+		tearDownMembers(&node)
+		if runRuntimeCheck {
+			if err := bringUpMembers(&node); err != nil {
+				return fail("re-bring up members for %s: %w", name, err)
+			}
+			if err := checkLiveTree("check-live-rebuild"); err != nil {
+				return fail("check live (fresh rebuild) %s: %w", name, err)
+			}
+		}
+	} else if !opts.NoRebuild {
 		if err := step("update", []string{"update", name}); err != nil {
 			return fail("update %s: %w", name, err)
 		}
@@ -615,7 +697,7 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 		// the post-update state is unexercised. (A flat bed's `charly update`
 		// succeeding is itself the rebuild proof; its baked deploy-scope check
 		// needs no re-deploy.)
-		if runRuntimeCheck && !isLocal && len(node.Nested) > 0 {
+		if runRuntimeCheck && !isLocal && len(node.Children) > 0 {
 			if isVM {
 				// `charly update` recreated the libvirt domain; the qcow2 disk (and
 				// thus the applied guest candies, the nested pod's quadlet, and
@@ -627,8 +709,8 @@ func runCheckBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRu
 				waitForVmSshReady(vmTemplate)
 			} else {
 				waitForContainerReady(name)
-				for _, childKey := range sortedNestedKeys(node.Nested) {
-					if err := step("redeploy-"+childKey, []string{"deploy", "add", name + "." + childKey}); err != nil {
+				for _, childKey := range sortedNestedKeys(node.Children) {
+					if err := step("redeploy-"+childKey, []string{"bundle", "add", name + "." + childKey}); err != nil {
 						return fail("re-deploy nested child %s.%s (fresh rebuild): %w", name, childKey, err)
 					}
 				}

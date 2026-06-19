@@ -126,11 +126,21 @@ type Op struct {
 	intentDo DoMode   `yaml:"-"                 json:"-"`
 	Context  []string `yaml:"context,omitempty" json:"context,omitempty"`
 
-	// Pod targets the container a check/agent-check step probes (a per-step
-	// field). Empty → the run-level default target. DependsOn
-	// lists step ids this step depends on (topological ordering + cascade
-	// skip). Both are per-step fields carried on the inline Op.
-	Pod       string   `yaml:"pod,omitempty"        json:"pod,omitempty"`
+	// venue is the step's EXECUTION VENUE — the deployment/member this step
+	// runs against, derived ENTIRELY from the step's POSITION in the bundle
+	// tree by flattenBundleVenues (node_bundle_venue.go): a step under a
+	// sibling member M → "M"; a step under a nested child C of parent path P →
+	// "P.C"; a step directly under a workload root R → "R". NEVER authored — the
+	// former authored `on:` (cross-member driver dispatch) and `pod:` (per-step
+	// container venue) fields are RETIRED; tree position is the sole source of
+	// venue (run: charly migrate). Read by checkrun.go runOne (per-step executor
+	// swap) and check_runner_live.go (scored-step bucketing); resolved to a live
+	// executor via resolveScoringChain / ResolveDeployChain / the run's
+	// TargetResolver.
+	venue string `yaml:"-" json:"-"`
+
+	// DependsOn lists step ids this step depends on (topological ordering +
+	// cascade skip) — a per-step field carried on the inline Op.
 	DependsOn []string `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
 
 	// Install/build modifiers (formerly Task). Validity depends on verb.
@@ -157,8 +167,6 @@ type Op struct {
 	//   Eventually:    duration string; retry the check (verb + matchers) until pass or timeout.
 	//                  Composes with Timeout (per-attempt cap) — Eventually is the outer retry cap.
 	//   RetryInterval: spacing between retries; defaults to "1s"; must be ≤ Eventually.
-	//   On:            target-entity override for multi-target plan runs. Omit → use the run's default target.
-	//                  Each On dispatch resolves a target-specific VarResolver (HOST_PORT / CONTAINER_IP / …).
 	//   Tag: free-form label set for --tag filtering (per-step; no group inheritance).
 	Capture string `yaml:"capture,omitempty"        json:"capture,omitempty"`
 	// CaptureExtract: optional Go RE2 regex applied to the raw capture
@@ -174,7 +182,6 @@ type Op struct {
 	CaptureExtract string   `yaml:"capture_extract,omitempty" json:"capture_extract,omitempty"`
 	Eventually     string   `yaml:"eventually,omitempty"     json:"eventually,omitempty"`
 	RetryInterval  string   `yaml:"retry_interval,omitempty" json:"retry_interval,omitempty"`
-	On             string   `yaml:"on,omitempty"             json:"on,omitempty"`
 	Tag            []string `yaml:"tag,omitempty"           json:"tag,omitempty"`
 
 	// Concurrency primitives (2026-05) — usable in plan Steps to express
@@ -734,12 +741,11 @@ var runtimeOnlyVarPrefixes = []string{
 	// a deploy-scope k8s check can address its own cluster generically via
 	// cluster: "${DEPLOY_NAME}". Resolved only against a live deployment.
 	"DEPLOY_NAME",
-	// Cross-deployment address vars (check_peer.go): ${PEER_HOST:name} and
-	// ${PEER_ENDPOINT:name:port} let a driven probe (a check with `on:`) reach
-	// a SEPARATE subject deployment. Resolved only against running deployments,
-	// so a build-scope check must not reference them.
-	"PEER_HOST",
-	"PEER_ENDPOINT",
+	// Cross-member address var (check_members.go): the unified ${HOST:<member>}
+	// (+ optional :port) lets a driven probe (a check with `on:`, or a sibling
+	// bundle member) reach a SEPARATE member. Resolved only against running
+	// deployments, so a build-scope check must not reference it.
+	"HOST",
 }
 
 // IsRuntimeOnlyVar reports whether the given variable key (as returned by
@@ -796,9 +802,9 @@ func (c *Op) StringFields() []*string {
 		&c.Apk, &c.Property, &c.Caps, &c.Strategy, &c.Session,
 		// record-specific modifiers
 		&c.RecordName, &c.RecordMode,
-		// BDD-era modifiers — On may contain ${VAR}; Capture/Eventually/RetryInterval
-		// are identifiers/durations but still run through the expander for symmetry.
-		&c.On, &c.Capture, &c.CaptureExtract, &c.Eventually, &c.RetryInterval,
+		// Capture/Eventually/RetryInterval are identifiers/durations but still run
+		// through the expander for symmetry.
+		&c.Capture, &c.CaptureExtract, &c.Eventually, &c.RetryInterval,
 		// kill: verb's PID arg is typically ${CAPTURED:<name>} from a prior
 		// background command; Signal is a literal but expanded for symmetry.
 		&c.Kill, &c.Signal,

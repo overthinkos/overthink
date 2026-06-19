@@ -34,7 +34,7 @@ func (c *CheckSyncCredCmd) RunActual() error {
 	if !ok || uf == nil {
 		return errors.New("harness sync-credential: no charly.yml in current directory")
 	}
-	node, found := uf.Deploy[c.Score]
+	node, found := uf.Bundle[c.Score]
 	if !found || node.Iterate == nil {
 		return fmt.Errorf("harness sync-credential: entity %q has no iterate: block", c.Score)
 	}

@@ -35,14 +35,18 @@ func TestLoadUnified_AbsentFileReturnsNotPresent(t *testing.T) {
 
 func TestLoadUnified_BasicRoot(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.165.1048
+	// Node-form: a box entity is `<name>: {box: <scalars>}` with each
+	// non-scalar field (distro/candy) carried by a CHILD node.
+	writeFixture(t, root, "charly.yml", `version: 2026.169.0004
 defaults:
   registry: quay.io/example
   build: [rpm]
-box:
-  fedora:
+fedora:
+  box:
     base: quay.io/fedora/fedora:43
+  fedora-distro:
     distro: [fedora:43, fedora]
+  fedora-candy:
     candy: [base]
 `)
 	uf, present, err := LoadUnified(root)
@@ -94,15 +98,15 @@ box:
 
 func TestLoadUnified_IncludesMerge(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.165.1048
+	writeFixture(t, root, "charly.yml", `version: 2026.169.0004
 import:
   - build.yml
   - images.yml
 defaults:
   registry: override.example.com
 `)
-	writeFixture(t, root, "build.yml", `distro:
-  fedora:
+	writeFixture(t, root, "build.yml", `fedora:
+  distro:
     bootstrap:
       install_cmd: "dnf install"
       package: [dnf5]
@@ -110,8 +114,8 @@ defaults:
 	writeFixture(t, root, "images.yml", `defaults:
   registry: included.example.com
   build: [rpm]
-box:
-  fedora:
+fedora:
+  box:
     base: quay.io/fedora/fedora:43
 `)
 	uf, _, err := LoadUnified(root)
@@ -136,7 +140,7 @@ box:
 
 func TestLoadUnified_IncludeCycleDetected(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.165.1048
+	writeFixture(t, root, "charly.yml", `version: 2026.169.0004
 import: [a.yml]
 `)
 	writeFixture(t, root, "a.yml", `import: [b.yml]
@@ -152,24 +156,32 @@ import: [a.yml]
 	}
 }
 
-func TestLoadUnified_MultiDocumentKindKeyed(t *testing.T) {
+// TestLoadUnified_MultiDocumentNodeForm — the loader parses a flat-imported file
+// as a YAML multi-document stream of NODE-FORM docs (`---`-separated). Each doc is
+// an arbitrary-name entity node (`<name>: {<kind>: …}`) with its non-scalar fields
+// (package/candy) as CHILD nodes; all merge into the root maps. Legacy multi-document
+// KIND-KEYED loading (`candy: {name: …}` per doc) is removed — that shape is now a
+// hard-reject (see TestLoadUnified_LegacyKindKeyedRejected).
+func TestLoadUnified_MultiDocumentNodeForm(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.165.1048
+	writeFixture(t, root, "charly.yml", `version: 2026.169.0004
 import: [bundle.yml]
 `)
-	writeFixture(t, root, "bundle.yml", `---
-candy:
-  name: chrome
-  package: [chromium]
+	writeFixture(t, root, "bundle.yml", `chrome:
+  candy: {}
+  chrome-package:
+    package: [chromium]
 ---
-candy:
-  name: firefox
-  package: [firefox]
+firefox:
+  candy: {}
+  firefox-package:
+    package: [firefox]
 ---
-box:
-  name: browsers
-  base: quay.io/fedora/fedora:43
-  candy: [chrome, firefox]
+browsers:
+  box:
+    base: quay.io/fedora/fedora:43
+  browsers-candy:
+    candy: [chrome, firefox]
 `)
 	uf, _, err := LoadUnified(root)
 	if err != nil {
@@ -186,11 +198,16 @@ box:
 	}
 }
 
-func TestLoadUnified_AmbiguousDocRejected(t *testing.T) {
+// TestLoadUnified_LegacyKindKeyedRejected — node-form is the ONLY authoring
+// surface. A legacy kind-keyed document (a top-level `candy:`/`box:`/… map of
+// entities, or a single `<kind>: {name: …}`) is hard-rejected with a `charly
+// migrate` hint. This replaced the former "ambiguous (root+kind) doc" classifier,
+// now gone: the bilingual reader was deleted, so EVERY kind-keyed shape — the old
+// "ambiguous" case (here, a doc carrying both `candy:` and `box:`) included —
+// routes through this one rejection.
+func TestLoadUnified_LegacyKindKeyedRejected(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.165.1048
-`)
-	writeFixture(t, root, "charly.yml", `version: 2026.165.1048
+	writeFixture(t, root, "charly.yml", `version: 2026.169.0004
 import: [bundle.yml]
 `)
 	writeFixture(t, root, "bundle.yml", `candy:
@@ -200,10 +217,14 @@ box:
 `)
 	_, _, err := LoadUnified(root)
 	if err == nil {
-		t.Fatal("expected ambiguous-doc error, got nil")
+		t.Fatal("expected hard-reject for a legacy kind-keyed doc, got nil")
 	}
-	if !strings.Contains(err.Error(), "ambiguous") {
-		t.Errorf("error = %v, want message mentioning ambiguous", err)
+	msg := err.Error()
+	if !strings.Contains(msg, "legacy kind-keyed config") {
+		t.Errorf("error = %v, want message mentioning 'legacy kind-keyed config'", err)
+	}
+	if !strings.Contains(msg, "charly migrate") {
+		t.Errorf("error = %v, want a `charly migrate` hint", err)
 	}
 }
 
@@ -218,7 +239,7 @@ func TestLoadUnified_DiscoverCandies(t *testing.T) {
   version: "1"
   package: [firefox]
 `)
-	writeFixture(t, root, "charly.yml", `version: 2026.165.1048
+	writeFixture(t, root, "charly.yml", `version: 2026.169.0004
 discover:
   - candy
 `)
@@ -243,11 +264,15 @@ func TestLoadUnified_DiscoverExplicitWinsOverDiscovered(t *testing.T) {
   version: "from-disk"
   package: [chromium]
 `)
-	writeFixture(t, root, "charly.yml", `version: 2026.165.1048
+	// Node-form: an explicit inline candy entry (`chrome: {candy: {…}}`) is
+	// defined directly in charly.yml. It must win over the discovered
+	// candy/chrome dir — discovery skips a name already present.
+	writeFixture(t, root, "charly.yml", `version: 2026.169.0004
 discover:
   - candy
-candy:
-  chrome: { from: custom/chrome }
+chrome:
+  candy:
+    version: 2026.100.0001
 `)
 	uf, _, err := LoadUnified(root)
 	if err != nil {
@@ -260,14 +285,21 @@ candy:
 	if il == nil {
 		t.Fatal("candy.chrome missing")
 	}
-	if il.From != "custom/chrome" {
-		t.Errorf("explicit map entry lost: From = %q, want custom/chrome", il.From)
+	// The explicit inline entry won: it is defined IN-PLACE (From == ""), not a
+	// lazy `From: candy/chrome` directory reference the discovery walk would have
+	// registered, and its inline body (version 2026.100.0001) survived rather than
+	// the discovered manifest's ("from-disk").
+	if il.From != "" {
+		t.Errorf("discovered dir clobbered the explicit entry: From = %q, want \"\" (inline)", il.From)
+	}
+	if il.Version != "2026.100.0001" {
+		t.Errorf("explicit inline body lost: Version = %q, want 2026.100.0001", il.Version)
 	}
 }
 
 func TestLoadUnified_ScanSpecStringShorthand(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.165.1048
+	writeFixture(t, root, "charly.yml", `version: 2026.169.0004
 discover:
   - layers
   - { path: vendor, recursive: false }
@@ -310,7 +342,7 @@ func TestLoadUnified_DiscoverConfigurableManifest(t *testing.T) {
   version: "1"
   package: [widget]
 `)
-	writeFixture(t, root, "charly.yml", `version: 2026.165.1048
+	writeFixture(t, root, "charly.yml", `version: 2026.169.0004
 discover:
   - { path: stuff, recursive: true, manifest: thing.yml }
 `)
@@ -335,7 +367,7 @@ func TestLoadUnified_DiscoverRoutesNonCandyByShape(t *testing.T) {
   name: myimg
   base: quay.io/fedora/fedora:43
 `)
-	writeFixture(t, root, "charly.yml", `version: 2026.165.1048
+	writeFixture(t, root, "charly.yml", `version: 2026.169.0004
 discover:
   - { path: entities, recursive: true, manifest: entity.yml }
 `)
@@ -358,7 +390,7 @@ discover:
 // (no stale references).
 func TestLoadUnified_DeploymentsSection(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.165.1048
+	writeFixture(t, root, "charly.yml", `version: 2026.169.0004
 deployments:
   openclaw:
     port: ["8080:80"]
@@ -378,10 +410,11 @@ deployments:
 
 func TestLoadUnified_ProjectConfig(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.165.1048
+	writeFixture(t, root, "charly.yml", `version: 2026.169.0004
 defaults: { registry: r.example.com }
-box:
-  foo: { base: alpine }
+foo:
+  box:
+    base: alpine
 `)
 	uf, _, err := LoadUnified(root)
 	if err != nil {

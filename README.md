@@ -11,8 +11,8 @@ driving.
 
 187 candies across this repo and its submodules. 53 box definitions
 (39 enabled by default). 2 VM definitions, 2 Android devices, and a
-growing catalog of `kind: local` host templates and `kind: check`
-test beds. Docker and Podman. `linux/amd64`. Fedora, Debian, Ubuntu,
+growing catalog of `kind: local` host templates and disposable
+check beds. Docker and Podman. `linux/amd64`. Fedora, Debian, Ubuntu,
 Arch, and CachyOS. One CLI: `charly` (29 top-level verbs). Every candy,
 box, VM, and command has a dedicated recipe card (skill) — ~290 skills
 across 25 plugins. See `plugins/README.md` for the full index.
@@ -56,16 +56,16 @@ from one config and one mental model:
 | Reach for `charly` when you want to…                            | …and you get                                       | Stage                 |
 |-------------------------------------------------------------|----------------------------------------------------|-----------------------|
 | compose a reproducible box from a candy list                | `kind: box` / `kind: candy`, `charly box build`    | [Build](#build)       |
-| run one or more containers as a managed pod                 | `kind: pod`, `charly deploy add`, `charly start`           | [Run](#run)           |
-| apply the same candies to a host, VM, k8s, or Android device | `charly deploy add` + `target:`                        | [Deploy](#deploy)     |
-| prove a config actually works, end-to-end                   | `kind: check`, `charly check run`, baked `check:` checks  | [Evaluate](#evaluate) |
+| run one or more containers as a managed pod                 | `kind: pod`, `charly bundle add`, `charly start`           | [Run](#run)           |
+| apply the same candies to a host, VM, k8s, or Android device | `charly bundle add` + a cross-ref scalar               | [Deploy](#deploy)     |
+| prove a config actually works, end-to-end                   | a disposable check bed, `charly check run`, baked `check:` checks  | [Evaluate](#evaluate) |
 
 The same `charly` drives two further stages — it
 [authors candies and boxes with an agent in the loop](#author-with-agents)
 and [manages](#manage) the running lifecycle (cleanup, diagnostics,
 schema upgrades, runtime config).
 
-> One `charly.yml`, one box, one per-host `charly.yml` overlay, and one `kind: check`
+> One `charly.yml`, one box, one per-host `charly.yml` overlay, and one disposable check
 > bed drive all four stages — the build, the local run, the remote
 > deploy, and the test harness. The binary that wires them together is
 > also an MCP server, so your agent reaches every verb over the
@@ -87,14 +87,14 @@ multi-stage Containerfiles with cache mounts, and builds in the right
 order — handling the hard parts so you (and your agents) don't
 have to.
 
-- **Candy** (`kind: candy` in `candy/<name>/charly.yml`) — packages (per-distro),
-  tasks (eight verbs: `cmd`/`mkdir`/`copy`/`write`/`link`/`download`/
+- **Candy** (`candy:` in `candy/<name>/charly.yml`) — packages (per-distro),
+  `run:` plan steps (eight ops: `cmd`/`mkdir`/`copy`/`write`/`link`/`download`/
   `setcap`/`build`), services (one unified `service:` list — see
   init-system polymorphism below), volumes, env, ports, check probes,
   `env_provide`/`env_require`/`mcp_provide`/`mcp_accept` for
   cross-container discovery, plus a `version:` CalVer.
   → `/charly-image:layer`.
-- **Box** (`kind: box`) — base + ordered candy list. Multi-stage
+- **Box** (`box:`) — base + ordered candy list. Multi-stage
   Containerfile, content-derived `ai.opencharly.version` OCI label,
   stable cache. → `/charly-image:image`.
 
@@ -112,7 +112,7 @@ a mistake costs one rebuild.
 
 Prove the riskiest unknown — above all whether a particular *combination*
 of candies, at their latest versions, actually builds and runs together —
-empirically on a disposable `kind: check` bed EARLY, before a design rests
+empirically on a disposable check bed EARLY, before a design rests
 on it. `charly check` makes that proof cheap, for you and your agents alike.
 → [VISION.md](VISION.md) (why), CLAUDE.md "Risk Driven Development (RDD)"
 (the rule), `/charly-check:check` (usage).
@@ -141,9 +141,9 @@ flow through all of them:
   multi-stage image.
 - **Run** — a `kind: pod` brings containers up as systemd-managed
   Podman quadlets.
-- **Deploy** — `charly deploy add` applies the same candies to a host, VM,
-  k8s cluster, or Android device via `target:`.
-- **Evaluate** — `kind: check` beds and baked `check:` checks prove any
+- **Deploy** — `charly bundle add` applies the same candies to a host, VM,
+  k8s cluster, or Android device — the bundle's cross-ref picks which.
+- **Evaluate** — disposable check beds and baked `check:` checks prove any
   box or deployment works end-to-end.
 
 See [Lifecycle](#lifecycle) for the full verb families (plus
@@ -151,41 +151,40 @@ authoring-with-agents and management).
 
 ### Schema kinds
 
-Beyond `candy` and `box`, the schema has these kinds — each a `kind:`
-discriminator in its file:
+Beyond `candy` and `box`, the schema has these kinds — each a
+discriminator key nested under the entity name (`<name>: {<kind>: …}`):
 
-- **Pod** (`kind: pod`) — multi-container deploy shape: containers,
+- **Pod** (`pod:`) — multi-container deploy shape: containers,
   sidecars, tunnels. Deployed as a Podman pod with a quadlet per
   container. → `/charly-pod:pod`.
-- **VM** (`kind: vm`) — `source: {kind: cloud_image | bootc}`,
+- **VM** (`vm:`) — `source: {kind: cloud_image | bootc}`,
   disk/ram/cpu, libvirt+QEMU. `charly vm build/create/start/stop/clone/
   snapshot/console`. → `/charly-vm:vm`.
-- **K8s** (`kind: k8s`) — Kubernetes cluster (in-pod k3s or external)
+- **K8s** (`k8s:`) — Kubernetes cluster (in-pod k3s or external)
   with provisioning + workload defaults. → `/charly-kubernetes:kubernetes`.
-- **Local** (`kind: local`) — host-side candy stack applied to the
+- **Local** (`local:`) — host-side candy stack applied to the
   operator's machine (or any ssh-reachable host) via the native
   package manager + systemd + shell profile. → `/charly-local:local-spec`.
-- **Android** (`kind: android`) — Android device: in-pod emulator
+- **Android** (`android:`) — Android device: in-pod emulator
   (via `box:`) or remote/physical adb endpoint. `apk:` is a candy
   package format scoped to Android targets. → `/charly-check:android`.
-- **Deploy** (`kind: deploy`) — a named deployment of one of the
-  kinds above to a `target:` (`pod` default, `vm`, `k8s`, `local`,
-  `android`). Carries env overlays, port remaps, volume backings,
-  sidecars, tunnels, secrets, and the `disposable: true` opt-in.
-  → `/charly-core:deploy`.
-- **Check** (`kind: check`) — a *disposable* deploy used as an R10 test
-  bed: `charly check run <bed>` runs build → deploy → probe →
-  fresh-update → tear-down. An `iterate:` block on the bed drives the
-  agent-iteration harness on top (the AI scores the bed's `plan:`
-  `check:`/`agent-check:` steps), choosing among the configured
-  `kind: agent` AI CLIs. → `/charly-check:check`.
+- **Bundle** (`bundle:`) — a named deployment; the bundle's cross-ref
+  scalar (a `box:`, `vm:`, `k8s:`, `local:`, or `android:`) picks where
+  it lands (a `box:` deploys as a Podman pod by default). Carries env
+  overlays, port remaps, volume backings, sidecars, tunnels, secrets,
+  and the `disposable: true` opt-in. A `disposable: true` bundle is a
+  *check bed* — the R10 test bed: `charly check run <bed>` runs build →
+  deploy → probe → fresh-update → tear-down, and an `iterate:` block on
+  it drives the agent-iteration harness (the AI scores the bed's
+  `check:`/`agent-check:` steps, choosing among the configured
+  `kind: agent` AI CLIs). → `/charly-core:deploy`, `/charly-check:check`.
 
 ### Cross-cutting rules
 
 **`charly.yml` is the single project entry point.** Boxes are
 discovered as `box/<name>/charly.yml`, candies as
 `candy/<name>/charly.yml`, and the remaining kinds
-(`vm`/`pod`/`k8s`/`check`/`local`/`android`) live inline in
+(`vm`/`pod`/`k8s`/`bundle`/`local`/`android`) live inline in
 `charly.yml`'s root; the distro/builder/init/resource build
 vocabulary is embedded in the `charly` binary. `import:` composes
 other files or repos — a bare string for a flat same-repo import
@@ -213,7 +212,7 @@ sections (`fedora:43:` / `ubuntu:24.04:`) and package-format sections
 differing only in package sections.
 
 **Disposability — explicit opt-in.** `disposable: true` on a
-`kind: deploy` is the *one and only* authorization for `charly update`'s
+`bundle` is the *one and only* authorization for `charly update`'s
 autonomous destroy + rebuild. No hostname heuristic, no inference.
 Explicit-only is what makes `charly update <name>` safe on shared
 infrastructure. → `/charly-internals:disposable`.
@@ -336,11 +335,11 @@ charly vm build  <my-bootc-vm> --type qcow2 # a kind:vm with source.kind: bootc
 charly vm create <my-bootc-vm>
 
 # Apply candies directly to your workstation (no container)
-charly deploy add host ripgrep
-charly deploy add host fedora-coder --with-services --yes
-charly deploy del host                  # reverses everything via ReverseOps + ledger
+charly bundle add host ripgrep
+charly bundle add host fedora-coder --with-services --yes
+charly bundle del host                  # reverses everything via ReverseOps + ledger
 
-# Run a kind:check test bed end-to-end (the R10 acceptance gate)
+# Run a disposable check bed end-to-end (the R10 acceptance gate)
 charly check run check-pod
 ```
 
@@ -392,7 +391,7 @@ reconcile` aligns the cross-repo pins when a candy's CalVer moves.
 > Multiple containers, one declaration, one start command — as
 > systemd-native units.
 
-`kind: pod` is the multi-container deploy shape. `charly deploy add
+`kind: pod` is the multi-container deploy shape. `charly bundle add
 <name> <pod-ref>` materializes it; `charly start` brings it up via
 Podman quadlets (`~/.config/containers/systemd/`) so a deployment is
 a real systemd user unit — `journalctl`, `systemctl status`,
@@ -452,39 +451,40 @@ input.
 > The same `charly.yml` applied to a host, a remote ssh box, a VM, a
 > k3s cluster, or an Android device.
 
-`charly deploy add <name> <ref>` is the unified verb; `target:`
-discriminates where it lands:
+`charly bundle add <name> <ref>` is the unified verb; the bundle's
+cross-ref scalar (`box:`/`vm:`/`k8s:`/`local:`/`android:`) discriminates
+where it lands:
 
-- **`target: pod`** (default) — Podman + quadlet, as in [Run](#run).
-- **`target: vm`** — libvirt + QEMU. Candies are applied *inside* the
+- **`box:` → pod** (default) — Podman + quadlet, as in [Run](#run).
+- **`vm:`** — libvirt + QEMU. Candies are applied *inside* the
   booted VM over SSH via the same InstallPlan IR. `charly vm build`
   (bootc → QCOW2/RAW), `charly vm create/destroy/start/stop`, `charly vm
   clone` (snapshot fork), `charly vm snapshot`, `charly vm console`. The
   managed `~/.config/charly/ssh_config` fragment gets a `Host
   charly-<vmname>` stanza written on `charly vm create`.
   → `/charly-vm:vm`, `/charly-internals:vm-deploy-target`.
-- **`target: k8s`** — Kustomize tree applied to k3s in-pod (candy
+- **`k8s:`** — Kustomize tree applied to k3s in-pod (candy
   triplet `/charly-infrastructure:k3s` + `k3s-server` + `k3s-agent`) or
   to an external cluster. `K3S_CLUSTER_TOKEN` auto-generated on
   first deploy via `ensureCandySecret` and shared with every joining
   agent — zero operator setup. → `/charly-kubernetes:kubernetes`,
   `/charly-infrastructure:k3s`.
-- **`target: local`** — applies the candies' packages / files /
+- **`local:`** — applies the candies' packages / files /
   systemd units to the host filesystem. `host: local` (default)
   uses the local shell executor; `host: user@machine[:port]` (or a
   configured alias) re-execs `charly` over SSH. Per-machine overlays
   via `add_candy:` in `~/.config/charly/charly.yml`. Ledger at
   `~/.config/opencharly/installed/` records every ReverseOp so
-  `charly deploy del host` reverses precisely what was applied.
+  `charly bundle del host` reverses precisely what was applied.
   → `/charly-local:local-deploy`, `/charly-local:local-spec`.
-- **`target: android`** — `kind: android` device (in-pod emulator
+- **`android:`** — `kind: android` device (in-pod emulator
   via `box:` or remote adb endpoint via `adb: {host: …}`);
   `apk:` packages installed by `apkeep` (Google Play) or pushed
   from committed `.apk` files via goadb. Nested `pod → android`
   mirrors `vm → k8s`. → `/charly-check:android`, `/charly-check:adb`.
 
-`charly deploy del`, `charly deploy sync` (apply K8s changes live),
-`charly deploy from-box` (source-less deploy from OCI labels), and
+`charly bundle del`, `charly bundle sync` (apply K8s changes live),
+`charly bundle from-box` (source-less deploy from OCI labels), and
 `charly update` complete the lifecycle. `charly update <name>` performs
 destroy + (optional rebuild) + create + start unattended *only*
 when the deploy carries `disposable: true`.
@@ -511,9 +511,9 @@ binds host `SSH_AUTH_SOCK` / `GPG_AGENT_SOCK` into the container.
 > Build → deploy → probe → fresh-update → tear down — disposable beds
 > with the same DSL as production deploys.
 
-Tests are first-class. Every `charly.yml` (box + candy) declares one
-flat ordered `plan:` list whose steps each carry exactly one intent
-keyword — `run:` (deterministic state-change, the install timeline),
+Tests are first-class. Every `charly.yml` (box + candy) declares its
+plan as an ordered set of child step nodes, each carrying exactly one
+intent keyword — `run:` (deterministic state-change, the install timeline),
 `check:` (deterministic idempotent probe), `agent-run:` (an agent that
 may mutate), `agent-check:` (read-only agent assessment), or
 `include: <kind>:<name>` (splice another entity's plan) — plus an inline
@@ -535,12 +535,13 @@ Three execution modes:
   `${ENV_*}`) so the same check survives port remaps and volume
   rebindings.
 - **`charly check run <bed>`** — the canonical R10 acceptance gate.
-  Picks a `kind: check` bed from the project `charly.yml` `check:` block (a disposable deploy
+  Picks a disposable check bed from the project `charly.yml` (a bundle
   carrying `disposable: true`) and runs build → check box → deploy
   → check live → fresh `charly update` → check live again → teardown.
   Pick the bed whose kind matches what you changed: `check-pod`,
   `check-local`, `check-k3s-vm`, `check-android-emulator-pod`.
-  `charly check run --all-beds` iterates the catalog.
+  To run a whole roster, fan the beds out concurrently — one
+  `charly check run <bed>` per agent — via the `/verify-beds` workflow.
 
 Exit codes are goss-style: `0` = all checks passed, `1` =
 infra/usage error (the check never reached a verdict), `2` =
@@ -593,7 +594,7 @@ getprop`, `appium: click`, …):
 > Agents in the loop, authoring and iterating on candies and
 > boxes — `charly`-specific.
 
-The agent iteration harness sits on top of `kind: check` via two
+The agent iteration harness sits on top of a disposable check bed via two
 pieces — the `kind: agent` catalog and an `iterate:` block:
 
 - **`kind: agent`** — reusable agent CLI catalog (`claude`,
@@ -602,7 +603,7 @@ pieces — the `kind: agent` catalog and an `iterate:` block:
   paths. The harness parses each NDJSON line into
   `iteration[].runner_event`.
 - **`iterate:` block** — the AI-loop orchestration declared on a
-  `kind: check` bed (or a `deploy:`): the eligible agents, the
+  disposable check bed (or any `bundle`): the eligible agents, the
   `sandbox:` where the agent + `charly` run (the former
   `check-sandbox`), the plateau iteration count, the prompt, and the
   watchdog timeout. The bed's own `plan:` IS the scored content —
@@ -672,7 +673,7 @@ gateway exposing the entire surface as MCP tools.
 |---|---|---|
 | **Box (build mode)** | `charly box {build, generate, validate, merge, new, inspect, list, pull, reconcile}` | `/charly-image:image` + `/charly-build:build`, `/charly-build:generate`, `/charly-build:validate`, `/charly-build:merge`, `/charly-build:new`, `/charly-build:inspect`, `/charly-build:list`, `/charly-build:pull`, `/charly-build:reconcile` |
 | **Box authoring (MCP-first)** | `charly box {set, add-candy, rm-candy, fetch, refresh, write, cat}` and `charly candy {set, add-rpm, add-deb, add-pac, add-aur}` | `/charly-image:image` "Authoring" + `/charly-image:layer` |
-| **Deployment** | `charly deploy {add, del, sync, from-box, export, import, show, reset, status, path}`; `charly config`; `charly start`, `charly stop`, `charly restart`, `charly update`, `charly remove` | `/charly-core:deploy`, `/charly-core:charly-config`, `/charly-core:start`, `/charly-core:stop`, `/charly-core:charly-update`, `/charly-core:remove`, `/charly-local:local-deploy`, `/charly-kubernetes:kubernetes`, `/charly-internals:vm-deploy-target` |
+| **Deployment** | `charly bundle {add, del, sync, from-box, export, import, show, reset, status, path}`; `charly config`; `charly start`, `charly stop`, `charly restart`, `charly update`, `charly remove` | `/charly-core:deploy`, `/charly-core:charly-config`, `/charly-core:start`, `/charly-core:stop`, `/charly-core:charly-update`, `/charly-core:remove`, `/charly-local:local-deploy`, `/charly-kubernetes:kubernetes`, `/charly-internals:vm-deploy-target` |
 | **Runtime** | `charly shell`, `charly cmd`, `charly service`, `charly status`, `charly logs`, `charly tmux` | `/charly-core:shell`, `/charly-core:cmd`, `/charly-core:service`, `/charly-core:charly-status`, `/charly-core:logs`, `/charly-automation:tmux` |
 | **Test + probes** | `charly check {box, live, run}` + the 11 live probe verbs (`cdp`, `wl`, `dbus`, `vnc`, `mcp`, `record`, `spice`, `libvirt`, `k8s`, `adb`, `appium`); `charly feature {list, pending, validate}` | `/charly-check:check`, `/charly-check:cdp`, `/charly-check:wl`, `/charly-check:dbus`, `/charly-check:vnc`, `/charly-check:spice`, `/charly-check:libvirt`, `/charly-check:record`, `/charly-kubernetes:check-k8s`, `/charly-check:adb`, `/charly-check:appium` |
 | **MCP gateway** | `charly mcp {serve, ping, servers, list-tools, list-resources, list-prompts, call, read}` | `/charly-build:charly-mcp-cmd`, `/charly-coder:charly-mcp` |
@@ -714,8 +715,8 @@ not enumerations:
   + bootc entries. → `/charly-vm:vms-catalog`.
 - **Deploy-target catalog** — pod / vm / k8s / local / android.
   Each has a dedicated kind file.
-- **Check bed catalog** (the `check:` blocks in the project and
-  `box/<distro>` `charly.yml`s) — `kind: check` beds for R10,
+- **Check bed catalog** (the disposable-bundle beds in the project and
+  `box/<distro>` `charly.yml`s) — disposable check beds for R10,
   plus `kind: agent` and the bed's `iterate:` block for the agent
   harness. → `/charly-check:check`.
 
@@ -755,7 +756,7 @@ not here.
 | Service built fine but broken in production | `charly check live <image>` runs the baked layer + image + deploy checks (`/charly-check:check`) |
 | `charly vm build` fails: "no kind:vm entity in vm.yml" | Declare a `kind: vm` entity (`/charly-vm:vms-catalog`) |
 | SPICE console blank on cloud_image VM | Known `simpledrm → qxldrmfb` race under UEFI; switch to `firmware: bios` (`/charly-vm:arch`) |
-| `charly deploy add vm:<name>` errors "VM does not exist" | Run `charly vm create <name>` first — VM deploy is not auto-provisioning (`/charly-core:deploy`) |
+| `charly bundle add vm:<name>` errors "VM does not exist" | Run `charly vm create <name>` first — VM deploy is not auto-provisioning (`/charly-core:deploy`) |
 | Resolver "referenced at multiple versions" warning | `charly box reconcile` aligns the cross-repo `@github` pins (`/charly-build:reconcile`) |
 | `charly box pull` says "image is not available locally" | `charly box pull` accepts short name + project, fully-qualified ref, or `@github` remote ref. See `/charly-build:pull` |
 | Newer-than-binary config rejected at load | `charly migrate` brings the project to the latest schema CalVer (`/charly-build:migrate`) |
@@ -766,12 +767,13 @@ not here.
 ```bash
 charly box new candy my-candy             # Scaffold the directory
 # Edit candy/my-candy/charly.yml        # Declare packages, deps, env, ports,
-#                                       # services, check probes, and tasks:
+#                                       # services, check probes, and run: steps
 #                                       # (see /charly-image:layer for the verb catalog)
 # Optionally add pixi.toml / package.json / Cargo.toml for auto-detected builders.
 
-# Add to a box's candy list in box/<name>/charly.yml:
-#   candy: [..., my-candy]
+# Add to a box's composition in box/<name>/charly.yml — a child node:
+#   my-box-candy:
+#       candy: [..., my-candy]
 
 charly box build my-image                 # Build it
 charly check box my-image                  # Run the baked checks
@@ -834,7 +836,7 @@ executors `check-bed-runner` and `deploy-verifier` that drive the `charly check`
 beds and return verbatim proof, plus enforcers `root-cause-analyzer`,
 `testing-validator`, and `layer-validator`. Two **dynamic workflows**
 (`.claude/workflows/`) fan the work out — `/verify-beds` runs every
-`kind: check` bed as the R10 gate, `/audit-deploy-configs` evaluates your
+disposable check bed as the R10 gate, `/audit-deploy-configs` evaluates your
 deploy configs — and the same agent definitions reuse as **agent-team**
 teammates. Whether you drive `charly` from the keyboard or hand it to an
 agent, testing and verifying deployments uses the one surface.

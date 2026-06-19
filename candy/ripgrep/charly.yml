@@ -1,40 +1,46 @@
-candy:
-    version: 2026.144.1443
-    name: ripgrep
-    description: |
-        Fast recursive text search (rg)
-        Installs the ripgrep package, which provides the `rg` binary at
-        /usr/bin/rg — a fast recursive grep that honours .gitignore by
-        default. Verifiable end to end: the binary lands at a fixed path,
-        `rg --version` reports a parseable version on stdout, and `rg`
-        returns the matching line (exit 0) for a present pattern and
-        exit 1 for an absent one.
-    package:
-        - ripgrep
-    plan:
-        - check: the rg binary is installed at /usr/bin/rg
-          file: /usr/bin/rg
-          exists: true
-        - check: rg reports a parseable ripgrep version on stdout
-          command: rg --version
-          exit_status: 0
-          stdout:
+ripgrep:
+    candy:
+        version: 2026.144.1443
+        description: |
+            Fast recursive text search (rg)
+            Installs the ripgrep package, which provides the `rg` binary at
+            /usr/bin/rg — a fast recursive grep that honours .gitignore by
+            default. Verifiable end to end: the binary lands at a fixed path,
+            `rg --version` reports a parseable version on stdout, and `rg`
+            returns the matching line (exit 0) for a present pattern and
+            exit 1 for an absent one.
+    ripgrep-package:
+        package:
+            - ripgrep
+    ripgrep-step-0:
+        check: the rg binary is installed at /usr/bin/rg
+        file: /usr/bin/rg
+        exists: true
+    ripgrep-step-1:
+        check: rg reports a parseable ripgrep version on stdout
+        command: rg --version
+        exit_status: 0
+        stdout:
             - matches: "ripgrep [0-9]"
-        - check: rg prints the matching line for a pattern present in piped input
-          command: printf 'alpha\nbeta\ngamma\n' | rg beta
-          exit_status: 0
-          stdout:
+    ripgrep-step-2:
+        check: rg prints the matching line for a pattern present in piped input
+        command: printf 'alpha\nbeta\ngamma\n' | rg beta
+        exit_status: 0
+        stdout:
             - contains: beta
-        - check: rg exits 1 (no match) when the pattern is absent, never matching spuriously
-          command: printf 'alpha\nbeta\n' | rg ZZZ-no-such-pattern; test $? -eq 1
-          exit_status: 0
-        - check: package=ripgrep
-          id: ripgrep-package
-          package: ripgrep
-          installed: true
-        - check: command=printf 'needle-in-haystack\nother-line\n' | rg needle
-          id: ripgrep-search-matches
-          command: printf 'needle-in-haystack\nother-line\n' | rg needle
-          exit_status: 0
-          stdout:
+    ripgrep-step-3:
+        check: rg exits 1 (no match) when the pattern is absent, never matching spuriously
+        command: printf 'alpha\nbeta\n' | rg ZZZ-no-such-pattern; test $? -eq 1
+        exit_status: 0
+    ripgrep-package-2:
+        check: package=ripgrep
+        id: ripgrep-package
+        package: ripgrep
+        installed: true
+    ripgrep-search-matches:
+        check: command=printf 'needle-in-haystack\nother-line\n' | rg needle
+        id: ripgrep-search-matches
+        command: printf 'needle-in-haystack\nother-line\n' | rg needle
+        exit_status: 0
+        stdout:
             - contains: needle-in-haystack

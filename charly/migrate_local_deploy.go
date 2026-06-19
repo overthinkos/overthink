@@ -4,9 +4,9 @@ package main
 //
 // Converts the per-host deploy file (~/.config/ov/deploy.yml) from the
 // legacy pre-2026-04 schema to the current schema-v4 shape used by
-// LoadDeployConfig.
+// LoadBundleConfig.
 //
-// Legacy form (silently dropped by current LoadDeployConfig because
+// Legacy form (silently dropped by current LoadBundleConfig because
 // yaml.Unmarshal ignores unknown root keys):
 //
 //   images:
@@ -153,7 +153,7 @@ func MigrateLocalDeploy(path string, dryRun bool) (bool, []string, error) {
 }
 
 // migrateLocalDeployEntry transforms a single legacy per-image entry into a
-// modern DeploymentNode-shaped map. Returns (transformed, summary-lines).
+// modern BundleNode-shaped map. Returns (transformed, summary-lines).
 //
 // Legacy fields handled:
 //   - bind_mounts → volumes (encrypted: true → type: encrypted; otherwise type: bind)
@@ -217,7 +217,7 @@ func migrateLocalDeployEntry(entry map[string]any) (map[string]any, []string) {
 	}
 
 	// 3. Pass-through fields (tunnel, dns, ports, env_file, security,
-	//    network, env, eval, …). The DeploymentNode struct accepts more
+	//    network, env, eval, …). The BundleNode struct accepts more
 	//    fields than the legacy schema offered, so any unknown fields
 	//    become benign — they're either valid v4 fields the user added
 	//    by hand, or ignored on load.

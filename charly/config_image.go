@@ -55,7 +55,7 @@ type BoxConfigSetupCmd struct {
 
 	// ExplicitRef, when non-empty, bypasses the short-name → registry-ref
 	// resolution in runConfig and uses this exact image ref (a full local or
-	// registry ref). Set by `charly deploy from-box` for a source-less pod
+	// registry ref). Set by `charly bundle from-box` for a source-less pod
 	// deploy — quadlet config comes from the image's baked OCI labels with no
 	// charly.yml project. Box then carries the deploy-key/name only.
 	// Not a CLI flag (kong:"-").
@@ -135,7 +135,7 @@ func (c *BoxConfigSetupCmd) Run() error {
 // ghcr.io/overthinkos/arch:TAG, not bare short names).
 func (c *BoxConfigSetupCmd) resolveDeployRef() (deployBoxName, imageRef string) {
 	if c.ExplicitRef != "" {
-		// Source-less from-box deploy (`charly deploy from-box`): use the exact
+		// Source-less from-box deploy (`charly bundle from-box`): use the exact
 		// ref as-is; c.Box is the deploy-key/name only. No charly.yml
 		// short-name resolution, no registry-ref composition — the image is
 		// already present locally (e.g. cp-box'd into a VM guest) and its
@@ -163,14 +163,14 @@ func (c *BoxConfigSetupCmd) resolveDeployRef() (deployBoxName, imageRef string) 
 
 // prepareQuadletEnv resolves the EnvironmentFile= path for the quadlet:
 // CLI --env-file > charly.yml env_file > workspace .env. Split out of runConfig.
-func (c *BoxConfigSetupCmd) prepareQuadletEnv(dc *DeployConfig, bindMounts []ResolvedBindMount) string {
+func (c *BoxConfigSetupCmd) prepareQuadletEnv(dc *BundleConfig, bindMounts []ResolvedBindMount) string {
 	var quadletEnvFile string
 	if c.EnvFile != "" {
 		quadletEnvFile, _ = filepath.Abs(c.EnvFile)
 	}
 	// Check charly.yml env_file
 	if quadletEnvFile == "" && dc != nil {
-		if overlay, ok := dc.Deploy[deployKey(c.Box, c.Instance)]; ok && overlay.EnvFile != "" {
+		if overlay, ok := dc.Bundle[deployKey(c.Box, c.Instance)]; ok && overlay.EnvFile != "" {
 			quadletEnvFile = expandHostHome(overlay.EnvFile)
 		}
 	}
@@ -191,10 +191,10 @@ func (c *BoxConfigSetupCmd) prepareQuadletEnv(dc *DeployConfig, bindMounts []Res
 // c.Env to the app-only set), and provisions sidecar secrets (appending any
 // fallback env to envVars). Returns the deploy sidecar defs, the resolved
 // sidecars, and the (possibly extended) env var list. Split out of runConfig.
-func (c *BoxConfigSetupCmd) resolveSidecars(dc *DeployConfig, rt *ResolvedRuntime, autoGen bool, envVars []string) (map[string]SidecarDef, []ResolvedSidecar, []string, error) {
+func (c *BoxConfigSetupCmd) resolveSidecars(dc *BundleConfig, rt *ResolvedRuntime, autoGen bool, envVars []string) (map[string]SidecarDef, []ResolvedSidecar, []string, error) {
 	var deploySidecars map[string]SidecarDef
 	if dc != nil {
-		if overlay, ok := dc.Deploy[deployKey(c.Box, c.Instance)]; ok {
+		if overlay, ok := dc.Bundle[deployKey(c.Box, c.Instance)]; ok {
 			deploySidecars = overlay.Sidecar
 		}
 	}
@@ -346,7 +346,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// THIS deploy so two concurrent beds never collide on a host port.
 	if dc != nil {
 		key := deployKey(c.Box, c.Instance)
-		overlay := dc.Deploy[key]
+		overlay := dc.Bundle[key]
 		containerPorts := containerPortsFromMappings(meta.Port)
 		if len(containerPorts) > 0 || len(overlay.Port) > 0 {
 			resolved, rErr := ResolveDeployPorts(containerPorts, overlay.Port, overlay.ResolvedPort, dc.OccupiedHostPorts(key))
@@ -355,8 +355,8 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 			}
 			if !sameStringSlice(overlay.ResolvedPort, resolved) {
 				overlay.ResolvedPort = resolved
-				dc.Deploy[key] = overlay
-				if saveErr := SaveDeployConfig(dc); saveErr != nil {
+				dc.Bundle[key] = overlay
+				if saveErr := SaveBundleConfig(dc); saveErr != nil {
 					return fmt.Errorf("saving resolved_port: %w", saveErr)
 				}
 				fmt.Fprintf(os.Stderr, "Resolved ports for %s: %s\n",
@@ -378,7 +378,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		deployVolumes = parseVolumeEnv(c.Box)
 	}
 	if len(deployVolumes) == 0 && dc != nil {
-		if overlay, ok := dc.Deploy[deployKey(c.Box, c.Instance)]; ok {
+		if overlay, ok := dc.Bundle[deployKey(c.Box, c.Instance)]; ok {
 			deployVolumes = overlay.Volume
 		}
 	}
@@ -576,7 +576,7 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		Ports:           ports,
 		Volumes:         volumes,
 		BindMounts:      bindMounts,
-		GPU:             detected.GPU || deployNodeSharesGPU(dc.Deploy[deployKey(c.Box, c.Instance)], gatherResources()),
+		GPU:             detected.GPU || deployNodeSharesGPU(dc.Bundle[deployKey(c.Box, c.Instance)], gatherResources()),
 		BindAddress:     rt.BindAddress,
 		Tunnel:          tunnelCfg,
 		UID:             uid,
@@ -812,9 +812,9 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 			// Update charly.yml with seeded state
 			if seeded > 0 {
 				if dc == nil {
-					dc = &DeployConfig{Deploy: make(map[string]DeploymentNode)}
+					dc = &BundleConfig{Bundle: make(map[string]BundleNode)}
 				}
-				imgDeploy := dc.Deploy[deployKey(c.Box, c.Instance)]
+				imgDeploy := dc.Bundle[deployKey(c.Box, c.Instance)]
 				for i := range imgDeploy.Volume {
 					for _, entry := range dataMeta.DataEntries {
 						if imgDeploy.Volume[i].Name == entry.Volume {
@@ -823,8 +823,8 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 						}
 					}
 				}
-				dc.Deploy[deployKey(c.Box, c.Instance)] = imgDeploy
-				if err := SaveDeployConfig(dc); err != nil {
+				dc.Bundle[deployKey(c.Box, c.Instance)] = imgDeploy
+				if err := SaveBundleConfig(dc); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: could not save data seeded state to charly.yml: %v\n", err)
 				}
 				fmt.Fprintf(os.Stderr, "Provisioned data for %d volume(s)\n", seeded)
@@ -1225,18 +1225,18 @@ func (c *BoxConfigSetupCmd) parseVolumeFlags() []DeployVolumeConfig {
 // flags (when provided) into charly.yml under this image's Security block. On
 // subsequent runs MergeDeployOntoMetadata picks them up automatically — no other
 // code path needs to know about the flags.
-func (c *BoxConfigSetupCmd) persistResourceCaps(dc **DeployConfig) error {
+func (c *BoxConfigSetupCmd) persistResourceCaps(dc **BundleConfig) error {
 	if c.MemoryMax == "" && c.MemoryHigh == "" && c.MemorySwapMax == "" && c.Cpus == "" {
 		return nil
 	}
 	if *dc == nil {
-		*dc = &DeployConfig{Deploy: make(map[string]DeploymentNode)}
+		*dc = &BundleConfig{Bundle: make(map[string]BundleNode)}
 	}
-	if (*dc).Deploy == nil {
-		(*dc).Deploy = make(map[string]DeploymentNode)
+	if (*dc).Bundle == nil {
+		(*dc).Bundle = make(map[string]BundleNode)
 	}
 	key := deployKey(c.Box, c.Instance)
-	entry := (*dc).Deploy[key]
+	entry := (*dc).Bundle[key]
 	if entry.Security == nil {
 		entry.Security = &SecurityConfig{}
 	}
@@ -1252,8 +1252,8 @@ func (c *BoxConfigSetupCmd) persistResourceCaps(dc **DeployConfig) error {
 	if c.Cpus != "" {
 		entry.Security.Cpus = c.Cpus
 	}
-	(*dc).Deploy[key] = entry
-	return SaveDeployConfig(*dc)
+	(*dc).Bundle[key] = entry
+	return SaveBundleConfig(*dc)
 }
 
 // parseVolumeEnv parses CHARLY_VOLUMES_<IMAGE> env var into DeployVolumeConfig.
@@ -1349,7 +1349,7 @@ func injectEnvProvides(boxName, instance string, envProvides map[string]string, 
 	}
 
 	if changed {
-		if err := SaveDeployConfig(dc); err != nil {
+		if err := SaveBundleConfig(dc); err != nil {
 			return false, fmt.Errorf("saving deploy config: %w", err)
 		}
 	}
@@ -1431,7 +1431,7 @@ func injectMCPProvides(boxName, instance string, mcpProvides []MCPServerYAML, po
 	}
 
 	if changed {
-		if err := SaveDeployConfig(dc); err != nil {
+		if err := SaveBundleConfig(dc); err != nil {
 			return false, fmt.Errorf("saving deploy config: %w", err)
 		}
 	}
@@ -1549,13 +1549,13 @@ func checkMissingSecretRequires(boxName string, requires []EnvDependency, resolu
 //
 //nolint:gocyclo // per-deploy quadlet-rewrite loop; each step (load metadata → merge deploy config → resolve env → rewrite quadlet) is a peer; extraction needs unwieldy param passing
 func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipBox string) error {
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil || dc == nil {
 		return nil
 	}
 
 	var updated []string
-	for key := range dc.Deploy {
+	for key := range dc.Bundle {
 		if key == skipBox {
 			continue
 		}
@@ -1626,7 +1626,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipBox string) error {
 		// Build volumes from metadata
 		var deployVolumes []DeployVolumeConfig
 		var deploySidecars map[string]SidecarDef
-		if overlay, ok := dc.Deploy[key]; ok {
+		if overlay, ok := dc.Bundle[key]; ok {
 			deployVolumes = overlay.Volume
 			deploySidecars = overlay.Sidecar
 		}
@@ -1634,7 +1634,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipBox string) error {
 
 		// Resolve env file
 		var quadletEnvFile string
-		if overlay, ok := dc.Deploy[key]; ok && overlay.EnvFile != "" {
+		if overlay, ok := dc.Bundle[key]; ok && overlay.EnvFile != "" {
 			quadletEnvFile = expandHostHome(overlay.EnvFile)
 		}
 		if quadletEnvFile == "" {
@@ -1737,7 +1737,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipBox string) error {
 			Ports:           meta.Port,
 			Volumes:         volumes,
 			BindMounts:      bindMounts,
-			GPU:             detected.GPU || deployNodeSharesGPU(dc.Deploy[key], gatherResources()),
+			GPU:             detected.GPU || deployNodeSharesGPU(dc.Bundle[key], gatherResources()),
 			BindAddress:     rt.BindAddress,
 			Tunnel:          tunnelCfg,
 			UID:             meta.UID,

@@ -11,7 +11,7 @@ package main
 //      `charly check k8s nodes --cluster <deploy>` both work immediately.
 //   2. Write a ClusterProfile at ~/.config/charly/clusters/<deploy>.yaml with
 //      ingress.class=traefik and storage.class_default=local-path so any
-//      subsequent `charly deploy add <app> --target kubernetes` that selects
+//      subsequent `charly bundle add <app> --target kubernetes` that selects
 //      this cluster picks up the right defaults for the k3s addon stack.
 //
 // Called from deploy_add_cmd.go and deploy_add_cmd_vm.go after the artifact

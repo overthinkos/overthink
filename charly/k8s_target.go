@@ -7,14 +7,14 @@ package main
 // Unlike host target (which applies candies directly to the local filesystem)
 // or container target (which emits podman quadlets), k8s target produces a
 // Kustomize base + overlay tree under <dir>/.opencharly/k8s/<name>/ — which
-// a subsequent `charly deploy sync` or `kubectl apply -k` applies to the cluster.
+// a subsequent `charly bundle sync` or `kubectl apply -k` applies to the cluster.
 // -----------------------------------------------------------------------------
 
 // K8sDeployTarget implements DeployTarget for kubernetes deploys. It doesn't
 // consume install plans the same way LocalDeployTarget does (plans describe
 // host/container mutations; K8s deploys describe desired cluster state
 // instead). Instead, its Emit is a no-op wrapper — K8s manifest generation
-// happens via GenerateK8sKustomize called separately by `charly deploy add
+// happens via GenerateK8sKustomize called separately by `charly bundle add
 // --target kubernetes`, which has direct access to (deployment, capabilities,
 // cluster profile) without going through the install-plan IR.
 type K8sDeployTarget struct {
@@ -23,7 +23,7 @@ type K8sDeployTarget struct {
 
 	// Deployment — the merged deployment spec (charly.yml:deployments.<name>
 	// + ~/.config/charly/charly.yml overlay).
-	Deploy DeploymentNode
+	Deploy BundleNode
 
 	// Instance — blank for the bare image name; otherwise the instance name
 	// after the "image/" prefix (e.g. "prod" for "openclaw/prod"). Used to

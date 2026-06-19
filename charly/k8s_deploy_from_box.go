@@ -8,7 +8,7 @@ import (
 // -----------------------------------------------------------------------------
 // Source-less K8s deploy — Part F.10.
 //
-// `charly deploy from-box <registry-ref> [name]` can deploy to K8s without any
+// `charly bundle from-box <registry-ref> [name]` can deploy to K8s without any
 // access to the repo's charly.yml. Capabilities come from the pushed OCI
 // image's ai.opencharly.* labels; runtime choices come from (per-machine
 // ~/.config/charly/charly.yml, cluster profile). This proves the self-contained
@@ -17,15 +17,15 @@ import (
 
 // DeployFromBoxOpts carries the source-less-deploy inputs.
 type DeployFromBoxOpts struct {
-	Engine         string          // "podman" | "docker" (auto-detected if empty)
-	ImageRef       string          // fully-qualified registry/name:tag
-	DeploymentName string          // optional override; defaults to the basename of ImageRef without tag
-	Instance       string          // optional "image/instance" suffix
-	ClusterName    string          // cluster profile name (ClusterProfile.Name)
-	Namespace      string          // optional override of cluster profile's default namespace
-	DeployOverlay  *DeploymentNode // optional: merged from ~/.config/charly/charly.yml
-	OutputDir      string          // defaults to <cwd>/.opencharly/k8s
-	ProjectDir     string          // for looking up clusters/<name>.yaml
+	Engine         string      // "podman" | "docker" (auto-detected if empty)
+	ImageRef       string      // fully-qualified registry/name:tag
+	DeploymentName string      // optional override; defaults to the basename of ImageRef without tag
+	Instance       string      // optional "image/instance" suffix
+	ClusterName    string      // cluster profile name (ClusterProfile.Name)
+	Namespace      string      // optional override of cluster profile's default namespace
+	DeployOverlay  *BundleNode // optional: merged from ~/.config/charly/charly.yml
+	OutputDir      string      // defaults to <cwd>/.opencharly/k8s
+	ProjectDir     string      // for looking up clusters/<name>.yaml
 }
 
 // DeployFromBox performs the source-less deploy. Returns the absolute path
@@ -65,7 +65,7 @@ func DeployFromBox(opts DeployFromBoxOpts) (string, error) {
 	}
 
 	// 4. Build the deployment spec from the per-machine overlay if any.
-	dc := DeploymentNode{
+	dc := BundleNode{
 		Target: "k8s",
 	}
 	if opts.DeployOverlay != nil {

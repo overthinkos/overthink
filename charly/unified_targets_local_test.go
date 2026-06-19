@@ -226,7 +226,7 @@ func TestHostUnifiedTarget_Del_SkipsNonHost(t *testing.T) {
 }
 
 // TestHostUnifiedTarget_Rebuild_DryRun verifies the dry-run path emits
-// the expected "charly deploy add <name>" message without invoking the
+// the expected "charly bundle add <name>" message without invoking the
 // subcommand.
 func TestHostUnifiedTarget_Rebuild_DryRun(t *testing.T) {
 	target := &LocalUnifiedTarget{NodeName: "arch-vm.arch-host"}

@@ -55,7 +55,7 @@ type DataYAML struct {
 }
 
 // CandyArtifact declares a file the candy publishes back to the operator
-// after its setup completes. Retricheck happens at `charly deploy add` finalization
+// after its setup completes. Retricheck happens at `charly bundle add` finalization
 // via the target's back-channel (scp for SSH/VM, cp for host, podman cp for
 // container). The retrieved file is written to `RetrieveTo` with shell-style
 // ${ENV} expansion on the path. Optional `Rewrite` rules perform a literal
@@ -263,7 +263,7 @@ type CandyYAML struct {
 	// priority) plus per-shell sub-blocks (bash/zsh/fish/sh). Travels in
 	// the ai.opencharly.shell OCI label (candy section) and is applied
 	// at `charly box build` time (snippets land in /etc/profile.d/,
-	// /etc/fish/conf.d/) and at `charly deploy add` time on target:local /
+	// /etc/fish/conf.d/) and at `charly bundle add` time on target:local /
 	// target:vm (managed-block in user rc files; per-candy drop-in for
 	// fish). See ShellConfig type and /charly-build:layer "Shell Init Surface".
 	Shell *ShellConfig `yaml:"shell,omitempty" json:"shell,omitempty"`
@@ -711,38 +711,27 @@ func parseCandyYAML(path string) (*CandyYAML, error) {
 		return nil, err
 	}
 
-	// Parse as a multi-document stream — reject if more than one non-empty doc.
-	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
-	var docs []yaml.Node
-	for {
-		var node yaml.Node
-		if err := decoder.Decode(&node); err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			return nil, fmt.Errorf("%s: %w", path, err)
-		}
-		// Skip empty (null-valued) docs.
-		if node.Kind == 0 || (node.Kind == yaml.DocumentNode && (len(node.Content) == 0 || (len(node.Content) == 1 && node.Content[0].Tag == "!!null"))) {
-			continue
-		}
-		docs = append(docs, node)
+	// Parse the stream down to its single top-level mapping node (or nil for an
+	// all-comment/null file → zero-value CandyYAML).
+	inner, err := singleCandyMappingNode(path, data)
+	if err != nil {
+		return nil, err
 	}
-	if len(docs) == 0 {
+	if inner == nil {
 		return &CandyYAML{}, nil
 	}
-	if len(docs) > 1 {
-		return nil, fmt.Errorf("%s: the candy manifest is not a multi-document stream; bundle files belong in the unified charly.yml", path)
-	}
 
-	node := &docs[0]
-	// Unwrap the DocumentNode wrapper.
-	inner := node
-	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
-		inner = node.Content[0]
-	}
-	if inner.Kind != yaml.MappingNode {
-		return nil, fmt.Errorf("%s: top level must be a mapping (got kind=%v)", path, inner.Kind)
+	// Unified node-form: a single name-first node `<name>: {candy: …, <children>}`.
+	// (The `candy` discriminator is NESTED under the node name, so the kind-keyed
+	// branch below — which looks for a TOP-LEVEL `candy:` key — won't match.)
+	if len(inner.Content) == 2 && !kindKeysSet[inner.Content[0].Value] {
+		if gn, perr := parseNode(inner.Content[0].Value, inner.Content[1], false); perr == nil && gn.disc == "candy" {
+			_, ic, berr := buildCandy(gn)
+			if berr != nil {
+				return nil, fmt.Errorf("%s: %w", path, berr)
+			}
+			return &ic.CandyYAML, nil
+		}
 	}
 
 	// Collect top-level keys.
@@ -795,6 +784,45 @@ func parseCandyYAML(path string) (*CandyYAML, error) {
 
 	// No `candy:` wrapper — legacy flat form. Reject with migration hint.
 	return nil, fmt.Errorf("%s: legacy flat candy.yml form is no longer accepted. Run `charly migrate` to convert to the canonical `candy:` kind-keyed form", path)
+}
+
+// singleCandyMappingNode parses a candy manifest's bytes as a YAML multi-document
+// stream and returns the single top-level mapping node (DocumentNode unwrapped). It
+// returns (nil, nil) when the stream holds no non-empty document (an all-comment /
+// null file → zero-value CandyYAML), and errors on a multi-document stream or a
+// non-mapping top level.
+func singleCandyMappingNode(path string, data []byte) (*yaml.Node, error) {
+	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
+	var docs []yaml.Node
+	for {
+		var node yaml.Node
+		if err := decoder.Decode(&node); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
+		// Skip empty (null-valued) docs.
+		if node.Kind == 0 || (node.Kind == yaml.DocumentNode && (len(node.Content) == 0 || (len(node.Content) == 1 && node.Content[0].Tag == "!!null"))) {
+			continue
+		}
+		docs = append(docs, node)
+	}
+	if len(docs) == 0 {
+		return nil, nil
+	}
+	if len(docs) > 1 {
+		return nil, fmt.Errorf("%s: the candy manifest is not a multi-document stream; bundle files belong in the unified charly.yml", path)
+	}
+	// Unwrap the DocumentNode wrapper.
+	inner := &docs[0]
+	if inner.Kind == yaml.DocumentNode && len(inner.Content) > 0 {
+		inner = inner.Content[0]
+	}
+	if inner.Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("%s: top level must be a mapping (got kind=%v)", path, inner.Kind)
+	}
+	return inner, nil
 }
 
 // rejectLegacyCandyKeys is the candy-manifest shape guard: a removed field name

@@ -127,7 +127,7 @@ func MergeDeployShell(baked *LabelShellSet, overlay []ShellEntry) *LabelShellSet
 // consumes a separate ShellOverlayEntry struct that carries Skip
 // explicitly. Here we treat any incoming entry whose Generic/ByShell
 // are both nil AND whose Origin is "deploy" or "" as a skip-by-id
-// signal — see DeploymentNode.Shell parsing in deploy.go.
+// signal — see BundleNode.Shell parsing in deploy.go.
 func replaceShellEntryByID(set *LabelShellSet, e ShellEntry) bool {
 	skip := e.Generic == nil && len(e.ByShell) == 0
 	for _, bucket := range [...]*[]ShellEntry{&set.Candy, &set.Box, &set.Deploy} {

@@ -285,7 +285,7 @@ func repoOverrideDir(repoPath string) (string, bool, error) {
 // selfSuperprojectOverridePair returns a CHARLY_REPO_OVERRIDE pair
 // (`<repo-identity>=<superproject-dir>`) that points a bed project's OWN
 // superproject `@github` refs at the local working tree, or "" when projectDir
-// is not a git submodule of a charly superproject. A `kind: check` bed living in
+// is not a git submodule of a charly superproject. A check bed (a `disposable: true` bundle) living in
 // a `box/<distro>` submodule references its parent repo's shared candies via
 // `@github.com/<org>/<parent>/candy/<name>:<tag>`; without this override the bed
 // would build the PINNED REMOTE candy and so test STALE code — the candy-ref

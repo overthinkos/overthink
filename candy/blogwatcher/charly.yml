@@ -1,44 +1,51 @@
-candy:
-    version: 2026.144.1443
-    name: blogwatcher
-    description: |
-        Blog/RSS feed monitor CLI installed from source via go install
-        Installs the blogwatcher cobra CLI (github.com/Hyaxia/blogwatcher)
-        with `go install`, landing the binary at ${HOME}/go/bin/blogwatcher
-        (GOPATH=~/go, with ~/go/bin appended to PATH). The install is
-        verifiable without the network: the binary is present and
-        executable, and `blogwatcher --help` runs (exit 0) and lists its
-        feed-management subcommands (add, scan, blogs, articles, read).
-    require:
-        - golang
-    env:
-        GOPATH: "~/go"
-    path_append:
-        - "~/go/bin"
-    plan:
-        - run: |
+blogwatcher:
+    candy:
+        version: 2026.144.1443
+        description: |
+            Blog/RSS feed monitor CLI installed from source via go install
+            Installs the blogwatcher cobra CLI (github.com/Hyaxia/blogwatcher)
+            with `go install`, landing the binary at ${HOME}/go/bin/blogwatcher
+            (GOPATH=~/go, with ~/go/bin appended to PATH). The install is
+            verifiable without the network: the binary is present and
+            executable, and `blogwatcher --help` runs (exit 0) and lists its
+            feed-management subcommands (add, scan, blogs, articles, read).
+    blogwatcher-require:
+        require:
+            - golang
+    blogwatcher-env:
+        env:
+            GOPATH: "~/go"
+    blogwatcher-path_append:
+        path_append:
+            - "~/go/bin"
+    blogwatcher-step-0:
+        run: |
             command=go install github.com/Hyaxia/blogwatcher/cmd/blogwatcher@latest
             go clean -cache
-          command: |
+        command: |
             go install github.com/Hyaxia/blogwatcher/cmd/blogwatcher@latest
             go clean -cache
-          run_as: "${USER}"
-        - check: the blogwatcher binary is installed at ~/go/bin/blogwatcher
-          file: ${HOME}/go/bin/blogwatcher
-          exists: true
-        - check: running blogwatcher --help exits 0 and lists the scan subcommand
-          command: "${HOME}/go/bin/blogwatcher --help 2>&1"
-          exit_status: 0
-          stdout:
+        run_as: "${USER}"
+    blogwatcher-step-1:
+        check: the blogwatcher binary is installed at ~/go/bin/blogwatcher
+        file: ${HOME}/go/bin/blogwatcher
+        exists: true
+    blogwatcher-step-2:
+        check: running blogwatcher --help exits 0 and lists the scan subcommand
+        command: "${HOME}/go/bin/blogwatcher --help 2>&1"
+        exit_status: 0
+        stdout:
             - contains: scan
-        - check: command=test -x ${HOME}/go/bin/blogwatcher
-          id: blogwatcher-binary-executable
-          command: "test -x ${HOME}/go/bin/blogwatcher"
-          exit_status: 0
-        - check: command=${HOME}/go/bin/blogwatcher --help 2>&1
-          id: blogwatcher-cli-help
-          command: "${HOME}/go/bin/blogwatcher --help 2>&1"
-          exit_status: 0
-          stdout:
+    blogwatcher-binary-executable:
+        check: command=test -x ${HOME}/go/bin/blogwatcher
+        id: blogwatcher-binary-executable
+        command: "test -x ${HOME}/go/bin/blogwatcher"
+        exit_status: 0
+    blogwatcher-cli-help:
+        check: command=${HOME}/go/bin/blogwatcher --help 2>&1
+        id: blogwatcher-cli-help
+        command: "${HOME}/go/bin/blogwatcher --help 2>&1"
+        exit_status: 0
+        stdout:
             - contains: scan
             - contains: blogs

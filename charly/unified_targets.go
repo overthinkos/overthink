@@ -97,7 +97,7 @@ type LocalUnifiedTarget struct {
 	NodeName string
 
 	// KeepRepoChanges and KeepServices are deploy-del gate flags
-	// populated by the dispatcher from `charly deploy del --keep-…`.
+	// populated by the dispatcher from `charly bundle del --keep-…`.
 	// Forwarded to runReverseOps when Del runs. Default false → repo
 	// changes and packaged services ARE reversed (the destructive
 	// teardown path).
@@ -141,7 +141,7 @@ type VmUnifiedTarget struct {
 	Instance string
 
 	// KeepRepoChanges and KeepServices are deploy-del gate flags
-	// populated by the dispatcher from `charly deploy del --keep-…`.
+	// populated by the dispatcher from `charly bundle del --keep-…`.
 	// Forwarded to runReverseOps when Del runs.
 	KeepRepoChanges bool
 	KeepServices    bool
@@ -152,10 +152,10 @@ type VmUnifiedTarget struct {
 	// Del builds it itself from buildVmReverseRunner(NodeName).
 	RevRunner ReverseRunner
 
-	// NodeOnly mirrors `charly deploy add --node-only`: when true, Add does
+	// NodeOnly mirrors `charly bundle add --node-only`: when true, Add does
 	// NOT descend into nested target:pod children (the caller deploys
 	// them explicitly afterwards via the dotted path). Set by the
-	// dispatcher from DeployAddCmd.NodeOnly.
+	// dispatcher from BundleAddCmd.NodeOnly.
 	NodeOnly bool
 }
 
@@ -189,7 +189,7 @@ type PodUnifiedTarget struct {
 	NodeName string
 
 	// KeepImage suppresses overlay-image removal during Del. Populated
-	// by the dispatcher from `charly deploy del --keep-image`. The unified
+	// by the dispatcher from `charly bundle del --keep-image`. The unified
 	// DelOpts is uniform across kinds; pod-specific gates live here.
 	KeepImage bool
 
@@ -199,7 +199,7 @@ type PodUnifiedTarget struct {
 	// NodeName at Rebuild time.
 	BaseImageRef string
 
-	// Add-time inputs, set by the dispatcher from DeployAddCmd flags.
+	// Add-time inputs, set by the dispatcher from BundleAddCmd flags.
 	// Tag overrides the resolved CalVer; Ref is the user-supplied image
 	// ref (persisted into charly.yml when --disposable/--lifecycle are
 	// set); Disposable / Lifecycle carry the classification opt-ins.
@@ -282,7 +282,7 @@ func (t *AndroidUnifiedTarget) Executor() DeployExecutor { return nil }
 //
 // Looks up a charly.yml node by name, validates that `target:` is set,
 // and returns the appropriate UnifiedDeployTarget adapter. This is the
-// canonical entry point for every deploy verb (`charly deploy add` / `del`
+// canonical entry point for every deploy verb (`charly bundle add` / `del`
 // and `charly update`). The returned adapter carries identity only; its Add
 // method CONSTRUCTS the live embedded target from the DeployContext.
 // ---------------------------------------------------------------------------
@@ -307,7 +307,7 @@ func canonicalTarget(target string) string {
 
 // ResolveTarget returns the UnifiedDeployTarget for `name`, dispatching
 // on the node's canonical target. The node MUST be the dispatch-merged
-// DeploymentNode (project+operator field merge from resolveTreeRoot) —
+// BundleNode (project+operator field merge from resolveTreeRoot) —
 // the adapter consumes node fields (Nested/Env/ephemeral/disposable)
 // directly and NEVER re-reads them from disk.
 //
@@ -315,9 +315,9 @@ func canonicalTarget(target string) string {
 //   - "no deployment X" — node absent / nil
 //   - "X: missing required `target:`" — schema violation
 //   - "X: unknown target Y" — value not in local|vm|pod|k8s|android
-func ResolveTarget(node *DeploymentNode, name string) (UnifiedDeployTarget, error) {
+func ResolveTarget(node *BundleNode, name string) (UnifiedDeployTarget, error) {
 	if node == nil {
-		return nil, fmt.Errorf("no deployment %q; run `charly deploy list`", name)
+		return nil, fmt.Errorf("no deployment %q; run `charly bundle list`", name)
 	}
 
 	// Every deployment MUST carry target:. The migrator sets it for

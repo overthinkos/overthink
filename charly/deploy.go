@@ -14,23 +14,23 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// DeployConfig represents per-machine deployment overrides (~/.config/charly/charly.yml).
+// BundleConfig represents per-machine deployment overrides (~/.config/charly/charly.yml).
 // Only runtime/deployment fields are supported — build-time fields are structurally excluded.
 //
 // Schema v4: the top-level map key is `deployment:` (singular, flat). The
 // legacy `images:` / `deployments.images.*` nesting is gone — all target
 // kinds (host / vm / pod / k8s) live under the single `deployment:` map.
-type DeployConfig struct {
-	Provides *ProvidesConfig           `yaml:"provides,omitempty" json:"provides,omitempty"`
-	Deploy   map[string]DeploymentNode `yaml:"deploy" json:"deploy"`
+type BundleConfig struct {
+	Provides *ProvidesConfig       `yaml:"provides,omitempty" json:"provides,omitempty"`
+	Bundle   map[string]BundleNode `yaml:"deploy" json:"deploy"`
 	// Sidecar carries the project's sidecar-template library (the embedded
 	// default set merged with any project-declared root sidecar: entries).
-	// Projected from UnifiedFile.Sidecar by ProjectDeployConfig(); deploy-time
+	// Projected from UnifiedFile.Sidecar by ProjectBundleConfig(); deploy-time
 	// resolution merges these UNDER each deploy node's own sidecar overrides.
 	Sidecar map[string]SidecarDef `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
 }
 
-// DeploymentNode is one node in the deployments tree declared in
+// BundleNode is one node in the deployments tree declared in
 // charly.yml. Every deployment is a node; each node may carry zero or
 // more `children:` that run inside its environment. The node's Target
 // discriminator picks the DeployTarget that owns execution:
@@ -49,7 +49,7 @@ type DeployConfig struct {
 // need a new target implementation — it's PodDeployTarget whose
 // executor happens to be NestedExecutor{Parent: SSHDeployExecutor{…}}.
 //
-// Addressing is dotted path: `charly deploy add stack.web.db` walks the tree
+// Addressing is dotted path: `charly bundle add stack.web.db` walks the tree
 // stack → web → db and applies that leaf plus all of its descendants in
 // pre-order. Map keys MUST NOT contain `.` — the load-time validator in
 // unified.go rejects them with a remediation hint.
@@ -57,7 +57,7 @@ type DeployConfig struct {
 // Disposability is per-node and does NOT cascade. A parent with
 // disposable: true does not authorize destroying its children unattended —
 // each child's flag stands on its own (see /charly-internals:disposable).
-type DeploymentNode struct {
+type BundleNode struct {
 	Version     string               `yaml:"version,omitempty" json:"version,omitempty"`
 	Description string               `yaml:"description,omitempty" json:"description,omitempty"` // plain-string self-description; first line = summary
 	Tunnel      *TunnelYAML          `yaml:"tunnel,omitempty" json:"tunnel,omitempty"`
@@ -95,14 +95,6 @@ type DeploymentNode struct {
 	// (deploy/runtime state).
 	Iterate *IterateConfig `yaml:"iterate,omitempty" json:"iterate,omitempty"`
 
-	// CheckBed marks this entry as a `kind: check` disposable R10 bed,
-	// folded into the Deploy map by foldCheckBeds() at load time so every
-	// deploy verb resolves it by name with no per-verb change. Never
-	// authored as a field — the `kind: check` discriminator is what sets
-	// it. Read by `charly check run` to enumerate beds and by validate.go for
-	// the bed-specific rules (disposable required, cross-ref resolvable).
-	CheckBed bool `yaml:"-"`
-
 	// Shell is the deploy-level overlay for the ai.opencharly.shell
 	// label. Same id-based replace/skip/append semantics as Check —
 	// applied via MergeDeployShell at deploy time. 2026-05 cutover.
@@ -115,14 +107,14 @@ type DeploymentNode struct {
 
 	// --- BuildTarget refactor fields (Task 13) ---
 	//
-	// Target selects the deploy destination. Empty or "container" →
-	// the existing quadlet/podman pipeline. "host" → apply candies
-	// directly to the invoking user's filesystem via LocalDeployTarget.
-	// "kubernetes" → emit a Kustomize tree via K8sDeployTarget (Part F).
-	// Only honored when this entry's map key matches (host/kubernetes)
-	// or when --target=... is passed on the CLI; a container-named
-	// entry with target:host is a config error.
-	Target string `yaml:"target,omitempty" json:"target,omitempty"`
+	// Target selects the deploy destination (pod | vm | k8s | local | android).
+	// NOT authored — DERIVED from the node's discriminator kind +
+	// cross-ref by buildBundleNode/inferBundleTarget (yaml:"-"); the former
+	// authored `target:` key is RETIRED (run: charly migrate). Empty → "pod"
+	// (classifyTarget default). The per-host overlay writer re-emits the node
+	// in disc form, so Target is re-derived on reload — never round-tripped as
+	// a `target:` key. json kept for `--dry-run --format json` output.
+	Target string `yaml:"-" json:"target,omitempty"`
 
 	// Kubernetes carries the `kubernetes:` sub-block. Only consulted when
 	// Target == "kubernetes". All cluster-wide K8s knobs (storage class,
@@ -256,7 +248,7 @@ type DeploymentNode struct {
 	Inside string `yaml:"-"`
 
 	// VmState is the runtime state written by VmDeployTarget on first
-	// apply. Preserved across reboots so charly deploy del can reverse the
+	// apply. Preserved across reboots so charly bundle del can reverse the
 	// deploy, and so re-apply is idempotent (instance-id stays stable,
 	// disk path points at the same qcow2, etc.).
 	VmState *VmDeployState `yaml:"vm_state,omitempty" json:"vm_state,omitempty"`
@@ -363,7 +355,7 @@ type DeploymentNode struct {
 
 	// --- Recursive tree: nested deployments (schema v4) ---
 	//
-	// Nested are DeploymentNodes whose execution venue is nested
+	// Children are BundleNodes whose execution venue is nested
 	// inside this node's environment. A container node with a vm child
 	// creates the container first, then boots the VM inside it; the
 	// child's DeployExecutor composes this node's executor with a
@@ -374,35 +366,57 @@ type DeploymentNode struct {
 	// treats `.` as a node separator (foo.bar.baz). LoadUnified
 	// rejects offending keys at parse time with a remediation hint.
 	//
-	// Schema v4 rename: `children:` → `nested:`. The parent-reverse-
-	// reference Inside is DERIVED from this tree at load time; authored
-	// `inside:` entries are rejected.
-	Nested map[string]*DeploymentNode `yaml:"nested,omitempty" json:"nested,omitempty"`
+	// NOT authored — DERIVED from POSITION: a resource node nested under a
+	// workload node becomes a Child (buildBundleNode). The former authored
+	// `nested:` key is RETIRED (yaml:"-"; run: charly migrate). The per-host
+	// overlay writer re-emits children as node-form tree children
+	// (marshalBundleNodeLegacy), so the tree round-trips though the field never
+	// marshals as a `nested:` key. json kept for `--dry-run --format json`.
+	Children map[string]*BundleNode `yaml:"-" json:"nested,omitempty"`
 
-	// --- Sibling peers: companion deployments brought up alongside ---
+	// --- Sibling members: companion deployments brought up alongside ---
 	//
-	// Peer are full DeploymentNodes brought up ALONGSIDE this node on the
-	// shared `charly` network — NOT nested inside it (contrast Nested, whose
+	// Members are full BundleNodes brought up ALONGSIDE this node on the
+	// shared `charly` network — NOT nested inside it (contrast Children, whose
 	// children run INSIDE this node's venue and are addressed by a dotted
-	// path). A peer is a companion INSTRUMENT — the canonical case is a
+	// path). A member is a companion INSTRUMENT — the canonical case is a
 	// Chrome driver pod that CDP-probes this web-server subject via a check
-	// with `on: <peer>`; peers are reachable by `${PEER_HOST:<name>}` over
+	// with `on: <member>`; members are reachable by `${HOST:<name>}` over
 	// the shared net and are NEVER check-live'd themselves (excluded from
-	// bedCheckLiveRefs). foldPeers registers each peer as a top-level,
-	// addressable Deploy entry at load time (inheriting this node's
+	// bedCheckLiveRefs). foldMembers registers each member as a top-level,
+	// addressable Bundle entry at load time (inheriting this node's
 	// disposability) so the SAME `charly config`/`charly start`/`charly stop` verbs the
 	// deploy path already uses bring it up and tear it down — and a kind:check
 	// bed inherits that lifecycle through its own `charly start <bed>` step.
 	// Used identically by kind:check beds and kind:deploy deployments (one
-	// codebase). Peer keys MUST be globally unique + carry no `.` (same rule
-	// as Nested + bed names); the AUTHOR keeps peer host ports disjoint.
-	Peer map[string]*DeploymentNode `yaml:"peer,omitempty" json:"peer,omitempty"`
+	// codebase). Members keys MUST be globally unique + carry no `.` (same rule
+	// as Children + bed names); the AUTHOR keeps member host ports disjoint.
+	//
+	// NOT authored — DERIVED from POSITION: a resource node placed alongside
+	// under a group/venue node becomes a Member (buildBundleNode). The former
+	// authored `peer:` key is RETIRED (yaml:"-"; run: charly migrate). The
+	// per-host overlay writer re-emits members as node-form tree children, so
+	// they round-trip though the field never marshals as a `peer:` key. json
+	// kept for `--dry-run --format json`.
+	Members map[string]*BundleNode `yaml:"-" json:"peer,omitempty"`
 
-	// PeerOf, when set, names the deployment whose `peer:` block defined this
-	// (folded) entry. DERIVED by foldPeers — never authored. Marks the entry
+	// MemberOf, when set, names the deployment whose member block defined this
+	// (folded) entry. DERIVED by foldMembers — never authored. Marks the entry
 	// as a companion so it is brought up/torn down with its owner and is not
 	// enumerated as an independent bed.
-	PeerOf string `yaml:"-"`
+	MemberOf string `yaml:"-"`
+
+	// AgentProvisioned marks a resource member/child as one the AI AGENT
+	// deploys at run time (the iterate-benchmark contract) — NOT a topology the
+	// bed deploys. Authored as `agent_provisioned: true` in the resource node's
+	// value. Semantics: (1) foldMembers SKIPS it (never a top-level addressable
+	// entry → no auto bring-up, no cross-bed name collision); (2) the
+	// box-required validators EXEMPT it (it carries no `box:` — the agent builds
+	// the image); (3) flattenBundleVenues still stamps its position-derived
+	// venue onto the steps under it, so the scorer resolves `charly-<name>` (the
+	// container the agent deployed) via resolveScoringChain's bare-name fallback
+	// / the agent-written local overlay (dotted). Image-less by design.
+	AgentProvisioned bool `yaml:"agent_provisioned,omitempty" json:"agent_provisioned,omitempty"`
 }
 
 // DeployShellOverlay is one entry in charly.yml `shell:`. ID matches
@@ -463,8 +477,15 @@ func (o *DeployShellOverlay) ToShellEntry() ShellEntry {
 // is marked ephemeral (the load-bearing implication: ephemeral deploys
 // MUST be auto-destroyed and therefore MAY be — see /charly-internals:disposable
 // "the ephemeral exception"). Implements the Classified interface.
-func (c DeploymentNode) IsDisposable() bool {
+func (c BundleNode) IsDisposable() bool {
 	return (c.Disposable != nil && *c.Disposable) || c.IsEphemeral()
+}
+
+// IsGroup reports whether this is a §3 GROUP bundle — no workload cross-ref
+// (Target == "") but with sibling Members (the cross-deployment subject+driver
+// shape). A group bed has no root container; its members ARE the deployment.
+func (c BundleNode) IsGroup() bool {
+	return c.Target == "" && len(c.Members) > 0
 }
 
 // IsEphemeral reports whether this deploy is marked ephemeral
@@ -472,7 +493,7 @@ func (c DeploymentNode) IsDisposable() bool {
 // `c.Ephemeral != nil`. The presence of the field is the marker; the
 // block's contents (TTL, keep_on_failure, naming_pattern) parameterize
 // the lifecycle.
-func (c DeploymentNode) IsEphemeral() bool {
+func (c BundleNode) IsEphemeral() bool {
 	return c.Ephemeral != nil
 }
 
@@ -480,13 +501,13 @@ func (c DeploymentNode) IsEphemeral() bool {
 // resource that may be gracefully stopped to free it (the `preemptible:`
 // field present). Orthogonal to IsDisposable/IsEphemeral — no derivation
 // either way. Implements the Classified interface.
-func (c DeploymentNode) IsPreemptible() bool {
+func (c BundleNode) IsPreemptible() bool {
 	return c.Preemptible != nil && len(c.Preemptible.Holds) > 0
 }
 
 // PreemptionHolds returns the exclusive-resource token(s) this deploy
 // occupies as a holder (nil-safe; empty when not preemptible).
-func (c DeploymentNode) PreemptionHolds() []string {
+func (c BundleNode) PreemptionHolds() []string {
 	if c.Preemptible == nil {
 		return nil
 	}
@@ -495,22 +516,22 @@ func (c DeploymentNode) PreemptionHolds() []string {
 
 // RequiredExclusive returns the exclusive-resource token(s) this deploy
 // claims sole use of (the claimant side; nil-safe).
-func (c DeploymentNode) RequiredExclusive() []string {
+func (c BundleNode) RequiredExclusive() []string {
 	return c.RequiresExclusive
 }
 
 // RequiredShared returns the shared-mode resource token(s) this deploy claims
 // (the refcounted shared-claimant side; nil-safe). Many shared claimants of one
 // token coexist; see RequiresShared + charly/preempt.go.
-func (c DeploymentNode) RequiredShared() []string {
+func (c BundleNode) RequiredShared() []string {
 	return c.RequiresShared
 }
 
 // HasChildren reports whether this node has any nested deployments.
 // Cheap predicate used by the tree walker to decide pre-order vs
 // leaf-only dispatch.
-func (n *DeploymentNode) HasChildren() bool {
-	return n != nil && len(n.Nested) > 0
+func (n *BundleNode) HasChildren() bool {
+	return n != nil && len(n.Children) > 0
 }
 
 // WalkPreOrder invokes fn on this node, then recurses into every
@@ -524,19 +545,19 @@ func (n *DeploymentNode) HasChildren() bool {
 //
 // When fn returns a non-nil error, traversal stops immediately and
 // the error propagates.
-func (n *DeploymentNode) WalkPreOrder(path string, fn func(path string, node *DeploymentNode) error) error {
+func (n *BundleNode) WalkPreOrder(path string, fn func(path string, node *BundleNode) error) error {
 	if n == nil {
 		return nil
 	}
 	if err := fn(path, n); err != nil {
 		return err
 	}
-	for _, k := range sortedNestedKeys(n.Nested) {
+	for _, k := range sortedNestedKeys(n.Children) {
 		childPath := k
 		if path != "" {
 			childPath = path + "." + k
 		}
-		if err := n.Nested[k].WalkPreOrder(childPath, fn); err != nil {
+		if err := n.Children[k].WalkPreOrder(childPath, fn); err != nil {
 			return err
 		}
 	}
@@ -547,23 +568,23 @@ func (n *DeploymentNode) WalkPreOrder(path string, fn func(path string, node *De
 // before invoking fn on this node. Post-order is the delete-order
 // semantic: a child must be torn down while its parent environment
 // is still alive, so the caller reverses leaves first.
-func (n *DeploymentNode) WalkPostOrder(path string, fn func(path string, node *DeploymentNode) error) error {
+func (n *BundleNode) WalkPostOrder(path string, fn func(path string, node *BundleNode) error) error {
 	if n == nil {
 		return nil
 	}
-	for _, k := range sortedNestedKeys(n.Nested) {
+	for _, k := range sortedNestedKeys(n.Children) {
 		childPath := k
 		if path != "" {
 			childPath = path + "." + k
 		}
-		if err := n.Nested[k].WalkPostOrder(childPath, fn); err != nil {
+		if err := n.Children[k].WalkPostOrder(childPath, fn); err != nil {
 			return err
 		}
 	}
 	return fn(path, n)
 }
 
-// ResolveNodePath walks roots[path0].Nested[path1]...[pathN] and
+// ResolveNodePath walks roots[path0].Children[path1]...[pathN] and
 // returns the targeted node plus its parent chain (root-first,
 // excluding the target itself). Returns a descriptive error when any
 // path segment is missing so the user sees which segment doesn't
@@ -572,7 +593,7 @@ func (n *DeploymentNode) WalkPostOrder(path string, fn func(path string, node *D
 // An empty path is invalid — callers dispatch to
 // WalkPreOrder/WalkPostOrder against a named root instead of
 // resolving "".
-func ResolveNodePath(roots map[string]DeploymentNode, path string) (*DeploymentNode, []*DeploymentNode, error) {
+func ResolveNodePath(roots map[string]BundleNode, path string) (*BundleNode, []*BundleNode, error) {
 	parts := splitDottedPath(path)
 	if len(parts) == 0 {
 		return nil, nil, fmt.Errorf("empty or malformed deployment path %q", path)
@@ -583,10 +604,10 @@ func ResolveNodePath(roots map[string]DeploymentNode, path string) (*DeploymentN
 		return nil, nil, fmt.Errorf("no deployment named %q", rootName)
 	}
 	current := &rootEntry
-	var ancestors []*DeploymentNode
+	var ancestors []*BundleNode
 	for i := 1; i < len(parts); i++ {
 		ancestors = append(ancestors, current)
-		next, ok := current.Nested[parts[i]]
+		next, ok := current.Children[parts[i]]
 		if !ok {
 			prefix := strings.Join(parts[:i], ".")
 			return nil, nil, fmt.Errorf("no child %q under %q", parts[i], prefix)
@@ -613,7 +634,7 @@ func splitDottedPath(path string) []string {
 
 // sortedNestedKeys returns the keys of a children map in deterministic
 // order so traversal produces stable output across runs.
-func sortedNestedKeys(children map[string]*DeploymentNode) []string {
+func sortedNestedKeys(children map[string]*BundleNode) []string {
 	out := make([]string, 0, len(children))
 	for k := range children {
 		out = append(out, k)
@@ -629,7 +650,7 @@ func sortedNestedKeys(children map[string]*DeploymentNode) []string {
 // is exercised against its real venue through the chain — not just the parent
 // substrate. Without the nested entries, `charly check run` deploys nested children
 // but never evaluates them. Pure + unit-tested.
-func bedCheckLiveRefs(name string, children map[string]*DeploymentNode) []string {
+func bedCheckLiveRefs(name string, children map[string]*BundleNode) []string {
 	refs := []string{name}
 	for _, k := range sortedNestedKeys(children) {
 		// A nested child gets its own `charly check live <parent>.<child>` hop ONLY
@@ -664,12 +685,12 @@ type EphemeralLifetime struct {
 	// ephemeral. Parsed via time.ParseDuration ("30m", "2h", "90s").
 	// When empty (boolean-shorthand authoring), defaults to "1h".
 	// The value is the safety floor: a systemd transient timer fires
-	// `charly deploy del <name> --assume-yes` after this duration if all
+	// `charly bundle del <name> --assume-yes` after this duration if all
 	// higher-layer cleanup paths fail.
 	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty"`
 
 	// KeepOnFailure, when true, instructs the check-runner integration
-	// to skip the post-run `charly deploy del` when assertions fail
+	// to skip the post-run `charly bundle del` when assertions fail
 	// — leaves the instance alive (still subject to TTL) for operator
 	// inspection. Default false.
 	KeepOnFailure bool `yaml:"keep_on_failure,omitempty" json:"keep_on_failure,omitempty"`
@@ -682,7 +703,7 @@ type EphemeralLifetime struct {
 
 	// boolForm captures whether YAML authored the field as a bare
 	// boolean (`ephemeral: true`) vs a block. Used for round-trip
-	// fidelity in `charly deploy show` and to distinguish "not set" from
+	// fidelity in `charly bundle show` and to distinguish "not set" from
 	// "set to true with all defaults" in error messages.
 	boolForm bool
 }
@@ -767,7 +788,7 @@ const (
 )
 
 // PreemptibleConfig is the HOLDER-side block of the resource-arbitration
-// axis (see DeploymentNode.Preemptible). Authoring forms:
+// axis (see BundleNode.Preemptible). Authoring forms:
 //
 //	preemptible: [nvidia-gpu]        # list shorthand → Holds, default stop/restore
 //	preemptible:                     # block form
@@ -813,12 +834,12 @@ func (p *PreemptibleConfig) EffectiveRestore() string {
 
 // LifecycleTag returns the literal Lifecycle field. Implements the
 // Classified interface.
-func (c DeploymentNode) LifecycleTag() string {
+func (c BundleNode) LifecycleTag() string {
 	return c.Lifecycle
 }
 
 // VmDeployState is the auto-managed runtime state for a vm: deploy.
-// Written by VmDeployTarget on first apply; preserved across charly deploy
+// Written by VmDeployTarget on first apply; preserved across charly bundle
 // add/del cycles so VM lifecycle is reversible and idempotent.
 type VmDeployState struct {
 	// InstanceID is the stable UUIDv4 cloud-init instance-id. Generated
@@ -852,7 +873,7 @@ type VmDeployState struct {
 
 	// KeyInjectionResolved is the effective D13 state after auto
 	// defaults + explicit overrides resolved. Two booleans (one per
-	// channel). Informational; used by charly deploy show and for audit
+	// channel). Informational; used by charly bundle show and for audit
 	// purposes.
 	KeyInjectionResolved *VmKeyInjectionResolved `yaml:"key_injection_resolved,omitempty" json:"key_injection_resolved,omitempty"`
 
@@ -878,7 +899,7 @@ type VmDeployState struct {
 	// active ephemeral instantiation: the registered systemd transient
 	// timer, the parent snapshot reference, the TTL deadline, and the
 	// optional parent ephemeral ID for nested cases. Reset to nil on
-	// `charly deploy del` (clean teardown) or `charly status --reap-orphans`
+	// `charly bundle del` (clean teardown) or `charly status --reap-orphans`
 	// (orphan cleanup). Presence here means an instance is/was active;
 	// the underlying-resource check (libvirt domain alive) determines
 	// whether it's still healthy.
@@ -887,7 +908,7 @@ type VmDeployState struct {
 
 // VmSnapshotState records one snapshot in charly.yml's vm_state mirror.
 // The authoritative store is the per-VM `registry.json` on disk; this
-// mirror lets `charly status` / `charly deploy show` report state without
+// mirror lets `charly status` / `charly bundle show` report state without
 // filesystem reads.
 type VmSnapshotState struct {
 	// Name uniquely identifies the snapshot within this VM.
@@ -950,7 +971,7 @@ type EphemeralRuntime struct {
 	// TimerUnit is the systemd transient unit name the TTL safety
 	// timer is registered as. Empty if registration failed or was
 	// skipped (e.g., on systems without user systemd). On clean
-	// teardown, `charly deploy del` cancels this unit.
+	// teardown, `charly bundle del` cancels this unit.
 	TimerUnit string `yaml:"timer_unit,omitempty" json:"timer_unit,omitempty"`
 
 	// TtlDeadline is the absolute time (ISO8601) when the TTL timer
@@ -976,7 +997,7 @@ type VmKeyInjectionResolved struct {
 }
 
 // InstallOptsConfig holds charly.yml install_opts settings for a host
-// deploy. Mirrors the command-line flags on DeployAddCmd so a user can
+// deploy. Mirrors the command-line flags on BundleAddCmd so a user can
 // pin their choices in charly.yml instead of repeating them.
 type InstallOptsConfig struct {
 	WithServices     bool   `yaml:"with_service,omitempty" json:"with_service,omitempty"`
@@ -1135,18 +1156,18 @@ func resolveDeployKeyToBox(key, instance string) string {
 	}
 	// User-side first.
 	if dc := loadDeployConfigForRead("resolveDeployKeyToBox"); dc != nil {
-		if entry, ok := dc.Deploy[deployKey(key, instance)]; ok && entry.Box != "" {
+		if entry, ok := dc.Bundle[deployKey(key, instance)]; ok && entry.Box != "" {
 			return entry.Box
 		}
-		if entry, ok := dc.Deploy[key]; ok && entry.Box != "" {
+		if entry, ok := dc.Bundle[key]; ok && entry.Box != "" {
 			return entry.Box
 		}
 	}
 	// Project-level fallback.
 	if dir, err := os.Getwd(); err == nil {
 		if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
-			if pc := uf.ProjectDeployConfig(); pc != nil {
-				if entry, ok := pc.Deploy[key]; ok && entry.Box != "" {
+			if pc := uf.ProjectBundleConfig(); pc != nil {
+				if entry, ok := pc.Bundle[key]; ok && entry.Box != "" {
 					return entry.Box
 				}
 			}
@@ -1155,9 +1176,9 @@ func resolveDeployKeyToBox(key, instance string) string {
 	return ""
 }
 
-// findVmDeployNode finds the DeploymentNode for a vm-target deploy. It is
+// findVmDeployNode finds the BundleNode for a vm-target deploy. It is
 // THE shared "which deploy entry backs this VM" lookup used by both
-// `charly deploy add` (artifact-env collection) and `charly check live` (tests
+// `charly bundle add` (artifact-env collection) and `charly check live` (tests
 // overlay), so the two never diverge. Resolution order:
 //  1. by deploy NAME (the entry key) — the precise match;
 //  2. by the legacy "vm:<name>" key form;
@@ -1167,9 +1188,9 @@ func resolveDeployKeyToBox(key, instance string) string {
 // Keying by the deploy NAME first is load-bearing: a bed whose key differs
 // from its vm entity (e.g. check-k3s-vm -> vm: k3s-vm) is found by its key,
 // not mis-resolved via the vm entity name.
-func findVmDeployNode(deploys map[string]DeploymentNode, name, vmName string) (DeploymentNode, bool) {
+func findVmDeployNode(deploys map[string]BundleNode, name, vmName string) (BundleNode, bool) {
 	if deploys == nil {
-		return DeploymentNode{}, false
+		return BundleNode{}, false
 	}
 	if name != "" {
 		if e, ok := deploys[name]; ok && (e.Target == "vm" || e.Vm != "") {
@@ -1184,7 +1205,7 @@ func findVmDeployNode(deploys map[string]DeploymentNode, name, vmName string) (D
 			return e, true
 		}
 	}
-	return DeploymentNode{}, false
+	return BundleNode{}, false
 }
 
 // vmEntityForDeploy resolves a vm-target deploy KEY to its `vm:` cross-ref
@@ -1199,14 +1220,14 @@ func vmEntityForDeploy(deployName string) string {
 		return ""
 	}
 	if dc := loadDeployConfigForRead("vmEntityForDeploy"); dc != nil {
-		if node, ok := findVmDeployNode(dc.Deploy, deployName, ""); ok && node.Vm != "" {
+		if node, ok := findVmDeployNode(dc.Bundle, deployName, ""); ok && node.Vm != "" {
 			return node.Vm
 		}
 	}
 	if dir, err := os.Getwd(); err == nil {
 		if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
-			if pc := uf.ProjectDeployConfig(); pc != nil {
-				if node, ok := findVmDeployNode(pc.Deploy, deployName, ""); ok && node.Vm != "" {
+			if pc := uf.ProjectBundleConfig(); pc != nil {
+				if node, ok := findVmDeployNode(pc.Bundle, deployName, ""); ok && node.Vm != "" {
 					return node.Vm
 				}
 			}
@@ -1236,13 +1257,13 @@ func resolveDeployBoxName(key, instance string) string {
 // DeployedContainerNames returns hostnames for all deployed images.
 // Used to enrich NO_PROXY so Chrome (which doesn't support CIDR) can bypass
 // the proxy for container-to-container traffic.
-func (dc *DeployConfig) DeployedContainerNames() []string {
+func (dc *BundleConfig) DeployedContainerNames() []string {
 	if dc == nil {
 		return nil
 	}
 	var names []string
 	seen := map[string]bool{}
-	for key := range dc.Deploy {
+	for key := range dc.Bundle {
 		img, inst := parseDeployKey(key)
 		name := containerNameInstance(img, inst)
 		if !seen[name] {
@@ -1271,7 +1292,7 @@ func defaultDeployConfigPath() (string, error) {
 	return filepath.Join(configDir, "charly", "charly.yml"), nil
 }
 
-// LoadDeployConfig reads the per-host deploy overlay (~/.config/charly/charly.yml)
+// LoadBundleConfig reads the per-host deploy overlay (~/.config/charly/charly.yml)
 // through the unified loader — the SAME LoadUnified path as every project
 // charly.yml. Returns nil, nil if the file doesn't exist.
 //
@@ -1282,7 +1303,7 @@ func defaultDeployConfigPath() (string, error) {
 // block subsume the legacy check; the ephemeral/naming validators + promotion
 // were consolidated there so a PROJECT charly.yml's inline deploy: entries get
 // them too — R3, one path).
-func LoadDeployConfig() (*DeployConfig, error) {
+func LoadBundleConfig() (*BundleConfig, error) {
 	path, err := DeployConfigPath()
 	if err != nil {
 		return nil, nil
@@ -1307,13 +1328,13 @@ func LoadDeployConfig() (*DeployConfig, error) {
 	if !ok {
 		return nil, nil
 	}
-	// A present-but-empty config still returns a non-nil DeployConfig (matching
+	// A present-but-empty config still returns a non-nil BundleConfig (matching
 	// the old bespoke parser), so callers that range/index dc.Deploy without a
 	// nil guard keep working after an overlay's last entry is removed.
-	if dc := uf.ProjectDeployConfig(); dc != nil {
+	if dc := uf.ProjectBundleConfig(); dc != nil {
 		return dc, nil
 	}
-	return &DeployConfig{}, nil
+	return &BundleConfig{}, nil
 }
 
 // hasLegacyImagesKey reports whether the raw YAML body has a top-level
@@ -1355,12 +1376,12 @@ func hasLegacyImagesKey(data []byte) bool {
 // the deploy key for the entry currently being expanded — we want to
 // allow it to keep its old allocations, not avoid them). Used by
 // ResolveDeployPorts to keep auto-allocations from colliding across deploys.
-func (dc *DeployConfig) OccupiedHostPorts(excludeKey string) map[int]bool {
+func (dc *BundleConfig) OccupiedHostPorts(excludeKey string) map[int]bool {
 	out := map[int]bool{}
 	if dc == nil {
 		return out
 	}
-	for key, entry := range dc.Deploy {
+	for key, entry := range dc.Bundle {
 		if key == excludeKey {
 			continue
 		}
@@ -1396,18 +1417,18 @@ func (dc *DeployConfig) OccupiedHostPorts(excludeKey string) map[int]bool {
 // 45434:11434 would lose its port to a running same-image deploy on 11434.
 //
 //nolint:gocyclo // field-by-field conditional overlay merge; every branch is a peer
-func MergeDeployOntoMetadata(meta *BoxMetadata, dc *DeployConfig, deployName, instance string) {
+func MergeDeployOntoMetadata(meta *BoxMetadata, dc *BundleConfig, deployName, instance string) {
 	// Volume isolation runs UNCONDITIONALLY (independent of any charly.yml
 	// overlay), so every distinctly-named deploy gets its own volume namespace
 	// on the very first `charly config` and every run after — see
 	// scopeVolumesToDeployKey.
 	scopeVolumesToDeployKey(meta, deployName, instance)
 
-	if dc == nil || dc.Deploy == nil || meta == nil {
+	if dc == nil || dc.Bundle == nil || meta == nil {
 		return
 	}
 
-	overlay, ok := dc.Deploy[deployKey(deployName, instance)]
+	overlay, ok := dc.Bundle[deployKey(deployName, instance)]
 	if !ok {
 		return
 	}
@@ -1671,25 +1692,25 @@ func ResolveVolumeBacking(boxName, instance string, labelVolumes []VolumeMount, 
 }
 
 // LoadDeployFile reads a charly.yml from an arbitrary path.
-func LoadDeployFile(path string) (*DeployConfig, error) {
+func LoadDeployFile(path string) (*BundleConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
-	var dc DeployConfig
+	var dc BundleConfig
 	if err := yaml.Unmarshal(data, &dc); err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
 	return &dc, nil
 }
 
-// SaveDeployConfig writes a DeployConfig to the standard charly.yml
+// SaveBundleConfig writes a BundleConfig to the standard charly.yml
 // path. Uses tempfile + os.Rename for atomic write — defense in depth
 // against partial writes truncating the prior file (primary guard is
 // loadDeployConfigForWrite's error propagation; this catches any
 // remaining IO/marshal failure mid-write). The tempfile lives in the
 // same directory as the target so rename stays on the same filesystem.
-func SaveDeployConfig(dc *DeployConfig) error {
+func SaveBundleConfig(dc *BundleConfig) error {
 	path, err := DeployConfigPath()
 	if err != nil {
 		return fmt.Errorf("determining deploy config path: %w", err)
@@ -1698,21 +1719,44 @@ func SaveDeployConfig(dc *DeployConfig) error {
 		return fmt.Errorf("creating config directory: %w", err)
 	}
 	if dc == nil {
-		dc = &DeployConfig{}
+		dc = &BundleConfig{}
 	}
-	// Write a unified-shaped per-host charly.yml: the HEAD `version:` stamp lets
-	// a re-load through LoadUnified pass the schema gate, and `deploy:` /
-	// `provides:` route by shape exactly like a project charly.yml.
-	stamped := struct {
-		Version  string                    `yaml:"version" json:"version"`
-		Provides *ProvidesConfig           `yaml:"provides,omitempty" json:"provides,omitempty"`
-		Deploy   map[string]DeploymentNode `yaml:"deploy" json:"deploy"`
-	}{
-		Version:  LatestSchemaVersion().String(),
-		Provides: dc.Provides,
-		Deploy:   dc.Deploy,
+	// Write a unified node-form per-host charly.yml: the HEAD `version:` stamp lets
+	// a re-load through LoadUnified pass the schema gate; `provides:` stays a
+	// document directive; each deploy entry is a name-first node `<name>: {bundle:
+	// <scalars>, <child-nodes>}` — the SAME shape the node-form loader accepts (the
+	// only authoring surface). Reuses migrateDeployEntity (the legacy-body →
+	// node-form transform) on each entry's marshaled struct body, so the writer can
+	// never drift from the migration.
+	root := &yaml.Node{Kind: yaml.MappingNode}
+	root.Content = append(root.Content, scalarNode("version"), scalarNode(LatestSchemaVersion().String()))
+	if dc.Provides != nil {
+		pb, perr := yaml.Marshal(dc.Provides)
+		if perr != nil {
+			return fmt.Errorf("marshaling provides: %w", perr)
+		}
+		var pd yaml.Node
+		if perr := yaml.Unmarshal(pb, &pd); perr != nil {
+			return fmt.Errorf("re-parsing provides: %w", perr)
+		}
+		if len(pd.Content) == 1 {
+			root.Content = append(root.Content, scalarNode("provides"), pd.Content[0])
+		}
 	}
-	data, err := yaml.Marshal(&stamped)
+	names := make([]string, 0, len(dc.Bundle))
+	for n := range dc.Bundle {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		node := dc.Bundle[name]
+		body, merr := marshalBundleNodeLegacy(&node)
+		if merr != nil {
+			return fmt.Errorf("marshaling deploy %q: %w", name, merr)
+		}
+		root.Content = append(root.Content, scalarNode(name), migrateDeployEntity(name, body))
+	}
+	data, err := yaml.Marshal(root)
 	if err != nil {
 		return fmt.Errorf("marshaling deploy config: %w", err)
 	}
@@ -1743,34 +1787,87 @@ func SaveDeployConfig(dc *DeployConfig) error {
 	return nil
 }
 
-// Lookup returns the DeploymentNode for (deployName, instance), or
+// marshalBundleNodeLegacy yaml-marshals a BundleNode into the LEGACY struct body
+// shape — re-injecting the now-yaml:"-" structural fields (`target:`, `nested:`,
+// `peer:`) that no longer marshal off the struct. This reproduces exactly the
+// input migrateDeployEntity expects (the body it converts into node-form tree
+// children), so the per-host overlay writer round-trips the deployment tree even
+// though Target/Children/Members are no longer authored/marshaled fields
+// (Risk 5a). Recurses so nested children + members at every depth are preserved.
+func marshalBundleNodeLegacy(node *BundleNode) (*yaml.Node, error) {
+	nb, err := yaml.Marshal(node)
+	if err != nil {
+		return nil, err
+	}
+	var nd yaml.Node
+	if err := yaml.Unmarshal(nb, &nd); err != nil {
+		return nil, err
+	}
+	if len(nd.Content) != 1 || nd.Content[0].Kind != yaml.MappingNode {
+		// Empty/odd body — return an empty mapping so the caller still emits a node.
+		return &yaml.Node{Kind: yaml.MappingNode}, nil
+	}
+	body := nd.Content[0]
+	// target: — derived from the node's disc/cross-ref at load; re-emit it so a
+	// reload re-derives the same target (also lets a group's empty target stay
+	// absent rather than mis-marshaling).
+	if node.Target != "" {
+		body.Content = append(body.Content, scalarNode("target"), scalarNode(node.Target))
+	}
+	// nested: + peer: — the recursive tree. Each child/member body is itself
+	// marshaled through this helper so its own structural fields survive.
+	appendNodeMap := func(key string, m map[string]*BundleNode) error {
+		if len(m) == 0 {
+			return nil
+		}
+		mapNode := &yaml.Node{Kind: yaml.MappingNode}
+		for _, k := range sortedMemberKeys(m) {
+			childBody, cerr := marshalBundleNodeLegacy(m[k])
+			if cerr != nil {
+				return cerr
+			}
+			mapNode.Content = append(mapNode.Content, scalarNode(k), childBody)
+		}
+		body.Content = append(body.Content, scalarNode(key), mapNode)
+		return nil
+	}
+	if err := appendNodeMap("nested", node.Children); err != nil {
+		return nil, err
+	}
+	if err := appendNodeMap("peer", node.Members); err != nil {
+		return nil, err
+	}
+	return body, nil
+}
+
+// Lookup returns the BundleNode for (deployName, instance), or
 // (zero, false) when the entry is absent. Safe to call on a nil
-// *DeployConfig — lets callers chain
+// *BundleConfig — lets callers chain
 // `loadDeployConfigForRead(...).Lookup(deployName, instance)` without a
 // separate nil check. deployName is the charly.yml key base the caller is
 // operating on (typically c.Image), NOT the baked image short-name — for a
 // kind:check bed or Pattern-B deploy the two differ. Pass the deploy key, never
 // a value derived from an image label (see MergeDeployOntoMetadata).
-func (dc *DeployConfig) Lookup(deployName, instance string) (DeploymentNode, bool) {
+func (dc *BundleConfig) Lookup(deployName, instance string) (BundleNode, bool) {
 	if dc == nil {
-		return DeploymentNode{}, false
+		return BundleNode{}, false
 	}
-	entry, ok := dc.Deploy[deployKey(deployName, instance)]
+	entry, ok := dc.Bundle[deployKey(deployName, instance)]
 	return entry, ok
 }
 
 // LookupKey looks up a deploy entry by its full charly.yml key (e.g.
 // "foo", "foo/instance", "vm:name"). Safe on nil receiver.
-func (dc *DeployConfig) LookupKey(key string) (DeploymentNode, bool) {
+func (dc *BundleConfig) LookupKey(key string) (BundleNode, bool) {
 	if dc == nil {
-		return DeploymentNode{}, false
+		return BundleNode{}, false
 	}
-	entry, ok := dc.Deploy[key]
+	entry, ok := dc.Bundle[key]
 	return entry, ok
 }
 
 // loadDeployConfigForRead loads charly.yml for read-only consumption.
-// Unlike the historical `dc, _ := LoadDeployConfig()` pattern (silently
+// Unlike the historical `dc, _ := LoadBundleConfig()` pattern (silently
 // discards validation errors → caller proceeds with nil → feature
 // degrades invisibly), this helper SURFACES the load error as a stderr
 // warning while still returning nil — preserving the existing caller
@@ -1784,27 +1881,36 @@ func (dc *DeployConfig) LookupKey(key string) (DeploymentNode, bool) {
 // context is a short human-readable label included in the warning
 // message so the operator can trace which code path noticed the
 // problem (e.g. "charly status", "config injectEnvProvides").
-func loadDeployConfigForRead(context string) *DeployConfig {
-	dc, err := LoadDeployConfig()
+func loadDeployConfigForRead(context string) *BundleConfig {
+	dc, err := LoadBundleConfig()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: %s: charly.yml unavailable for read: %v\n", context, err)
-		return nil
+	}
+	// NEVER return nil — a caller dereferences `dc.Deploy[...]` directly (and some
+	// assign into it), so an absent config (LoadBundleConfig → (nil, nil)) or a load
+	// error both degrade to an EMPTY config with a live map (image-label-driven
+	// behavior), not a nil-deref / nil-map-assignment panic.
+	if dc == nil {
+		return &BundleConfig{Bundle: map[string]BundleNode{}}
+	}
+	if dc.Bundle == nil {
+		dc.Bundle = map[string]BundleNode{}
 	}
 	return dc
 }
 
 // loadDeployConfigForWrite loads charly.yml for mutation. Unlike the
-// historical `dc, _ := LoadDeployConfig()` pattern (silently discards
-// validation errors → writer constructs an empty config → SaveDeployConfig
+// historical `dc, _ := LoadBundleConfig()` pattern (silently discards
+// validation errors → writer constructs an empty config → SaveBundleConfig
 // truncates the file), this helper PROPAGATES the load error so writers
 // can ABORT instead of destroying data.
 //
-// Cautionary tale: pre-2026-05-16 the `charly deploy add --disposable` write
+// Cautionary tale: pre-2026-05-16 the `charly bundle add --disposable` write
 // path discarded the load error. The 2026-05-12 require-image schema
-// cutover widened the set of conditions under which LoadDeployConfig
+// cutover widened the set of conditions under which LoadBundleConfig
 // returns an error; once any pre-existing charly.yml entry failed
-// validation, the next `charly deploy add` constructed a fresh empty
-// DeployConfig containing only the new entry and truncated the on-disk
+// validation, the next `charly bundle add` constructed a fresh empty
+// BundleConfig containing only the new entry and truncated the on-disk
 // file. The user's `provides:` block and unrelated deploy entries
 // vanished silently. New write sites MUST use this helper.
 //
@@ -1812,55 +1918,55 @@ func loadDeployConfigForRead(context string) *DeployConfig {
 // (e.g. "saveDeployState"). Returns (nil, error) when the file exists
 // but failed parse/validation; (fresh empty config, nil) when the file
 // doesn't exist; (parsed config, nil) on clean load.
-func loadDeployConfigForWrite(context string) (*DeployConfig, error) {
-	dc, err := LoadDeployConfig()
+func loadDeployConfigForWrite(context string) (*BundleConfig, error) {
+	dc, err := LoadBundleConfig()
 	if err != nil {
 		return nil, fmt.Errorf("%s: refusing to write — charly.yml load failed: %w", context, err)
 	}
 	if dc == nil {
-		dc = &DeployConfig{Deploy: make(map[string]DeploymentNode)}
+		dc = &BundleConfig{Bundle: make(map[string]BundleNode)}
 	}
-	if dc.Deploy == nil {
-		dc.Deploy = make(map[string]DeploymentNode)
+	if dc.Bundle == nil {
+		dc.Bundle = make(map[string]BundleNode)
 	}
 	return dc, nil
 }
 
 // MergeDeployConfigs merges multiple DeployConfigs left-to-right. Later
 // configs take precedence (field-level replace per image). The merge walks
-// every yaml-tagged field of DeploymentNode via reflect: a field copies
+// every yaml-tagged field of BundleNode via reflect: a field copies
 // from src → dst when src's value is non-zero (string != "", slice/map/ptr
 // not nil, bool != false, numeric != 0). This makes adding a new field to
-// DeploymentNode automatically merge-correct — the pre-2026-05 hand-rolled
+// BundleNode automatically merge-correct — the pre-2026-05 hand-rolled
 // per-field merge silently dropped 19+ fields (ResolvedPort, Description,
 // Secret, Sidecar, Shell, Kubernetes, ForwardGpgAgent, ForwardSshAgent,
 // Kind, Replica, Restart, Schedule, Resources, Expose, Storage, Probes,
 // Cpus, Ram, DiskSize) whenever any merge → save cycle ran.
 //
-// The yaml tag `-` (currently only DeploymentNode.Inside, a derived
+// The yaml tag `-` (currently only BundleNode.Inside, a derived
 // runtime field) skips the merge. Untagged fields are also skipped.
-func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
-	result := &DeployConfig{Deploy: make(map[string]DeploymentNode)}
+func MergeDeployConfigs(configs ...*BundleConfig) *BundleConfig {
+	result := &BundleConfig{Bundle: make(map[string]BundleNode)}
 	for _, dc := range configs {
-		if dc == nil || dc.Deploy == nil {
+		if dc == nil || dc.Bundle == nil {
 			continue
 		}
-		for name, overlay := range dc.Deploy {
-			existing := result.Deploy[name]
-			result.Deploy[name] = MergeDeploymentNode(existing, overlay)
+		for name, overlay := range dc.Bundle {
+			existing := result.Bundle[name]
+			result.Bundle[name] = MergeBundleNode(existing, overlay)
 		}
 	}
 	return result
 }
 
-// MergeDeploymentNode applies non-zero fields from `src` onto `dst` and
+// MergeBundleNode applies non-zero fields from `src` onto `dst` and
 // returns the merged copy. Walks every yaml-tagged field via reflect; the
 // yaml `-` tag (derived/runtime-only fields) is skipped. Same precedence
 // rule as the underlying merge: src non-zero wins, otherwise dst passes
 // through. Per R3 the single helper replaces the hand-rolled per-field
 // merges that previously lived in MergeDeployConfigs (drift-prone — every
 // new struct field needed a remembered append, and 19+ were missed).
-func MergeDeploymentNode(dst, src DeploymentNode) DeploymentNode {
+func MergeBundleNode(dst, src BundleNode) BundleNode {
 	dstV := reflect.ValueOf(&dst).Elem()
 	srcV := reflect.ValueOf(src)
 	t := dstV.Type()
@@ -1878,6 +1984,22 @@ func MergeDeploymentNode(dst, src DeploymentNode) DeploymentNode {
 		}
 		dstV.Field(i).Set(sv)
 	}
+	// Children/Members/Target are loader-DERIVED (yaml:"-" — not authored) yet are
+	// real TREE DATA that must merge across project + per-host overlay. The reflect
+	// loop above skips yaml:"-" fields (intended for the genuinely runtime-only
+	// MemberOf/Inside/venue), so merge the structural tree fields EXPLICITLY here:
+	// src non-zero wins, else dst passes through (same precedence). Without this a
+	// project's nested/peer tree + target is dropped on the empty→project merge AND
+	// by a nestedless operator overlay (resolveTreeRoot → MergeDeployConfigs).
+	if src.Target != "" {
+		dst.Target = src.Target
+	}
+	if len(src.Children) > 0 {
+		dst.Children = src.Children
+	}
+	if len(src.Members) > 0 {
+		dst.Members = src.Members
+	}
 	return dst
 }
 
@@ -1889,19 +2011,19 @@ func MergeDeploymentNode(dst, src DeploymentNode) DeploymentNode {
 // port, security, …) that MUST survive a destroy→create cycle. Compares against
 // the zero node after blanking the three auto-set fields, so a newly-added
 // per-host field is covered automatically (no remembered append — same
-// drift-proof discipline as MergeDeploymentNode).
-func isAutoVmDeployEntry(entry DeploymentNode) bool {
+// drift-proof discipline as MergeBundleNode).
+func isAutoVmDeployEntry(entry BundleNode) bool {
 	probe := entry
 	probe.VmState = nil
 	probe.Target = ""
 	probe.Vm = ""
-	return reflect.DeepEqual(probe, DeploymentNode{})
+	return reflect.DeepEqual(probe, BundleNode{})
 }
 
 // RemoveBoxDeploy removes an image's entry from a deploy config.
-func RemoveBoxDeploy(dc *DeployConfig, boxName string) {
-	if dc != nil && dc.Deploy != nil {
-		delete(dc.Deploy, boxName)
+func RemoveBoxDeploy(dc *BundleConfig, boxName string) {
+	if dc != nil && dc.Bundle != nil {
+		delete(dc.Bundle, boxName)
 	}
 }
 
@@ -1917,14 +2039,14 @@ func cleanDeployEntry(boxName, instance string) {
 		return
 	}
 	defer func() { _ = unlock() }()
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil || dc == nil {
 		return
 	}
 
 	key := deployKey(boxName, instance)
 	hasImage := false
-	if _, ok := dc.Deploy[key]; ok {
+	if _, ok := dc.Bundle[key]; ok {
 		hasImage = true
 		RemoveBoxDeploy(dc, key)
 	}
@@ -1955,7 +2077,7 @@ func cleanDeployEntry(boxName, instance string) {
 		} else {
 			// Base image removal: only remove if no other entries for the same base image remain
 			hasOtherEntries := false
-			for k := range dc.Deploy {
+			for k := range dc.Bundle {
 				base, _ := parseDeployKey(k)
 				if base == boxName {
 					hasOtherEntries = true
@@ -1990,11 +2112,11 @@ func cleanDeployEntry(boxName, instance string) {
 		return
 	}
 
-	if len(dc.Deploy) == 0 && dc.Provides == nil {
+	if len(dc.Bundle) == 0 && dc.Provides == nil {
 		if path, pathErr := DeployConfigPath(); pathErr == nil {
 			_ = os.Remove(path)
 		}
-	} else if err := SaveDeployConfig(dc); err != nil {
+	} else if err := SaveBundleConfig(dc); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not clean charly.yml: %v\n", err)
 		return
 	}
@@ -2067,7 +2189,7 @@ type SaveDeployStateInput struct {
 	// require-image cutover (validateDeployRequiresBox). Written
 	// when non-empty AND when the existing entry doesn't already have
 	// a value (don't clobber operator-authored refs on re-config).
-	// Without these, `charly deploy add foo bar --disposable` would write
+	// Without these, `charly bundle add foo bar --disposable` would write
 	// an entry that the validator then rejects on the next load —
 	// hard-failing every subsequent `charly` invocation.
 	Box    string
@@ -2075,7 +2197,7 @@ type SaveDeployStateInput struct {
 }
 
 // saveDeployState persists deployment parameters to charly.yml (best-effort).
-// Merges onto any existing entry to preserve fields from charly deploy import.
+// Merges onto any existing entry to preserve fields from charly bundle import.
 //
 // Defense-in-depth: any env entry whose key matches a name in input.SecretNames
 // is stripped from both input.Env and the existing persisted entry.Env before
@@ -2100,7 +2222,7 @@ func saveDeployState(boxName, instance string, input SaveDeployStateInput) {
 		return
 	}
 	key := deployKey(boxName, instance)
-	entry := dc.Deploy[key] // preserve existing fields (tunnel, volumes, etc.)
+	entry := dc.Bundle[key] // preserve existing fields (tunnel, volumes, etc.)
 	if input.Box != "" && entry.Box == "" {
 		entry.Box = input.Box
 	}
@@ -2157,7 +2279,7 @@ func saveDeployState(boxName, instance string, input SaveDeployStateInput) {
 		entry.Lifecycle = input.Lifecycle
 	}
 	// Defensive zero-write guard: refuse to persist a fully-zero
-	// DeploymentNode (every field at its Go zero value). A future caller
+	// BundleNode (every field at its Go zero value). A future caller
 	// that invokes saveDeployState with an empty SaveDeployStateInput on
 	// a key that doesn't yet exist in the user overlay would otherwise
 	// write `<key>: {}`, materializing an empty entry that masks any
@@ -2166,11 +2288,11 @@ func saveDeployState(boxName, instance string, input SaveDeployStateInput) {
 	// shape was real and the user's charly.yml ended up empty by some
 	// path we couldn't fully reconstruct — this guard makes the entire
 	// regression class structurally impossible).
-	if reflect.DeepEqual(entry, DeploymentNode{}) {
+	if reflect.DeepEqual(entry, BundleNode{}) {
 		return
 	}
-	dc.Deploy[key] = entry
-	if err := SaveDeployConfig(dc); err != nil {
+	dc.Bundle[key] = entry
+	if err := SaveBundleConfig(dc); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not save to charly.yml: %v\n", err)
 	}
 }
@@ -2231,15 +2353,15 @@ func mergeEnvVars(existing, newVars []string) []string {
 }
 
 // ExportAllBox exports all runtime-relevant fields for all enabled images in a Config.
-func ExportAllBox(cfg *Config) *DeployConfig {
-	dc := &DeployConfig{Deploy: make(map[string]DeploymentNode)}
+func ExportAllBox(cfg *Config) *BundleConfig {
+	dc := &BundleConfig{Bundle: make(map[string]BundleNode)}
 	for name, img := range cfg.Box {
 		if !img.IsEnabled() {
 			continue
 		}
 		// Schema v4: Tunnel / DNS / AcmeEmail / Engine no longer sourced
 		// from BoxConfig (they're deploy-only).
-		entry := DeploymentNode{
+		entry := BundleNode{
 			Version:     img.Version,
 			Description: img.Description,
 			Env:         img.Env,
@@ -2252,7 +2374,7 @@ func ExportAllBox(cfg *Config) *DeployConfig {
 		if entry.Version != "" || entry.Description != "" ||
 			entry.Env != nil ||
 			entry.EnvFile != "" || entry.Security != nil || entry.Network != "" {
-			dc.Deploy[name] = entry
+			dc.Bundle[name] = entry
 		}
 	}
 	return dc

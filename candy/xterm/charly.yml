@@ -1,22 +1,24 @@
-candy:
-    version: 2026.144.1443
-    name: xterm
-    description: |
-        xterm classic X terminal emulator
-        Installs xterm, the reference X terminal emulator (usable under
-        XWayland). Verifiable: the xterm binary lands at /usr/bin/xterm and
-        the xterm package is installed.
-    distro:
-        arch:
-            package:
-                - xterm
-        fedora:
-            package:
-                - xterm
-    plan:
-        - check: the xterm binary is installed at /usr/bin/xterm
-          file: /usr/bin/xterm
-          exists: true
-        - check: the xterm package is registered with the package manager
-          package: xterm
-          installed: true
+xterm:
+    candy:
+        version: 2026.144.1443
+        description: |
+            xterm classic X terminal emulator
+            Installs xterm, the reference X terminal emulator (usable under
+            XWayland). Verifiable: the xterm binary lands at /usr/bin/xterm and
+            the xterm package is installed.
+    xterm-distro:
+        distro:
+            arch:
+                package:
+                    - xterm
+            fedora:
+                package:
+                    - xterm
+    xterm-step-0:
+        check: the xterm binary is installed at /usr/bin/xterm
+        file: /usr/bin/xterm
+        exists: true
+    xterm-step-1:
+        check: the xterm package is registered with the package manager
+        package: xterm
+        installed: true

@@ -92,7 +92,10 @@
 	timeout?:      #Duration
 	in_container?: bool
 	context?: [...#Context]
-	pod?: string
+	// `pod:` (per-step container venue) is RETIRED — a step's execution venue is
+	// derived ENTIRELY from its position in the bundle tree (flattenBundleVenues
+	// → Op.venue, yaml:"-"). Authoring it is a closed-schema rejection (run:
+	// charly migrate).
 	depends_on?: [...string]
 
 	// --- install/build modifiers ---
@@ -112,7 +115,10 @@
 	capture_extract?: string
 	eventually?:      #Duration
 	retry_interval?:  #Duration
-	on?:              string
+	// `on:` (cross-member driver dispatch) is RETIRED — a step that drives a
+	// peer/driver is authored as a step CHILD of that member node; its venue is
+	// derived from position (flattenBundleVenues → Op.venue). Authoring `on:` is
+	// a closed-schema rejection (run: charly migrate).
 	tag?: [...string]
 
 	// --- concurrency ---

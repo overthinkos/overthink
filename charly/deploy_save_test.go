@@ -20,7 +20,7 @@ import (
 // `loadDeployConfigForRead(...).Lookup(image, instance)` without a
 // separate nil check.
 func TestDeployConfigLookup_NilSafe(t *testing.T) {
-	var dc *DeployConfig // nil
+	var dc *BundleConfig // nil
 	if entry, ok := dc.Lookup("foo", ""); ok {
 		t.Errorf("Lookup on nil dc returned ok=true entry=%+v; want (zero, false)", entry)
 	}
@@ -34,7 +34,7 @@ func TestDeployConfigLookup_NilSafe(t *testing.T) {
 // nil deploy map return (zero, false). Instance form is keyed via
 // deployKey (image/instance); LookupKey takes the raw deploy.yml key.
 func TestDeployConfigLookup_PresentAndAbsent(t *testing.T) {
-	dc := &DeployConfig{Deploy: map[string]DeploymentNode{
+	dc := &BundleConfig{Bundle: map[string]BundleNode{
 		"foo":       {Target: "pod", Box: "foo"},
 		"foo/inst1": {Target: "pod", Box: "foo"},
 		"vm:arch":   {Target: "vm"},
@@ -63,19 +63,19 @@ func TestDeployConfigLookup_PresentAndAbsent(t *testing.T) {
 	}
 
 	// Empty / nil-map dc returns (zero, false).
-	emptyDc := &DeployConfig{}
+	emptyDc := &BundleConfig{}
 	if entry, ok := emptyDc.Lookup("foo", ""); ok {
 		t.Errorf("Lookup on empty dc returned ok=true entry=%+v", entry)
 	}
 }
 
 // TestSaveDeployState_AbortOnInvalidExistingFile pins the post-2026-05-16
-// data-loss fix: when LoadDeployConfig returns an error (e.g. because
+// data-loss fix: when LoadBundleConfig returns an error (e.g. because
 // the file fails validateDeployRequiresBox), saveDeployState MUST
 // ABORT and leave the file byte-identical — not silently construct a
 // fresh empty config and truncate the on-disk file.
 //
-// Pre-fix reproduction: `charly deploy add arch arch --disposable`
+// Pre-fix reproduction: `charly bundle add arch arch --disposable`
 // against a deploy.yml whose pre-existing entries lacked the required
 // `box:` field destroyed the entire file's content (provides section,
 // other deploy entries) and wrote only the new disposable: true marker.
@@ -87,7 +87,7 @@ func TestSaveDeployState_AbortOnInvalidExistingFile(t *testing.T) {
 	}
 	// Pre-existing deploy.yml that fails validateDeployRequiresBox —
 	// `legacy-entry` is target:pod but lacks the required `box:`.
-	initialYAML := `version: 2026.165.1048
+	initialYAML := `version: 2026.169.0004
 provides:
     env:
         - name: SOME_URL
@@ -107,8 +107,8 @@ deploy:
 	initialBytes, _ := os.ReadFile(path)
 
 	// Attempt to write the disposable flag for a brand-new entry. With
-	// the pre-fix code, this would call LoadDeployConfig() → err →
-	// discarded → dc = empty → entry.Disposable = true → SaveDeployConfig
+	// the pre-fix code, this would call LoadBundleConfig() → err →
+	// discarded → dc = empty → entry.Disposable = true → SaveBundleConfig
 	// truncates the file. With the post-fix code, the load error
 	// propagates and saveDeployState aborts before any write.
 	saveDeployState("newimage", "", SaveDeployStateInput{
@@ -136,10 +136,9 @@ func TestSaveDeployState_PersistsImageAndTargetForNewEntry(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "charly"), 0700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	initialYAML := `version: 2026.165.1048
-deploy:
-    existing-deploy:
-        target: pod
+	initialYAML := `version: 2026.169.0004
+existing-deploy:
+    bundle:
         box: existing-image
 `
 	path := filepath.Join(dir, "charly", "charly.yml")
@@ -154,19 +153,19 @@ deploy:
 		Target:        "pod",
 	})
 
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil {
 		t.Fatalf("reload after save: %v", err)
 	}
 	if dc == nil {
-		t.Fatal("nil DeployConfig after reload")
+		t.Fatal("nil BundleConfig after reload")
 	}
 
-	if _, ok := dc.Deploy["existing-deploy"]; !ok {
+	if _, ok := dc.Bundle["existing-deploy"]; !ok {
 		t.Error("existing-deploy entry was lost (merge failure)")
 	}
 
-	newEntry, ok := dc.Deploy["newimage"]
+	newEntry, ok := dc.Bundle["newimage"]
 	if !ok {
 		t.Fatal("newimage entry not added")
 	}
@@ -192,10 +191,9 @@ func TestSaveDeployState_DoesNotClobberExistingImageTarget(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "charly"), 0700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	initialYAML := `version: 2026.165.1048
-deploy:
-    existing:
-        target: pod
+	initialYAML := `version: 2026.169.0004
+existing:
+    bundle:
         box: pinned-image-ref:1.2.3
 `
 	path := filepath.Join(dir, "charly", "charly.yml")
@@ -210,11 +208,11 @@ deploy:
 		Target:        "vm",
 	})
 
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil {
 		t.Fatalf("reload after save: %v", err)
 	}
-	entry := dc.Deploy["existing"]
+	entry := dc.Bundle["existing"]
 	if entry.Box != "pinned-image-ref:1.2.3" {
 		t.Errorf("Image clobbered: got %q want %q", entry.Box, "pinned-image-ref:1.2.3")
 	}
@@ -226,7 +224,7 @@ deploy:
 	}
 }
 
-// TestSaveDeployConfig_AtomicWriteSurvivesIntermediateFailure pins the
+// TestSaveBundleConfig_AtomicWriteSurvivesIntermediateFailure pins the
 // tempfile + rename atomic-write guarantee: if the marshal step succeeds
 // but the rename step fails (simulated by making the target path a
 // directory), the prior on-disk file MUST remain intact.
@@ -234,17 +232,17 @@ deploy:
 // We can't easily inject a failure into os.Rename in a unit test, so
 // this test exercises the happy path's atomicity properties (file mode,
 // no .tmp leftovers) as a regression guard for the implementation shape.
-func TestSaveDeployConfig_AtomicWriteLeavesNoTempLeftover(t *testing.T) {
+func TestSaveBundleConfig_AtomicWriteLeavesNoTempLeftover(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	if err := os.MkdirAll(filepath.Join(dir, "charly"), 0700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	dc := &DeployConfig{Deploy: map[string]DeploymentNode{
+	dc := &BundleConfig{Bundle: map[string]BundleNode{
 		"foo": {Target: "pod", Box: "foo"},
 	}}
-	if err := SaveDeployConfig(dc); err != nil {
-		t.Fatalf("SaveDeployConfig: %v", err)
+	if err := SaveBundleConfig(dc); err != nil {
+		t.Fatalf("SaveBundleConfig: %v", err)
 	}
 	// No .tmp leftovers in the config dir.
 	entries, err := os.ReadDir(filepath.Join(dir, "charly"))
@@ -268,31 +266,30 @@ func TestSaveDeployConfig_AtomicWriteLeavesNoTempLeftover(t *testing.T) {
 	}
 }
 
-// TestDeploymentNode_DisposableFalseRoundTrip pins the *bool Disposable
+// TestBundleNode_DisposableFalseRoundTrip pins the *bool Disposable
 // fix: an operator's explicit `disposable: false` must survive YAML
 // unmarshal → re-marshal. With the prior `Disposable bool` +
 // `omitempty` declaration, `false` was indistinguishable from "absent"
 // at marshal time so the explicit lockdown intent was silently erased
 // on the next saveDeployState. With *bool, nil=absent and &false=
 // explicit lockdown both round-trip faithfully.
-func TestDeploymentNode_DisposableFalseRoundTrip(t *testing.T) {
+func TestBundleNode_DisposableFalseRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	if err := os.MkdirAll(filepath.Join(dir, "charly"), 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	src := `version: 2026.165.1048
-deploy:
-    locked-pod:
-        target: pod
+	src := `version: 2026.169.0004
+locked-pod:
+    bundle:
         box: foo
         disposable: false
-    open-pod:
-        target: pod
+open-pod:
+    bundle:
         box: bar
         disposable: true
-    bare-pod:
-        target: pod
+bare-pod:
+    bundle:
         box: baz
 `
 	path := filepath.Join(dir, "charly", "charly.yml")
@@ -300,15 +297,15 @@ deploy:
 		t.Fatalf("write: %v", err)
 	}
 
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
 
 	if dc == nil {
-		t.Fatal("LoadDeployConfig returned nil")
+		t.Fatal("LoadBundleConfig returned nil")
 	}
-	locked := dc.Deploy["locked-pod"]
+	locked := dc.Bundle["locked-pod"]
 	if locked.Disposable == nil {
 		t.Fatal("locked-pod: explicit `disposable: false` parsed as nil; should be &false")
 	}
@@ -319,7 +316,7 @@ deploy:
 		t.Error("locked-pod.IsDisposable() returned true despite explicit disposable: false")
 	}
 
-	open := dc.Deploy["open-pod"]
+	open := dc.Bundle["open-pod"]
 	if open.Disposable == nil || !*open.Disposable {
 		t.Errorf("open-pod: disposable = %v, want &true", open.Disposable)
 	}
@@ -327,7 +324,7 @@ deploy:
 		t.Error("open-pod.IsDisposable() returned false despite explicit disposable: true")
 	}
 
-	bare := dc.Deploy["bare-pod"]
+	bare := dc.Bundle["bare-pod"]
 	if bare.Disposable != nil {
 		t.Errorf("bare-pod: disposable = %v, want nil (field absent in source)", bare.Disposable)
 	}
@@ -335,7 +332,7 @@ deploy:
 		t.Error("bare-pod.IsDisposable() returned true for absent disposable field")
 	}
 
-	if err := SaveDeployConfig(dc); err != nil {
+	if err := SaveBundleConfig(dc); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 
@@ -352,7 +349,7 @@ deploy:
 }
 
 // TestRemoveVmDeployEntry_SelectiveAndIdempotent pins the deploy-lifecycle
-// cleanup primitive that `charly vm destroy` (vm.go) and `charly deploy del vm:<name>`
+// cleanup primitive that `charly vm destroy` (vm.go) and `charly bundle del vm:<name>`
 // (unified_targets_vm.go) rely on to remove a VM's deploy.yml entry on teardown
 // — the inverse of the saveVmDeployState written on add. It proves the two
 // load-bearing properties of the fix:
@@ -376,22 +373,22 @@ func TestRemoveVmDeployEntry_SelectiveAndIdempotent(t *testing.T) {
 	}
 	// Seed: the disposable bed VM to remove, plus a running preemptible
 	// operator workstation and an unrelated pod deploy that must both survive.
-	initialYAML := `version: 2026.165.1048
-deploy:
-    vm:k3s-vm:
-        target: vm
+	initialYAML := `version: 2026.169.0004
+vm:k3s-vm:
+    bundle:
         vm: k3s-vm
         vm_state:
             ssh_port: 38067
             ssh_user: arch
-    vm:cachyos-gpu:
-        target: vm
+vm:cachyos-gpu:
+    bundle:
         vm: cachyos-gpu
+    vm:cachyos-gpu-preemptible:
         preemptible:
             holds:
                 - nvidia-gpu
-    web-app:
-        target: pod
+web-app:
+    bundle:
         box: web-app
 `
 	path := filepath.Join(dir, "charly", "charly.yml")
@@ -403,7 +400,7 @@ deploy:
 	if err := removeVmDeployEntry("vm:k3s-vm"); err != nil {
 		t.Fatalf("removeVmDeployEntry(vm:k3s-vm): %v", err)
 	}
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil {
 		t.Fatalf("reload after removal: %v", err)
 	}
@@ -421,7 +418,7 @@ deploy:
 	if err := removeVmDeployEntry("vm:k3s-vm"); err != nil {
 		t.Fatalf("idempotent re-removal of vm:k3s-vm errored: %v", err)
 	}
-	dc2, err := LoadDeployConfig()
+	dc2, err := LoadBundleConfig()
 	if err != nil {
 		t.Fatalf("reload after idempotent re-removal: %v", err)
 	}

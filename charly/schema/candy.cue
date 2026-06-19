@@ -11,9 +11,9 @@
 #Candy: {
 	// --- identity (required: ADE mandates version+name+description+plan) ---
 	version:     #CalVer
-	name:        #EntityRef
+	name?:       #EntityRef
 	description: string & !=""
-	plan: [...#Step]
+	plan?: [...#Step]
 
 	// --- maturity / engine / legacy-tolerated ---
 	status?: *"testing" | "working" | "broken"

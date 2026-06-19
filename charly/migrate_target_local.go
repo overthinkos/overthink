@@ -9,7 +9,7 @@ package main
 //   - rename top-level `host:` map → `local:`
 //   - rename `host.yml` file → `local.yml`
 //   - rename `target: host` → `target: local`
-//   - rename DeploymentNode `host: <template-name>` → `local: <template-name>`
+//   - rename BundleNode `host: <template-name>` → `local: <template-name>`
 //     (heuristic: when value matches a known kind:local template name)
 //   - drop `status:` / `info:` scalar fields (already migrated to
 //     `description:` by `charly migrate`; this command is the
@@ -127,7 +127,7 @@ func applyTargetLocalRewrites(src string, templates map[string]bool) string {
 			continue
 		}
 
-		// DeploymentNode `host: <template-name>` rewrite. Heuristic:
+		// BundleNode `host: <template-name>` rewrite. Heuristic:
 		// indented (not root-level) host: <bareword> matching a known
 		// kind:local template name → rewrite to `local: <bareword>`.
 		// Hostname-like values (containing @, ., :, or "localhost"/

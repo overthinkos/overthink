@@ -13,12 +13,12 @@ import (
 // purpose.
 //
 // Pure orphan detection — no race resolution. If a teardown is concurrently
-// in progress, the second `charly deploy del --assume-yes` no-ops on the already-
+// in progress, the second `charly bundle del --assume-yes` no-ops on the already-
 // removed pieces.
 type ReapOrphansCmd struct{}
 
 func (c *ReapOrphansCmd) Run() error {
-	dc, err := LoadDeployConfig()
+	dc, err := LoadBundleConfig()
 	if err != nil {
 		return fmt.Errorf("loading charly.yml: %w", err)
 	}
@@ -27,7 +27,7 @@ func (c *ReapOrphansCmd) Run() error {
 		return nil
 	}
 	var orphans []string
-	for name, node := range dc.Deploy {
+	for name, node := range dc.Bundle {
 		if node.VmState == nil || node.VmState.Ephemeral == nil {
 			continue
 		}
@@ -49,7 +49,7 @@ func (c *ReapOrphansCmd) Run() error {
 		cmd.Stderr = os.Stderr
 		cmd.Stdout = os.Stdout
 		if err := cmd.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: charly deploy del %q: %v\n", name, err)
+			fmt.Fprintf(os.Stderr, "warning: charly bundle del %q: %v\n", name, err)
 		}
 	}
 	return nil
@@ -59,7 +59,7 @@ func (c *ReapOrphansCmd) Run() error {
 // underlying resource is still alive. Best-effort across targets — false
 // negatives are OK (we just skip reaping that entry); false positives are
 // bad (we'd nuke a still-running resource), so the checks lean conservative.
-func ephemeralUnderlyingResourceAlive(name string, node DeploymentNode) bool {
+func ephemeralUnderlyingResourceAlive(name string, node BundleNode) bool {
 	switch node.Target {
 	case "vm":
 		conn, err := connectLibvirt(libvirtSessionURI)

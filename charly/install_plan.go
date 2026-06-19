@@ -9,8 +9,8 @@ package main
 // data so the same plan can be consumed by:
 //
 //   - OCITarget        → build-mode Containerfile emission (charly box build)
-//   - ContainerDeploy  → deploy-mode overlay + quadlet (charly deploy add <name>)
-//   - LocalDeployTarget → deploy-mode host execution (charly deploy add host)
+//   - ContainerDeploy  → deploy-mode overlay + quadlet (charly bundle add <name>)
+//   - LocalDeployTarget → deploy-mode host execution (charly bundle add host)
 //
 // Keeping these three code paths behind one shared IR is the load-bearing
 // move: every feature (service rendering, add_candy overlay, uninstall
@@ -201,7 +201,7 @@ const (
 
 // ReverseOpKind discriminates the kinds of teardown actions Reverse()
 // produces. Ledger entries serialize these verbatim so a later
-// `charly deploy del` can walk them without re-compiling the plan.
+// `charly bundle del` can walk them without re-compiling the plan.
 type ReverseOpKind string
 
 const (
@@ -578,7 +578,7 @@ func (s *OpStep) Reverse() []ReverseOp {
 		}}
 	case s.Op.Mkdir != "":
 		// Directories aren't auto-removed (might contain other files);
-		// only record paths for manual inspection via `charly deploy status`.
+		// only record paths for manual inspection via `charly bundle status`.
 		return nil
 	}
 	return nil
@@ -856,7 +856,7 @@ func (s *ShellSnippetStep) Reverse() []ReverseOp {
 // rpmfusion-free.repo to /etc/yum.repos.d/). Distinct from
 // SystemPackagesStep's PhasePrepare because the compiler often synthesizes
 // these from `cmd:` tasks that happen to install a -release.rpm — we want
-// them tracked separately so `charly deploy del` can reverse them precisely.
+// them tracked separately so `charly bundle del` can reverse them precisely.
 type RepoChangeStep struct {
 	Format    string // "rpm" | "deb" | "pac"
 	File      string // absolute path of the repo file
@@ -912,7 +912,7 @@ func (s *ApkInstallStep) Venue() Venue       { return VenueHostNative }
 func (s *ApkInstallStep) RequiresGate() Gate { return GateNone }
 
 // Reverse returns no ledger ops — Android teardown is not ledger-based.
-// `charly deploy del <android>` (AndroidUnifiedTarget.Del) re-resolves the
+// `charly bundle del <android>` (AndroidUnifiedTarget.Del) re-resolves the
 // deploy's apk candies and `pm uninstall`s each package directly.
 func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
 
@@ -1154,7 +1154,7 @@ type EmitOpts struct {
 
 	// ParentExec is the DeployExecutor of the parent deployment in a
 	// nested tree. Non-nil iff this target is dispatched as a child of
-	// another — DeployAddCmd's tree walker builds the chain root-first
+	// another — BundleAddCmd's tree walker builds the chain root-first
 	// and passes the immediate ancestor's executor here. Targets that
 	// support being nested (host, container, vm) compose their own
 	// executor over ParentExec via NestedExecutor; leaf-only targets
@@ -1166,11 +1166,11 @@ type EmitOpts struct {
 	// to have no `children:`.
 	ParentExec DeployExecutor
 
-	// ParentNode is the DeploymentNode above this target in the tree.
+	// ParentNode is the BundleNode above this target in the tree.
 	// Useful for targets that need parent-level context beyond the
 	// executor (e.g. a vm child wants to know its parent container's
 	// name to wire network forwarding). nil at the root.
-	ParentNode *DeploymentNode
+	ParentNode *BundleNode
 
 	// Path is the dotted-path identifier of this node (e.g.
 	// "stack.web.db"). Used for logging + ledger keying.

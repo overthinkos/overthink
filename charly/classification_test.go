@@ -10,7 +10,7 @@ import (
 // the IsDisposableFields helper — disposability is now a DEPLOY
 // property only (see /charly-internals:disposable). The former
 // TestVmSpec_DisposableRoundTrip / TestVmSpec_LifecycleAloneDoesNotAuthorize
-// tests moved to the DeploymentNode-level equivalents below.
+// tests moved to the BundleNode-level equivalents below.
 
 // TestDeployBoxConfig_DisposableRoundTrip — same invariants for
 // the container-deploy side.
@@ -19,12 +19,12 @@ func TestDeployBoxConfig_DisposableRoundTrip(t *testing.T) {
 disposable: true
 lifecycle: dev
 `
-	var c DeploymentNode
+	var c BundleNode
 	if err := yaml.Unmarshal([]byte(yamlStr), &c); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if !c.IsDisposable() {
-		t.Error("DeploymentNode.IsDisposable() = false; want true")
+		t.Error("BundleNode.IsDisposable() = false; want true")
 	}
 	if got := c.LifecycleTag(); got != "dev" {
 		t.Errorf("LifecycleTag = %q; want dev", got)
@@ -35,12 +35,12 @@ lifecycle: dev
 // mirror of the critical anti-derivation test.
 func TestDeployBoxConfig_LifecycleAloneDoesNotAuthorize(t *testing.T) {
 	yamlStr := `lifecycle: dev`
-	var c DeploymentNode
+	var c BundleNode
 	if err := yaml.Unmarshal([]byte(yamlStr), &c); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if c.IsDisposable() {
-		t.Fatal("DeploymentNode{Lifecycle: dev}.IsDisposable() = true; want false.")
+		t.Fatal("BundleNode{Lifecycle: dev}.IsDisposable() = true; want false.")
 	}
 }
 
@@ -48,7 +48,7 @@ func TestDeployBoxConfig_LifecycleAloneDoesNotAuthorize(t *testing.T) {
 // the same image with different disposable values must behave
 // independently (the multi-instance requirement).
 func TestMultipleInstances_IndependentFlags(t *testing.T) {
-	// Under singular kinds, DeployConfig.Deploy is keyed
+	// Under singular kinds, BundleConfig.Deploy is keyed
 	// off the `deployment:` (singular) YAML map, not the legacy plural
 	// `images:`. The resolver renamed both files (deploy.yml carries
 	// `deployment:`) — fixture follows suit.
@@ -66,7 +66,7 @@ deploy:
   fedora-coder-scratch:
     disposable: true
 `
-	var cfg DeployConfig
+	var cfg BundleConfig
 	if err := yaml.Unmarshal([]byte(yamlStr), &cfg); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -80,7 +80,7 @@ deploy:
 		{"fedora-coder-scratch", true}, // explicit disposable: true
 	}
 	for _, tc := range tests {
-		e, ok := cfg.Deploy[tc.key]
+		e, ok := cfg.Bundle[tc.key]
 		if !ok {
 			t.Fatalf("image %q missing", tc.key)
 		}

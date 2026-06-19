@@ -2,7 +2,7 @@ package main
 
 // shell_profile.go — host-side shell profile integration.
 //
-// On `charly deploy add host`, each installed candy contributes a set of
+// On `charly bundle add host`, each installed candy contributes a set of
 // env vars and PATH additions (from the candy manifest's env: + path_append:).
 // We materialize them as `~/.config/opencharly/env.d/<candy>.env` files
 // and insert a managed block in the user's shell init so those files
@@ -24,7 +24,7 @@ package main
 //   <sourcing loop>
 //   # opencharly:end
 //
-// On `charly deploy del host`, if no candies remain deployed the managed
+// On `charly bundle del host`, if no candies remain deployed the managed
 // block is removed from the shell init file.
 
 import (

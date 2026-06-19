@@ -14,9 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
-	"strings"
 )
 
 // The HarnessCmd top-level type was deleted in the check-cutover. Its
@@ -57,14 +55,13 @@ func (c *CheckListAgentCmd) Run() error {
 // CheckRunCmd is `charly check run <name>` — overloaded by the kind the name
 // resolves to: a kind:check bed runs the full R10 sequence (build → check
 // box → deploy → check live → fresh update → tear down); a kind:score
-// drives the AI iteration loop. The two namespaces are disjoint (a name
-// cannot be both — foldCheckBeds enforces it at load time).
+// drives the AI iteration loop. A check bed is a `disposable: true` bundle, so the
+// loader's globally-unique node names keep a bed and a score name disjoint.
 type CheckRunCmd struct {
-	Name  string `arg:"" optional:"" help:"kind:check bed (full R10 sequence) or kind:score (AI iteration loop). Omit with --all-beds."`
+	Name  string `arg:"" optional:"" help:"kind:check bed (full R10 sequence) or kind:score (AI iteration loop)."`
 	Agent string `name:"agent" help:"Pick which agent to run (required if score.agent has more than one entry)"`
 
 	// kind:check bed-path flags (ignored on the kind:score path).
-	AllBeds   bool `name:"all-beds" help:"Run every kind:check bed (name-sorted) through the full R10 sequence"`
 	Keep      bool `name:"keep" help:"kind:check beds: don't tear the bed down after the run"`
 	NoRebuild bool `name:"no-rebuild" help:"kind:check beds: skip the fresh-update R10 re-verify step (R10 acceptance gate)"`
 
@@ -95,8 +92,8 @@ func (c *CheckRunCmd) Run() error {
 		return fmt.Errorf("charly check run: no charly.yml in %s", cwd)
 	}
 
-	// Reusable-artifact retention: after the run completes (any path — bed,
-	// --all-beds, or score), trim .check to defaults.keep_check_runs. Runs after
+	// Reusable-artifact retention: after the run completes (any path — bed
+	// or score), trim .check to defaults.keep_check_runs. Runs after
 	// the new run's output is written, so the newest run is kept; NOTES.md is
 	// always preserved. keep_check_runs: 0 / absent disables. See `charly clean`.
 	if keep := resolveIntPtr(uf.Defaults.KeepCheckRuns, nil, keepCheckRunsFallback); keep > 0 {
@@ -108,16 +105,17 @@ func (c *CheckRunCmd) Run() error {
 	}
 
 	// Dispatch: an entity carrying an `iterate:` block → the AI loop; a plain
-	// kind:check bed → the deterministic R10 sequence. --all-beds runs every
-	// bed. The two share the `charly check run` verb.
+	// kind:check bed → the deterministic R10 sequence. The two share the
+	// `charly check run` verb; ONE bed per invocation.
 	beds := uf.CheckBeds()
-	if c.AllBeds {
-		return runAllCheckBeds(uf, beds, bedRunOpts{Keep: c.Keep, NoRebuild: c.NoRebuild})
-	}
 	if c.Name == "" {
-		return fmt.Errorf("charly check run: provide an iterate: entity or kind:check bed name, or pass --all-beds")
+		// Run a whole roster by fanning beds out at the AGENT layer — one
+		// `charly check run <bed>` per agent (the /verify-beds workflow / an agent
+		// team), which collapses wall-clock to ≈ the slowest single bed instead of
+		// the sum of a sequential sweep. See /charly-check:check + /charly-internals:agents.
+		return fmt.Errorf("charly check run: provide an iterate: entity or a kind:check bed name (run a full roster concurrently via the /verify-beds workflow)")
 	}
-	node, hasNode := uf.Deploy[c.Name]
+	node, hasNode := uf.Bundle[c.Name]
 	bedNode, isBed := beds[c.Name]
 	if (!hasNode || node.Iterate == nil) && isBed {
 		exe, exeErr := os.Executable()
@@ -145,7 +143,7 @@ func (c *CheckRunCmd) Run() error {
 // it resolves the sandbox target, generates a run ID, builds the run-local
 // argv, performs the disposable-pod preflight, and dispatches to the host/pod/
 // VM runner. Split out of Run, which keeps the kind:check bed-run branch inline.
-func (c *CheckRunCmd) runIterateEntity(uf *UnifiedFile, node DeploymentNode, hasNode bool, cwd string) error {
+func (c *CheckRunCmd) runIterateEntity(uf *UnifiedFile, node BundleNode, hasNode bool, cwd string) error {
 	// iterate: path (AI iteration loop).
 	if !hasNode || node.Iterate == nil {
 		return fmt.Errorf("charly check run %s: no iterate: block and no kind:check bed by that name", c.Name)
@@ -194,7 +192,7 @@ func (c *CheckRunCmd) runIterateEntity(uf *UnifiedFile, node DeploymentNode, has
 	// through systemctl restart uses the existing on-disk quadlet
 	// unchanged.
 	if tk == TargetKindPod {
-		cfg, err := LoadDeployConfig()
+		cfg, err := LoadBundleConfig()
 		if err != nil {
 			return fmt.Errorf("loading per-host deploy overlay: %w", err)
 		}
@@ -270,61 +268,15 @@ func (c *CheckRunCmd) runIterateEntity(uf *UnifiedFile, node DeploymentNode, has
 // (see the preflight comment in Run), so a missing entry is an operator
 // precondition failure — fail fast with the remediation instead of letting
 // podman surface a raw exec error against a container that cannot exist.
-func scorePodTargetEntry(cfg *DeployConfig, scoreName, targetName string) (DeploymentNode, error) {
+func scorePodTargetEntry(cfg *BundleConfig, scoreName, targetName string) (BundleNode, error) {
 	if cfg != nil {
-		if entry, ok := cfg.Deploy[targetName]; ok {
+		if entry, ok := cfg.Bundle[targetName]; ok {
 			return entry, nil
 		}
 	}
-	return DeploymentNode{}, fmt.Errorf(
-		"score %q targets pod %q but no deploy entry exists on this host — provision the harness sandbox first: `charly deploy add %s <ref> --disposable` then `charly start %s` (the sandbox is per-host operator config, never shipped by the repo; see /charly-check:check)",
+	return BundleNode{}, fmt.Errorf(
+		"score %q targets pod %q but no deploy entry exists on this host — provision the harness sandbox first: `charly bundle add %s <ref> --disposable` then `charly start %s` (the sandbox is per-host operator config, never shipped by the repo; see /charly-check:check)",
 		scoreName, targetName, targetName, targetName)
-}
-
-// runAllCheckBeds runs every kind:check bed (name-sorted for determinism)
-// through the full R10 sequence — the `--all-beds` replacement for the
-// retired `charly check kind all`. Aggregates failures so one broken bed
-// doesn't mask the rest.
-func runAllCheckBeds(uf *UnifiedFile, beds map[string]DeploymentNode, opts bedRunOpts) error {
-	if len(beds) == 0 {
-		return fmt.Errorf("charly check run --all-beds: no kind:check beds defined in the check: block")
-	}
-	exe, err := os.Executable()
-	if err != nil {
-		exe = os.Args[0]
-	}
-	names := make([]string, 0, len(beds))
-	for n := range beds {
-		names = append(names, n)
-	}
-	sort.Strings(names)
-	var failures []string
-	allCheckFails := true // every failure so far is a failing-checks (exit 2) failure
-	for _, n := range names {
-		opts.CheckLevel = bedCheckLevel(uf, beds[n])
-		res, runErr := runCheckBed(exe, n, beds[n], opts)
-		if res != nil {
-			fmt.Fprintf(os.Stderr, "charly check run %s: %s (steps=%d)\n",
-				n, summaryStatus(res.OK), len(res.Step))
-		}
-		if runErr != nil {
-			failures = append(failures, fmt.Sprintf("%s: %v", n, runErr))
-			if res == nil || res.FailExitCode != CheckFailExitCode {
-				allCheckFails = false
-			}
-		}
-	}
-	if len(failures) > 0 {
-		msg := fmt.Sprintf("charly check run --all-beds: %d failure(s):\n  - %s",
-			len(failures), strings.Join(failures, "\n  - "))
-		// All failures were failing checks → check-fail exit code (2). Any
-		// infra failure (build/deploy/vm-create) keeps the generic exit 1.
-		if allCheckFails {
-			return &CheckFailedError{Msg: msg}
-		}
-		return fmt.Errorf("%s", msg)
-	}
-	return nil
 }
 
 // runLocalInProcess invokes CheckRunLocalCmd in-process for host targets.
@@ -561,7 +513,7 @@ func (c *CheckSelfCheckCmd) Run() error {
 	if !ok || uf == nil {
 		return fmt.Errorf("charly check self-evaluate: no check.yml at project root %s — self-evaluate must run from a directory with a project tree containing check.yml (typically /workspace inside the harness sandbox)", cwd)
 	}
-	node, found := uf.Deploy[score]
+	node, found := uf.Bundle[score]
 	if !found || node.Iterate == nil {
 		return fmt.Errorf("charly check self-evaluate: entity %q has no iterate: block", score)
 	}

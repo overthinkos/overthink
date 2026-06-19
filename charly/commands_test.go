@@ -18,6 +18,9 @@ import (
 func TestBoxConfigSetupCmd_DirectModeAllowed(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yml")
+	// Isolate the per-host deploy config — a unit test must not read (or depend on
+	// the validity of) the operator's real ~/.config/charly/charly.yml.
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmpDir, "xdg"))
 
 	orig := RuntimeConfigPath
 	defer func() { RuntimeConfigPath = orig }()

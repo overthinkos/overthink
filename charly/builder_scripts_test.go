@@ -8,7 +8,7 @@ import (
 // Tests for renderBuilderScript — the bash scripts that run inside builder
 // containers during host/VM deploys. The scripts are now config-driven: they
 // render each builder's phase.install.host cell from the REAL build vocabulary
-// (the embedded charly.cue), so these are round-trip tests proving the host
+// (the embedded charly_defaults.yml), so these are round-trip tests proving the host
 // cells produce the expected shell (the faithful translation of the deleted
 // render*Script Go helpers).
 
@@ -90,7 +90,7 @@ func TestRenderAurScriptPackages(t *testing.T) {
 		"*.pkg.tar.zst",
 		// The DB refresh that keeps the (cached, stale) builder DB from
 		// resolving a makedepend to a mirror-rotated version (the go-1.26.3
-		// .sig 404). Mirrors the embedded charly.cue's aur stage_template (R3).
+		// .sig 404). Mirrors the embedded charly_defaults.yml's aur stage_template (R3).
 		"pacman -Syu --noconfirm",
 	}
 	for _, m := range mustContain {

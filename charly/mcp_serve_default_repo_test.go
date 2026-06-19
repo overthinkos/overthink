@@ -166,11 +166,20 @@ func runMcpServeListImages(t *testing.T, bin, cwd string, extraEnv, args []strin
 }
 
 // sanitizedEnv returns os.Environ minus any CHARLY_PROJECT_DIR / CHARLY_PROJECT_REPO
-// inherited from the test harness, so each subtest controls these cleanly.
+// AND CHARLY_REPO_OVERRIDE inherited from the test harness, so each subtest
+// controls project resolution cleanly. The override is stripped because it is
+// an RDD local-override that redirects a remote @github ref (incl.
+// overthinkos/overthink, the repo this test resolves via --repo / the default
+// fallback) to a local working tree — winning over the cache BEFORE
+// IsRepoCached. Left in place it defeats the pre-seeded CHARLY_REPO_CACHE stub
+// this test relies on for hermeticity, resolving to the real working tree
+// (whose root charly.yml declares no testimage box) instead.
 func sanitizedEnv() []string {
 	var out []string
 	for _, e := range os.Environ() {
-		if strings.HasPrefix(e, "CHARLY_PROJECT_DIR=") || strings.HasPrefix(e, "CHARLY_PROJECT_REPO=") {
+		if strings.HasPrefix(e, "CHARLY_PROJECT_DIR=") ||
+			strings.HasPrefix(e, "CHARLY_PROJECT_REPO=") ||
+			strings.HasPrefix(e, "CHARLY_REPO_OVERRIDE=") {
 			continue
 		}
 		out = append(out, e)

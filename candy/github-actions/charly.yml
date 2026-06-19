@@ -1,17 +1,18 @@
-candy:
-    version: 2026.144.1443
-    name: github-actions
-    description: |
-        Local GitHub Actions execution and workflow linting via act and actionlint.
-        Installs the act CLI at /usr/bin/act for running GitHub Actions
-        workflows locally, the actionlint linter at /usr/local/bin/actionlint
-        for static workflow validation, and the guestfs-tools package. Each
-        tool lands at a fixed path and self-reports a version, so its presence
-        and basic operability are deterministically verifiable.
-    package:
-        - guestfs-tools
-    plan:
-        - run: |
+github-actions:
+    candy:
+        version: 2026.144.1443
+        description: |
+            Local GitHub Actions execution and workflow linting via act and actionlint.
+            Installs the act CLI at /usr/bin/act for running GitHub Actions
+            workflows locally, the actionlint linter at /usr/local/bin/actionlint
+            for static workflow validation, and the guestfs-tools package. Each
+            tool lands at a fixed path and self-reports a version, so its presence
+            and basic operability are deterministically verifiable.
+    github-actions-package:
+        package:
+            - guestfs-tools
+    github-actions-step-0:
+        run: |
             command=set -e
             ACT_VERSION="0.2.85"
             BUILD_ARCH=$(uname -m)
@@ -24,7 +25,7 @@ candy:
             tar -xzf /tmp/act.tar.gz -C /usr/bin/ act
             chmod +x /usr/bin/act
             rm -f /tmp/act.tar.gz
-          command: |
+        command: |
             set -e
             ACT_VERSION="0.2.85"
             BUILD_ARCH=$(uname -m)
@@ -37,8 +38,9 @@ candy:
             tar -xzf /tmp/act.tar.gz -C /usr/bin/ act
             chmod +x /usr/bin/act
             rm -f /tmp/act.tar.gz
-          run_as: root
-        - run: |
+        run_as: root
+    github-actions-step-1:
+        run: |
             command=set -e
             ACTIONLINT_VERSION="1.7.12"
             BUILD_ARCH=$(uname -m)
@@ -51,7 +53,7 @@ candy:
             tar -xzf /tmp/actionlint.tar.gz -C /usr/local/bin/ actionlint
             chmod +x /usr/local/bin/actionlint
             rm -f /tmp/actionlint.tar.gz
-          command: |
+        command: |
             set -e
             ACTIONLINT_VERSION="1.7.12"
             BUILD_ARCH=$(uname -m)
@@ -64,20 +66,25 @@ candy:
             tar -xzf /tmp/actionlint.tar.gz -C /usr/local/bin/ actionlint
             chmod +x /usr/local/bin/actionlint
             rm -f /tmp/actionlint.tar.gz
-          run_as: root
-        - check: the act CLI is installed at its fixed path
-          file: /usr/bin/act
-          exists: true
-        - check: act reports its version without error
-          command: /usr/bin/act --version
-          exit_status: 0
-        - check: the actionlint linter is installed at its fixed path
-          file: /usr/local/bin/actionlint
-          exists: true
-        - check: actionlint reports its version without error
-          command: /usr/local/bin/actionlint -version
-          exit_status: 0
-        - check: package=guestfs-tools
-          id: guestfs-tools-package
-          package: guestfs-tools
-          installed: true
+        run_as: root
+    github-actions-step-2:
+        check: the act CLI is installed at its fixed path
+        file: /usr/bin/act
+        exists: true
+    github-actions-step-3:
+        check: act reports its version without error
+        command: /usr/bin/act --version
+        exit_status: 0
+    github-actions-step-4:
+        check: the actionlint linter is installed at its fixed path
+        file: /usr/local/bin/actionlint
+        exists: true
+    github-actions-step-5:
+        check: actionlint reports its version without error
+        command: /usr/local/bin/actionlint -version
+        exit_status: 0
+    guestfs-tools-package:
+        check: package=guestfs-tools
+        id: guestfs-tools-package
+        package: guestfs-tools
+        installed: true

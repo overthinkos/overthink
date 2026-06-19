@@ -204,11 +204,11 @@ func (c *CheckFeatureRunCmd) Run() error {
 
 	// Deploy overlay → runtime variable resolution (real HOST_PORT mappings,
 	// container IP, env), same as `charly check live`.
-	var deployOverlay *DeploymentNode
+	var deployOverlay *BundleNode
 	if dc := loadDeployConfigForRead("charly check feature run"); dc != nil {
-		if entry, ok := dc.Deploy[deployKey(c.Box, c.Instance)]; ok {
+		if entry, ok := dc.Bundle[deployKey(c.Box, c.Instance)]; ok {
 			deployOverlay = &entry
-		} else if entry, ok := dc.Deploy[c.Box]; ok {
+		} else if entry, ok := dc.Bundle[c.Box]; ok {
 			deployOverlay = &entry
 		}
 	}

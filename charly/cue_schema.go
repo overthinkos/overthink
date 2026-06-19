@@ -111,14 +111,26 @@ func validateEntityClosedCUE(kind, label string, entity cue.Value) error {
 	return nil
 }
 
-// validateCandyManifestCUE extracts the `candy:` entity from a kind-keyed candy
-// manifest and validates it against #Candy (per-entity model).
+// validateCandyManifestCUE validates a candy manifest. A legacy kind-keyed
+// manifest (`candy: {…}`) validates its entity against #Candy; a unified node-form
+// manifest (`<name>: {candy: …, <children>}`) validates the WHOLE document against
+// #NodeDoc concretely (the #CandyArm + its kind-narrowed children).
 func validateCandyManifestCUE(path string, data []byte) error {
 	doc, err := cueDocFromYAML(path, data)
 	if err != nil {
 		return err
 	}
-	return validateEntityCUE("candy", path, doc.LookupPath(cue.ParsePath("candy")))
+	if c := doc.LookupPath(cue.ParsePath("candy")); c.Exists() {
+		return validateEntityCUE("candy", path, c)
+	}
+	def := sharedCueSchema.LookupPath(cue.ParsePath("#NodeDoc"))
+	if def.Err() != nil {
+		return fmt.Errorf("%s: #NodeDoc schema not found: %w", path, def.Err())
+	}
+	if verr := doc.Unify(def).Validate(cue.Concrete(true)); verr != nil {
+		return fmt.Errorf("%s: %s", path, errors.Details(verr, nil))
+	}
+	return nil
 }
 
 // cueDocFromYAML ingests one YAML document into a cue.Value (the whole doc).

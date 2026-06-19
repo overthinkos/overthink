@@ -12,7 +12,7 @@ import (
 // `ctx`, plus an unrelated pod deploy that the collector must ignore.
 func k8sUnified(name, image, tmpl, ctx string) *UnifiedFile {
 	return &UnifiedFile{
-		Deploy: map[string]DeploymentNode{
+		Bundle: map[string]BundleNode{
 			name:       {Target: "k8s", Box: image, K8s: tmpl},
 			"some-pod": {Target: "pod", Box: "redis"},
 		},
@@ -127,7 +127,7 @@ func TestK8sCollector_AvailableFalse(t *testing.T) {
 	}
 
 	// Only a pod deploy declared — still nothing for the k8s substrate.
-	uf := &UnifiedFile{Deploy: map[string]DeploymentNode{"web": {Target: "pod", Box: "web"}}}
+	uf := &UnifiedFile{Bundle: map[string]BundleNode{"web": {Target: "pod", Box: "web"}}}
 	if col.Available(CollectOpts{Unified: uf}) {
 		t.Errorf("Available = true with only a pod deploy, want false")
 	}
@@ -147,13 +147,13 @@ func TestK8sCollector_AvailableFalse(t *testing.T) {
 // the tree was generated for.
 func TestK8sWorkloadKind(t *testing.T) {
 	cases := []struct {
-		node DeploymentNode
+		node BundleNode
 		want string
 	}{
-		{DeploymentNode{}, "Deployment"},
-		{DeploymentNode{Kind: "service"}, "Deployment"},
-		{DeploymentNode{Kind: "service", Storage: []DeployStorage{{Name: "data"}}}, "StatefulSet"},
-		{DeploymentNode{Kind: "daemon"}, "DaemonSet"},
+		{BundleNode{}, "Deployment"},
+		{BundleNode{Kind: "service"}, "Deployment"},
+		{BundleNode{Kind: "service", Storage: []DeployStorage{{Name: "data"}}}, "StatefulSet"},
+		{BundleNode{Kind: "daemon"}, "DaemonSet"},
 	}
 	for _, c := range cases {
 		got := k8sWorkloadKind(c.node)

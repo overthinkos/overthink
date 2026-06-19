@@ -45,7 +45,7 @@ type CLI struct {
 	Clean       CleanCmd        `cmd:"" help:"Prune reusable build artifacts to defaults: retention (images, check runs) + sweep one-time makepkg leftovers"`
 	Cmd         CmdCmd          `cmd:"" help:"Run a command in a running container (with notification)"`
 	Config      BoxConfigCmd    `cmd:"" help:"Configure box deployment (setup, secrets, encrypted volumes)"`
-	Deploy      DeployCmd       `cmd:"" help:"Manage charly.yml deployment overrides"`
+	Bundle      BundleCmd       `cmd:"" help:"Manage charly.yml bundle (deployment) overrides"`
 	Doctor      DoctorCmd       `cmd:"" help:"Show host dependency status"`
 	Box         BoxCmd          `cmd:"" name:"box" help:"Build, generate, inspect, and pull container boxes (reads charly.yml)"`
 	Candy       CandyCmd        `cmd:"" name:"candy" help:"Edit candy.yml files in the project's candy/ directory"`
@@ -342,7 +342,7 @@ func (c *InspectCmd) formatAliases(cfg *Config, dir string) error {
 
 // formatTunnel prints the deploy-time tunnel config for the box. Schema v4:
 // Tunnel moved off BoxConfig/ResolvedBox — deploy-only. Resolve from
-// DeploymentNode.Tunnel via charly.yml. Any resolution failure is silently
+// BundleNode.Tunnel via charly.yml. Any resolution failure is silently
 // skipped (no tunnel output), matching the prior inline behaviour.
 func (c *InspectCmd) formatTunnel(cfg *Config, dir string, resolved *ResolvedBox) {
 	overlay, ok := loadDeployConfigForRead("charly box inspect tunnel").Lookup(c.Box, c.Instance)

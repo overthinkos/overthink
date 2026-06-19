@@ -195,7 +195,7 @@ func (t *PodUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error 
 			fmt.Printf("dry-run: charly box build %s\n", baseRef)
 			fmt.Printf("dry-run: charly check box %s\n", baseRef)
 		}
-		fmt.Printf("dry-run: charly deploy add %s\n", t.NodeName)
+		fmt.Printf("dry-run: charly bundle add %s\n", t.NodeName)
 		fmt.Printf("dry-run: charly stop %s\n", t.NodeName)
 		fmt.Printf("dry-run: charly config %s\n", t.NodeName)
 		fmt.Printf("dry-run: charly start %s\n", t.NodeName)
@@ -211,8 +211,8 @@ func (t *PodUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error 
 		}
 	}
 
-	if err := runCharlySubcommand("deploy", "add", t.NodeName); err != nil {
-		return fmt.Errorf("charly deploy add %s: %w", t.NodeName, err)
+	if err := runCharlySubcommand("bundle", "add", t.NodeName); err != nil {
+		return fmt.Errorf("charly bundle add %s: %w", t.NodeName, err)
 	}
 
 	_ = runCharlySubcommand("stop", t.NodeName)

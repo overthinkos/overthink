@@ -12,7 +12,7 @@ package main
 //     android.yml fold their kind keys into charly.yml's root mapping; the files
 //     are deleted.
 //   - the build.yml import is dropped — the default distro/builder/init/resource
-//     vocabulary is now EMBEDDED in the charly binary (charly/charly.cue, see
+//     vocabulary is now EMBEDDED in the charly binary (charly/charly_defaults.yml, see
 //     embed_defaults.go). A local build.yml whose build vocabulary matches the
 //     embedded default is deleted; a CUSTOMIZED local build.yml is left imported
 //     (it overrides the embedded default). A remote `@github.../build.yml:vTAG`
@@ -351,8 +351,14 @@ func rewriteBuildImport(rootMap *yaml.Node, dir string, dryRun bool) bool {
 // whitespace differences. A customized build.yml (any vocab the embed lacks)
 // returns false and is left imported.
 func localBuildMatchesEmbeddedVocab(data []byte) bool {
+	// Parse the local build.yml through the SAME document-routing core the embedded
+	// default flows through (mergeUnifiedDocs → classifyDoc → normalizeNodeInto),
+	// so both sides get identical normalization + defaults materialization (a raw
+	// yaml.Unmarshal would skip the node-form normalizer + default fill, making a
+	// content-identical vocab compare unequal). Bilingual: handles a legacy-shape
+	// OR node-form build.yml.
 	var local UnifiedFile
-	if err := yaml.Unmarshal(data, &local); err != nil {
+	if _, err := mergeUnifiedDocs(&local, data, "local build.yml", ""); err != nil {
 		return false
 	}
 	def, err := embeddedDefaults()

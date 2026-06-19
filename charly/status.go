@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-// StatusCmd shows the runtime status of one or all charly deployments. The
+// StatusCmd shows the runtime status of one or all charly bundles. The
 // implementation lives in:
 //
 //	status_engine.go     — single-touchpoint to podman/docker (one batched ps + inspect)

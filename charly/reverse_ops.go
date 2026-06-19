@@ -4,7 +4,7 @@ package main
 // at install time, turning them into concrete teardown commands.
 //
 // Each InstallStep's Reverse() method records a list of ReverseOps
-// when the step runs (see deploy_target_local.go). `charly deploy del`
+// when the step runs (see deploy_target_local.go). `charly bundle del`
 // reads those ops from the candy ledger and hands them here for
 // execution. The ops are opaque to the ledger — only the teardown
 // logic in this file understands each Kind.
@@ -19,7 +19,7 @@ import (
 )
 
 // ReverseExecutor is the interface ReverseOp handlers expect. Allows
-// us to pass either DeployDelCmd (for real teardown) or a test mock.
+// us to pass either BundleDelCmd (for real teardown) or a test mock.
 //
 // reverseRunner returns the shell-runner used to execute reversal
 // commands. When non-nil, handlers dispatch through it (so VM teardown
@@ -43,12 +43,12 @@ type ReverseRunner interface {
 	RunUser(script string) error
 }
 
-// DeployDelCmd satisfies ReverseExecutor via thin wrappers — keeps
+// BundleDelCmd satisfies ReverseExecutor via thin wrappers — keeps
 // the flag-accessor protocol decoupled from the concrete command type.
-func (c *DeployDelCmd) reverseDryRun() bool          { return c.DryRun }
-func (c *DeployDelCmd) reverseKeepRepoChanges() bool { return c.KeepRepoChanges }
-func (c *DeployDelCmd) reverseKeepServices() bool    { return c.KeepServices }
-func (c *DeployDelCmd) reverseRunner() ReverseRunner { return c.Runner }
+func (c *BundleDelCmd) reverseDryRun() bool          { return c.DryRun }
+func (c *BundleDelCmd) reverseKeepRepoChanges() bool { return c.KeepRepoChanges }
+func (c *BundleDelCmd) reverseKeepServices() bool    { return c.KeepServices }
+func (c *BundleDelCmd) reverseRunner() ReverseRunner { return c.Runner }
 
 // runReverseOps executes ops in REVERSE order (last-installed, first-
 // removed). Idempotent where possible: a missing file is treated as

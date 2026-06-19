@@ -1,35 +1,38 @@
-candy:
-    version: 2026.144.1443
-    name: versatiles-style
-    description: |
-        Local @versatiles/style MapLibre style-generator browser bundle for the Shortbread schema
-        @versatiles/style is a TypeScript MapLibre style generator producing
-        colorful() / eclipse() / graybeard() / neutrino() / shadow() /
-        satellite() style JSON for maps backed by the Shortbread vector-tile
-        schema. This candy installs nodejs + npm and lands the browser-ready
-        bundle under /opt/versatiles-style/ (GitHub release tarball first, npm
-        install fallback), so the notebook's MapLibre HTML imports the styles
-        from a local file instead of a runtime CDN dependency (unpkg.com). The
-        bundle is re-served as static JS by the versatiles-frontend layer at
-        /style/versatiles-style.js. The install is verifiable: a non-empty
-        versatiles-style*.js must land under the install path, and the node
-        toolchain that built and serves it must be present.
-    require:
-        - supervisord
-    distro:
-        arch:
-            package:
-                - nodejs
-                - npm
-        fedora:
-            package:
-                - nodejs
-                - npm
-    plan:
-        - run: mkdir=/opt/versatiles-style
-          mkdir: /opt/versatiles-style
-          run_as: root
-        - run: |
+versatiles-style:
+    candy:
+        version: 2026.144.1443
+        description: |
+            Local @versatiles/style MapLibre style-generator browser bundle for the Shortbread schema
+            @versatiles/style is a TypeScript MapLibre style generator producing
+            colorful() / eclipse() / graybeard() / neutrino() / shadow() /
+            satellite() style JSON for maps backed by the Shortbread vector-tile
+            schema. This candy installs nodejs + npm and lands the browser-ready
+            bundle under /opt/versatiles-style/ (GitHub release tarball first, npm
+            install fallback), so the notebook's MapLibre HTML imports the styles
+            from a local file instead of a runtime CDN dependency (unpkg.com). The
+            bundle is re-served as static JS by the versatiles-frontend layer at
+            /style/versatiles-style.js. The install is verifiable: a non-empty
+            versatiles-style*.js must land under the install path, and the node
+            toolchain that built and serves it must be present.
+    versatiles-style-require:
+        require:
+            - supervisord
+    versatiles-style-distro:
+        distro:
+            arch:
+                package:
+                    - nodejs
+                    - npm
+            fedora:
+                package:
+                    - nodejs
+                    - npm
+    versatiles-style-step-0:
+        run: mkdir=/opt/versatiles-style
+        mkdir: /opt/versatiles-style
+        run_as: root
+    versatiles-style-step-1:
+        run: |
             command=set -euo pipefail
             TMPDIR=$(mktemp -d)
             cd "$TMPDIR"
@@ -77,7 +80,7 @@ candy:
 
             cd /
             rm -rf "$TMPDIR" /root/.npm
-          command: |
+        command: |
             set -euo pipefail
             TMPDIR=$(mktemp -d)
             cd "$TMPDIR"
@@ -125,20 +128,24 @@ candy:
 
             cd /
             rm -rf "$TMPDIR" /root/.npm
-          run_as: root
-        - check: a non-empty versatiles-style*.js browser bundle is present under /opt/versatiles-style
-          command: |
+        run_as: root
+    versatiles-style-step-2:
+        check: a non-empty versatiles-style*.js browser bundle is present under /opt/versatiles-style
+        command: |
             find /opt/versatiles-style -maxdepth 3 -name 'versatiles-style*.js' -size +1c | head -1 | grep -q .
-          exit_status: 0
-        - check: nodejs is installed so the @versatiles/style bundle can be built and served
-          package: nodejs
-          installed: true
-        - check: the node runtime reports its version
-          command: node --version
-          exit_status: 0
-          stdout:
+        exit_status: 0
+    versatiles-style-step-3:
+        check: nodejs is installed so the @versatiles/style bundle can be built and served
+        package: nodejs
+        installed: true
+    versatiles-style-step-4:
+        check: the node runtime reports its version
+        command: node --version
+        exit_status: 0
+        stdout:
             - matches: "v[0-9]+"
-        - check: file=/opt/versatiles-style
-          id: versatiles-style-install-dir
-          file: /opt/versatiles-style
-          filetype: directory
+    versatiles-style-install-dir:
+        check: file=/opt/versatiles-style
+        id: versatiles-style-install-dir
+        file: /opt/versatiles-style
+        filetype: directory

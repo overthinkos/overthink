@@ -19,7 +19,7 @@ func TestScorePodTargetEntry_NilConfigFailsFastWithRemediation(t *testing.T) {
 	for _, want := range []string{
 		`score "scaffolding-selftest"`,
 		`pod "check-sandbox"`,
-		"charly deploy add check-sandbox <ref> --disposable",
+		"charly bundle add check-sandbox <ref> --disposable",
 		"charly start check-sandbox",
 	} {
 		if !strings.Contains(err.Error(), want) {
@@ -29,7 +29,7 @@ func TestScorePodTargetEntry_NilConfigFailsFastWithRemediation(t *testing.T) {
 }
 
 func TestScorePodTargetEntry_MissingEntryFailsFast(t *testing.T) {
-	cfg := &DeployConfig{Deploy: map[string]DeploymentNode{
+	cfg := &BundleConfig{Bundle: map[string]BundleNode{
 		"unrelated": {Disposable: disposableTrue()},
 	}}
 	_, err := scorePodTargetEntry(cfg, "default", "check-sandbox")
@@ -42,7 +42,7 @@ func TestScorePodTargetEntry_MissingEntryFailsFast(t *testing.T) {
 }
 
 func TestScorePodTargetEntry_PresentEntryIsReturned(t *testing.T) {
-	cfg := &DeployConfig{Deploy: map[string]DeploymentNode{
+	cfg := &BundleConfig{Bundle: map[string]BundleNode{
 		"check-sandbox": {Disposable: disposableTrue()},
 	}}
 	entry, err := scorePodTargetEntry(cfg, "default", "check-sandbox")

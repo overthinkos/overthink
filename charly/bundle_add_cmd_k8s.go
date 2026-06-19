@@ -10,7 +10,7 @@ import (
 // The k8s deploy/teardown logic lives on K8sUnifiedTarget.Add /
 // K8sUnifiedTarget.Del (unified_targets_k8s.go); both call the output-dir
 // resolver below. K8s doesn't consume the InstallPlan IR — the real work
-// is GenerateK8sKustomize, which reads (Capabilities, DeploymentNode,
+// is GenerateK8sKustomize, which reads (Capabilities, BundleNode,
 // K8sSpec/cluster) and emits a Kustomize tree.
 
 // defaultK8sOutputDir resolves the canonical output directory for

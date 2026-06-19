@@ -283,7 +283,7 @@ func TestPlanUnify_PerStepScorerReportsSolvedAndFailingID(t *testing.T) {
 }
 
 // §J.8 — a migrated task:→run: step lowers to an InstallStep AND reverses on
-// `charly deploy del` (the task:→plan: fold preserves the ledger/reversal).
+// `charly bundle del` (the task:→plan: fold preserves the ledger/reversal).
 func TestPlanUnify_RunStepLowersToInstallStepAndReverses(t *testing.T) {
 	// The migration turns a `task: { package: redis }` op into a run: step.
 	layer := &Candy{Name: "x", plan: []Step{{Run: "install redis", Op: Op{Package: "redis"}}}}
@@ -300,6 +300,6 @@ func TestPlanUnify_RunStepLowersToInstallStepAndReverses(t *testing.T) {
 	}
 	rev := sp.Reverse()
 	if len(rev) != 1 || rev[0].Kind != ReverseOpPackageRemove {
-		t.Fatalf("lowered install step does not reverse to package-remove (charly deploy del): %+v", rev)
+		t.Fatalf("lowered install step does not reverse to package-remove (charly bundle del): %+v", rev)
 	}
 }

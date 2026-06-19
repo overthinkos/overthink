@@ -99,10 +99,10 @@ func (v *VMCollector) rowForDomain(d domainInfo, opts CollectOpts) DeploymentSta
 // Absence of a deploy entry is normal: the libvirt domain still shows with
 // Source:libvirt and no enrichment.
 func (v *VMCollector) enrichFromDeploy(cs *DeploymentStatus, entity string, opts CollectOpts) {
-	if opts.Deploy == nil || opts.Deploy.Deploy == nil {
+	if opts.Deploy == nil || opts.Deploy.Bundle == nil {
 		return
 	}
-	node, ok := findVmDeployNode(opts.Deploy.Deploy, entity, entity)
+	node, ok := findVmDeployNode(opts.Deploy.Bundle, entity, entity)
 	if !ok {
 		return
 	}

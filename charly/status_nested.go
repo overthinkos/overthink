@@ -17,7 +17,7 @@ import (
 // tree from the deploy config, attaches each declared child to its parent
 // row's DeploymentStatus.Nested[], and — under --nested — probes each child's
 // live venue through the same ResolveDeployChain + NestedExecutor primitive
-// `charly deploy add` / `charly check live parent.child` use.
+// `charly bundle add` / `charly check live parent.child` use.
 //
 // Collector.All calls applyNestedOverlay exactly once, after the substrate
 // fan-out and before the final sort.
@@ -101,19 +101,19 @@ func applyNestedOverlay(rows []DeploymentStatus, opts CollectOpts) []DeploymentS
 // dotted path parentPath) as DeploymentStatus rows, recursing into deeper
 // nesting. Children are emitted in sorted key order for stable output. A child
 // that claims a flat row adds that row's index to claimed.
-func buildNestedChildren(parentPath string, parentNode *DeploymentNode, rows []DeploymentStatus, byKey map[string]int, roots map[string]DeploymentNode, claimed map[int]bool, opts CollectOpts) []DeploymentStatus {
+func buildNestedChildren(parentPath string, parentNode *BundleNode, rows []DeploymentStatus, byKey map[string]int, roots map[string]BundleNode, claimed map[int]bool, opts CollectOpts) []DeploymentStatus {
 	if !parentNode.HasChildren() {
 		return nil
 	}
-	keys := make([]string, 0, len(parentNode.Nested))
-	for k := range parentNode.Nested {
+	keys := make([]string, 0, len(parentNode.Children))
+	for k := range parentNode.Children {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 
 	out := make([]DeploymentStatus, 0, len(keys))
 	for _, k := range keys {
-		child := parentNode.Nested[k]
+		child := parentNode.Children[k]
 		if child == nil {
 			continue
 		}
@@ -137,7 +137,7 @@ func buildNestedChildren(parentPath string, parentNode *DeploymentNode, rows []D
 // top level. A child with NO flat match keeps the synthesized "declared" row
 // with Source "nested". Under --nested the status is then refined by a live
 // multi-hop probe.
-func nestedChildStatus(childPath, childKey string, child *DeploymentNode, rows []DeploymentStatus, byKey map[string]int, roots map[string]DeploymentNode, claimed map[int]bool, opts CollectOpts) DeploymentStatus {
+func nestedChildStatus(childPath, childKey string, child *BundleNode, rows []DeploymentStatus, byKey map[string]int, roots map[string]BundleNode, claimed map[int]bool, opts CollectOpts) DeploymentStatus {
 	cs := DeploymentStatus{
 		Kind:    nestedChildKind(child),
 		Image:   childKey,
@@ -195,10 +195,10 @@ func claimFlatRow(childPath string, byKey map[string]int, claimed map[int]bool) 
 // probeNestedChildLive resolves the dotted path to a DeployExecutor chain and
 // runs a trivial liveness probe under nestedProbeTimeout. Returns "reachable"
 // on a clean exit, "unreachable" on any error / non-zero exit / timeout. The
-// chain construction reuses ResolveDeployChain — the SAME primitive `charly deploy
+// chain construction reuses ResolveDeployChain — the SAME primitive `charly bundle
 // add` and `charly check live parent.child` use (R3); there is no bespoke nested
 // dial here.
-func probeNestedChildLive(childPath string, roots map[string]DeploymentNode) string {
+func probeNestedChildLive(childPath string, roots map[string]BundleNode) string {
 	leaf, chain, err := ResolveDeployChain(roots, childPath, nil)
 	if err != nil || chain == nil || leaf == nil {
 		return "unreachable"
@@ -215,7 +215,7 @@ func probeNestedChildLive(childPath string, roots map[string]DeploymentNode) str
 // nestedChildKind maps a nested node's target to the SubstrateKind used for
 // the row's KIND cell. classifyTarget normalizes empty/legacy spellings, so
 // pod / vm / k8s / local / android all resolve to their canonical kind.
-func nestedChildKind(child *DeploymentNode) SubstrateKind {
+func nestedChildKind(child *BundleNode) SubstrateKind {
 	switch classifyTarget(child) {
 	case "vm":
 		return SubstrateVM
@@ -231,25 +231,25 @@ func nestedChildKind(child *DeploymentNode) SubstrateKind {
 }
 
 // mergedNestedRoots returns the declared deployment tree (project +
-// per-machine), with kind:check beds already folded into the project Deploy map
-// by foldCheckBeds at load time. Mirrors resolveTreeRoot's merge precedence
+// per-machine); check beds are `disposable: true` bundles already in the project
+// Bundle map. Mirrors resolveTreeRoot's merge precedence
 // (project then local overlay) but operates on the ALREADY-LOADED configs in
 // opts — applyNestedOverlay must not re-read disk or re-run LoadUnified.
-func mergedNestedRoots(opts CollectOpts) map[string]DeploymentNode {
-	var project *DeployConfig
+func mergedNestedRoots(opts CollectOpts) map[string]BundleNode {
+	var project *BundleConfig
 	if opts.Unified != nil {
-		project = opts.Unified.ProjectDeployConfig()
+		project = opts.Unified.ProjectBundleConfig()
 	}
 	merged := MergeDeployConfigs(project, opts.Deploy)
 	if merged == nil {
 		return nil
 	}
-	return merged.Deploy
+	return merged.Bundle
 }
 
 // sortedRootKeys returns deploy-tree root keys in deterministic order so the
 // overlay attaches children in stable order across runs.
-func sortedRootKeys(roots map[string]DeploymentNode) []string {
+func sortedRootKeys(roots map[string]BundleNode) []string {
 	keys := make([]string, 0, len(roots))
 	for k := range roots {
 		keys = append(keys, k)

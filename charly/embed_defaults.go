@@ -5,32 +5,27 @@ import (
 	"fmt"
 )
 
-// embeddedCharlyCUE is the binary's DEFAULT config, compiled into the charly
-// CLI. It is a complete charly.cue carrying the default build vocabulary
-// (resource / builder / distro / init) AND the default sidecar-template library
-// (sidecar:), authored in CUE (definitions / references / hidden fields factor
-// out the per-distro / per-format repetition). A project needs to ship NONE of
-// it: the binary fills any vocabulary or sidecar the project did not declare
-// (project-wins), and a project EXTENDS or OVERRIDES it by declaring its own
-// entries in its charly.yml (project config stays YAML).
+// embeddedCharlyDefaults is the binary's DEFAULT config, compiled into the charly
+// CLI. It is a complete UNIFIED NODE-FORM charly config carrying the default build
+// vocabulary (resource / builder / distro / init) AND the default sidecar-template
+// library, authored in the SAME node-form (`<name>: {<discriminator>: …}`) every
+// project charly.yml uses. A project needs to ship NONE of it: the binary fills any
+// vocabulary or sidecar the project did not declare (project-wins), and a project
+// EXTENDS or OVERRIDES it by declaring its own node entries.
 //
-//go:embed charly.cue
-var embeddedCharlyCUE []byte
+//go:embed charly_defaults.yml
+var embeddedCharlyDefaults []byte
 
-// embeddedDefaults compiles the binary-embedded charly.cue to its concrete data
-// (compileCUEToYAML — the CUE-source front-end) and parses it into a UnifiedFile
+// embeddedDefaults parses the binary-embedded node-form defaults into a UnifiedFile
 // through the SAME document-routing core (mergeUnifiedDocs → classifyDoc →
-// mergeUnified) that every on-disk charly.yml flows through. The embedded
-// default is just another config that happens to live in the binary, authored
-// in CUE. Parsed fresh on each call so no mutable state is shared across loads.
+// normalizeNodeInto) that every on-disk charly.yml flows through — including the
+// validate-before-execute #NodeDoc gate. The embedded default is just another
+// node-form config that happens to live in the binary. Parsed fresh on each call
+// so no mutable state is shared across loads.
 func embeddedDefaults() (*UnifiedFile, error) {
-	yamlBytes, err := compileCUEToYAML(embeddedCharlyCUE, "charly.cue (embedded)")
-	if err != nil {
-		return nil, fmt.Errorf("compiling embedded charly.cue: %w", err)
-	}
 	var uf UnifiedFile
-	if _, err := mergeUnifiedDocs(&uf, yamlBytes, "charly.cue (embedded)", ""); err != nil {
-		return nil, fmt.Errorf("parsing embedded charly.cue: %w", err)
+	if _, err := mergeUnifiedDocs(&uf, embeddedCharlyDefaults, "charly defaults (embedded)", ""); err != nil {
+		return nil, fmt.Errorf("parsing embedded defaults: %w", err)
 	}
 	return &uf, nil
 }

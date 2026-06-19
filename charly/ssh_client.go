@@ -5,7 +5,7 @@ package main
 // `charly check` commands. Built on `golang.org/x/crypto/ssh`, which is
 // already a transitive dependency.
 //
-// The executor used by `charly deploy add vm:<name>` (in
+// The executor used by `charly bundle add vm:<name>` (in
 // deploy_executor_ssh.go) keeps shelling out to the system `ssh`
 // binary — that path wants to inherit the user's ~/.ssh/config,
 // ControlMaster, agent forwarding, and everything else OpenSSH

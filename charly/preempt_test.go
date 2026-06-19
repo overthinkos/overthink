@@ -20,11 +20,11 @@ type fakeWorld struct {
 	cdiCalls  int                     // EnsureCDI invocations (nvidia-direction flips)
 }
 
-func newTestArbiter(t *testing.T, holders map[string]DeploymentNode, w *fakeWorld) *ResourceArbiter {
+func newTestArbiter(t *testing.T, holders map[string]BundleNode, w *fakeWorld) *ResourceArbiter {
 	t.Helper()
 	return &ResourceArbiter{
 		ledgerPath: filepath.Join(t.TempDir(), "leases.yml"),
-		gather:     func() map[string]DeploymentNode { return holders },
+		gather:     func() map[string]BundleNode { return holders },
 		running:    func(addr holderAddr) bool { return w.running[addr.Name] },
 		stop: func(addr holderAddr) error {
 			if w.stopErr[addr.Name] {
@@ -60,15 +60,15 @@ type stopFailedError struct{}
 
 func (*stopFailedError) Error() string { return "stop failed (test)" }
 
-func holderNode(holds []string, restore string) DeploymentNode {
-	return DeploymentNode{
+func holderNode(holds []string, restore string) BundleNode {
+	return BundleNode{
 		Target:      "pod",
 		Preemptible: &PreemptibleConfig{Holds: holds, Restore: restore},
 	}
 }
 
-func claimantNode(requires []string) DeploymentNode {
-	return DeploymentNode{Target: "pod", RequiresExclusive: requires}
+func claimantNode(requires []string) BundleNode {
+	return BundleNode{Target: "pod", RequiresExclusive: requires}
 }
 
 func opsContain(ops []string, want string) bool {
@@ -78,7 +78,7 @@ func opsContain(ops []string, want string) bool {
 // 1. Acquire stops a running holder of the token; Release restores it.
 func TestArbiter_AcquireStopsHolder_ReleaseRestores(t *testing.T) {
 	w := &fakeWorld{running: map[string]bool{"h1": true, "claimant": true}}
-	holders := map[string]DeploymentNode{"h1": holderNode([]string{"gpu"}, "")}
+	holders := map[string]BundleNode{"h1": holderNode([]string{"gpu"}, "")}
 	a := newTestArbiter(t, holders, w)
 
 	lease, err := a.AcquireExclusive("claimant", claimantNode([]string{"gpu"}), true)
@@ -108,7 +108,7 @@ func TestArbiter_AcquireStopsHolder_ReleaseRestores(t *testing.T) {
 // 2. A holder already stopped before the claim is neither stopped nor restored.
 func TestArbiter_AlreadyStoppedHolder_LeftAlone(t *testing.T) {
 	w := &fakeWorld{running: map[string]bool{"h1": false, "claimant": true}}
-	holders := map[string]DeploymentNode{"h1": holderNode([]string{"gpu"}, "")}
+	holders := map[string]BundleNode{"h1": holderNode([]string{"gpu"}, "")}
 	a := newTestArbiter(t, holders, w)
 
 	lease, err := a.AcquireExclusive("claimant", claimantNode([]string{"gpu"}), true)
@@ -128,7 +128,7 @@ func TestArbiter_AlreadyStoppedHolder_LeftAlone(t *testing.T) {
 // is live.
 func TestArbiter_ConflictRefusesSecondClaimant(t *testing.T) {
 	w := &fakeWorld{running: map[string]bool{"h1": true, "c1": true, "c2": true}}
-	holders := map[string]DeploymentNode{"h1": holderNode([]string{"gpu"}, "")}
+	holders := map[string]BundleNode{"h1": holderNode([]string{"gpu"}, "")}
 	a := newTestArbiter(t, holders, w)
 
 	if _, err := a.AcquireExclusive("c1", claimantNode([]string{"gpu"}), false); err != nil {
@@ -143,7 +143,7 @@ func TestArbiter_ConflictRefusesSecondClaimant(t *testing.T) {
 // 4. A holder whose token does not overlap the claim is untouched.
 func TestArbiter_NonOverlappingTokensIgnored(t *testing.T) {
 	w := &fakeWorld{running: map[string]bool{"h1": true, "claimant": true}}
-	holders := map[string]DeploymentNode{"h1": holderNode([]string{"other"}, "")}
+	holders := map[string]BundleNode{"h1": holderNode([]string{"other"}, "")}
 	a := newTestArbiter(t, holders, w)
 
 	if _, err := a.AcquireExclusive("claimant", claimantNode([]string{"gpu"}), true); err != nil {
@@ -157,7 +157,7 @@ func TestArbiter_NonOverlappingTokensIgnored(t *testing.T) {
 // 5. reconcileStranded restores holders for a lease whose claimant is gone.
 func TestArbiter_ReconcileStrandedRestores(t *testing.T) {
 	w := &fakeWorld{running: map[string]bool{"h1": false, "deadclaimant": false}}
-	a := newTestArbiter(t, map[string]DeploymentNode{}, w)
+	a := newTestArbiter(t, map[string]BundleNode{}, w)
 
 	// Hand-write a stranded lease (claimant not running, holder stopped).
 	led := &preemptLedger{Leases: []preemptLease{{
@@ -193,7 +193,7 @@ func TestArbiter_ReconcileStrandedRestores(t *testing.T) {
 // claimant's acquire garbage-collected the first, still-building bed's lease.
 func TestArbiter_TransientLeaseLiveOwnerNotReconciled(t *testing.T) {
 	w := &fakeWorld{running: map[string]bool{"building-bed": false}} // pod not up yet
-	a := newTestArbiter(t, map[string]DeploymentNode{}, w)
+	a := newTestArbiter(t, map[string]BundleNode{}, w)
 
 	led := &preemptLedger{Leases: []preemptLease{{
 		Claimant:   "building-bed",
@@ -226,7 +226,7 @@ func TestArbiter_TransientLeaseLiveOwnerNotReconciled(t *testing.T) {
 // the owner reads as dead and crash-recovery restores the holder + drops the lease.
 func TestArbiter_TransientLeaseDeadOwnerReconciled(t *testing.T) {
 	w := &fakeWorld{running: map[string]bool{"h1": false, "crashed-bed": true}} // pod orphaned, still "running"
-	a := newTestArbiter(t, map[string]DeploymentNode{}, w)
+	a := newTestArbiter(t, map[string]BundleNode{}, w)
 
 	led := &preemptLedger{Leases: []preemptLease{{
 		Claimant:   "crashed-bed",
@@ -266,8 +266,8 @@ func TestArbiter_TwoConcurrentSharedLeasesCoexist(t *testing.T) {
 		running:   map[string]bool{}, // neither pod running yet (both mid-build)
 		resources: map[string]*ResourceDef{"gpu": {Gpu: &GpuSelector{Vendor: "0x10de"}}},
 	}
-	a := newTestArbiter(t, map[string]DeploymentNode{}, w)
-	node := DeploymentNode{Target: "pod", RequiresShared: []string{"gpu"}}
+	a := newTestArbiter(t, map[string]BundleNode{}, w)
+	node := BundleNode{Target: "pod", RequiresShared: []string{"gpu"}}
 
 	if _, err := a.AcquireShared("bed-a", node, true); err != nil {
 		t.Fatalf("acquire bed-a: %v", err)
@@ -290,7 +290,7 @@ func TestArbiter_TwoConcurrentSharedLeasesCoexist(t *testing.T) {
 // 6a. restore: on-success — a FAILED claim leaves the holder stopped.
 func TestArbiter_RestoreOnSuccess_FailedClaimLeavesStopped(t *testing.T) {
 	w := &fakeWorld{running: map[string]bool{"h1": true, "claimant": true}}
-	holders := map[string]DeploymentNode{"h1": holderNode([]string{"gpu"}, PreemptRestoreSuccess)}
+	holders := map[string]BundleNode{"h1": holderNode([]string{"gpu"}, PreemptRestoreSuccess)}
 	a := newTestArbiter(t, holders, w)
 
 	lease, err := a.AcquireExclusive("claimant", claimantNode([]string{"gpu"}), true)
@@ -311,7 +311,7 @@ func TestArbiter_RestoreOnSuccess_FailedClaimLeavesStopped(t *testing.T) {
 // 6b. restore: always — even a FAILED claim restores the holder.
 func TestArbiter_RestoreAlways_FailedClaimRestores(t *testing.T) {
 	w := &fakeWorld{running: map[string]bool{"h1": true, "claimant": true}}
-	holders := map[string]DeploymentNode{"h1": holderNode([]string{"gpu"}, PreemptRestoreAlways)}
+	holders := map[string]BundleNode{"h1": holderNode([]string{"gpu"}, PreemptRestoreAlways)}
 	a := newTestArbiter(t, holders, w)
 
 	lease, _ := a.AcquireExclusive("claimant", claimantNode([]string{"gpu"}), true)
@@ -326,7 +326,7 @@ func TestArbiter_RestoreAlways_FailedClaimRestores(t *testing.T) {
 // 7. The ledger persists across arbiter instances (durable, crash-recoverable).
 func TestArbiter_LedgerPersistsAcrossInstances(t *testing.T) {
 	w := &fakeWorld{running: map[string]bool{"h1": true, "claimant": true}}
-	holders := map[string]DeploymentNode{"h1": holderNode([]string{"gpu"}, "")}
+	holders := map[string]BundleNode{"h1": holderNode([]string{"gpu"}, "")}
 	a1 := newTestArbiter(t, holders, w)
 	if _, err := a1.AcquireExclusive("claimant", claimantNode([]string{"gpu"}), false); err != nil {
 		t.Fatalf("acquire: %v", err)
@@ -359,7 +359,7 @@ func TestArbiter_LedgerPersistsAcrossInstances(t *testing.T) {
 // 8. A claimant that requires nothing exclusive gets a no-op lease.
 func TestArbiter_NoTokensIsNoop(t *testing.T) {
 	w := &fakeWorld{running: map[string]bool{"h1": true}}
-	holders := map[string]DeploymentNode{"h1": holderNode([]string{"gpu"}, "")}
+	holders := map[string]BundleNode{"h1": holderNode([]string{"gpu"}, "")}
 	a := newTestArbiter(t, holders, w)
 	lease, err := a.AcquireExclusive("claimant", claimantNode(nil), true)
 	if err != nil {
@@ -380,7 +380,7 @@ func TestArbiter_StopFailureRollsBack(t *testing.T) {
 		running: map[string]bool{"h1": true, "h2": true, "claimant": true},
 		stopErr: map[string]bool{"h2": true},
 	}
-	holders := map[string]DeploymentNode{
+	holders := map[string]BundleNode{
 		"h1": holderNode([]string{"gpu"}, ""),
 		"h2": holderNode([]string{"gpu"}, ""),
 	}

@@ -87,7 +87,7 @@ dist/
 # KeePass credential databases (local, not committed)
 *.kdbx
 
-# Containerfile regression snapshot (ephemeral; used during the charly deploy
+# Containerfile regression snapshot (ephemeral; used during the charly bundle
 # refactor to verify byte-identical output after IR lift)
 /.regression-snapshot/
 /.regression-snapshot-checksums.txt

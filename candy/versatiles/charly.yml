@@ -1,52 +1,57 @@
-candy:
-    version: 2026.144.1443
-    name: versatiles
-    description: |
-        VersaTiles CLI (versatiles-rs) + tile server — convert/serve/probe tile containers, serving vector tiles over HTTP on port 8090
-        Installs the versatiles-rs single Rust binary at /usr/local/bin/versatiles
-        (convert / serve / probe / dev for the .versatiles, .pmtiles, .mbtiles and
-        .tar tile-container formats), plus a supervisord-managed wrapper that runs
-        `versatiles serve` on port 8090 (host-mapped 28090). The wrapper always
-        includes the public download.versatiles.org/osm.versatiles source so the
-        service starts cleanly on a fresh deploy before any local shortbread tiles
-        exist, then appends local /workspace/tiles/shortbread/ containers as the OSM
-        DAG produces them. The convert subcommand is symmetric (PMTiles ↔ .versatiles
-        ↔ MBTiles round-trip). Every fact below is observable: the installed binary,
-        the linked convert subcommand, the serve wrapper, the running service, the
-        reachable port, and the HTTP 200 a known OSM tile endpoint returns.
-    require:
-        - supervisord
-    distro:
-        arch:
-            package:
-                # curl + jq pull the GitHub-API release listing dynamically so
-                # the install step picks up whatever versatiles-rs version is
-                # current at build time (mirrors the pmtiles install in
-                # /charly-versa:osm-tools-layer). jq is already pulled by
-                # osm-tools so this is a soft dep; declared here for layer
-                # composability if osm-tools is ever removed.
-                - curl
-                - jq
-        fedora:
-            package:
-                - curl
-                - jq
-    port:
-        - 8090 # versatiles serve HTTP (host-mapped 28090)
-    # VERSATILES_PUBLIC_URL is browser-side — embedded into MapLibre HTML
-    # for the shortbread map cell (which fetches /tiles/<source>/{z}/{x}/{y}
-    # directly from versatiles serve, bypassing the martin path).
-    env_provide:
-        VERSATILES_PUBLIC_URL: "http://127.0.0.1:{{.HostPort 8090}}"
-    service:
-        - name: versatiles
-          exec: /usr/local/bin/versatiles-wrapper.sh
-          restart: always
-          priority: 37
-          enable: true
-          scope: system
-    plan:
-        - run: |
+versatiles:
+    candy:
+        version: 2026.144.1443
+        description: |
+            VersaTiles CLI (versatiles-rs) + tile server — convert/serve/probe tile containers, serving vector tiles over HTTP on port 8090
+            Installs the versatiles-rs single Rust binary at /usr/local/bin/versatiles
+            (convert / serve / probe / dev for the .versatiles, .pmtiles, .mbtiles and
+            .tar tile-container formats), plus a supervisord-managed wrapper that runs
+            `versatiles serve` on port 8090 (host-mapped 28090). The wrapper always
+            includes the public download.versatiles.org/osm.versatiles source so the
+            service starts cleanly on a fresh deploy before any local shortbread tiles
+            exist, then appends local /workspace/tiles/shortbread/ containers as the OSM
+            DAG produces them. The convert subcommand is symmetric (PMTiles ↔ .versatiles
+            ↔ MBTiles round-trip). Every fact below is observable: the installed binary,
+            the linked convert subcommand, the serve wrapper, the running service, the
+            reachable port, and the HTTP 200 a known OSM tile endpoint returns.
+    versatiles-require:
+        require:
+            - supervisord
+    versatiles-distro:
+        distro:
+            arch:
+                package:
+                    # curl + jq pull the GitHub-API release listing dynamically so
+                    # the install step picks up whatever versatiles-rs version is
+                    # current at build time (mirrors the pmtiles install in
+                    # /charly-versa:osm-tools-layer). jq is already pulled by
+                    # osm-tools so this is a soft dep; declared here for layer
+                    # composability if osm-tools is ever removed.
+                    - curl
+                    - jq
+            fedora:
+                package:
+                    - curl
+                    - jq
+    versatiles-port:
+        port:
+            - 8090 # versatiles serve HTTP (host-mapped 28090)
+    versatiles-env_provide:
+        # VERSATILES_PUBLIC_URL is browser-side — embedded into MapLibre HTML
+        # for the shortbread map cell (which fetches /tiles/<source>/{z}/{x}/{y}
+        # directly from versatiles serve, bypassing the martin path).
+        env_provide:
+            VERSATILES_PUBLIC_URL: "http://127.0.0.1:{{.HostPort 8090}}"
+    versatiles-service:
+        service:
+            - name: versatiles
+              exec: /usr/local/bin/versatiles-wrapper.sh
+              restart: always
+              priority: 37
+              enable: true
+              scope: system
+    versatiles-step-0:
+        run: |
             command=set -euo pipefail
             # The release asset name follows the pattern
             # `versatiles-linux-gnu-x86_64.tar.gz` (gnu BEFORE x86_64,
@@ -74,7 +79,7 @@ candy:
             install -m 0755 "$BIN" /usr/local/bin/versatiles
             cd /
             rm -rf "$TMPDIR"
-          command: |
+        command: |
             set -euo pipefail
             # The release asset name follows the pattern
             # `versatiles-linux-gnu-x86_64.tar.gz` (gnu BEFORE x86_64,
@@ -102,12 +107,13 @@ candy:
             install -m 0755 "$BIN" /usr/local/bin/versatiles
             cd /
             rm -rf "$TMPDIR"
-          run_as: root
-        - run: write=/usr/local/bin/versatiles-wrapper.sh
-          write: /usr/local/bin/versatiles-wrapper.sh
-          mode: "0755"
-          run_as: root
-          content: |
+        run_as: root
+    versatiles-step-1:
+        run: write=/usr/local/bin/versatiles-wrapper.sh
+        write: /usr/local/bin/versatiles-wrapper.sh
+        mode: "0755"
+        run_as: root
+        content: |
             #!/usr/bin/env bash
             set -euo pipefail
             DIR="/workspace/tiles/shortbread"
@@ -130,38 +136,46 @@ candy:
             done
             echo "versatiles-wrapper: starting versatiles serve with ${#ARGS[@]} source(s)" >&2
             exec /usr/local/bin/versatiles serve --port 8090 "${ARGS[@]}"
-        - check: the versatiles binary is installed and executable at /usr/local/bin/versatiles
-          file: /usr/local/bin/versatiles
-          exists: true
-          mode: "0755"
-        - check: the installed binary reports its version
-          command: versatiles --version
-          exit_status: 0
-        - check: the convert subcommand is compiled into the binary (not a stripped-down build)
-          command: versatiles convert --help
-          exit_status: 0
-        - check: the supervisord serve wrapper is installed and executable at /usr/local/bin/versatiles-wrapper.sh
-          file: /usr/local/bin/versatiles-wrapper.sh
-          exists: true
-          mode: "0755"
-        - check: the versatiles service is running under the init system
-          service: versatiles
-          running: true
-          context:
+    versatiles-step-2:
+        check: the versatiles binary is installed and executable at /usr/local/bin/versatiles
+        file: /usr/local/bin/versatiles
+        exists: true
+        mode: "0755"
+    versatiles-step-3:
+        check: the installed binary reports its version
+        command: versatiles --version
+        exit_status: 0
+    versatiles-step-4:
+        check: the convert subcommand is compiled into the binary (not a stripped-down build)
+        command: versatiles convert --help
+        exit_status: 0
+    versatiles-step-5:
+        check: the supervisord serve wrapper is installed and executable at /usr/local/bin/versatiles-wrapper.sh
+        file: /usr/local/bin/versatiles-wrapper.sh
+        exists: true
+        mode: "0755"
+    versatiles-step-6:
+        check: the versatiles service is running under the init system
+        service: versatiles
+        running: true
+        context:
             - runtime
-        - check: the serve port is reachable on the host loopback
-          addr: "127.0.0.1:${HOST_PORT:8090}"
-          reachable: true
-          timeout: 10s
-          context:
+    versatiles-step-7:
+        check: the serve port is reachable on the host loopback
+        addr: "127.0.0.1:${HOST_PORT:8090}"
+        reachable: true
+        timeout: 10s
+        context:
             - runtime
-        - check: a known OSM tile endpoint returns HTTP 200
-          http: "http://127.0.0.1:${HOST_PORT:8090}/tiles/osm/0/0/0.pbf"
-          status: 200
-          timeout: 10s
-          context:
+    versatiles-step-8:
+        check: a known OSM tile endpoint returns HTTP 200
+        http: "http://127.0.0.1:${HOST_PORT:8090}/tiles/osm/0/0/0.pbf"
+        status: 200
+        timeout: 10s
+        context:
             - runtime
-        - check: |
+    versatiles-convert-roundtrip:
+        check: |
             command=set -euo pipefail
             SRC=/workspace/tiles/pmtiles/monaco.pmtiles
             # If the OSM DAG hasn't run yet on this deploy, skip the
@@ -181,9 +195,9 @@ candy:
             # Probe both ends to verify they're readable + parseable.
             versatiles probe "$SRC" >/dev/null
             versatiles probe "$TMP/monaco-roundtrip.pmtiles" >/dev/null
-          id: versatiles-convert-roundtrip
-          in_container: true
-          command: |
+        id: versatiles-convert-roundtrip
+        in_container: true
+        command: |
             set -euo pipefail
             SRC=/workspace/tiles/pmtiles/monaco.pmtiles
             # If the OSM DAG hasn't run yet on this deploy, skip the
@@ -203,6 +217,6 @@ candy:
             # Probe both ends to verify they're readable + parseable.
             versatiles probe "$SRC" >/dev/null
             versatiles probe "$TMP/monaco-roundtrip.pmtiles" >/dev/null
-          exit_status: 0
-          context:
+        exit_status: 0
+        context:
             - runtime

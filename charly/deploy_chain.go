@@ -11,7 +11,7 @@ import (
 //
 // Pre-cutover (2026-04), four call sites built executor chains (or partial
 // chains) independently:
-//   - charly deploy add  → deriveChildExecutorForPath in deploy_add_cmd.go
+//   - charly bundle add  → deriveChildExecutorForPath in deploy_add_cmd.go
 //   - charly check live <name> → ad-hoc executor construction in check_cmd.go
 //   - charly check live parent.child → resolveNestedNode + a *flat* VmTestExecutor
 //                            (silent single-hop bug — leaf tests ran on the
@@ -27,7 +27,7 @@ import (
 
 // ResolveDeployChain walks `dotted` through `roots` (typically the merged
 // deployment tree from resolveTreeRoot) and returns the leaf
-// DeploymentNode + a composed DeployExecutor chain that reaches it from
+// BundleNode + a composed DeployExecutor chain that reaches it from
 // `root`.
 //
 // `root` is typically &ShellExecutor{} (the operator's host, or
@@ -52,7 +52,7 @@ import (
 //
 // Returns clear errors with available-name hints when a segment fails
 // to resolve.
-func ResolveDeployChain(roots map[string]DeploymentNode, dotted string, root DeployExecutor) (*DeploymentNode, DeployExecutor, error) {
+func ResolveDeployChain(roots map[string]BundleNode, dotted string, root DeployExecutor) (*BundleNode, DeployExecutor, error) {
 	if dotted == "" {
 		return nil, nil, fmt.Errorf("ResolveDeployChain: empty path")
 	}
@@ -80,13 +80,13 @@ func ResolveDeployChain(roots map[string]DeploymentNode, dotted string, root Dep
 	// Walk remaining segments, stacking one hop per segment.
 	for i, seg := range parts[1:] {
 		traversed := strings.Join(parts[:i+1], ".")
-		if len(current.Nested) == 0 {
+		if len(current.Children) == 0 {
 			return nil, nil, fmt.Errorf("path %q: %q has no nested children", dotted, traversed)
 		}
-		child, ok := current.Nested[seg]
+		child, ok := current.Children[seg]
 		if !ok || child == nil {
 			return nil, nil, fmt.Errorf("path %q: nested child %q not found under %q%s",
-				dotted, seg, traversed, didYouMeanNestedChild(seg, current.Nested))
+				dotted, seg, traversed, didYouMeanNestedChild(seg, current.Children))
 		}
 		current = child
 		// Container names flatten the FULL path so far (parts[:i+2]); seg is the
@@ -104,7 +104,7 @@ func ResolveDeployChain(roots map[string]DeploymentNode, dotted string, root Dep
 
 // appendHopForNode is the root-segment variant — uses `name` for the
 // container target (no flattening needed at the root).
-func appendHopForNode(chain DeployExecutor, node *DeploymentNode, name string) (DeployExecutor, error) {
+func appendHopForNode(chain DeployExecutor, node *BundleNode, name string) (DeployExecutor, error) {
 	return appendHopForFlatPath(chain, node, name, name)
 }
 
@@ -129,7 +129,7 @@ func chainEntersVMGuest(chain DeployExecutor) bool {
 // underscores — the host-side container name suffix; leaf is the final path
 // segment (the node's own key), used for a pod deployed STANDALONE inside a VM
 // guest (which has no parent-path concept — see the pod case).
-func appendHopForFlatPath(chain DeployExecutor, node *DeploymentNode, flatPath, leaf string) (DeployExecutor, error) {
+func appendHopForFlatPath(chain DeployExecutor, node *BundleNode, flatPath, leaf string) (DeployExecutor, error) {
 	switch classifyTarget(node) {
 	case "host", "local", "android":
 		// Host/local + android nodes share the parent venue: a local node's
@@ -143,7 +143,7 @@ func appendHopForFlatPath(chain DeployExecutor, node *DeploymentNode, flatPath, 
 		// Container name convention: "charly-<flat-path>" — matches quadlet
 		// emission, which deploys a HOST-side nested pod as "charly-<seg1>_<seg2>".
 		// EXCEPTION — a pod nested inside a VM guest: it is deployed by the
-		// guest's OWN `charly deploy from-box <ref> <childKey>`
+		// guest's OWN `charly bundle from-box <ref> <childKey>`
 		// (deployNestedPodsInGuest), so the in-guest container is "charly-<childKey>"
 		// (the leaf). The guest never sees the host-side bed/VM-entity prefix, so
 		// once the chain has crossed into a VM guest the podman-exec hop must
@@ -198,7 +198,7 @@ func appendHopForFlatPath(chain DeployExecutor, node *DeploymentNode, flatPath, 
 // rootExecutorForDeployNode selects the ROOT DeployExecutor for a
 // `target: local` deployment node from its `host:` field — the single source
 // of truth for "where does a local deploy's work run?", shared by
-// `charly deploy add` (LocalUnifiedTarget.Add) and `charly check live`
+// `charly bundle add` (LocalUnifiedTarget.Add) and `charly check live`
 // (runLocalCheck) so neither re-implements the selection (R3):
 //
 //	host: ""  / "local"        → ShellExecutor{} (this machine, direct shell)
@@ -208,7 +208,7 @@ func appendHopForFlatPath(chain DeployExecutor, node *DeploymentNode, flatPath, 
 // It does NOT handle the nested-inside-a-parent case (opts.ParentExec); that
 // stays in LocalUnifiedTarget.Add because it's deploy-execution-specific.
 // Returns ShellExecutor{} for a nil node.
-func rootExecutorForDeployNode(node *DeploymentNode) (DeployExecutor, error) {
+func rootExecutorForDeployNode(node *BundleNode) (DeployExecutor, error) {
 	if node == nil {
 		return ShellExecutor{}, nil
 	}
@@ -274,7 +274,7 @@ func ImageChain(engine, imageRef string) DeployExecutor {
 // didYouMeanDeploy returns a "; available deployments: a, b, c" hint
 // listing top-level deploy names sorted alphabetically. Empty when no
 // candidates exist.
-func didYouMeanDeploy(missed string, roots map[string]DeploymentNode) string {
+func didYouMeanDeploy(missed string, roots map[string]BundleNode) string {
 	_ = missed // reserved for future fuzzy-matching
 	if len(roots) == 0 {
 		return ""
@@ -292,7 +292,7 @@ func didYouMeanDeploy(missed string, roots map[string]DeploymentNode) string {
 
 // didYouMeanNestedChild renders a hint listing nested child keys under
 // a given node. Empty when the parent has no nested children.
-func didYouMeanNestedChild(missed string, nested map[string]*DeploymentNode) string {
+func didYouMeanNestedChild(missed string, nested map[string]*BundleNode) string {
 	_ = missed
 	if len(nested) == 0 {
 		return ""

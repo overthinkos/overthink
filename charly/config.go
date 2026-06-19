@@ -125,7 +125,7 @@ type BoxConfig struct {
 	Produce    []string      `yaml:"produce,omitempty" json:"produce,omitempty"`         // what this builder image can produce (pixi, npm, cargo, aur). Renamed from `builds:` to avoid yaml key collision with the `build:` BuildFormats above (field-singular cutover, 2026-05).
 	// Schema v4: DNS / AcmeEmail / Tunnel / Engine removed — they are
 	// deployment choices with no declaration meaning. They live on
-	// DeploymentNode and flow through to consumers via BoxMetadata.
+	// BundleNode and flow through to consumers via BoxMetadata.
 	Env       []string        `yaml:"env,omitempty" json:"env,omitempty"`               // runtime env vars (KEY=VALUE) — declaration of vars the image consumes
 	EnvFile   string          `yaml:"env_file,omitempty" json:"env_file,omitempty"`     // path to env file for runtime injection
 	Security  *SecurityConfig `yaml:"security,omitempty" json:"security,omitempty"`     // container security options — declaration of required capabilities
@@ -281,7 +281,7 @@ func (img *ResolvedBox) SupportsBuild(format string) bool {
 // LoadConfig reads charly.yml and returns the Config (defaults + images)
 // projection. Mode purity preserved: this reads the PROJECT charly.yml only and
 // never merges the per-host charly.yml overlay. Deploy-mode commands must call
-// LoadDeployConfig + MergeDeployOntoMetadata explicitly.
+// LoadBundleConfig + MergeDeployOntoMetadata explicitly.
 func LoadConfig(dir string) (*Config, error) {
 	return LoadConfigRaw(dir)
 }
@@ -344,7 +344,7 @@ func (c *Config) ResolveBox(name string, calverTag string, dir string, opts Reso
 	// owns it, where its base:/builder: refs are relative. This mirrors
 	// resolveBoxRef's descent (namespace.go) so that EVERY ResolveBox
 	// caller — `charly box inspect/generate/merge/pull/validate`,
-	// ensure-image's build-fallback, `charly deploy add`/`charly update` — is
+	// ensure-image's build-fallback, `charly bundle add`/`charly update` — is
 	// namespace-aware through this single chokepoint instead of each
 	// re-implementing (or omitting) the descent. Additive: a bare name
 	// takes the flat tail below exactly as before, so existing behaviour
@@ -432,7 +432,7 @@ func (c *Config) ResolveBox(name string, calverTag string, dir string, opts Reso
 
 	// Builder resolution flows through the ONE canonical method so it can't
 	// diverge across commands (build/generate/inspect via ResolveBox,
-	// `charly deploy add`'s synthetic host/VM image, and the remote-ref fetch walk
+	// `charly bundle add`'s synthetic host/VM image, and the remote-ref fetch walk
 	// via effectiveBuilderForBox all call resolveEffectiveBuilder).
 	resolved.Builder = c.resolveEffectiveBuilder(name, resolved.Distro, resolved.Base, resolved.IsExternalBase, img.Builder)
 
@@ -730,7 +730,7 @@ func resolveIntPtr(value, fallback *int, defaultVal int) int {
 // from a root-namespace image whose bare refs resolve HERE.
 //
 // EVERY builder-consuming path calls this — ResolveBox (box: images), the
-// synthetic host/VM image in `charly deploy add` (deploy_add_cmd.go), and the
+// synthetic host/VM image in `charly bundle add` (deploy_add_cmd.go), and the
 // remote-ref FETCH walk (effectiveBuilderForBox → CollectRemoteRefsOpts) — so
 // the resolution can never drift between commands and the fetch set stays in
 // lockstep with the resolve set.

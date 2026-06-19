@@ -13,9 +13,11 @@ import (
 // erroring out. Plan-unify re-keys this from scenario- to step-level.
 func TestRunCheckLive_PureCycleEmitsFailVerdictsNoPropagation(t *testing.T) {
 	// a depends_on b, b depends_on a — pure cycle (id-keyed).
+	// venue is loader-derived (yaml:"-") from tree position; this in-package test
+	// sets it directly to stand in for the flatten pass.
 	plan := []Step{
-		{Check: "a", Op: Op{ID: "a", Pod: "test-pod", DependsOn: []string{"b"}, File: "/a"}},
-		{Check: "b", Op: Op{ID: "b", Pod: "test-pod", DependsOn: []string{"a"}, File: "/b"}},
+		{Check: "a", Op: Op{ID: "a", venue: "test-pod", DependsOn: []string{"b"}, File: "/a"}},
+		{Check: "b", Op: Op{ID: "b", venue: "test-pod", DependsOn: []string{"a"}, File: "/b"}},
 	}
 	res, err := RunCheckLive(context.Background(), "", "test-score", plan, RunScoringOpts{})
 	if err != nil {

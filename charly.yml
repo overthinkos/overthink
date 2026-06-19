@@ -1,4 +1,4 @@
-version: 2026.165.1048
+version: 2026.169.0004
 # Canonical repo identity. After the 2026-06 box inversion main imports the three
 # active distro submodules (arch / cachyos / fedora) ONE-DIRECTIONALLY to reference
 # their relocated boxes; the submodules no longer import main as a namespace (they
@@ -85,6 +85,9 @@ vm:
                 - "echo '10.89.0.1 charly-web' >> /etc/hosts"
                 - "systemctl enable --now qemu-guest-agent"
                 - "for c in 21 33 46 82 124 196 208 220 1 5; do printf '\\033[48;5;%dm                    \\033[0m\\n' $c >> /dev/tty1; done || true"
+vm-libvirt:
+    vm: {}
+    vm-libvirt-libvirt:
         libvirt:
             devices:
                 channels:
@@ -99,7 +102,8 @@ vm:
                     - model: virtio
                       heads: 1
                       accel3d: false
-    k3s-vm:
+k3s-vm:
+    vm:
         source:
             kind: cloud_image
             url: https://fastly.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2
@@ -134,6 +138,7 @@ vm:
                 - sudo
             charly_install:
                 strategy: auto
+    k3s-vm-libvirt:
         libvirt:
             devices:
                 rng:
@@ -141,10 +146,11 @@ vm:
                       backend: /dev/urandom
                 memballoon:
                     model: virtio
-    # Arch Cloud VM backing check-charly-vm — the pac localpkg deploy witness. Plain
-    # disposable VM (no port forwards / k3s); charly is installed onto it by the bed's
-    # localpkg deploy, so the VM itself carries no opencharly layers.
-    charly-vm:
+# Arch Cloud VM backing check-charly-vm — the pac localpkg deploy witness. Plain
+# disposable VM (no port forwards / k3s); charly is installed onto it by the bed's
+# localpkg deploy, so the VM itself carries no opencharly layers.
+charly-vm:
+    vm:
         source:
             kind: cloud_image
             url: https://fastly.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2
@@ -164,10 +170,12 @@ vm:
             timezone: UTC
             package:
                 - sudo
-pod: {}
-k8s: {vm-k3s-vm: {box: "", kubeconfig_context: vm-k3s-vm}}
-agent:
-    claude:
+vm-k3s-vm:
+    k8s:
+        box: ""
+        kubeconfig_context: vm-k3s-vm
+claude:
+    agent:
         description: Anthropic Claude Code CLI — autonomous coding agent.
         # --verbose + --output-format stream-json emit one JSON object per
         # message in the agent loop (system / assistant / user / tool_use /
@@ -181,13 +189,15 @@ agent:
         version_command: [claude, --version]
         credential:
             - {src: ~/.claude/.credentials.json, dst: ~/.claude/.credentials.json}
-    codex:
+codex:
+    agent:
         description: OpenAI Codex CLI — coding agent.
         command: [codex, exec, "${PROMPT}"]
         version_command: [codex, --version]
         credential:
             - {src: ~/.config/codex/auth.json, dst: ~/.config/codex/auth.json, optional: true}
-    gemini:
+gemini:
+    agent:
         description: Google Gemini CLI.
         command: [gemini, chat, "${PROMPT}"]
         version_command: [gemini, --version]
@@ -196,8 +206,8 @@ agent:
 # =============================================================================
 # kind: check — disposable, zero-operator-side-effect R10 test beds.
 # =============================================================================
-# Each entry is a disposable deployment (a DeploymentNode), folded into the
-# Deploy map at load time so every deploy verb resolves it by name. Run the
+# Each entry is a disposable deployment (a BundleNode), folded into the
+# Bundle map at load time so every deploy verb resolves it by name. Run the
 # full R10 acceptance sequence on any of them — build → check box → deploy →
 # check live → fresh update (R10 gate) → tear down — with:
 #
@@ -234,220 +244,222 @@ agent:
 # qcow2; check-local → a disposable scratch dir. No test writes to ~/.local/bin,
 # ~/.config/opencharly, /etc, /usr, or any operator-side directory.
 # =============================================================================
-check:
-    # check-k3s-vm — disposable libvirt VM running k3s-server. Kubeconfig is
-    # pulled back for host-side k8s: probes (all 13 methods) via the forwarded
-    # :6443. A VM (native kernel + cgroup tree) sidesteps the rootless-podman
-    # cpuset-delegation blocker that makes a pod-hosted k3s impossible.
-    # References the vm: entity `k3s-vm` (defined below).
-    check-k3s-vm:
-        target: vm
+# check-k3s-vm — disposable libvirt VM running k3s-server. Kubeconfig is
+# pulled back for host-side k8s: probes (all 13 methods) via the forwarded
+# :6443. A VM (native kernel + cgroup tree) sidesteps the rootless-podman
+# cpuset-delegation blocker that makes a pod-hosted k3s impossible.
+# References the vm: entity `k3s-vm` (defined below).
+check-k3s-vm:
+    bundle:
         vm: k3s-vm
         disposable: true
         lifecycle: dev
         description: >-
-            Sole deterministic proof of the VmDeployTarget->k8s end-to-end path
-            and the full 13-method k8s probe surface against a real k3s control
-            plane, and the R10 for ssh.port_auto. A disposable libvirt Arch
-            cloud VM (host 16443->guest 6443 forward, charly installed via
-            cloud-init) overlays k3s-server over SSH, then runs guest
-            command/process/port/file probes plus the full k8s suite
-            (nodes/wait-nodes/pods/wait-ready/addons/ingressclass/storageclass/raw/service)
-            against cluster vm-k3s-vm, an agent-check matching probe, and a
-            host-side charly status --json (status-shows-vm).
+            Sole deterministic proof of the VmDeployTarget->k8s end-to-end path and the full 13-method k8s probe surface against a real k3s control plane, and the R10 for ssh.port_auto. A disposable libvirt Arch cloud VM (host 16443->guest 6443 forward, charly installed via cloud-init) overlays k3s-server over SSH, then runs guest command/process/port/file probes plus the full k8s suite (nodes/wait-nodes/pods/wait-ready/addons/ingressclass/storageclass/raw/service) against cluster vm-k3s-vm, an agent-check matching probe, and a host-side charly status --json (status-shows-vm).
+    check-k3s-vm-add_candy:
         add_candy:
             - k3s-server
+    check-k3s-vm-env:
         env:
             - K3S_SERVER_HOSTNAME=127.0.0.1
             # Host port 16443 forwards into the guest's :6443; the retrieved
             # kubeconfig's server: line is rewritten to this URL.
             - K3S_KUBECONFIG_SERVER=https://127.0.0.1:16443
+    check-k3s-vm-install_opts:
         install_opts:
             with_service: true
             allow_repo_changes: true # pacman sync / repo key import
             skip_incompatible: true # skip rpm:/deb:-only layer sections
             verify: true
-        plan:
-            - check: command=id
-              id: kv-guest-identity
-              command: id
-              stdout: {contains: "uid=1000(arch)"}
-              context: [runtime]
-            - check: command=cat /etc/os-release
-              id: kv-guest-os-release
-              command: "cat /etc/os-release"
-              stdout: {contains: "ID=arch"}
-              context: [runtime]
-            - check: process=k3s-server
-              id: kv-k3s-process
-              process: "k3s-server"
-              running: true
-              context: [runtime]
-            - check: port=6443
-              id: kv-port-6443-listening
-              port: 6443
-              listening: true
-              context: [runtime]
-            - check: file=/etc/rancher/k3s/k3s.yaml
-              id: kv-kubeconfig-file
-              file: /etc/rancher/k3s/k3s.yaml
-              exists: true
-              context: [runtime]
-            - check: k8s=nodes
-              id: kv-k8s-nodes
-              k8s: nodes
-              cluster: "vm-k3s-vm"
-              context: [runtime]
-            - check: k8s=wait-nodes
-              id: kv-k8s-wait-nodes
-              k8s: "wait-nodes"
-              cluster: "vm-k3s-vm"
-              k8s_count: 1
-              timeout: "300s"
-              context: [runtime]
-            - check: k8s=pods
-              id: kv-k8s-pods
-              k8s: pods
-              cluster: "vm-k3s-vm"
-              namespace: kube-system
-              context: [runtime]
-            - check: k8s=wait-ready
-              id: kv-k8s-wait-ready
-              k8s: "wait-ready"
-              cluster: "vm-k3s-vm"
-              k8s_kind: Deployment
-              namespace: kube-system
-              name: coredns
-              timeout: "180s"
-              context: [runtime]
-            - check: k8s=addons
-              id: kv-k8s-addons
-              k8s: addons
-              cluster: "vm-k3s-vm"
-              context: [runtime]
-            - check: k8s=ingressclass
-              id: kv-k8s-ingressclass-traefik
-              k8s: ingressclass
-              cluster: "vm-k3s-vm"
-              stdout: {contains: "traefik"}
-              context: [runtime]
-            - check: k8s=storageclass
-              id: kv-k8s-storageclass-localpath
-              k8s: storageclass
-              cluster: "vm-k3s-vm"
-              stdout: {contains: "local-path"}
-              context: [runtime]
-            - check: k8s=raw
-              id: kv-k8s-raw-version
-              k8s: raw
-              cluster: "vm-k3s-vm"
-              text: "version -o json"
-              context: [runtime]
-            - check: k8s=service
-              id: kv-k8s-service-kubernetes
-              k8s: service
-              cluster: "vm-k3s-vm"
-              namespace: default
-              name: kubernetes
-              context: [runtime]
-            - check: command=/tmp/charly-build/charly version || charly version
-              id: kv-charly-version
-              command: "/tmp/charly-build/charly version || charly version"
-              stdout: {matches: "[0-9]{4}\\.[0-9]+"}
-              in_container: false
-              context: [runtime]
-            - agent-check: agent-check
-              id: kv-matching
-              matching: "check-k3s-vm up"
-              contains: {contains: "k3s"}
-              context: [runtime]
-            - check: command=charly status --json
-              id: status-shows-vm
-              command: charly status --json
-              in_container: false
-              stdout:
-                - contains: '"kind": "vm"'
-                - contains: k3s-vm
-              context:
-                - runtime
-    check-local:
-        target: local
-        local: check-local
+    kv-guest-identity:
+        check: command=id
+        id: kv-guest-identity
+        command: id
+        stdout: {contains: "uid=1000(arch)"}
+        context: [runtime]
+    kv-guest-os-release:
+        check: command=cat /etc/os-release
+        id: kv-guest-os-release
+        command: "cat /etc/os-release"
+        stdout: {contains: "ID=arch"}
+        context: [runtime]
+    kv-k3s-process:
+        check: process=k3s-server
+        id: kv-k3s-process
+        process: "k3s-server"
+        running: true
+        context: [runtime]
+    kv-port-6443-listening:
+        check: port=6443
+        id: kv-port-6443-listening
+        port: 6443
+        listening: true
+        context: [runtime]
+    kv-kubeconfig-file:
+        check: file=/etc/rancher/k3s/k3s.yaml
+        id: kv-kubeconfig-file
+        file: /etc/rancher/k3s/k3s.yaml
+        exists: true
+        context: [runtime]
+    kv-k8s-nodes:
+        check: k8s=nodes
+        id: kv-k8s-nodes
+        k8s: nodes
+        cluster: "vm-k3s-vm"
+        context: [runtime]
+    kv-k8s-wait-nodes:
+        check: k8s=wait-nodes
+        id: kv-k8s-wait-nodes
+        k8s: "wait-nodes"
+        cluster: "vm-k3s-vm"
+        k8s_count: 1
+        timeout: "300s"
+        context: [runtime]
+    kv-k8s-pods:
+        check: k8s=pods
+        id: kv-k8s-pods
+        k8s: pods
+        cluster: "vm-k3s-vm"
+        namespace: kube-system
+        context: [runtime]
+    kv-k8s-wait-ready:
+        check: k8s=wait-ready
+        id: kv-k8s-wait-ready
+        k8s: "wait-ready"
+        cluster: "vm-k3s-vm"
+        k8s_kind: Deployment
+        namespace: kube-system
+        name: coredns
+        timeout: "180s"
+        context: [runtime]
+    kv-k8s-addons:
+        check: k8s=addons
+        id: kv-k8s-addons
+        k8s: addons
+        cluster: "vm-k3s-vm"
+        context: [runtime]
+    kv-k8s-ingressclass-traefik:
+        check: k8s=ingressclass
+        id: kv-k8s-ingressclass-traefik
+        k8s: ingressclass
+        cluster: "vm-k3s-vm"
+        stdout: {contains: "traefik"}
+        context: [runtime]
+    kv-k8s-storageclass-localpath:
+        check: k8s=storageclass
+        id: kv-k8s-storageclass-localpath
+        k8s: storageclass
+        cluster: "vm-k3s-vm"
+        stdout: {contains: "local-path"}
+        context: [runtime]
+    kv-k8s-raw-version:
+        check: k8s=raw
+        id: kv-k8s-raw-version
+        k8s: raw
+        cluster: "vm-k3s-vm"
+        text: "version -o json"
+        context: [runtime]
+    kv-k8s-service-kubernetes:
+        check: k8s=service
+        id: kv-k8s-service-kubernetes
+        k8s: service
+        cluster: "vm-k3s-vm"
+        namespace: default
+        name: kubernetes
+        context: [runtime]
+    kv-charly-version:
+        check: command=/tmp/charly-build/charly version || charly version
+        id: kv-charly-version
+        command: "/tmp/charly-build/charly version || charly version"
+        stdout: {matches: "[0-9]{4}\\.[0-9]+"}
+        in_container: false
+        context: [runtime]
+    kv-matching:
+        agent-check: agent-check
+        id: kv-matching
+        matching: "check-k3s-vm up"
+        contains: {contains: "k3s"}
+        context: [runtime]
+    status-shows-vm:
+        check: command=charly status --json
+        id: status-shows-vm
+        command: charly status --json
+        in_container: false
+        stdout:
+            - contains: '"kind": "vm"'
+            - contains: k3s-vm
+        context:
+            - runtime
+check-local:
+    bundle:
+        local: check-local-app
         host: local
         disposable: true
         lifecycle: dev
         description: >-
-            Sole proof of the kind:local layer-application path via ShellExecutor
-            + HostDeployTarget, and the fastest bed. Applies check-local-layer to
-            the operator host (host: local), dropping /etc/check-local-marker,
-            then runs host-side command/file probes plus charly status --json
-            asserting kind:local + source:ledger (status-shows-local).
-        plan:
-            - check: command=charly status --json
-              id: status-shows-local
-              command: charly status --json
-              in_container: false
-              stdout:
-                # local deploy-ids are content hashes (not the bed name), so assert
-                # the substrate renders via the kind discriminator + ledger source.
-                - contains: '"kind": "local"'
-                - contains: '"source": "ledger"'
-              context:
-                - runtime
-    # pac localpkg AUTO-RESOLVE witness against the LOCAL charly candy (no @github):
-    # deploys candy/charly to a disposable Arch Cloud VM, where the layer's localpkg
-    # builds the opencharly-git package from pkg/arch (makepkg on the host) and
-    # `pacman -U`'s it onto the guest — pacman -U AUTO-RESOLVES the mandatory repo
-    # deps. This is main's own live proof of the localpkg DEPLOY path (the rpm/deb
-    # legs are proven by the fedora/debian/ubuntu submodule VM beds).
-    check-charly-vm:
-        target: vm
+            Sole proof of the kind:local layer-application path via ShellExecutor + HostDeployTarget, and the fastest bed. Applies check-local-layer to the operator host (host: local), dropping /etc/check-local-marker, then runs host-side command/file probes plus charly status --json asserting kind:local + source:ledger (status-shows-local).
+    status-shows-local:
+        check: command=charly status --json
+        id: status-shows-local
+        command: charly status --json
+        in_container: false
+        stdout:
+            # local deploy-ids are content hashes (not the bed name), so assert
+            # the substrate renders via the kind discriminator + ledger source.
+            - contains: '"kind": "local"'
+            - contains: '"source": "ledger"'
+        context:
+            - runtime
+# pac localpkg AUTO-RESOLVE witness against the LOCAL charly candy (no @github):
+# deploys candy/charly to a disposable Arch Cloud VM, where the layer's localpkg
+# builds the opencharly-git package from pkg/arch (makepkg on the host) and
+# `pacman -U`'s it onto the guest — pacman -U AUTO-RESOLVES the mandatory repo
+# deps. This is main's own live proof of the localpkg DEPLOY path (the rpm/deb
+# legs are proven by the fedora/debian/ubuntu submodule VM beds).
+check-charly-vm:
+    bundle:
         vm: charly-vm
         disposable: true
         lifecycle: dev
         description: >-
-            Sole proof of the pac localpkg DEPLOY auto-resolve path on Arch —
-            opencharly-git built via makepkg and installed with pacman -U
-            auto-resolving the mandatory repo deps. A disposable libvirt Arch
-            cloud VM (ssh.port_auto) overlays the LOCAL candy/charly whose
-            localpkg builds opencharly-git on the host and pacman -U's it into
-            the guest; one command probe asserts
-            opencharly-git/podman/libvirt/tailscale/gocryptfs present, charly
-            resolves to /usr/bin/charly, and charly version runs
-            (LOCALPKG-PAC-AUTORESOLVE-OK).
+            Sole proof of the pac localpkg DEPLOY auto-resolve path on Arch — opencharly-git built via makepkg and installed with pacman -U auto-resolving the mandatory repo deps. A disposable libvirt Arch cloud VM (ssh.port_auto) overlays the LOCAL candy/charly whose localpkg builds opencharly-git on the host and pacman -U's it into the guest; one command probe asserts opencharly-git/podman/libvirt/tailscale/gocryptfs present, charly resolves to /usr/bin/charly, and charly version runs (LOCALPKG-PAC-AUTORESOLVE-OK).
+    check-charly-vm-add_candy:
         add_candy:
             - charly
+    check-charly-vm-install_opts:
         install_opts:
             allow_repo_changes: true
             allow_root_tasks: true
-        plan:
-            - check: |
-                command=pacman -Q opencharly-git >/dev/null 2>&1 &&
-                pacman -Q podman >/dev/null 2>&1 &&
-                pacman -Q libvirt >/dev/null 2>&1 &&
-                pacman -Q tailscale >/dev/null 2>&1 &&
-                pacman -Q gocryptfs >/dev/null 2>&1 &&
-                test "$(command -v charly)" -ef /usr/bin/charly &&
-                charly version &&
-                echo LOCALPKG-PAC-AUTORESOLVE-OK
-              id: localpkg-pac-autoresolve
-              description: charly installed as the opencharly-git pacman package via localpkg, mandatory repo deps auto-resolved by pacman -U
-              command: |
-                pacman -Q opencharly-git >/dev/null 2>&1 &&
-                pacman -Q podman >/dev/null 2>&1 &&
-                pacman -Q libvirt >/dev/null 2>&1 &&
-                pacman -Q tailscale >/dev/null 2>&1 &&
-                pacman -Q gocryptfs >/dev/null 2>&1 &&
-                test "$(command -v charly)" -ef /usr/bin/charly &&
-                charly version &&
-                echo LOCALPKG-PAC-AUTORESOLVE-OK
-              stdout:
-                - contains: LOCALPKG-PAC-AUTORESOLVE-OK
-              exit_status: 0
-              context:
-                - runtime
-    charly-cli:
+    localpkg-pac-autoresolve:
+        check: |
+            command=pacman -Q opencharly-git >/dev/null 2>&1 &&
+            pacman -Q podman >/dev/null 2>&1 &&
+            pacman -Q libvirt >/dev/null 2>&1 &&
+            pacman -Q tailscale >/dev/null 2>&1 &&
+            pacman -Q gocryptfs >/dev/null 2>&1 &&
+            test "$(command -v charly)" -ef /usr/bin/charly &&
+            charly version &&
+            echo LOCALPKG-PAC-AUTORESOLVE-OK
+        id: localpkg-pac-autoresolve
+        description: charly installed as the opencharly-git pacman package via localpkg, mandatory repo deps auto-resolved by pacman -U
+        command: |
+            pacman -Q opencharly-git >/dev/null 2>&1 &&
+            pacman -Q podman >/dev/null 2>&1 &&
+            pacman -Q libvirt >/dev/null 2>&1 &&
+            pacman -Q tailscale >/dev/null 2>&1 &&
+            pacman -Q gocryptfs >/dev/null 2>&1 &&
+            test "$(command -v charly)" -ef /usr/bin/charly &&
+            charly version &&
+            echo LOCALPKG-PAC-AUTORESOLVE-OK
+        stdout:
+            - contains: LOCALPKG-PAC-AUTORESOLVE-OK
+        exit_status: 0
+        context:
+            - runtime
+charly-cli:
+    bundle:
         description: AI check — an agent operates the charly management command surface (build → deploy → status) end-to-end.
+    charly-cli-iterate:
         iterate:
             sandbox: check-sandbox
             agent: [claude]
@@ -462,7 +474,7 @@ check:
                 == Bed purpose ==
                 This bed proves an agent can OPERATE the charly management command
                 surface end-to-end. Use `charly box build os` to build the `os` image,
-                then `charly deploy add os os` (or `charly start os`) to bring it up as a
+                then `charly bundle add os os` (or `charly start os`) to bring it up as a
                 running pod, and `charly status` to confirm it. The bed's `check:` steps
                 assert the `os` pod is running with its predetermined marker file —
                 satisfy them by driving the real charly commands, not by hand-crafting
@@ -471,17 +483,21 @@ check:
             note: false
             env: {}
             mcp_endpoint: "http://localhost:18765/mcp"
-        plan:
-            - check: the os pod the agent built with `charly box build` + started with charly is running
-              process: supervisord
-              running: true
-              pod: os
-            - check: the built os image's predetermined marker file is present
-              file: /etc/charly-os-marker
-              contains: ["charly-os-content-marker"]
-              pod: os
-    default:
+    os:
+        pod:
+            agent_provisioned: true
+        charly-cli-step-0:
+            check: the os pod the agent built with `charly box build` + started with charly is running
+            process: supervisord
+            running: true
+        charly-cli-step-1:
+            check: the built os image's predetermined marker file is present
+            file: /etc/charly-os-marker
+            contains: ["charly-os-content-marker"]
+default:
+    bundle:
         description: Default benchmark — progressive verb-coverage curriculum across the full `charly check` surface (system state → network → cross-pod → MCP → Kubernetes → desktop → VM → nested).
+    default-iterate:
         iterate:
             sandbox: check-sandbox
             agent: [claude]
@@ -535,14 +551,16 @@ check:
                 == Plan you must solve — IN-SCOPE FOR THIS PHASE ==
                 ${PLAN}
 
-                Each step carries a `pod:` field — that's the container the
-                harness probes it in. Read every step; collect the unique
-                set of pod names; deploy a container with each name. The plan may
-                reuse a pod name (same container, more steps scored against it).
-                Some include: blocks deploy "fixture pods"
-                whose hostnames (e.g. `charly-web`) are reached from later
-                steps' pods across the pod network — those fixtures must remain
-                running across phases.
+                The plan is a TREE of agent-provisioned nodes: each node's NAME
+                is the container you must deploy, and the steps nested under it
+                run in that container — the step's venue comes from its TREE
+                POSITION, not a `pod:` field. Read the tree; collect the node
+                names; deploy a container named `charly-<node>` for each. A nested
+                node (`a.b.c`) is a container deployed inside its parent (reached
+                by a dotted venue). Some `include:` steps splice fixture plans
+                whose nodes (e.g. `charly-web`) are reached from other nodes'
+                steps across the pod network — those fixtures must remain running
+                across phases.
 
                 Some steps carry `depends_on: [...]` — they only run after the
                 named upstream steps pass. If you see a step marked
@@ -619,150 +637,172 @@ check:
             env: {}
             mcp_endpoint: "http://localhost:18765/mcp"
             validate_ai_artifacts: true
-        plan:
-            - check: the predetermined marker file exists at /etc/charly-os-marker
-              file: /etc/charly-os-marker
-              exists: true
-              pod: os
-            - check: the marker file contains the predetermined content marker
-              file: /etc/charly-os-marker
-              contains: ["charly-os-content-marker"]
-              pod: os
-            - check: the predetermined system package is installed
-              package: bash
-              installed: true
-              pod: os
-            - check: a predetermined process is running by name
-              process: bash
-              running: true
-              pod: os
-            - check: the predetermined user account is present in the user database
-              user: root
-              uid: 0
-              pod: os
-            - check: the predetermined group is present in the group database
-              group: root
-              gid: 0
-              pod: os
-            - check: the predetermined mountpoint is listed in the mount table
-              mount: /proc
-              filesystem: proc
-              pod: os
-            - check: the predetermined kernel parameter is readable from sysctl
-              kernel-param: kernel.hostname
-              value: {matches: "."}
-              pod: os
-            - check: the loopback interface is present
-              interface: lo
-              addrs: ["127.0.0.1/8"]
-              pod: os
-            - agent-check: an in-process matcher resolves a literal predetermined string
-              matching: "charly-os-content-marker"
-              contains: ["charly-os-content-marker"]
-              pod: os
-            - check: the HTTP server's system package is installed
-              package: nginx
-              installed: true
-              pod: web
-            - check: the HTTP server's port is listening inside the pod
-              port: 8080
-              listening: true
-              pod: web
-            - check: the HTTP server's port is reachable from the host
-              addr: "127.0.0.1:${HOST_PORT:8080}"
-              reachable: true
-              pod: web
-            - check: GET / returns 200 with the predetermined content marker
-              http: "http://localhost:8080/"
-              status: 200
-              body: {contains: ["charly-web-content-marker"]}
-              pod: web
-            - check: the served content file persists on disk with the predetermined marker
-              file: /srv/fixture/index.html
-              exists: true
-              contains: ["charly-web-content-marker"]
-              pod: web
-            - check: a self-curl from inside the pod returns the predetermined marker
-              command: "curl -fsS http://127.0.0.1:8080/"
-              exit_status: 0
-              stdout: {contains: ["charly-web-content-marker"]}
-              pod: web
-            - check: the data store's primary process is running
-              process: redis-server
-              running: true
-              pod: redis
-            - check: the data store is reachable from a separate pod
-              command: "ss -tln | grep ':6379' | grep -v '127.0.0.1'"
-              exit_status: 0
-              pod: redis
-            - check: the client pod has the data store's client tool installed
-              command: "command -v redis-cli"
-              exit_status: 0
-              pod: redis-client
-            - check: the client pod successfully writes the nonce-protected key into the data store
-              command: "redis-cli -h charly-redis SET bench:${EVAL_NONCE_KEY} ${EVAL_NONCE_VALUE}"
-              stdout: {contains: [OK]}
-              pod: redis-client
-            - check: the nonce-protected key is readable on the server pod with the correct value
-              command: "redis-cli get bench:${EVAL_NONCE_KEY}"
-              stdout: {contains: ["${EVAL_NONCE_VALUE}"]}
-              pod: redis
-            - include: box:fedora.jupyter
-            - run: remove any prior probe notebook
-              command: "rm -f /workspace/mcp-A.ipynb"
-              in_container: true
-              exit_status: 0
-            - check: notebook_create writes the file but does not open a CRDT room
-              mcp: call
-              tool: notebook_create
-              input: '{"path":"mcp-A.ipynb"}'
-              timeout: 30s
-              pod: mcp
-            - check: room_list does NOT contain mcp-A.ipynb
-              mcp: call
-              tool: room_list
-              input: '{}'
-              stdout: {not_contains: "mcp-A.ipynb"}
-              timeout: 30s
-              pod: mcp
-            - run: clean state
-              command: "rm -f /workspace/mcp-B.ipynb"
-              in_container: true
-              exit_status: 0
-            - run: create
-              mcp: call
-              tool: notebook_create
-              input: '{"path":"mcp-B.ipynb"}'
-              timeout: 30s
-            - check: cell_insert without prior open auto-creates the room
-              mcp: call
-              tool: cell_insert
-              input: '{"path":"mcp-B.ipynb","index":0,"source":"x","cell_type":"markdown"}'
-              timeout: 60s
-              pod: mcp
-            - check: room_list now contains mcp-B.ipynb
-              mcp: call
-              tool: room_list
-              input: '{}'
-              stdout: {contains: "mcp-B.ipynb"}
-              timeout: 30s
-              pod: mcp
-            - run: clean state
-              command: "rm -f /workspace/mcp-D.ipynb"
-              in_container: true
-              exit_status: 0
-            - run: create
-              mcp: call
-              tool: notebook_create
-              input: '{"path":"mcp-D.ipynb"}'
-              timeout: 30s
-            - run: MCP-side cell_insert auto-creates the room
-              mcp: call
-              tool: cell_insert
-              input: '{"path":"mcp-D.ipynb","index":0,"source":"hello","cell_type":"markdown"}'
-              timeout: 60s
-            - check: transient UI-style WebSocket connect (in-container python)
-              command: |-
+    os:
+        pod:
+            agent_provisioned: true
+        default-step-0:
+            check: the predetermined marker file exists at /etc/charly-os-marker
+            file: /etc/charly-os-marker
+            exists: true
+        default-step-1:
+            check: the marker file contains the predetermined content marker
+            file: /etc/charly-os-marker
+            contains: ["charly-os-content-marker"]
+        default-step-2:
+            check: the predetermined system package is installed
+            package: bash
+            installed: true
+        default-step-3:
+            check: a predetermined process is running by name
+            process: bash
+            running: true
+        default-step-4:
+            check: the predetermined user account is present in the user database
+            user: root
+            uid: 0
+        default-step-5:
+            check: the predetermined group is present in the group database
+            group: root
+            gid: 0
+        default-step-6:
+            check: the predetermined mountpoint is listed in the mount table
+            mount: /proc
+            filesystem: proc
+        default-step-7:
+            check: the predetermined kernel parameter is readable from sysctl
+            kernel-param: kernel.hostname
+            value: {matches: "."}
+        default-step-8:
+            check: the loopback interface is present
+            interface: lo
+            addrs: ["127.0.0.1/8"]
+        default-step-9:
+            agent-check: an in-process matcher resolves a literal predetermined string
+            matching: "charly-os-content-marker"
+            contains: ["charly-os-content-marker"]
+    web:
+        pod:
+            agent_provisioned: true
+        default-step-10:
+            check: the HTTP server's system package is installed
+            package: nginx
+            installed: true
+        default-step-11:
+            check: the HTTP server's port is listening inside the pod
+            port: 8080
+            listening: true
+        default-step-12:
+            check: the HTTP server's port is reachable from the host
+            addr: "127.0.0.1:${HOST_PORT:8080}"
+            reachable: true
+        default-step-13:
+            check: GET / returns 200 with the predetermined content marker
+            http: "http://localhost:8080/"
+            status: 200
+            body: {contains: ["charly-web-content-marker"]}
+        default-step-14:
+            check: the served content file persists on disk with the predetermined marker
+            file: /srv/fixture/index.html
+            exists: true
+            contains: ["charly-web-content-marker"]
+        default-step-15:
+            check: a self-curl from inside the pod returns the predetermined marker
+            command: "curl -fsS http://127.0.0.1:8080/"
+            exit_status: 0
+            stdout: {contains: ["charly-web-content-marker"]}
+    redis:
+        pod:
+            agent_provisioned: true
+        default-step-16:
+            check: the data store's primary process is running
+            process: redis-server
+            running: true
+        default-step-17:
+            check: the data store is reachable from a separate pod
+            command: "ss -tln | grep ':6379' | grep -v '127.0.0.1'"
+            exit_status: 0
+        default-step-20:
+            check: the nonce-protected key is readable on the server pod with the correct value
+            command: "redis-cli get bench:${EVAL_NONCE_KEY}"
+            stdout: {contains: ["${EVAL_NONCE_VALUE}"]}
+    redis-client:
+        pod:
+            agent_provisioned: true
+        default-step-18:
+            check: the client pod has the data store's client tool installed
+            command: "command -v redis-cli"
+            exit_status: 0
+        default-step-19:
+            check: the client pod successfully writes the nonce-protected key into the data store
+            command: "redis-cli -h charly-redis SET bench:${EVAL_NONCE_KEY} ${EVAL_NONCE_VALUE}"
+            stdout: {contains: [OK]}
+    mcp:
+        pod:
+            agent_provisioned: true
+        default-step-21:
+            include: box:fedora.jupyter
+        default-step-22:
+            run: remove any prior probe notebook
+            command: "rm -f /workspace/mcp-A.ipynb"
+            in_container: true
+            exit_status: 0
+        default-step-23:
+            check: notebook_create writes the file but does not open a CRDT room
+            mcp: call
+            tool: notebook_create
+            input: '{"path":"mcp-A.ipynb"}'
+            timeout: 30s
+        default-step-24:
+            check: room_list does NOT contain mcp-A.ipynb
+            mcp: call
+            tool: room_list
+            input: '{}'
+            stdout: {not_contains: "mcp-A.ipynb"}
+            timeout: 30s
+        default-step-25:
+            run: clean state
+            command: "rm -f /workspace/mcp-B.ipynb"
+            in_container: true
+            exit_status: 0
+        default-step-26:
+            run: create
+            mcp: call
+            tool: notebook_create
+            input: '{"path":"mcp-B.ipynb"}'
+            timeout: 30s
+        default-step-27:
+            check: cell_insert without prior open auto-creates the room
+            mcp: call
+            tool: cell_insert
+            input: '{"path":"mcp-B.ipynb","index":0,"source":"x","cell_type":"markdown"}'
+            timeout: 60s
+        default-step-28:
+            check: room_list now contains mcp-B.ipynb
+            mcp: call
+            tool: room_list
+            input: '{}'
+            stdout: {contains: "mcp-B.ipynb"}
+            timeout: 30s
+        default-step-29:
+            run: clean state
+            command: "rm -f /workspace/mcp-D.ipynb"
+            in_container: true
+            exit_status: 0
+        default-step-30:
+            run: create
+            mcp: call
+            tool: notebook_create
+            input: '{"path":"mcp-D.ipynb"}'
+            timeout: 30s
+        default-step-31:
+            run: MCP-side cell_insert auto-creates the room
+            mcp: call
+            tool: cell_insert
+            input: '{"path":"mcp-D.ipynb","index":0,"source":"hello","cell_type":"markdown"}'
+            timeout: 60s
+        default-step-32:
+            check: transient UI-style WebSocket connect (in-container python)
+            command: |-
                 python3 -c '
                 import asyncio
                 async def main():
@@ -782,37 +822,41 @@ check:
                         print(f"ws-probe-noop: {e}")
                 asyncio.run(main())
                 '
-              in_container: true
-              exit_status: 0
-              pod: mcp
-            - check: room_list still shows EXACTLY one entry for the path
-              mcp: call
-              tool: room_list
-              input: '{}'
-              stdout:
+            in_container: true
+            exit_status: 0
+        default-step-33:
+            check: room_list still shows EXACTLY one entry for the path
+            mcp: call
+            tool: room_list
+            input: '{}'
+            stdout:
                 - matches: 'mcp-D\.ipynb'
-              timeout: 30s
-              pod: mcp
-            - run: clean state
-              command: "rm -f /workspace/mcp-E.ipynb"
-              in_container: true
-              exit_status: 0
-            - run: create
-              mcp: call
-              tool: notebook_create
-              input: '{"path":"mcp-E.ipynb"}'
-              timeout: 30s
-            - run: MCP cell_insert auto-creates the room
-              mcp: call
-              tool: cell_insert
-              input: '{"path":"mcp-E.ipynb","index":0,"source":"x","cell_type":"markdown"}'
-              timeout: 60s
-            - run: snapshot the pod log mark
-              command: "date +%s > /tmp/mcp-E.markstamp"
-              in_container: true
-              exit_status: 0
-            - check: transient UI-style WebSocket connect to provoke _clean_room
-              command: |-
+            timeout: 30s
+        default-step-34:
+            run: clean state
+            command: "rm -f /workspace/mcp-E.ipynb"
+            in_container: true
+            exit_status: 0
+        default-step-35:
+            run: create
+            mcp: call
+            tool: notebook_create
+            input: '{"path":"mcp-E.ipynb"}'
+            timeout: 30s
+        default-step-36:
+            run: MCP cell_insert auto-creates the room
+            mcp: call
+            tool: cell_insert
+            input: '{"path":"mcp-E.ipynb","index":0,"source":"x","cell_type":"markdown"}'
+            timeout: 60s
+        default-step-37:
+            run: snapshot the pod log mark
+            command: "date +%s > /tmp/mcp-E.markstamp"
+            in_container: true
+            exit_status: 0
+        default-step-38:
+            check: transient UI-style WebSocket connect to provoke _clean_room
+            command: |-
                 python3 -c '
                 import asyncio
                 async def main():
@@ -831,199 +875,218 @@ check:
                         pass
                 asyncio.run(main())
                 '
-              in_container: true
-              exit_status: 0
-              pod: mcp
-            - check: let upstream _clean_room settle
-              command: "sleep 2"
-              in_container: true
-              exit_status: 0
-              pod: mcp
-            - check: no 'Task exception was never retrieved' or 'is not in list' since the mark
-              command: |-
+            in_container: true
+            exit_status: 0
+        default-step-39:
+            check: let upstream _clean_room settle
+            command: "sleep 2"
+            in_container: true
+            exit_status: 0
+        default-step-40:
+            check: no 'Task exception was never retrieved' or 'is not in list' since the mark
+            command: |-
                 MARK=$(cat /tmp/mcp-E.markstamp); LOG=$(journalctl -t supervisord --since "@$MARK" 2>/dev/null || cat /tmp/jupyter*.log 2>/dev/null || true); echo "$LOG" | grep -E 'Task exception was never retrieved|is not in list' && exit 1 || exit 0
-              in_container: true
-              exit_status: 0
-              pod: mcp
-            - check: at least one cluster node is listable
-              k8s: nodes
-              pod: k8s
-            - check: all cluster nodes reach Ready
-              k8s: wait-nodes
-              pod: k8s
-            - check: the kube-system coredns Deployment reaches Ready
-              k8s: wait-ready
-              k8s_kind: Deployment
-              name: coredns
-              namespace: kube-system
-              pod: k8s
-            - check: a default storage class is present
-              k8s: storageclass
-              pod: k8s
-            - check: an ingress class is registered
-              k8s: ingressclass
-              pod: k8s
-            - check: the cluster addons report healthy
-              k8s: addons
-              pod: k8s
-            - check: the kubernetes Service is listable
-              k8s: service
-              stdout: {contains: ["kubernetes"]}
-              pod: k8s
-            - check: a raw API call to the /nodes resource returns a JSON document with a kind field
-              k8s: raw
-              k8s_resource: nodes
-              json: true
-              stdout: {contains: ["kind"]}
-              pod: k8s
-            - check: the desktop's Chrome DevTools is reachable
-              cdp: status
-              stdout: {contains: ["ok"]}
-              pod: desktop
-            - check: the desktop's Wayland session is up
-              wl: status
-              stdout: {contains: ["ok"]}
-              pod: desktop
-            - check: the desktop's VNC server is reachable
-              vnc: status
-              stdout: {contains: ["ok"]}
-              pod: desktop
-            - check: the desktop's session bus advertises notifications
-              dbus: list
-              stdout: {contains: ["org.freedesktop.Notifications"]}
-              pod: desktop
-            - check: the desktop browser navigates to the upstream HTTP fixture URL via CDP
-              cdp: open
-              url: "http://charly-web:8080/"
-              exit_status: 0
-              pod: desktop
-            - check: CDP extracts the predetermined upstream content marker from the loaded page
-              cdp: text
-              tab: "1"
-              stdout: {contains: ["charly-web-content-marker"]}
-              pod: desktop
-            - check: CDP correctly evaluates a predetermined JavaScript expression on the loaded page
-              cdp: eval
-              tab: "1"
-              expression: "1+1"
-              stdout: {contains: ["2"]}
-              pod: desktop
-            - check: a CDP screenshot of the loaded page has real, non-uniform content at the expected dimensions
-              cdp: screenshot
-              tab: "1"
-              artifact: /tmp/cdp.png
-              artifact_min_bytes: 5000
-              artifact_min_dimensions: 800x600
-              artifact_not_uniform: true
-              pod: desktop
-            - check: the Wayland toplevel listing includes at least one rendered window
-              wl: toplevel
-              stdout: {matches: "."}
-              pod: desktop
-            - check: a Wayland screenshot of the desktop has real, non-uniform content at the expected dimensions
-              wl: screenshot
-              artifact: /tmp/wl.png
-              artifact_min_bytes: 10000
-              artifact_min_dimensions: 800x600
-              artifact_not_uniform: true
-              pod: desktop
-            - check: a VNC framebuffer screenshot has real, non-uniform content at the expected dimensions
-              vnc: screenshot
-              artifact: /tmp/vnc.png
-              artifact_min_bytes: 5000
-              artifact_min_dimensions: 800x600
-              artifact_not_uniform: true
-              pod: desktop
-            - check: a desktop notification can be sent with a predetermined body
-              dbus: notify
-              text: "charly-dbus-notify-marker"
-              exit_status: 0
-              pod: desktop
-            - check: a terminal recording is captured with at least the predetermined number of events
-              record: stop
-              artifact: /tmp/session.cast
-              artifact_min_bytes: 200
-              artifact_min_cast_events: 5
-              pod: desktop
-            - check: the VM's libvirt domain info is queryable
-              libvirt: info
-              pod: vm
-            - check: the VM's domain definition contains the predetermined domain name
-              libvirt: domain-xml
-              stdout: {contains: ["vm"]}
-              pod: vm
-            - check: a libvirt console screenshot has real, non-uniform content at the expected dimensions
-              libvirt: screenshot
-              artifact: /tmp/lv.png
-              artifact_min_bytes: 5000
-              artifact_min_dimensions: 640x480
-              artifact_not_uniform: true
-              pod: vm
-            - check: the VM guest agent answers ping
-              libvirt: guest/ping
-              pod: vm
-            - check: the VM guest reports a Linux kernel via guest/exec
-              libvirt: guest/exec
-              command: "uname -s"
-              stdout: {contains: ["Linux"]}
-              pod: vm
-            - check: from inside the VM, fetching the upstream HTTP fixture URL returns the predetermined marker
-              libvirt: guest/exec
-              command: "curl -fsS http://charly-web:8080/"
-              stdout: {contains: ["charly-web-content-marker"]}
-              pod: vm
-            - check: snapshot listing succeeds
-              libvirt: snapshot/list
-              pod: vm
-            - check: the VM's SPICE handshake completes
-              spice: status
-              stdout: {contains: ["ok"]}
-              pod: vm
-            - check: a SPICE framebuffer screenshot has real, non-uniform content at the expected dimensions
-              spice: screenshot
-              artifact: /tmp/spice.png
-              artifact_min_bytes: 5000
-              artifact_min_dimensions: 640x480
-              artifact_not_uniform: true
-              pod: vm
-            - check: the VM has booted and is reachable from the bench pod
-              command: "uptime"
-              exit_status: 0
-              pod: nested-check-vm
-            - check: the guest has hardware-accelerated virtualization available
-              file: /dev/kvm
-              exists: true
-              pod: nested-check-vm
-            - check: the inner pod's primary process is running
-              process: nginx
-              running: true
-              pod: nested-check-vm.inner-app-pod
-            - check: the inner pod's predetermined port is listening
-              port: 8080
-              listening: true
-              pod: nested-check-vm.inner-app-pod
-            - check: the nested data store's primary process is running
-              process: redis-server
-              running: true
-              pod: nested-check-vm.inner-app-pod.nested-redis-pod
-            - check: the nested data store is reachable on the network (not loopback only)
-              command: "ss -tln | grep ':6379' | grep -v '127.0.0.1'"
-              exit_status: 0
-              pod: nested-check-vm.inner-app-pod.nested-redis-pod
-            - check: the inner pod successfully writes the nonce-protected key on the nested data store
-              command: "redis-cli -h charly-inner-app-pod_nested-redis-pod SET bench:${EVAL_NONCE_KEY} ${EVAL_NONCE_VALUE}"
-              stdout: {contains: [OK]}
-              pod: nested-check-vm.inner-app-pod
-            - check: the nonce-protected key is readable on the deepest pod with the correct value
-              command: "redis-cli get bench:${EVAL_NONCE_KEY}"
-              stdout: {contains: ["${EVAL_NONCE_VALUE}"]}
-              pod: nested-check-vm.inner-app-pod.nested-redis-pod
-            - check: the VM guest can reach the outermost data store from phase 3
-              command: "redis-cli -h charly-redis ping"
-              stdout: {contains: [PONG]}
-              pod: nested-check-vm
-    scaffolding-selftest:
+            in_container: true
+            exit_status: 0
+    k8s-cluster:
+        pod:
+            agent_provisioned: true
+        default-step-41:
+            check: at least one cluster node is listable
+            k8s: nodes
+        default-step-42:
+            check: all cluster nodes reach Ready
+            k8s: wait-nodes
+        default-step-43:
+            check: the kube-system coredns Deployment reaches Ready
+            k8s: wait-ready
+            k8s_kind: Deployment
+            name: coredns
+            namespace: kube-system
+        default-step-44:
+            check: a default storage class is present
+            k8s: storageclass
+        default-step-45:
+            check: an ingress class is registered
+            k8s: ingressclass
+        default-step-46:
+            check: the cluster addons report healthy
+            k8s: addons
+        default-step-47:
+            check: the kubernetes Service is listable
+            k8s: service
+            stdout: {contains: ["kubernetes"]}
+        default-step-48:
+            check: a raw API call to the /nodes resource returns a JSON document with a kind field
+            k8s: raw
+            k8s_resource: nodes
+            json: true
+            stdout: {contains: ["kind"]}
+    desktop:
+        pod:
+            agent_provisioned: true
+        default-step-49:
+            check: the desktop's Chrome DevTools is reachable
+            cdp: status
+            stdout: {contains: ["ok"]}
+        default-step-50:
+            check: the desktop's Wayland session is up
+            wl: status
+            stdout: {contains: ["ok"]}
+        default-step-51:
+            check: the desktop's VNC server is reachable
+            vnc: status
+            stdout: {contains: ["ok"]}
+        default-step-52:
+            check: the desktop's session bus advertises notifications
+            dbus: list
+            stdout: {contains: ["org.freedesktop.Notifications"]}
+        default-step-53:
+            check: the desktop browser navigates to the upstream HTTP fixture URL via CDP
+            cdp: open
+            url: "http://charly-web:8080/"
+            exit_status: 0
+        default-step-54:
+            check: CDP extracts the predetermined upstream content marker from the loaded page
+            cdp: text
+            tab: "1"
+            stdout: {contains: ["charly-web-content-marker"]}
+        default-step-55:
+            check: CDP correctly evaluates a predetermined JavaScript expression on the loaded page
+            cdp: eval
+            tab: "1"
+            expression: "1+1"
+            stdout: {contains: ["2"]}
+        default-step-56:
+            check: a CDP screenshot of the loaded page has real, non-uniform content at the expected dimensions
+            cdp: screenshot
+            tab: "1"
+            artifact: /tmp/cdp.png
+            artifact_min_bytes: 5000
+            artifact_min_dimensions: 800x600
+            artifact_not_uniform: true
+        default-step-57:
+            check: the Wayland toplevel listing includes at least one rendered window
+            wl: toplevel
+            stdout: {matches: "."}
+        default-step-58:
+            check: a Wayland screenshot of the desktop has real, non-uniform content at the expected dimensions
+            wl: screenshot
+            artifact: /tmp/wl.png
+            artifact_min_bytes: 10000
+            artifact_min_dimensions: 800x600
+            artifact_not_uniform: true
+        default-step-59:
+            check: a VNC framebuffer screenshot has real, non-uniform content at the expected dimensions
+            vnc: screenshot
+            artifact: /tmp/vnc.png
+            artifact_min_bytes: 5000
+            artifact_min_dimensions: 800x600
+            artifact_not_uniform: true
+        default-step-60:
+            check: a desktop notification can be sent with a predetermined body
+            dbus: notify
+            text: "charly-dbus-notify-marker"
+            exit_status: 0
+        default-step-61:
+            check: a terminal recording is captured with at least the predetermined number of events
+            record: stop
+            artifact: /tmp/session.cast
+            artifact_min_bytes: 200
+            artifact_min_cast_events: 5
+    vm-guest:
+        pod:
+            agent_provisioned: true
+        default-step-62:
+            check: the VM's libvirt domain info is queryable
+            libvirt: info
+        default-step-63:
+            check: the VM's domain definition contains the predetermined domain name
+            libvirt: domain-xml
+            stdout: {contains: ["vm"]}
+        default-step-64:
+            check: a libvirt console screenshot has real, non-uniform content at the expected dimensions
+            libvirt: screenshot
+            artifact: /tmp/lv.png
+            artifact_min_bytes: 5000
+            artifact_min_dimensions: 640x480
+            artifact_not_uniform: true
+        default-step-65:
+            check: the VM guest agent answers ping
+            libvirt: guest/ping
+        default-step-66:
+            check: the VM guest reports a Linux kernel via guest/exec
+            libvirt: guest/exec
+            command: "uname -s"
+            stdout: {contains: ["Linux"]}
+        default-step-67:
+            check: from inside the VM, fetching the upstream HTTP fixture URL returns the predetermined marker
+            libvirt: guest/exec
+            command: "curl -fsS http://charly-web:8080/"
+            stdout: {contains: ["charly-web-content-marker"]}
+        default-step-68:
+            check: snapshot listing succeeds
+            libvirt: snapshot/list
+        default-step-69:
+            check: the VM's SPICE handshake completes
+            spice: status
+            stdout: {contains: ["ok"]}
+        default-step-70:
+            check: a SPICE framebuffer screenshot has real, non-uniform content at the expected dimensions
+            spice: screenshot
+            artifact: /tmp/spice.png
+            artifact_min_bytes: 5000
+            artifact_min_dimensions: 640x480
+            artifact_not_uniform: true
+    nested-check-vm:
+        vm:
+            agent_provisioned: true
+        default-step-71:
+            check: the VM has booted and is reachable from the bench pod
+            command: "uptime"
+            exit_status: 0
+        default-step-72:
+            check: the guest has hardware-accelerated virtualization available
+            file: /dev/kvm
+            exists: true
+        inner-app-pod:
+            pod:
+                agent_provisioned: true
+            default-step-73:
+                check: the inner pod's primary process is running
+                process: nginx
+                running: true
+            default-step-74:
+                check: the inner pod's predetermined port is listening
+                port: 8080
+                listening: true
+            nested-redis-pod:
+                pod:
+                    agent_provisioned: true
+                default-step-75:
+                    check: the nested data store's primary process is running
+                    process: redis-server
+                    running: true
+                default-step-76:
+                    check: the nested data store is reachable on the network (not loopback only)
+                    command: "ss -tln | grep ':6379' | grep -v '127.0.0.1'"
+                    exit_status: 0
+                default-step-78:
+                    check: the nonce-protected key is readable on the deepest pod with the correct value
+                    command: "redis-cli get bench:${EVAL_NONCE_KEY}"
+                    stdout: {contains: ["${EVAL_NONCE_VALUE}"]}
+            default-step-77:
+                check: the inner pod successfully writes the nonce-protected key on the nested data store
+                command: "redis-cli -h charly-inner-app-pod_nested-redis-pod SET bench:${EVAL_NONCE_KEY} ${EVAL_NONCE_VALUE}"
+                stdout: {contains: [OK]}
+        default-step-79:
+            check: the VM guest can reach the outermost data store from phase 3
+            command: "redis-cli -h charly-redis ping"
+            stdout: {contains: [PONG]}
+scaffolding-selftest:
+    bundle:
         description: End-to-end self-test of the harness benchmark scaffolding chain — loader + composition + cross-namespace deps + live scoring against AI-deployed pods.
+    scaffolding-selftest-iterate:
         iterate:
             sandbox: check-sandbox
             agent: [claude]
@@ -1069,10 +1132,11 @@ check:
                 == Plan in scope ==
                 ${PLAN}
 
-                Each step carries a `pod:` field — that's the container the
-                harness probes it in. Read every step; collect the
-                unique set of pod names; deploy a container with each name whose
-                filesystem satisfies the probes the plan asserts. Some
+                The plan is a TREE of agent-provisioned nodes: each node's NAME
+                is the container you must deploy, whose filesystem satisfies the
+                probes nested under it — the step's venue comes from its TREE
+                POSITION, not a `pod:` field. Read the tree; collect the node
+                names; deploy a container named `charly-<node>` for each. Some
                 steps carry `depends_on: [...]` — they only run after the
                 named upstream steps pass.
 
@@ -1093,30 +1157,35 @@ check:
             note: false
             env: {}
             mcp_endpoint: "http://localhost:18765/mcp"
-        plan:
-            - include: candy:sshd
-            - include: box:fedora.composition-source
-            - check: a marker file written during the composition self-test is present
-              file: /etc/charly-composition-selftest
-              exists: true
-              pod: composition-app
-local:
-    # =================================================================
-    # check-local — per-kind R10 smoke template for kind:local.
-    # Applied via the check-local bed (kind:check) in this file's check: block. Single layer
-    # (check-local-layer) drops a marker file the deploy-scope check probe
-    # verifies on the host (not in a container).
-    # =================================================================
-    check-local:
-        candy:
-            - check-local-layer
+    composition-app:
+        pod:
+            agent_provisioned: true
+        scaffolding-selftest-step-0:
+            include: candy:sshd
+        scaffolding-selftest-step-1:
+            include: box:fedora.composition-source
+        scaffolding-selftest-step-2:
+            check: a marker file written during the composition self-test is present
+            file: /etc/charly-composition-selftest
+            exists: true
+# =================================================================
+# check-local — per-kind R10 smoke template for kind:local.
+# Applied via the check-local bed (kind:check) in this file's check: block. Single layer
+# (check-local-layer) drops a marker file the deploy-scope check probe
+# verifies on the host (not in a container).
+# =================================================================
+check-local-app:
+    local:
         description: |-
             Fast check bed for kind:local layer-application smoke
             Minimal kind:local template applying check-local-layer to the operator's host.
-        plan:
-            - check: command=test -f /etc/check-local-marker
-              id: check-local-marker
-              command: "test -f /etc/check-local-marker"
-              in_container: false
-              context:
-                - runtime
+    check-local-candy:
+        candy:
+            - check-local-layer
+    check-local-marker:
+        check: command=test -f /etc/check-local-marker
+        id: check-local-marker
+        command: "test -f /etc/check-local-marker"
+        in_container: false
+        context:
+            - runtime

@@ -200,7 +200,7 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 		deployRec.Candy = append(deployRec.Candy, plan.Candy)
 		if deployRec.Image == "" && plan.Candy != "" {
 			// For pure-add_candy vm deploys the deploy-id's "image" slot
-			// stays as the vm: target name so `charly deploy del` can find it.
+			// stays as the vm: target name so `charly bundle del` can find it.
 			deployRec.Image = t.targetName()
 		}
 	}
@@ -226,7 +226,7 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 }
 
 // firstDeployID returns the DeployID of the first non-nil plan. All
-// plans in one `charly deploy add` pass share the same DeployID (stamped in
+// plans in one `charly bundle add` pass share the same DeployID (stamped in
 // Run()), so any non-nil plan's ID is the one to persist.
 func firstDeployID(plans []*InstallPlan) string {
 	for _, p := range plans {
@@ -287,7 +287,7 @@ mkdir -p "$HOME/.config/opencharly/env.d"
 // emitPlan walks a single InstallPlan and routes each step to the
 // appropriate DeployExecutor method. Mirrors LocalDeployTarget.emitPlan's
 // step-dispatch table but with SSH-wrapped execution. Collects
-// ReverseOps from each executed step so `charly deploy del vm:<name>` can
+// ReverseOps from each executed step so `charly bundle del vm:<name>` can
 // replay them in reverse order at teardown time.
 func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts EmitOpts) (*CandyRecord, error) {
 	fmt.Fprintf(os.Stderr, "\n--- plan: %s (candy=%s) ---\n", plan.DeployID, plan.Candy)

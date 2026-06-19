@@ -20,7 +20,7 @@ func EngineBinary(engine string) string {
 // ResolveBoxEngine returns the run engine for a specific box.
 // Schema v4: BoxConfig.Engine removed (deploy-only choice). Priority is
 // now: candy engine requirements > global default. Deploy-time overrides
-// come from DeploymentNode.Engine via ResolveBoxEngineForDeploy /
+// come from BundleNode.Engine via ResolveBoxEngineForDeploy /
 // ResolveBoxEngineFromMeta.
 func ResolveBoxEngine(cfg *Config, layers map[string]*Candy, boxName string, globalRunEngine string) string {
 	img, ok := cfg.Box[boxName]

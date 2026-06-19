@@ -1,5 +1,5 @@
-distro:
-    arch:
+arch:
+    distro:
         bootstrap:
             install_cmd: pacman -Syu --noconfirm
             package:
@@ -45,7 +45,8 @@ distro:
                     {{- range .Options}} {{.}}{{end}}
                     {{- range .Packages}} \
                           {{.}}{{end}}
-    debian:
+debian:
+    distro:
         bootstrap:
             install_cmd: apt-get update && apt-get install -y --no-install-recommends
             package:
@@ -84,7 +85,8 @@ distro:
                     {{- range .Options}} {{.}}{{end}}
                     {{- range .Packages}} \
                           {{.}}{{end}}
-    fedora:
+fedora:
+    distro:
         bootstrap:
             install_cmd: dnf install -y --setopt=install_weak_deps=False
             package:
@@ -136,14 +138,15 @@ distro:
                     {{- range .Copr}} && \
                         dnf5 config-manager setopt "copr:copr.fedorainfracloud.org:{{replace . "/" ":"}}.enabled=0"
                     {{- end}}
-    ubuntu:
+ubuntu:
+    distro:
         inherits: debian
         bootstrap:
             install_cmd: ""
             package: []
             cache_mount: []
-builder:
-    aur:
+aur:
+    builder:
         detect_config: aur
         cache_mount:
             - dst: /var/cache/pacman/pkg
@@ -167,7 +170,8 @@ builder:
         copy_artifact:
             - src: /tmp/aur-pkgs/
               dst: /tmp/aur-pkgs/
-    cargo:
+cargo:
+    builder:
         detect_file:
             - Cargo.toml
         requires_src_dir: true
@@ -177,7 +181,8 @@ builder:
         install_template: |
             RUN --mount=type=bind,from={{.LayerStage}},source=/,target=/ctx \
                 {{cacheMountsOwned .CacheMounts .UID .GID}}cargo install --path /ctx
-    npm:
+npm:
+    builder:
         detect_file:
             - package.json
         cache_mount:
@@ -192,7 +197,8 @@ builder:
             - src: '{{.Home}}'
               dst: '{{.Home}}'
               chown: true
-    pixi:
+pixi:
+    builder:
         detect_file:
             - pixi.toml
             - pyproject.toml
@@ -200,9 +206,6 @@ builder:
         cache_mount:
             - dst: /tmp/pixi-cache
             - dst: /tmp/rattler-cache
-        env:
-            PIXI_CACHE_DIR: /tmp/pixi-cache
-            RATTLER_CACHE_DIR: /tmp/rattler-cache
         stage_template: |
             FROM {{.BuilderRef}} AS {{.StageName}}
             USER {{.UID}}
@@ -228,3 +231,7 @@ builder:
         copy_binary:
             src: /usr/local/bin/pixi
             dst: /usr/local/bin/pixi
+    pixi-env:
+        env:
+            PIXI_CACHE_DIR: /tmp/pixi-cache
+            RATTLER_CACHE_DIR: /tmp/rattler-cache

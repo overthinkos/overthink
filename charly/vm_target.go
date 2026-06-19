@@ -69,8 +69,8 @@ func ResolveVmTarget(vmName, uri string) (*VmTarget, error) {
 	// (e.g. "arch") or a kind:deployment name with target:vm (e.g.
 	// "arch-vm") whose Vm field points at the actual entity.
 	spec, present := uf.VM[vmName]
-	if !present && uf.Deploy != nil {
-		if entry, ok := uf.Deploy[vmName]; ok && entry.Target == "vm" && entry.Vm != "" {
+	if !present && uf.Bundle != nil {
+		if entry, ok := uf.Bundle[vmName]; ok && entry.Target == "vm" && entry.Vm != "" {
 			if s, okSpec := uf.VM[entry.Vm]; okSpec {
 				spec = s
 				vmName = entry.Vm

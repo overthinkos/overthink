@@ -1,22 +1,20 @@
 package main
 
-// cross_kind_name_test.go — locks in the cross-kind name reuse policy
-// introduced 2026-05. The same identifier (e.g. charly-cachyos) MAY exist
-// simultaneously across multiple namespaces:
+// cross_kind_name_test.go — locks in the cross-kind name reuse policy under
+// the unified node-form model. The boundary moved with the node-form cutover:
 //
-//   - candy (under candy/<name>/)
-//   - box: entry
-//   - pod: entry
-//   - vm: entry
-//   - k8s: entry
-//   - local: entry
-//   - deployment: entry
+//   - ACROSS SEPARATE discovered documents (files), the SAME identifier (e.g.
+//     `redis`) MAY name a box in one file AND a candy in another — they are
+//     distinct documents that register into distinct internal maps.
+//   - WITHIN ONE document, every top-level node name is GLOBALLY UNIQUE — a
+//     box `x` and a local/vm/candy `x` both flatten to the one top-level YAML
+//     key `x: {…}`, so they COLLIDE: yaml merges the two `x:` mappings into a
+//     single node carrying two entity discriminators, which the closed #NodeDoc
+//     schema rejects (a node has exactly one discriminator). The loader fails.
 //
-// The unified loader does NOT enforce global uniqueness across these
-// namespaces — uniqueness is scoped to each kind. charly verbs disambiguate
-// by command context: `charly box build charly-cachyos` reaches into the
-// box: map, `charly vm create charly-cachyos` reaches into the vm: map, and
-// so on.
+// charly verbs still disambiguate cross-FILE reuse by command context:
+// `charly box build redis` reaches the box document, the candy resolver reaches
+// the candy directory.
 
 import (
 	"os"
@@ -24,78 +22,86 @@ import (
 	"testing"
 )
 
-// TestCrossKindNameReuse_LoaderAcceptsAllKinds — write an charly.yml
-// with the SAME identifier `charly-cachyos` under every kind-keyed map, plus
-// a candy at layers/charly-cachyos/. LoadUnified must accept it without a
-// uniqueness error.
+// TestCrossKindNameReuse_LoaderAcceptsAllKinds — the SAME name `redis` names a
+// box in box/redis/charly.yml AND a candy in candy/redis/charly.yml. Because
+// they are SEPARATE discovered documents, LoadUnified accepts the reuse and
+// registers each into its own map. Within ONE document, however, a duplicate
+// top-level node name collides and the loader rejects it.
 func TestCrossKindNameReuse_LoaderAcceptsAllKinds(t *testing.T) {
+	// --- Cross-FILE reuse: accepted. ---
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "layers", "charly-cachyos"), 0o755); err != nil {
-		t.Fatal(err)
+	must := func(p, body string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := os.WriteFile(filepath.Join(dir, "layers", "charly-cachyos", "candy.yml"),
-		[]byte("rpm:\n  packages: [example]\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	cfgYAML := `version: 2026.165.1048
+	must(filepath.Join(dir, "charly.yml"), `version: 2026.169.0004
 defaults:
   registry: ghcr.io/example
-  build: [rpm]
-
-box:
-  charly-cachyos:
+discover:
+  - path: box
+    recursive: true
+  - path: candy
+    recursive: true
+`)
+	// A box named `redis` in its own discovered document (node-form).
+	must(filepath.Join(dir, "box", "redis", "charly.yml"), `redis:
+  box:
     base: fedora
-    candy: [charly-cachyos]
-
-pod:
-  charly-cachyos:
-    box: charly-cachyos
-
-vm:
-  charly-cachyos:
-    source:
-      kind: cloud_image
-      url: https://example.invalid/img.qcow2
-
-local:
-  charly-cachyos:
-    candy: [charly-cachyos]
-
-deploy:
-  charly-cachyos:
-    target: local
-    local: charly-cachyos
-    host: local
-`
-	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(cfgYAML), 0o644); err != nil {
-		t.Fatal(err)
-	}
+`)
+	// A candy ALSO named `redis` in a SEPARATE discovered document. Node-form:
+	// only SCALARS live in the `candy:` value — its package collection and each
+	// plan step are CHILD nodes (`redis-package:` / `redis-step-N:`).
+	must(filepath.Join(dir, "candy", "redis", "charly.yml"), `redis:
+  candy:
+    version: "2026.150.0000"
+    description: in-memory store
+  redis-package:
+    package:
+      - redis
+  redis-step-0:
+    check: the binary exists
+    file: /usr/bin/redis-server
+`)
 
 	uf, ok, err := LoadUnified(dir)
 	if err != nil {
-		t.Fatalf("LoadUnified rejected cross-kind name reuse: %v", err)
+		t.Fatalf("LoadUnified rejected cross-FILE name reuse: %v", err)
 	}
 	if !ok || uf == nil {
 		t.Fatal("LoadUnified returned ok=false")
 	}
-	// Every kind-keyed map must contain the shared name.
-	if _, present := uf.Box["charly-cachyos"]; !present {
-		t.Error("image.charly-cachyos missing")
+	cfg := uf.ProjectConfig()
+	if _, present := cfg.Box["redis"]; !present {
+		t.Errorf("box.redis missing; boxes present: %v", boxConfigKeys(cfg))
 	}
-	if _, present := uf.Pod["charly-cachyos"]; !present {
-		t.Error("pod.charly-cachyos missing")
+	cands, err := uf.ProjectCandies(dir)
+	if err != nil {
+		t.Fatalf("ProjectCandies: %v", err)
 	}
-	if _, present := uf.VM["charly-cachyos"]; !present {
-		t.Error("vm.charly-cachyos missing")
+	if cands["redis"] == nil {
+		t.Errorf("candy.redis missing; got %d candies", len(cands))
 	}
-	if _, present := uf.Local["charly-cachyos"]; !present {
-		t.Error("local.charly-cachyos missing")
+
+	// --- Within ONE document: duplicate top-level name rejected. ---
+	dir2 := t.TempDir()
+	dupDoc := `version: 2026.169.0004
+redis:
+  box:
+    base: fedora
+redis:
+  local:
+    candy: [redis]
+`
+	if err := os.WriteFile(filepath.Join(dir2, "charly.yml"), []byte(dupDoc), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	if uf.Deploy == nil {
-		t.Fatal("deployments section missing")
-	}
-	if _, present := uf.Deploy["charly-cachyos"]; !present {
-		t.Error("deployment.charly-cachyos missing")
+	if _, _, err := LoadUnified(dir2); err == nil {
+		t.Fatal("LoadUnified accepted a duplicate top-level node name within one document; want a collision error")
 	}
 }
 
@@ -113,7 +119,7 @@ func TestCrossKindNameReuse_RetiredKeysRejected(t *testing.T) {
 	}{
 		{
 			name: "deployment.qc",
-			cfgYAML: `version: 2026.165.1048
+			cfgYAML: `version: 2026.169.0004
 deploy:
   qc:
     target: local
@@ -124,7 +130,7 @@ deploy:
 		},
 		{
 			name: "deployment.cachyos-dx",
-			cfgYAML: `version: 2026.165.1048
+			cfgYAML: `version: 2026.169.0004
 deploy:
   cachyos-dx:
     target: local
@@ -135,7 +141,7 @@ deploy:
 		},
 		{
 			name: "local.cachyos-dx",
-			cfgYAML: `version: 2026.165.1048
+			cfgYAML: `version: 2026.169.0004
 local:
   cachyos-dx:
     candy: [example]

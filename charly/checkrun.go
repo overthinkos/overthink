@@ -198,45 +198,45 @@ type Runner struct {
 	// run/benchmark start.
 	IterStartTime time.Time
 
-	// PeerVars carries pre-resolved cross-deployment address variables —
-	// ${PEER_HOST:name} and ${PEER_ENDPOINT:name:port} (check_peer.go) — that
+	// HostVars carries pre-resolved cross-deployment address variables —
+	// ${HOST:name} and ${HOST:name:port} (check_members.go) — that
 	// let a driven probe (a check with `on: <driver>`) TARGET a SEPARATE
 	// SUBJECT deployment over the shared `charly` network or the host. Overlaid by
 	// effectiveEnv onto WHATEVER resolver is active (primary, on:-swapped, or a
 	// harness bucket), so cross-deployment addressing is identical across
 	// `charly check live`, kind:check beds, and AI-iteration runs. Nil under classical runs
-	// with no ${PEER_*} refs (no overlay, behaviour unchanged).
-	PeerVars map[string]string
-	// peerCleanups tears down anything opened while resolving PeerVars (an
-	// ssh -L forward for a ${PEER_ENDPOINT} VM/host subject). Run via
-	// ClosePeers() — the check command defers it at run end.
-	peerCleanups []func()
+	// with no ${HOST:<member>} refs (no overlay, behaviour unchanged).
+	HostVars map[string]string
+	// hostCleanups tears down anything opened while resolving HostVars (an
+	// ssh -L forward for a ${HOST} VM/host subject). Run via
+	// CloseHosts() — the check command defers it at run end.
+	hostCleanups []func()
 }
 
-// ClosePeers tears down any resources opened while resolving ${PEER_*} address
+// CloseHosts tears down any resources opened while resolving ${HOST:<member>} address
 // variables (ssh -L forwards). Safe to call when none were opened.
-func (r *Runner) ClosePeers() {
-	for _, c := range r.peerCleanups {
+func (r *Runner) CloseHosts() {
+	for _, c := range r.hostCleanups {
 		if c != nil {
 			c()
 		}
 	}
-	r.peerCleanups = nil
+	r.hostCleanups = nil
 }
 
 // RunLive runs `checks` as a LIVE cross-deployment check. It is the SINGLE entry
 // point every host-context live-check path (a pod / VM / local SUBJECT) shares,
 // so cross-deployment support is wired generically in ONE place, never per kind
 // (R3). It wires the `on:` driver TargetResolver (liveTargetResolver resolves a
-// driver of ANY kind via resolveCheckVenue), pre-resolves the ${PEER_*} subject
-// addresses (applyPeerVars), runs, and tears down any peer endpoints opened.
+// driver of ANY kind via resolveCheckVenue), pre-resolves the ${HOST:<member>} subject
+// addresses (applyHostVars), runs, and tears down any host endpoints opened.
 // The harness scorer (check_runner_live.go) keeps its OWN resolver — it runs
 // against sandbox-NESTED pods, a genuinely different venue context, not a
 // duplicate of this host-context path.
 func (r *Runner) RunLive(ctx context.Context, checks []Op, instance string) []CheckResult {
 	r.TargetResolver = liveTargetResolver(instance)
-	applyPeerVars(r, checks, instance)
-	defer r.ClosePeers()
+	applyHostVars(r, checks, instance)
+	defer r.CloseHosts()
 	return r.Run(ctx, checks)
 }
 
@@ -357,24 +357,25 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 		result.TotalElapsed = result.Elapsed
 		return result
 	}
-	// `on:` multi-target dispatch. Swap executor + resolver + image for
-	// the duration of this check only; restore on return. When
-	// r.TargetResolver is nil (classical tests: path), Resolver+Exec
-	// stay as-is.
+	// Per-step VENUE dispatch (loader-derived from tree position — the former
+	// authored `on:`). Swap executor + resolver + image for the duration of this
+	// check only; restore on return. The self-swap guard (`c.venue != r.Box`)
+	// skips the swap when the step's venue is already the active target: the
+	// scored-step path (check_runner_live.go) pre-buckets by venue and sets r.Box
+	// to the bucket venue, so its in-bucket steps need no re-swap; the
+	// deterministic path (charly check live <bed>) swaps only for a step whose
+	// venue differs from the bed's default target. When r.TargetResolver is nil
+	// (classical no-tree path), Resolver+Exec stay as-is.
 	//
-	// 2026-05: also swap r.Image so cdp/wl/vnc/mcp/etc dispatch
-	// (runCharlyVerb at checkrun_ov_verbs.go:709 reads r.Image to build
-	// `charly check <verb> <method> <image> ...` argv) routes against the
-	// on-named pod, not the plan run's default pod. Without this swap,
-	// `cdp: open` with `on: sway-browser-vnc-concurrency-test` was
-	// silently dispatched against the plan run's jupyter pod and
-	// failed at unknown-image.
+	// The swap also retargets r.Box so cdp/wl/vnc/mcp/etc dispatch (runCharlyVerb
+	// reads r.Box to build `charly check <verb> <method> <venue> ...` argv) routes
+	// against the venue's pod, not the plan run's default pod.
 	origExec, origResolver, origImage := r.Exec, r.Resolver, r.Box
-	if c.On != "" && r.TargetResolver != nil {
-		newResolver, newExec, terr := r.TargetResolver(c.On)
+	if c.venue != "" && c.venue != r.Box && r.TargetResolver != nil {
+		newResolver, newExec, terr := r.TargetResolver(c.venue)
 		if terr != nil {
 			result.Status = TestFail
-			result.Message = fmt.Sprintf("on: %q — %v", c.On, terr)
+			result.Message = fmt.Sprintf("venue %q — %v", c.venue, terr)
 			result.Elapsed = time.Since(start)
 			result.Attempts = 1
 			result.TotalElapsed = result.Elapsed
@@ -386,7 +387,7 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 		if newResolver != nil {
 			r.Resolver = newResolver
 		}
-		r.Box = c.On
+		r.Box = c.venue
 		defer func() {
 			r.Exec = origExec
 			r.Resolver = origResolver
@@ -403,16 +404,16 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 	env := r.effectiveEnv()
 	missing := expanded.ExpandVars(env)
 	if len(missing) > 0 {
-		// An unresolved cross-deployment var (${PEER_HOST}/${PEER_ENDPOINT})
+		// An unresolved cross-deployment var (${HOST}/${HOST})
 		// means the peer/subject this probe targets is UNREACHABLE — the
 		// probe's whole premise failed, so the check FAILS. A SKIP there would
 		// be a fake pass (the bed must NOT go green on an unreachable peer).
 		// Other unresolved vars stay a legitimate SKIP: a deploy-only var under
 		// build scope, an unmounted volume — inputs that genuinely don't apply
 		// to this run, not a failed dependency.
-		if peerMissing := filterPeerVars(missing); len(peerMissing) > 0 {
+		if hostMissing := filterHostVars(missing); len(hostMissing) > 0 {
 			result.Status = TestFail
-			result.Message = fmt.Sprintf("peer unreachable — unresolved cross-deployment variable(s): %s", strings.Join(peerMissing, ", "))
+			result.Message = fmt.Sprintf("peer unreachable — unresolved cross-deployment variable(s): %s", strings.Join(hostMissing, ", "))
 		} else {
 			result.Status = TestSkip
 			result.Message = fmt.Sprintf("unresolved variables: %s", strings.Join(missing, ", "))
@@ -557,20 +558,20 @@ func (r *Runner) effectiveEnv() map[string]string {
 	if r.Resolver != nil {
 		base = r.Resolver.Env
 	}
-	if r.Scenario == nil && len(r.PeerVars) == 0 {
+	if r.Scenario == nil && len(r.HostVars) == 0 {
 		return base
 	}
 	// Copy-on-overlay so the resolver's shared Env map stays clean across
-	// plan runs. Cross-deployment ${PEER_*} addresses overlay first (they are
+	// plan runs. Cross-deployment ${HOST:<member>} addresses overlay first (they are
 	// per-run, target-independent), then plan-run captures (which win on the
 	// rare key collision).
 	capN := 0
 	if r.Scenario != nil {
 		capN = len(r.Scenario.Captures)
 	}
-	env := make(map[string]string, len(base)+len(r.PeerVars)+capN+2)
+	env := make(map[string]string, len(base)+len(r.HostVars)+capN+2)
 	maps.Copy(env, base)
-	maps.Copy(env, r.PeerVars)
+	maps.Copy(env, r.HostVars)
 	if r.Scenario != nil {
 		r.Scenario.ApplyToEnv(env)
 	}

@@ -70,7 +70,7 @@ func TestResolveAgentForwarding_DeployOverride(t *testing.T) {
 		ForwardSshAgent: true,
 	}
 	f := false
-	deploy := &DeploymentNode{
+	deploy := &BundleNode{
 		ForwardGpgAgent: &f,
 		ForwardSshAgent: &f,
 	}

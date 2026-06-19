@@ -67,7 +67,7 @@ func (t *AndroidUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 	tree, _ := resolveTreeRoot(dir)
 	node, ok := tree[t.NodeName]
 	if !ok {
-		fmt.Fprintf(os.Stderr, "charly deploy del %s: no android deploy entry; nothing to uninstall\n", t.NodeName)
+		fmt.Fprintf(os.Stderr, "charly bundle del %s: no android deploy entry; nothing to uninstall\n", t.NodeName)
 		return nil
 	}
 	spec := findAndroidSpec(dir, node.Android)
@@ -77,7 +77,7 @@ func (t *AndroidUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 	dev, err := resolveAndroidDevice(spec, &node, t.NodeName)
 	if err != nil {
 		// Device gone (pod removed) — nothing to uninstall.
-		fmt.Fprintf(os.Stderr, "charly deploy del %s: android device not reachable (%v); skipping uninstall\n", t.NodeName, err)
+		fmt.Fprintf(os.Stderr, "charly bundle del %s: android device not reachable (%v); skipping uninstall\n", t.NodeName, err)
 		return nil
 	}
 	pkgs := androidApkPackageIDs(&node, dir)
@@ -88,7 +88,7 @@ func (t *AndroidUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 		}
 		out, uerr := dev.Uninstall(pkg)
 		if uerr != nil {
-			fmt.Fprintf(os.Stderr, "charly deploy del %s: uninstall %s: %v\n", t.NodeName, pkg, uerr)
+			fmt.Fprintf(os.Stderr, "charly bundle del %s: uninstall %s: %v\n", t.NodeName, pkg, uerr)
 			continue
 		}
 		fmt.Printf("android: uninstalled %s: %s\n", pkg, out)
@@ -103,5 +103,5 @@ func (t *AndroidUnifiedTarget) Test(ctx context.Context, checks []Op, opts TestO
 	return fmt.Errorf("android %q: test not supported on android target (check the hosting pod/device)", t.NodeName)
 }
 func (t *AndroidUnifiedTarget) Update(ctx context.Context, plans []*InstallPlan, opts UpdateOpts) error {
-	return fmt.Errorf("android %q: update not supported on android target (re-run charly deploy add to reinstall apks)", t.NodeName)
+	return fmt.Errorf("android %q: update not supported on android target (re-run charly bundle add to reinstall apks)", t.NodeName)
 }

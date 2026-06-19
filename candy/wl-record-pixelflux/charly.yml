@@ -1,25 +1,28 @@
-candy:
-    version: 2026.144.1443
-    name: wl-record-pixelflux
-    description: |
-        Desktop video recorder via the selkies pixelflux H.264 pipeline
-        Installs the pixelflux-record wrapper script under ~/.local/bin, which
-        drives the selkies pixelflux capture pipeline through ffmpeg to record
-        the desktop as H.264. Verifiable: the wrapper script is installed and
-        executable.
-    require:
-        - selkies
-        - ffmpeg
-    plan:
-        - run: mkdir=${HOME}/.local/bin
-          mkdir: "${HOME}/.local/bin"
-          run_as: "${USER}"
-        - run: copy=pixelflux-record
-          copy: pixelflux-record
-          to: "${HOME}/.local/bin/pixelflux-record"
-          mode: "0755"
-          run_as: "${USER}"
-        - check: the pixelflux-record wrapper is installed and executable
-          file: ${HOME}/.local/bin/pixelflux-record
-          exists: true
-          mode: "0755"
+wl-record-pixelflux:
+    candy:
+        version: 2026.144.1443
+        description: |
+            Desktop video recorder via the selkies pixelflux H.264 pipeline
+            Installs the pixelflux-record wrapper script under ~/.local/bin, which
+            drives the selkies pixelflux capture pipeline through ffmpeg to record
+            the desktop as H.264. Verifiable: the wrapper script is installed and
+            executable.
+    wl-record-pixelflux-require:
+        require:
+            - selkies
+            - ffmpeg
+    wl-record-pixelflux-step-0:
+        run: mkdir=${HOME}/.local/bin
+        mkdir: "${HOME}/.local/bin"
+        run_as: "${USER}"
+    wl-record-pixelflux-step-1:
+        run: copy=pixelflux-record
+        copy: pixelflux-record
+        to: "${HOME}/.local/bin/pixelflux-record"
+        mode: "0755"
+        run_as: "${USER}"
+    wl-record-pixelflux-step-2:
+        check: the pixelflux-record wrapper is installed and executable
+        file: ${HOME}/.local/bin/pixelflux-record
+        exists: true
+        mode: "0755"

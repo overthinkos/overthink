@@ -1,7 +1,7 @@
 package main
 
 // deploy_ref.go — unified box/candy reference resolver for
-// `charly deploy add <name> <ref>`, `--add-candy <ref>`, and charly.yml
+// `charly bundle add <name> <ref>`, `--add-candy <ref>`, and charly.yml
 // box:/add_candy: fields.
 //
 // <ref> accepts four forms, auto-detected:
@@ -258,7 +258,7 @@ func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, 
 	// files transparently). No direct file reads here.
 	if uf, ok, err := LoadUnified(projectDir); err == nil && ok && uf != nil {
 		// Namespace-aware presence check via the single resolver, so a qualified
-		// deploy ref (`charly deploy add charly.<image>`) resolves the same way every
+		// deploy ref (`charly bundle add charly.<image>`) resolves the same way every
 		// other command resolves a box name. Bare names hit the root map
 		// exactly as the previous flat `uf.Box[name]` did.
 		if _, _, present := uf.ProjectConfig().resolveBoxRef(name); present {

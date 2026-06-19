@@ -2,7 +2,7 @@ package main
 
 // deploy_tree.go — the recursive tree walker for schema v2 deployments.
 //
-// Every deployment is a DeploymentNode that may carry `children:`.
+// Every deployment is a BundleNode that may carry `children:`.
 // This file owns the walk-and-dispatch logic that turns the tree into
 // a sequence of per-target Emit() calls with the correct ParentExec
 // threaded through.
@@ -39,7 +39,7 @@ const (
 // Returning (nil, nil) for a node with children is an error — it
 // means "cannot compute child executor", which the walker surfaces
 // with the offending path.
-type DeployTreeVisitor func(path string, node *DeploymentNode, parentExec DeployExecutor) (childExec DeployExecutor, err error)
+type DeployTreeVisitor func(path string, node *BundleNode, parentExec DeployExecutor) (childExec DeployExecutor, err error)
 
 // WalkDeploymentTree performs a pre-order walk rooted at the given
 // node, calling visit on each node. Dotted-path accumulation is
@@ -48,7 +48,7 @@ type DeployTreeVisitor func(path string, node *DeploymentNode, parentExec Deploy
 //
 // Errors short-circuit: as soon as any visit call returns a non-nil
 // error, the walk stops and that error propagates.
-func WalkDeploymentTree(rootPath string, root *DeploymentNode, parentExec DeployExecutor, visit DeployTreeVisitor) error {
+func WalkDeploymentTree(rootPath string, root *BundleNode, parentExec DeployExecutor, visit DeployTreeVisitor) error {
 	if root == nil {
 		return nil
 	}
@@ -59,8 +59,8 @@ func WalkDeploymentTree(rootPath string, root *DeploymentNode, parentExec Deploy
 	if !root.HasChildren() {
 		return nil
 	}
-	for _, k := range sortedNestedKeys(root.Nested) {
-		child := root.Nested[k]
+	for _, k := range sortedNestedKeys(root.Children) {
+		child := root.Children[k]
 		childPath := k
 		if rootPath != "" {
 			childPath = rootPath + "." + k
@@ -73,10 +73,10 @@ func WalkDeploymentTree(rootPath string, root *DeploymentNode, parentExec Deploy
 }
 
 // WalkDeploymentTreePostOrder is the post-order analogue used by
-// DeployDelCmd. Children are visited before their parent, so a
+// BundleDelCmd. Children are visited before their parent, so a
 // parent's venue can still accept the teardown commands for its
 // children.
-func WalkDeploymentTreePostOrder(rootPath string, root *DeploymentNode, parentExec DeployExecutor, visit DeployTreeVisitor) error {
+func WalkDeploymentTreePostOrder(rootPath string, root *BundleNode, parentExec DeployExecutor, visit DeployTreeVisitor) error {
 	if root == nil {
 		return nil
 	}
@@ -93,8 +93,8 @@ func WalkDeploymentTreePostOrder(rootPath string, root *DeploymentNode, parentEx
 		return err
 	}
 	if root.HasChildren() {
-		for _, k := range sortedNestedKeys(root.Nested) {
-			child := root.Nested[k]
+		for _, k := range sortedNestedKeys(root.Children) {
+			child := root.Children[k]
 			childPath := k
 			if rootPath != "" {
 				childPath = rootPath + "." + k
@@ -127,7 +127,7 @@ func WalkDeploymentTreePostOrder(rootPath string, root *DeploymentNode, parentEx
 //
 // Returns (parentExec, nil) for nodes with no children — no
 // composition needed.
-func deriveChildExecutor(node *DeploymentNode, parentExec DeployExecutor, deployName string) (DeployExecutor, error) {
+func deriveChildExecutor(node *BundleNode, parentExec DeployExecutor, deployName string) (DeployExecutor, error) {
 	if node == nil {
 		return parentExec, nil
 	}
@@ -168,7 +168,7 @@ func deriveChildExecutor(node *DeploymentNode, parentExec DeployExecutor, deploy
 // follows the `charly` convention of matching the deploy key — callers
 // that need a custom name can set node.Engine or pass via the deploy
 // entry's naming.
-func containerChildExecutor(node *DeploymentNode, parentExec DeployExecutor) (DeployExecutor, error) {
+func containerChildExecutor(node *BundleNode, parentExec DeployExecutor) (DeployExecutor, error) {
 	name := containerNameForNode(node)
 	if name == "" {
 		return nil, fmt.Errorf("container node: cannot determine container name for nested dispatch")
@@ -197,7 +197,7 @@ func containerChildExecutor(node *DeploymentNode, parentExec DeployExecutor) (De
 // a `charly-<bed>` alias with no matching stanza (e.g., bed `arch-vm` →
 // `charly-arch-vm`, but the stanza is `charly-arch`). deployName is kept for
 // log messages where the deployment identity matters.
-func vmChildExecutor(node *DeploymentNode, parentExec DeployExecutor, deployName string) (DeployExecutor, error) {
+func vmChildExecutor(node *BundleNode, parentExec DeployExecutor, deployName string) (DeployExecutor, error) {
 	vmName := node.Vm
 	if vmName == "" {
 		vmName = deployName // fallback for legacy nodes without `vm:` set
@@ -224,18 +224,18 @@ func vmChildExecutor(node *DeploymentNode, parentExec DeployExecutor, deployName
 }
 
 // containerNameForNode derives the container name for a node's
-// container target. Today `charly deploy add <name>` uses the deploy key
+// container target. Today `charly bundle add <name>` uses the deploy key
 // as the container name; we preserve that convention for the root
 // level. For nested container children, the fully-qualified path is
 // flattened with `_` to produce a unique podman-compatible name
 // (e.g. `stack.web.db` → `stack_web_db`).
 //
 // Callers provide the path via node.pathHint when set; absent that,
-// we fall back to parsing the node's fields. Because DeploymentNode
+// we fall back to parsing the node's fields. Because BundleNode
 // doesn't carry its own key (the map above owns the key), we embed
 // the dotted path into EmitOpts.Path upstream; deriveChildExecutor
 // reads that when available.
-func containerNameForNode(_ *DeploymentNode) string {
+func containerNameForNode(_ *BundleNode) string {
 	// Placeholder: the real path is known only by the walker that
 	// tracks it. When invoked from the walker's DeployTreeVisitor,
 	// callers pass the name via the NestedJump.Target directly and
@@ -247,7 +247,7 @@ func containerNameForNode(_ *DeploymentNode) string {
 // sshParamsForVm returns an SSHExecutor pointing at the VM's managed
 // ssh-config alias (charly-<deployName>). All connection details — User,
 // Port, IdentityFile, host-key checking — live in the Host stanza
-// that `charly vm create` / `charly deploy add` published into
+// that `charly vm create` / `charly bundle add` published into
 // ~/.config/charly/ssh_config; ssh(1) reads them from there. Our
 // SSHExecutor needs only the alias as Host.
 func sshParamsForVm(deployName string) *SSHExecutor {
@@ -262,7 +262,7 @@ func sshParamsForVm(deployName string) *SSHExecutor {
 // "container"/"kubernetes" spellings normalize to pod/k8s so
 // downstream code speaks the canonical target vocabulary exclusively.
 // Target is the canonical source of truth (no name-prefix heuristic).
-func classifyTarget(node *DeploymentNode) string {
+func classifyTarget(node *BundleNode) string {
 	if node == nil || node.Target == "" {
 		return "pod"
 	}
@@ -286,20 +286,20 @@ func NestedContainerName(path string) string {
 // resolveTreeRoot returns the DeploymentsSection's Images map from
 // the merged UnifiedFile + local overlay, ready for dotted-path
 // traversal. Handles the project charly.yml + local overlay merge
-// the same way DeployAddCmd.Run does today.
-func resolveTreeRoot(dir string) (map[string]DeploymentNode, error) {
-	var projectDC *DeployConfig
+// the same way BundleAddCmd.Run does today.
+func resolveTreeRoot(dir string) (map[string]BundleNode, error) {
+	var projectDC *BundleConfig
 	if uf, ok, err := LoadUnified(dir); err != nil {
 		return nil, err
 	} else if ok && uf != nil {
-		projectDC = uf.ProjectDeployConfig()
+		projectDC = uf.ProjectBundleConfig()
 	}
-	localDC, _ := LoadDeployConfig()
+	localDC, _ := LoadBundleConfig()
 	merged := MergeDeployConfigs(projectDC, localDC)
-	if merged == nil || merged.Deploy == nil {
+	if merged == nil || merged.Bundle == nil {
 		return nil, nil
 	}
-	return merged.Deploy, nil
+	return merged.Bundle, nil
 }
 
 // Suppressor for imports only used in doc comments / future

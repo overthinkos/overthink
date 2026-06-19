@@ -1,0 +1,221 @@
+package main
+
+// node_parse.go — the generic parser for the UNIFIED node-form document tree (the
+// ONE clean forward model; NO legacy kind-first parse). Every charly.yml element is
+// a name-first node `<name>: {<discriminator>: <value>, <child>: <node>…}`:
+//   - the ONE discriminator is a keyword from the unified vocabulary — an ENTITY
+//     kind (box/candy/bundle/pod/vm/…), a DATA key (package/env/service/route/…),
+//     or a STEP verb (run/check/agent-run/agent-check/include);
+//   - an ENTITY node's value holds its SCALAR/object config; its COLLECTIONS (data)
+//     and PLAN (steps) are CHILD nodes, and a resource nested under it is a
+//     sub-ENTITY child;
+//   - a DATA node carries its one collection payload; a STEP node carries its verb
+//     prose + inline Op fields. Neither has children.
+// The assembler (node_build.go) folds data + step children back into the entity's
+// body and decodes it through the COMPLETE per-kind schema (#Candy/#Deploy/…), so
+// the strict typing comes from the complete def — no per-arm value gaps.
+// The vocabulary mirrors schema/node.cue — keep them in lockstep.
+
+import (
+	"fmt"
+
+	"gopkg.in/yaml.v3"
+)
+
+// nodeEntityKinds are the ENTITY discriminator keywords (mirror schema/node.cue
+// _reservedNode entity arms).
+var nodeEntityKinds = map[string]bool{
+	"box": true, "candy": true, "bundle": true, "pod": true, "vm": true,
+	"k8s": true, "local": true, "android": true, "host": true,
+	"distro": true, "builder": true, "init": true, "resource": true,
+	"sidecar": true, "agent": true, "group": true, "module": true, "target": true,
+}
+
+// nodeResourceKinds are the ONLY entity kinds that nest as a sub-ENTITY child
+// (a deploy-into / alongside member). Every OTHER kind keyword that also names a
+// data field (candy, distro) classifies as DATA when it appears as a child — so a
+// `{candy: [refs]}` composition child and a `{distro: {…}}` package-map child are
+// data, while a top-level `candy:`/`distro:` node is an entity.
+var nodeResourceKinds = map[string]bool{
+	"pod": true, "vm": true, "k8s": true, "local": true,
+	"android": true, "host": true, "bundle": true,
+}
+
+// nodeStepVerbs are the plan-step discriminator keywords (one per step node). A
+// step node carries this verb's prose plus its inline Op fields.
+var nodeStepVerbs = map[string]bool{
+	"run": true, "check": true, "agent-run": true, "agent-check": true, "include": true,
+}
+
+// nodeDataKeys are the DATA discriminator keywords — every NON-SCALAR field of an
+// entity (composition refs, collections, single-object config), each carried by one
+// child node and SET onto the owning entity's matching field by the assembler. Only
+// true scalars stay in the kind value. MUST stay in lockstep with the non-scalar
+// fields of the entity structs (CandyYAML / BundleNode); guarded by
+// TestNodeDataKeysCoverEntityFields.
+var nodeDataKeys = map[string]bool{
+	// candy composition + capability
+	"candy": true, "require": true, "requires_capability": true, "capability": true,
+	// candy collections + objects
+	"env": true, "var": true, "path_append": true, "package": true, "distro": true,
+	"apk": true, "localpkg": true, "port": true, "port_relay": true, "route": true,
+	"service": true, "volume": true, "alias": true, "extract": true, "data": true,
+	"security": true, "libvirt": true, "hook": true, "shell": true, "artifact": true,
+	"env_provide": true, "env_require": true, "env_accept": true,
+	"secret": true, "secret_accept": true, "secret_require": true,
+	"mcp_provide": true, "mcp_require": true, "mcp_accept": true,
+	// deploy/bundle non-scalars (beyond the shared env/port/volume/secret/route)
+	"add_candy": true, "install_opts": true, "tunnel": true, "iterate": true,
+	"ephemeral": true, "preemptible": true,
+	"requires_exclusive": true, "requires_shared": true, "ssh_arg": true,
+}
+
+// nodeDocDirectives are the reserved DOCUMENT directives (configure the document,
+// not entities).
+var nodeDocDirectives = map[string]bool{
+	"version": true, "repo": true, "import": true, "discover": true,
+	"defaults": true, "provides": true,
+}
+
+// genericNode is one parsed node-form node.
+type genericNode struct {
+	name      string         // the node's key (its name)
+	disc      string         // the discriminator keyword
+	discClass string         // "entity" | "data" | "step"
+	discValue *yaml.Node     // the discriminator's value (entity scalars / data payload / step prose)
+	raw       *yaml.Node     // the WHOLE node mapping (a step folds its raw Op; a data node its payload)
+	children  []*genericNode // sub-nodes (data / step / sub-entity) — entity nodes only
+}
+
+// classifyDisc returns the discriminator class for a keyword, or "" if not a
+// discriminator (→ a child node name). asChild distinguishes a top-level node
+// (every entity kind is an entity) from a child node (only RESOURCE kinds nest as
+// sub-entities; candy/distro as a child are their DATA sense).
+func classifyDisc(k string, asChild bool) string {
+	if asChild {
+		switch {
+		case nodeResourceKinds[k]:
+			return "entity"
+		case nodeStepVerbs[k]:
+			return "step"
+		case nodeDataKeys[k]:
+			return "data"
+		default:
+			return ""
+		}
+	}
+	switch {
+	case nodeEntityKinds[k]:
+		return "entity"
+	case nodeStepVerbs[k]:
+		return "step"
+	case nodeDataKeys[k]:
+		return "data"
+	default:
+		return ""
+	}
+}
+
+// parseNode builds a genericNode from a node mapping (the value under `name:`).
+// asChild is true when the node is a child of another node (vs a top-level node).
+func parseNode(name string, m *yaml.Node, asChild bool) (*genericNode, error) {
+	if m.Kind == yaml.DocumentNode && len(m.Content) == 1 {
+		m = m.Content[0]
+	}
+	if m.Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("node %q: expected a mapping value, got yaml kind %v", name, m.Kind)
+	}
+	gn := &genericNode{name: name, raw: m}
+	type kv struct{ k, v *yaml.Node }
+	var childPairs []kv
+	// Phase 1 — a STEP node: a step verb is the SOLE discriminator, and EVERY other
+	// key is an inline Op field (carried in raw), never a discriminator or a child.
+	// Step verbs take precedence so an Op field that happens to share a data-key name
+	// (e.g. a `port:` probe field on a `check:` step) is not misread as a second
+	// discriminator.
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if nodeStepVerbs[m.Content[i].Value] {
+			if gn.disc != "" {
+				return nil, fmt.Errorf("node %q: two step verbs (%q and %q) — a step has exactly one", name, gn.disc, m.Content[i].Value)
+			}
+			gn.disc, gn.discClass, gn.discValue = m.Content[i].Value, "step", m.Content[i+1]
+		}
+	}
+	if gn.disc != "" {
+		return gn, nil // step node — Op fields stay in raw, no children
+	}
+	// Phase 2 — an ENTITY or DATA node: exactly one entity-kind / data-key
+	// discriminator; every other key is a child-node name (entity nodes only).
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		key, val := m.Content[i], m.Content[i+1]
+		cls := classifyDisc(key.Value, asChild)
+		if cls == "" {
+			childPairs = append(childPairs, kv{key, val})
+			continue
+		}
+		if gn.disc != "" {
+			return nil, fmt.Errorf("node %q: two discriminators (%q and %q) — a node has exactly one", name, gn.disc, key.Value)
+		}
+		gn.disc, gn.discClass, gn.discValue = key.Value, cls, val
+	}
+	if gn.disc == "" {
+		return nil, fmt.Errorf("node %q: no discriminator (expected an entity kind, data key, or step verb)", name)
+	}
+	// "Everything except scalars is a node": an entity value holds ONLY scalar
+	// fields — every collection / composition / object / plan step is a CHILD node.
+	// Reject a non-scalar field sitting in the value directly (the deterministic
+	// child-node gate; CUE owns the closed-typo / wrong-kind-child strictness).
+	if gn.discClass == "entity" && gn.discValue != nil && gn.discValue.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(gn.discValue.Content); i += 2 {
+			vk := gn.discValue.Content[i].Value
+			if nodeDataKeys[vk] || nodeStepVerbs[vk] || vk == "plan" {
+				return nil, fmt.Errorf("node %q: %q must be a CHILD node, not a field in the %q value — everything except scalars is a node (run: charly migrate)", name, vk, gn.disc)
+			}
+		}
+	}
+	// Only ENTITY nodes have child nodes; for data/step nodes the non-discriminator
+	// keys are inline Op/payload fields (left in raw), never children.
+	if gn.discClass == "entity" {
+		for _, c := range childPairs {
+			child, err := parseNode(c.k.Value, c.v, true)
+			if err != nil {
+				return nil, err
+			}
+			// Wrong-kind-child gate: only a DEPLOYABLE kind nests sub-ENTITY members
+			// (a bundle/pod/vm/k8s/local/android/host). A non-deployable kind
+			// (candy/box/distro/…) admits ONLY data + step children. (This replaces
+			// the per-child CUE kind-disjunction, which was an O(N×kinds×children)
+			// blow-up; CUE still strictly validates each node's closed VALUE.)
+			if child.discClass == "entity" && !nodeResourceKinds[gn.disc] {
+				return nil, fmt.Errorf("node %q (kind %q): sub-entity child %q (kind %q) is not allowed — only deployable kinds (bundle/pod/vm/k8s/local/android/host) nest sub-entities", name, gn.disc, child.name, child.disc)
+			}
+			gn.children = append(gn.children, child)
+		}
+	}
+	return gn, nil
+}
+
+// parseNodeTree walks a whole node-form document mapping into its reserved
+// directives and its top-level entity nodes.
+func parseNodeTree(doc *yaml.Node) (directives map[string]*yaml.Node, nodes []*genericNode, err error) {
+	if doc.Kind == yaml.DocumentNode && len(doc.Content) == 1 {
+		doc = doc.Content[0]
+	}
+	if doc.Kind != yaml.MappingNode {
+		return nil, nil, fmt.Errorf("node-form document: expected a top-level mapping, got yaml kind %v", doc.Kind)
+	}
+	directives = map[string]*yaml.Node{}
+	for i := 0; i+1 < len(doc.Content); i += 2 {
+		key, val := doc.Content[i], doc.Content[i+1]
+		if nodeDocDirectives[key.Value] {
+			directives[key.Value] = val
+			continue
+		}
+		gn, e := parseNode(key.Value, val, false)
+		if e != nil {
+			return nil, nil, e
+		}
+		nodes = append(nodes, gn)
+	}
+	return directives, nodes, nil
+}

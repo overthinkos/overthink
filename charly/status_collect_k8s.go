@@ -15,7 +15,7 @@ import (
 // referenced kind:k8s template points at.
 //
 // Provenance is Source="tree": k8s deploys do not run a container on this
-// host — they emit a manifest tree that `charly deploy sync` / `kubectl apply -k`
+// host — they emit a manifest tree that `charly bundle sync` / `kubectl apply -k`
 // applies to a remote cluster. The flat (non-nested) view therefore reports
 // generation state, never live pod health. Under opts.Nested it additionally
 // queries the live cluster (via the same vendored client-go subset the
@@ -58,7 +58,7 @@ func (k *K8sCollector) Collect(ctx context.Context, opts CollectOpts) ([]Deploym
 
 	rows := make([]DeploymentStatus, 0, len(entries))
 	for _, name := range entries {
-		node := opts.Unified.Deploy[name]
+		node := opts.Unified.Bundle[name]
 
 		row := DeploymentStatus{
 			Kind:      SubstrateK8s,
@@ -69,7 +69,7 @@ func (k *K8sCollector) Collect(ctx context.Context, opts CollectOpts) ([]Deploym
 		}
 
 		// Tree-present detection: <treeRoot>/<name>/ stats successfully iff
-		// `charly deploy add` has generated the Kustomize tree.
+		// `charly bundle add` has generated the Kustomize tree.
 		treePresent := false
 		if rootErr == nil {
 			if _, err := os.Stat(filepath.Join(treeRoot, name)); err == nil {
@@ -116,14 +116,14 @@ func k8sTreeRoot() (string, error) {
 }
 
 // k8sDeployEntries returns the names of every target:k8s deploy in the folded
-// Deploy map, in deterministic (map-key) order via the shared classifier so
+// Bundle map, in deterministic (map-key) order via the shared classifier so
 // legacy "kubernetes" spellings resolve identically to "k8s".
 func k8sDeployEntries(uf *UnifiedFile) []string {
-	if uf == nil || uf.Deploy == nil {
+	if uf == nil || uf.Bundle == nil {
 		return nil
 	}
 	var names []string
-	for name, node := range uf.Deploy {
+	for name, node := range uf.Bundle {
 		n := node
 		if classifyNodeTarget(&n, name) == "k8s" {
 			names = append(names, name)
@@ -135,7 +135,7 @@ func k8sDeployEntries(uf *UnifiedFile) []string {
 // k8sImageRef resolves the image a k8s deploy runs, mirroring
 // K8sUnifiedTarget.Add: the node's explicit Box, falling back to the
 // deploy name.
-func k8sImageRef(name string, node DeploymentNode) string {
+func k8sImageRef(name string, node BundleNode) string {
 	if node.Box != "" {
 		return node.Box
 	}
@@ -144,7 +144,7 @@ func k8sImageRef(name string, node DeploymentNode) string {
 
 // k8sSpecFor resolves the kind:k8s template referenced by node.K8s from the
 // unified projection. Nil when unreferenced or absent.
-func k8sSpecFor(uf *UnifiedFile, node DeploymentNode) *K8sSpec {
+func k8sSpecFor(uf *UnifiedFile, node BundleNode) *K8sSpec {
 	if uf == nil || uf.K8s == nil || node.K8s == "" {
 		return nil
 	}
@@ -157,7 +157,7 @@ func k8sSpecFor(uf *UnifiedFile, node DeploymentNode) *K8sSpec {
 // ("unreachable", true) when the cluster can't be reached; ("", false) only
 // when no workload GVR can be derived. Never panics, never blocks beyond the
 // dynamic client's own dialing.
-func k8sLiveStatus(ctx context.Context, name string, node DeploymentNode, spec *K8sSpec) (string, bool) {
+func k8sLiveStatus(ctx context.Context, name string, node BundleNode, spec *K8sSpec) (string, bool) {
 	gvr, ok := kindToGVR(k8sWorkloadKind(node))
 	if !ok {
 		return "", false
@@ -181,13 +181,13 @@ func k8sLiveStatus(ctx context.Context, name string, node DeploymentNode, spec *
 // k8sWorkloadKind derives the workload kind for a deploy node using the same
 // heuristic GenerateK8sKustomize applies (service+storage → StatefulSet, etc.),
 // so the live probe targets the SAME resource that was generated.
-func k8sWorkloadKind(node DeploymentNode) string {
+func k8sWorkloadKind(node BundleNode) string {
 	return selectWorkloadKind(K8sGenerateOpts{Deploy: node})
 }
 
 // k8sWorkloadNamespace resolves the workload namespace exactly as
 // deployNamespace does (deploy override → template default → "default").
-func k8sWorkloadNamespace(node DeploymentNode, spec *K8sSpec) string {
+func k8sWorkloadNamespace(node BundleNode, spec *K8sSpec) string {
 	ns := deployNamespace(K8sGenerateOpts{Deploy: node, Cluster: spec})
 	if ns == "" {
 		ns = "default"

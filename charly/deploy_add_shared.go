@@ -46,8 +46,8 @@ func prepareCandySecrets(plans []*InstallPlan, dir string) ([]*Candy, map[string
 // Shared by LocalUnifiedTarget.Add / VmUnifiedTarget.Add — both feed it
 // to RetrieveCandyArtifacts so rewrite rules like ${K3S_KUBECONFIG_SERVER}
 // resolve to the declared value rather than a literal placeholder. The
-// node is the dispatch-merged DeploymentNode (never re-read from disk).
-func buildArtifactEnv(secretEnv map[string]string, node *DeploymentNode) map[string]string {
+// node is the dispatch-merged BundleNode (never re-read from disk).
+func buildArtifactEnv(secretEnv map[string]string, node *BundleNode) map[string]string {
 	env := make(map[string]string, len(secretEnv))
 	maps.Copy(env, secretEnv)
 	if node != nil {
@@ -87,7 +87,7 @@ func retrieveArtifactsAndK3s(ctx context.Context, exec DeployExecutor, candyList
 // ordering). Consumes the merged node — does NOT re-read charly.yml.
 // Registration failure is logged (not fatal), matching the prior run*
 // behavior; the returned error is always nil today but kept for symmetry.
-func registerEphemeralIfMarked(node *DeploymentNode, name string) {
+func registerEphemeralIfMarked(node *BundleNode, name string) {
 	if node == nil || !node.IsEphemeral() {
 		return
 	}

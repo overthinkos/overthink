@@ -290,6 +290,24 @@ func resolveCheckVenue(name, instance string) (*CheckVenue, error) {
 			}
 			return &CheckVenue{Exec: exec, Kind: "host", Name: name, Instance: instance}, nil
 		}
+		// Dotted pod-in-pod path (e.g. cache.migrate): build the full nested
+		// chain so the verb lands inside the leaf pod, not the root container.
+		// (The dotted VM case is handled above; this is the non-VM nesting the
+		// position-derived venue produces.) The leaf container is
+		// `charly-<flat-path>` (NestedContainerName) for host-side port mapping.
+		if strings.Contains(name, ".") {
+			if roots, _ := resolveTreeRoot(dir); roots != nil {
+				if _, chain, chainErr := ResolveDeployChain(roots, name, ShellExecutor{}); chainErr == nil && chain != nil {
+					return &CheckVenue{
+						Exec:     chain,
+						Kind:     "container",
+						Engine:   "podman",
+						Name:     "charly-" + NestedContainerName(name),
+						Instance: instance,
+					}, nil
+				}
+			}
+		}
 	}
 
 	// Default: a running container.
@@ -319,7 +337,7 @@ func checkVmTarget(uf *UnifiedFile, name string) (vmName string, ok bool) {
 	// Dotted: route through the root segment's VM substrate.
 	if idx := strings.Index(name, "."); idx > 0 {
 		root := name[:idx]
-		if entry, present := uf.Deploy[root]; present && entry.Target == "vm" {
+		if entry, present := uf.Bundle[root]; present && entry.Target == "vm" {
 			vm := entry.Vm
 			if vm == "" {
 				vm = root
@@ -333,8 +351,8 @@ func checkVmTarget(uf *UnifiedFile, name string) (vmName string, ok bool) {
 			return name, true
 		}
 	}
-	if uf.Deploy != nil {
-		if entry, present := uf.Deploy[name]; present && entry.Target == "vm" {
+	if uf.Bundle != nil {
+		if entry, present := uf.Bundle[name]; present && entry.Target == "vm" {
 			vm := entry.Vm
 			if vm == "" {
 				vm = name
@@ -349,16 +367,16 @@ func checkVmTarget(uf *UnifiedFile, name string) (vmName string, ok bool) {
 // target:local deployment and returns its node so the caller can build the
 // host/ssh executor via rootExecutorForDeployNode. Shared by
 // CheckLiveCmd.isLocalTarget and resolveCheckVenue (R3).
-func checkLocalTarget(uf *UnifiedFile, name string) (DeploymentNode, bool) {
-	if uf == nil || uf.Deploy == nil {
-		return DeploymentNode{}, false
+func checkLocalTarget(uf *UnifiedFile, name string) (BundleNode, bool) {
+	if uf == nil || uf.Bundle == nil {
+		return BundleNode{}, false
 	}
 	root := name
 	if idx := strings.Index(name, "."); idx > 0 {
 		root = name[:idx]
 	}
-	if entry, present := uf.Deploy[root]; present && entry.Target == "local" {
+	if entry, present := uf.Bundle[root]; present && entry.Target == "local" {
 		return entry, true
 	}
-	return DeploymentNode{}, false
+	return BundleNode{}, false
 }

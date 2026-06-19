@@ -268,7 +268,7 @@ func validateRunMode(value string) error {
 // The functional-systemd-user check (added 2026-04-27) catches nested
 // environments — harness sandbox pods, supervisord-only containers, sysvinit hosts —
 // that have the systemctl binary present but no running `systemd --user`
-// session. Without this check, `charly deploy add <name> <ref>` would silently
+// session. Without this check, `charly bundle add <name> <ref>` would silently
 // pick run_mode=quadlet, write the .container file, and fail at
 // `systemctl --user daemon-reload` time. With the check, run_mode=direct
 // is auto-selected on those hosts and `runConfigDirect()` (in

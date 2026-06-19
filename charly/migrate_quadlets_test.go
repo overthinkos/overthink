@@ -84,23 +84,25 @@ func TestDetectStaleEncryptedQuadlets(t *testing.T) {
 	}
 	t.Setenv("XDG_CONFIG_HOME", xdg)
 
-	deployYAML := `version: 2026.165.1048
-deploy:
-  immich:
-    box: immich
-    target: pod
-    volume:
-      - {name: data, type: encrypted}
-  jupyter:
-    box: jupyter
-    target: pod
-    volume:
-      - {name: data, type: encrypted}
-  webapp:
-    box: webapp
-    target: pod
-    volume:
-      - {name: data, type: bind, host: /tmp}
+	deployYAML := `version: 2026.169.0004
+immich:
+    bundle:
+        box: immich
+    immich-volume:
+        volume:
+            - {name: data, type: encrypted}
+jupyter:
+    bundle:
+        box: jupyter
+    jupyter-volume:
+        volume:
+            - {name: data, type: encrypted}
+webapp:
+    bundle:
+        box: webapp
+    webapp-volume:
+        volume:
+            - {name: data, type: bind, host: /tmp}
 `
 	if err := os.WriteFile(filepath.Join(xdg, "charly", "charly.yml"), []byte(deployYAML), 0o600); err != nil {
 		t.Fatal(err)
@@ -164,7 +166,7 @@ func TestDetectStaleEncryptedQuadlets_NoQuadletOnDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("XDG_CONFIG_HOME", xdg)
-	if err := os.WriteFile(filepath.Join(xdg, "charly", "charly.yml"), []byte("version: 2026.165.1048\ndeploy:\n  ghost:\n    box: ghost\n    target: pod\n    volume:\n      - {name: data, type: encrypted}\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(xdg, "charly", "charly.yml"), []byte("version: 2026.169.0004\nghost:\n    bundle:\n        box: ghost\n    ghost-volume:\n        volume:\n            - {name: data, type: encrypted}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	stale, err := DetectStaleEncryptedQuadlets(filepath.Join(dir, "quadlets-empty"))

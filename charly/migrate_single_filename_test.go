@@ -51,9 +51,9 @@ vm:
   version: 2026.144.1443
 `)
 	// build.yml whose build vocabulary matches the embedded default → dropped +
-	// deleted (semantic compare: the embedded charly.cue parses to the same
+	// deleted (semantic compare: the embedded charly_defaults.yml parses to the same
 	// distro/builder/init/resource maps). The frozen legacy YAML fixture is the
-	// exact YAML form the embedded charly.cue is data-equivalent to.
+	// exact YAML form the embedded charly_defaults.yml is data-equivalent to.
 	legacyVocab, rerr := os.ReadFile("testdata/embedded_legacy.yml")
 	if rerr != nil {
 		t.Fatal(rerr)
@@ -65,7 +65,13 @@ vm:
 	if _, err := MigrateSingleFilename(dir, "", false); err != nil {
 		t.Fatalf("MigrateSingleFilename: %v", err)
 	}
-	// calver-schema is the next chain step; it re-stamps the root to HEAD so the
+	// unified-node is the next forward chain step: it rewrites every kind-keyed
+	// entity (the split box: docs + the folded root vm:) into the name-first
+	// node-form the loader requires.
+	if _, err := MigrateUnifiedNode(dir, false); err != nil {
+		t.Fatalf("unified-node: %v", err)
+	}
+	// calver-schema is the chain's final step; it re-stamps the root to HEAD so the
 	// migrated tree loads (single-filename itself does no version bump).
 	if _, err := MigrateCalverSchema(dir, "", LatestSchemaVersion(), false); err != nil {
 		t.Fatalf("calver-schema: %v", err)
@@ -79,8 +85,8 @@ vm:
 			t.Errorf("box/%s/charly.yml missing: %v", name, err)
 			continue
 		}
-		if !strings.Contains(string(data), "box:") || !strings.Contains(string(data), "name: "+name) {
-			t.Errorf("box/%s/charly.yml not a kind-keyed box: doc:\n%s", name, data)
+		if !strings.Contains(string(data), "box:") || !strings.Contains(string(data), name+":") {
+			t.Errorf("box/%s/charly.yml not a name-first node-form box: doc:\n%s", name, data)
 		}
 	}
 	// Box files deleted.

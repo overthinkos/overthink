@@ -1,39 +1,44 @@
-candy:
-    version: 2026.144.1443
-    name: check-local-layer
-    description: |
-        Drop /etc/check-local-marker on the host filesystem
-        Used by the check-local kind:local template to exercise the
-        ShellExecutor + HostDeployTarget path. Marker file is written by
-        a write: task; deploy-scope check probe runs on the host (not in a
-        container) to verify the file is present after `charly deploy add`.
-    plan:
-        - run: write=/etc/check-local-marker
-          write: /etc/check-local-marker
-          run_as: root
-          mode: "0644"
-          content: |
+check-local-layer:
+    candy:
+        version: 2026.144.1443
+        description: |
+            Drop /etc/check-local-marker on the host filesystem
+            Used by the check-local kind:local template to exercise the
+            ShellExecutor + HostDeployTarget path. Marker file is written by
+            a write: task; deploy-scope check probe runs on the host (not in a
+            container) to verify the file is present after `charly bundle add`.
+    check-local-layer-step-0:
+        run: write=/etc/check-local-marker
+        write: /etc/check-local-marker
+        run_as: root
+        mode: "0644"
+        content: |
             check-local v1
-        - check: the check-local marker file is present at /etc/check-local-marker
-          file: /etc/check-local-marker
-          exists: true
-        - check: the marker records the check-local version stamp "check-local v1"
-          file: /etc/check-local-marker
-          contains:
+    check-local-layer-step-1:
+        check: the check-local marker file is present at /etc/check-local-marker
+        file: /etc/check-local-marker
+        exists: true
+    check-local-layer-step-2:
+        check: the marker records the check-local version stamp "check-local v1"
+        file: /etc/check-local-marker
+        contains:
             - contains: "check-local v1"
-        - check: after the check-local kind:local apply, the marker resolves on the host filesystem outside any container
-          command: "test -f /etc/check-local-marker"
-          in_container: false
-          context:
+    check-local-layer-step-3:
+        check: after the check-local kind:local apply, the marker resolves on the host filesystem outside any container
+        command: "test -f /etc/check-local-marker"
+        in_container: false
+        context:
             - runtime
-        - check: command=grep -q 'check-local v1' /etc/check-local-marker
-          id: check-local-marker-host-content
-          command: "grep -q 'check-local v1' /etc/check-local-marker"
-          in_container: false
-          context:
+    check-local-marker-host-content:
+        check: command=grep -q 'check-local v1' /etc/check-local-marker
+        id: check-local-marker-host-content
+        command: "grep -q 'check-local v1' /etc/check-local-marker"
+        in_container: false
+        context:
             - runtime
-        - check: file=/etc/check-local-marker
-          id: check-local-marker-build
-          file: /etc/check-local-marker
-          exists: true
-          mode: "0644"
+    check-local-marker-build:
+        check: file=/etc/check-local-marker
+        id: check-local-marker-build
+        file: /etc/check-local-marker
+        exists: true
+        mode: "0644"

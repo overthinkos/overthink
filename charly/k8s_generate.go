@@ -37,7 +37,7 @@ type K8sGenerateOpts struct {
 	DeploymentName string // map key from charly.yml:deployments.images (base image name)
 	Instance       string // "" for the bare overlay; non-empty for image/instance
 	ImageRef       string // fully qualified image ref (registry/name:tag)
-	Deploy         DeploymentNode
+	Deploy         BundleNode
 	Capabilities   *Capabilities
 	Cluster        *K8sSpec
 	OutputDir      string // usually <projectDir>/.opencharly/k8s
@@ -548,7 +548,7 @@ func generateEnv(env []string) []map[string]any {
 // Resources.
 // -----------------------------------------------------------------------------
 
-func generateResources(d DeploymentNode) map[string]any {
+func generateResources(d BundleNode) map[string]any {
 	out := map[string]any{}
 	req := map[string]any{}
 	if d.Resources != nil {
@@ -665,7 +665,7 @@ func generateVolumeClaimTemplates(opts K8sGenerateOpts) []map[string]any {
 	return out
 }
 
-func generateVolumeMounts(d DeploymentNode) []map[string]any {
+func generateVolumeMounts(d BundleNode) []map[string]any {
 	out := make([]map[string]any, 0, len(d.Storage))
 	for _, s := range d.Storage {
 		mount := s.Path

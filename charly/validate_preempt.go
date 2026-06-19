@@ -7,7 +7,7 @@ import (
 
 // Validation for the resource-arbitration ("preemptible") classification axis
 // — the holder-side `preemptible:` block and the claimant-side
-// `requires_exclusive:` list on a DeploymentNode. See classification.go +
+// `requires_exclusive:` list on a BundleNode. See classification.go +
 // charly/preempt.go. Mirrors validate_ephemeral.go.
 
 // ValidatePreemptibleOnNode checks one deploy node's preemptible +
@@ -21,7 +21,7 @@ import (
 //   - preemptible.restore must be "always" or "on-success".
 //   - requires_exclusive entries must be non-empty strings.
 //   - a node may not both hold and require the SAME token (self-contention).
-func ValidatePreemptibleOnNode(name string, node *DeploymentNode, errs *ValidationError) {
+func ValidatePreemptibleOnNode(name string, node *BundleNode, errs *ValidationError) {
 	if node == nil {
 		return
 	}
@@ -65,11 +65,11 @@ func ValidatePreemptibleOnNode(name string, node *DeploymentNode, errs *Validati
 
 // ValidatePreemptibleAcrossDeploy validates every node in a charly.yml config
 // (the operator-deploy load path). Accumulates into errs.
-func ValidatePreemptibleAcrossDeploy(dc *DeployConfig, errs *ValidationError) {
+func ValidatePreemptibleAcrossDeploy(dc *BundleConfig, errs *ValidationError) {
 	if dc == nil {
 		return
 	}
-	for name, node := range dc.Deploy {
+	for name, node := range dc.Bundle {
 		ValidatePreemptibleOnNode(name, &node, errs)
 	}
 }
@@ -82,7 +82,7 @@ func validatePreemptibleUnified(uf *UnifiedFile) error {
 		return nil
 	}
 	errs := &ValidationError{}
-	for name, node := range uf.Deploy {
+	for name, node := range uf.Bundle {
 		ValidatePreemptibleOnNode(name, &node, errs)
 	}
 	validateResourceDefs(uf, errs)
@@ -112,7 +112,7 @@ func validateResourceDefs(uf *UnifiedFile, errs *ValidationError) {
 	if len(uf.Resource) == 0 {
 		return
 	}
-	for name, node := range uf.Deploy {
+	for name, node := range uf.Bundle {
 		if node.Target != "vm" {
 			continue
 		}

@@ -244,13 +244,13 @@ func TestDeployNodeSharesGPU(t *testing.T) {
 	}
 	cases := []struct {
 		name string
-		node DeploymentNode
+		node BundleNode
 		want bool
 	}{
-		{"gpu-backed shared token", DeploymentNode{RequiresShared: []string{"nvidia-gpu"}}, true},
-		{"selector-less shared token", DeploymentNode{RequiresShared: []string{"abstract"}}, false},
-		{"no shared claim", DeploymentNode{}, false},
-		{"exclusive is not shared", DeploymentNode{RequiresExclusive: []string{"nvidia-gpu"}}, false},
+		{"gpu-backed shared token", BundleNode{RequiresShared: []string{"nvidia-gpu"}}, true},
+		{"selector-less shared token", BundleNode{RequiresShared: []string{"abstract"}}, false},
+		{"no shared claim", BundleNode{}, false},
+		{"exclusive is not shared", BundleNode{RequiresExclusive: []string{"nvidia-gpu"}}, false},
 	}
 	for _, tc := range cases {
 		if got := deployNodeSharesGPU(tc.node, resources); got != tc.want {
@@ -318,13 +318,70 @@ func TestArbiter_PoisonedTokenRefusesAcquire(t *testing.T) {
 		t.Skip("no boot_id")
 	}
 	w := &fakeWorld{running: map[string]bool{}, resources: map[string]*ResourceDef{"nvidia-gpu": {Gpu: &GpuSelector{Vendor: "0x10de"}}}}
-	a := newTestArbiter(t, map[string]DeploymentNode{}, w)
+	a := newTestArbiter(t, map[string]BundleNode{}, w)
 	a.poisonResource("nvidia-gpu")
 
-	if _, err := a.AcquireShared("gpu-bed", DeploymentNode{RequiresShared: []string{"nvidia-gpu"}}, true); err == nil || !strings.Contains(err.Error(), "reboot") {
+	if _, err := a.AcquireShared("gpu-bed", BundleNode{RequiresShared: []string{"nvidia-gpu"}}, true); err == nil || !strings.Contains(err.Error(), "reboot") {
 		t.Fatalf("AcquireShared on a poisoned token must refuse with a reboot-required error, got %v", err)
 	}
-	if _, err := a.AcquireExclusive("gpu-vm", DeploymentNode{RequiresExclusive: []string{"nvidia-gpu"}}, true); err == nil || !strings.Contains(err.Error(), "reboot") {
+	if _, err := a.AcquireExclusive("gpu-vm", BundleNode{RequiresExclusive: []string{"nvidia-gpu"}}, true); err == nil || !strings.Contains(err.Error(), "reboot") {
 		t.Fatalf("AcquireExclusive on a poisoned token must refuse with a reboot-required error, got %v", err)
+	}
+}
+
+// H1. The pure formatter: empty holders → a generic clause; one/many → the
+// listed "external process(es): comm (pid N), …" form. No /proc, no shell-out.
+func TestFormatNvidiaHolders(t *testing.T) {
+	if got := formatNvidiaHolders(nil); !strings.Contains(got, "could not be identified") || strings.Contains(got, "pid") {
+		t.Fatalf("empty holders must render the generic clause, got %q", got)
+	}
+	one := formatNvidiaHolders([]NvidiaHolder{{PID: 237390, Comm: "btop"}})
+	if one != "external process(es): btop (pid 237390)" {
+		t.Fatalf("single holder format wrong, got %q", one)
+	}
+	many := formatNvidiaHolders([]NvidiaHolder{{PID: 237390, Comm: "btop"}, {PID: 41, Comm: "nvidia-smi"}})
+	if many != "external process(es): btop (pid 237390), nvidia-smi (pid 41)" {
+		t.Fatalf("multi holder format wrong, got %q", many)
+	}
+}
+
+// H2. The refusal error names the external holders, points at the
+// auto-preempt-and-close-yours remediation, and KEEPS the no-force wording.
+func TestNvidiaInUseRefusal_Message(t *testing.T) {
+	err := nvidiaInUseRefusal([]NvidiaHolder{{PID: 237390, Comm: "btop"}})
+	msg := err.Error()
+	for _, want := range []string{"REFUSED", "btop (pid 237390)", "auto-preempts", "close these external GPU clients", "refusing to force-unbind"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("refusal message missing %q:\n%s", want, msg)
+		}
+	}
+	// Empty discovery still produces an actionable (generic) refusal.
+	if g := nvidiaInUseRefusal(nil).Error(); !strings.Contains(g, "could not be identified") || !strings.Contains(g, "force-unbind") {
+		t.Errorf("empty-holder refusal must stay actionable, got %q", g)
+	}
+}
+
+// H3. Wiring: an EBUSY (exit-3) vfio refusal is enriched with the discovered
+// external holder(s); it stays a plain refusal (NOT errGPUSwitchWedged) and
+// never forces. Discovery is injected (no /proc read).
+func TestSwitchGPUDriverMode_VfioRefusalNamesHolders(t *testing.T) {
+	origDrv, origRun, origDisc := gpuDisplayDriver, runGPUSwitchScript, discoverNvidiaHolders
+	defer func() { gpuDisplayDriver, runGPUSwitchScript, discoverNvidiaHolders = origDrv, origRun, origDisc }()
+
+	gpuDisplayDriver = func(string) string { return "nvidia" } // group not in vfio → flip attempted
+	runGPUSwitchScript = func(string) ([]byte, error) {
+		return []byte("switch-to-vfio REFUSED: " + nvidiaInUseMarker + " (a GPU client holds the card) — refusing to force-unbind (would wedge the device_lock)"), errors.New("exit status 3")
+	}
+	discoverNvidiaHolders = func() []NvidiaHolder { return []NvidiaHolder{{PID: 237390, Comm: "btop"}} }
+
+	err := switchGPUDriverMode(twoFnGPU(), gpuModeVfio)
+	if err == nil {
+		t.Fatal("an EBUSY refusal must surface an error")
+	}
+	if errors.Is(err, errGPUSwitchWedged) {
+		t.Fatalf("an external-holder refusal is NOT a wedge, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "btop (pid 237390)") {
+		t.Fatalf("refusal must name the external holder, got %q", err.Error())
 	}
 }

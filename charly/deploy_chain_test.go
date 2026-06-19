@@ -8,7 +8,7 @@ import (
 // TestResolveDeployChain_FlatContainer verifies a single-segment pod path
 // produces a one-hop NestedExecutor with JumpPodmanExec into "charly-<name>".
 func TestResolveDeployChain_FlatContainer(t *testing.T) {
-	roots := map[string]DeploymentNode{
+	roots := map[string]BundleNode{
 		"redis": {Target: "pod"},
 	}
 	leaf, chain, err := ResolveDeployChain(roots, "redis", ShellExecutor{})
@@ -28,7 +28,7 @@ func TestResolveDeployChain_FlatContainer(t *testing.T) {
 // TestResolveDeployChain_VmFlat verifies a single-segment vm path returns
 // a plain SSHExecutor (no NestedExecutor wrapper at the root level).
 func TestResolveDeployChain_VmFlat(t *testing.T) {
-	roots := map[string]DeploymentNode{
+	roots := map[string]BundleNode{
 		"bench-vm": {
 			Target: "vm",
 			VmState: &VmDeployState{
@@ -54,15 +54,15 @@ func TestResolveDeployChain_VmFlat(t *testing.T) {
 // pod nested inside a VM. Must produce a chain where the leaf hop is
 // JumpPodmanExec into the flattened name "charly-bench-vm_inner".
 func TestResolveDeployChain_VmInnerPod(t *testing.T) {
-	innerNode := &DeploymentNode{Target: "pod"}
-	roots := map[string]DeploymentNode{
+	innerNode := &BundleNode{Target: "pod"}
+	roots := map[string]BundleNode{
 		"bench-vm": {
 			Target: "vm",
 			VmState: &VmDeployState{
 				SshUser: "arch",
 				SshPort: 2222,
 			},
-			Nested: map[string]*DeploymentNode{
+			Children: map[string]*BundleNode{
 				"inner": innerNode,
 			},
 		},
@@ -76,7 +76,7 @@ func TestResolveDeployChain_VmInnerPod(t *testing.T) {
 	}
 	venue := chain.Venue()
 	// A pod nested in a VM guest is deployed STANDALONE by the guest's own
-	// `charly deploy from-box <ref> <childKey>` (deployNestedPodsInGuest), so the
+	// `charly bundle from-box <ref> <childKey>` (deployNestedPodsInGuest), so the
 	// in-guest container is "charly-<childKey>" (the leaf) — NOT the host-side
 	// "charly-<vm>_<inner>" flatPath the guest never sees. The chain must podman-exec
 	// the leaf name, or it targets a container that doesn't exist (the silent
@@ -93,21 +93,21 @@ func TestResolveDeployChain_VmInnerPod(t *testing.T) {
 // TestResolveDeployChain_ThreeDeep stacks three hops:
 // vm → inner-pod → nested-pod. Verifies arbitrary depth works.
 func TestResolveDeployChain_ThreeDeep(t *testing.T) {
-	deepNode := &DeploymentNode{Target: "pod"}
-	innerNode := &DeploymentNode{
+	deepNode := &BundleNode{Target: "pod"}
+	innerNode := &BundleNode{
 		Target: "pod",
-		Nested: map[string]*DeploymentNode{
+		Children: map[string]*BundleNode{
 			"deeper": deepNode,
 		},
 	}
-	roots := map[string]DeploymentNode{
+	roots := map[string]BundleNode{
 		"bench-vm": {
 			Target: "vm",
 			VmState: &VmDeployState{
 				SshUser: "arch",
 				SshPort: 2222,
 			},
-			Nested: map[string]*DeploymentNode{
+			Children: map[string]*BundleNode{
 				"inner": innerNode,
 			},
 		},
@@ -132,7 +132,7 @@ func TestResolveDeployChain_ThreeDeep(t *testing.T) {
 // TestResolveDeployChain_UnknownRoot returns a clear error with the
 // "available deployments" hint.
 func TestResolveDeployChain_UnknownRoot(t *testing.T) {
-	roots := map[string]DeploymentNode{
+	roots := map[string]BundleNode{
 		"redis": {Target: "pod"},
 		"web":   {Target: "pod"},
 	}
@@ -151,14 +151,14 @@ func TestResolveDeployChain_UnknownRoot(t *testing.T) {
 // TestResolveDeployChain_UnknownNestedChild returns a hint about
 // available nested children.
 func TestResolveDeployChain_UnknownNestedChild(t *testing.T) {
-	roots := map[string]DeploymentNode{
+	roots := map[string]BundleNode{
 		"vm": {
 			Target: "vm",
 			VmState: &VmDeployState{
 				SshUser: "arch",
 				SshPort: 2222,
 			},
-			Nested: map[string]*DeploymentNode{
+			Children: map[string]*BundleNode{
 				"inner-app": {Target: "pod"},
 			},
 		},

@@ -27,11 +27,11 @@ type BootstrapVMResult struct {
 // map user namespaces (and ping loses cap_net_raw). The privileged builder runs
 // this as root, so it can restore the security.* xattrs. Verified empirically:
 // a plain `tar --xattrs` round-trip drops cap_setuid; the include preserves it.
-// (The build.yml create-side tars carry the same flag — TestBootstrapTarPreservesFileCaps.)
+// (The create-side tars in the embedded build vocabulary (charly/charly.yml) carry the same flag — TestBootstrapTarPreservesFileCaps.)
 const bootstrapRootfsExtractTar = `tar -C /mnt --xattrs --xattrs-include='*' --acls -xzf /in/rootfs.tar.gz`
 
 // BuildBootstrapVM creates a fresh VM disk by:
-//  1. Resolving the bootstrap builder + distro from build.yml
+//  1. Resolving the bootstrap builder + distro from the embedded build vocabulary
 //  2. Running the bootstrap builder via RunPrivileged (pacstrap /
 //     debootstrap / alpine-bootstrap → rootfs.tar.gz)
 //  3. Partitioning a sparse disk + extracting the rootfs + running
@@ -52,25 +52,25 @@ func BuildBootstrapVM(
 		return BootstrapVMResult{}, fmt.Errorf("BuildBootstrapVM called with source.kind=%q (expected bootstrap)", spec.Source.Kind)
 	}
 	if builderCfg == nil || builderCfg.Builder == nil {
-		return BootstrapVMResult{}, fmt.Errorf("build.yml builder: section is empty; cannot resolve %q", spec.Source.Builder)
+		return BootstrapVMResult{}, fmt.Errorf("the builder: section of the embedded vocabulary (charly/charly.yml) is empty; cannot resolve %q", spec.Source.Builder)
 	}
 	builder, ok := builderCfg.Builder[spec.Source.Builder]
 	if !ok {
-		return BootstrapVMResult{}, fmt.Errorf("builder %q not declared in build.yml", spec.Source.Builder)
+		return BootstrapVMResult{}, fmt.Errorf("builder %q not declared in the embedded build vocabulary (charly/charly.yml)", spec.Source.Builder)
 	}
 	if !builder.IsBootstrap() {
 		return BootstrapVMResult{}, fmt.Errorf("builder %q is not kind: bootstrap", spec.Source.Builder)
 	}
 	if distroCfg == nil {
-		return BootstrapVMResult{}, fmt.Errorf("build.yml distro: section is empty; cannot resolve %q", spec.Source.Distro)
+		return BootstrapVMResult{}, fmt.Errorf("the distro: section of the embedded vocabulary (charly/charly.yml) is empty; cannot resolve %q", spec.Source.Distro)
 	}
 	distro, ok := distroCfg.Distro[spec.Source.Distro]
 	if !ok {
-		return BootstrapVMResult{}, fmt.Errorf("distro %q not declared in build.yml", spec.Source.Distro)
+		return BootstrapVMResult{}, fmt.Errorf("distro %q not declared in the embedded build vocabulary (charly/charly.yml)", spec.Source.Distro)
 	}
 	distro = distroCfg.resolveInherits(distro, 10)
 	if distro.Bootloader == nil {
-		return BootstrapVMResult{}, fmt.Errorf("distro %q has no bootloader: block in build.yml (required for VM bootstrap)", spec.Source.Distro)
+		return BootstrapVMResult{}, fmt.Errorf("distro %q has no bootloader: block in the embedded build vocabulary (charly/charly.yml) (required for VM bootstrap)", spec.Source.Distro)
 	}
 	if spec.Source.BuilderImage == "" {
 		return BootstrapVMResult{}, fmt.Errorf("source.builder_image is required for bootstrap VMs")

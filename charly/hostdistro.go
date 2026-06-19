@@ -100,13 +100,14 @@ func splitOsReleaseLine(line string) (key, val string, ok bool) {
 }
 
 // distroIDAliases maps /etc/os-release ID= values to the canonical
-// name used inside build.yml's distro: map. Arch Linux reports ID=arch
-// but build.yml keys the distro as "arch"; several Fedora
-// spin-offs report their own name but charly treats them as "fedora".
+// name used inside the embedded vocabulary's (charly/charly.yml) distro:
+// map. Arch Linux reports ID=arch but the embedded distro: vocabulary keys
+// the distro as "arch"; several Fedora spin-offs report their own name but
+// charly treats them as "fedora".
 //
-// Populated tags include both the os-release name and the build.yml
-// canonical name so candy tag-section matching and build.yml
-// format-lookup both succeed.
+// Populated tags include both the os-release name and the embedded
+// distro: vocabulary's canonical name so candy tag-section matching and
+// distro format-lookup both succeed.
 var distroIDAliases = map[string]string{
 	"arch":        "arch",
 	"archarm":     "arch",
@@ -120,7 +121,8 @@ var distroIDAliases = map[string]string{
 
 // populateTags derives HostDistro.Tags from the other fields. The
 // resulting list includes both the os-release ID (exact match for
-// candy tag sections like `arch:`) and the build.yml canonical name
+// candy tag sections like `arch:`) and the embedded vocabulary's
+// (charly/charly.yml) canonical name
 // (for DistroConfig.ResolveDistro to find the format definitions).
 func (hd *HostDistro) populateTags() {
 	hd.Tags = hd.Tags[:0]
@@ -151,11 +153,11 @@ func (hd *HostDistro) PrimaryTag() string {
 }
 
 // distroIDToFormat is the SINGLE distro-OS-ID → package-format table. The host
-// heuristic (FormatHint, no build.yml in hand) and the config-derived
+// heuristic (FormatHint, no DistroDef in hand) and the config-derived
 // DistroDef.PrimaryFormat fallback both consult it, so the OS-ID → format
 // knowledge lives in exactly one place. Keys are /etc/os-release ID / ID_LIKE
-// values; the build.yml distro key (fedora/debian/arch) is the same token, so a
-// resolved DistroDef name resolves here too.
+// values; the embedded distro: vocabulary's distro key (fedora/debian/arch) is
+// the same token, so a resolved DistroDef name resolves here too.
 var distroIDToFormat = map[string]string{
 	"fedora":      "rpm",
 	"rhel":        "rpm",
@@ -171,14 +173,14 @@ var distroIDToFormat = map[string]string{
 	"cachyos":     "pac",
 }
 
-// formatForDistroID maps an /etc/os-release-style distro ID (or a build.yml
-// distro key) to its package format via the single distroIDToFormat table.
-// Returns "" for an unknown ID.
+// formatForDistroID maps an /etc/os-release-style distro ID (or an embedded
+// distro: vocabulary key) to its package format via the single distroIDToFormat
+// table. Returns "" for an unknown ID.
 func formatForDistroID(id string) string { return distroIDToFormat[id] }
 
 // FormatHint returns the best-guess format name (rpm/deb/pac) based on the
 // host distro's ID / ID_LIKE, via the single distroIDToFormat table. Used when
-// the caller has no build.yml DistroDef in hand (e.g. the synthetic host-adhoc
+// the caller has no DistroDef in hand (e.g. the synthetic host-adhoc
 // image). For a resolved DistroDef, prefer DistroDef.PrimaryFormat.
 func (hd *HostDistro) FormatHint() string {
 	for _, id := range append([]string{hd.ID}, hd.IDLike...) {

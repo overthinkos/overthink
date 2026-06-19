@@ -123,7 +123,7 @@ func reversePackageRemove(op ReverseOp, re ReverseExecutor) error {
 
 // fillReverseUninstallCmds renders the host-venue uninstall command for every
 // ReverseOpPackageRemove op in the slice from the format's uninstall_template
-// (build.yml), in place. Called at install/record time by LocalDeployTarget and
+// (the embedded build vocabulary, charly/charly.yml), in place. Called at install/record time by LocalDeployTarget and
 // VmDeployTarget (R3 — one shared filler) when the DistroConfig is in hand, so
 // the persisted ledger op carries the exact removal command the teardown will
 // run. Ops whose format declares no uninstall_template, or whose format isn't in

@@ -297,7 +297,7 @@ type CandyYAML struct {
 }
 
 // candyYAMLKnownFields lists non-format top-level keys in the candy manifest.
-// Unknown keys are routed to FormatSections (if matching a build.yml distro format)
+// Unknown keys are routed to FormatSections (if matching an embedded distro format)
 // or TagSections (otherwise).
 //
 // `directory`, `info` deleted in the 2026-05 Calamares cutover (0 YAML files
@@ -327,10 +327,11 @@ var candyYAMLKnownFields = map[string]bool{
 }
 
 // The build vocabulary — the set of distro names and package-format names — is
-// NOT hardcoded in Go. It is DERIVED at load time from the project's build.yml
-// `distro:` section (the DistroConfig) by RegisterBuildVocabulary, which every
-// entry point calls before scanning candies. Adding a new distro or package
-// format is therefore purely a build.yml edit, with no code change.
+// NOT hardcoded in Go. It is DERIVED at load time from the embedded build
+// vocabulary (plus any project build.yml override) — the `distro:` section (the
+// DistroConfig) — by RegisterBuildVocabulary, which every entry point calls
+// before scanning candies. Adding a new distro or package format is therefore
+// purely an embedded-vocabulary (or project-override) edit, with no code change.
 //
 // These caches are consumed ONLY by the candy-manifest shape guard
 // (looksLikeDistroOrFormatKey / rejectLegacyCandyKeys) to recognize a
@@ -342,13 +343,14 @@ var (
 	// candyYAMLFormatNames = the union of every distro's declared package
 	// formats (rpm/deb/pac/aur/…), inherited chains resolved.
 	candyYAMLFormatNames map[string]bool
-	// candyYAMLDistroNames = every distro name declared in build.yml.
+	// candyYAMLDistroNames = every distro name declared in the embedded build vocabulary.
 	candyYAMLDistroNames map[string]bool
 )
 
 // RegisterBuildVocabulary derives the distro/format vocabulary from a
 // DistroConfig and caches it for the duration of the process. Sourced entirely
-// from build.yml, never from a Go constant. Safe to call repeatedly; a nil
+// from the embedded build vocabulary (plus any project build.yml override),
+// never from a Go constant. Safe to call repeatedly; a nil
 // config clears the caches (the shape guard then fails open — no false
 // positives).
 func RegisterBuildVocabulary(dc *DistroConfig) {
@@ -541,7 +543,7 @@ type RouteYAML struct {
 }
 
 // Format-specific structs (RpmConfig, DebConfig, PacConfig, AurConfig) removed.
-// All format sections are now parsed dynamically as PackageSection via build.yml distro format names.
+// All format sections are now parsed dynamically as PackageSection via the embedded distro format names.
 // See PackageSection type and CandyYAML.UnmarshalYAML for the generic parsing.
 
 // Candy represents a candy directory and its contents
@@ -830,7 +832,7 @@ func singleCandyMappingNode(path string, data []byte) (*yaml.Node, error) {
 // section at the candy root produces a clear error describing the current
 // schema. Runs before standard YAML decoding so the user sees a precise message,
 // not a generic "field not found". The format/distro vocabulary it recognizes is
-// the DYNAMIC build vocabulary sourced from build.yml (RegisterBuildVocabulary) —
+// the DYNAMIC build vocabulary sourced from the embedded build vocabulary (RegisterBuildVocabulary) —
 // no hardcoded format/distro list, so a newly-added format or distro is caught
 // automatically.
 // rejectUnknownCandyTopLevelKeys hard-errors on an unknown top-level candy key
@@ -868,7 +870,7 @@ func rejectLegacyCandyKeys(path string, body *yaml.Node) error {
 		}
 		// A package-format family key (pac:/deb:/rpm:/aur:) or a per-distro tag
 		// section (`debian:`, `debian:13:`, `debian,ubuntu:`) at the candy ROOT
-		// belongs UNDER the `distro:` map. Both vocabularies come from build.yml.
+		// belongs UNDER the `distro:` map. Both vocabularies come from the embedded build vocabulary.
 		if looksLikeDistroOrFormatKey(key) {
 			return fmt.Errorf("%s: candy manifest places `%s:` at the top level — package-format and per-distro sections nest under the `distro:` map (e.g. `distro:\n  %s:\n    package: [...]`). Run `charly migrate`", path, key, key)
 		}
@@ -880,7 +882,8 @@ func rejectLegacyCandyKeys(path string, body *yaml.Node) error {
 // package-format family name (pac/deb/rpm/aur) or a per-distro tag section
 // (`debian`, `debian:13`, `debian,ubuntu`) — shapes that nest under the `distro:`
 // map, never at the candy root. The vocabulary is the dynamic build vocabulary
-// registered from build.yml by RegisterBuildVocabulary; this helper holds no
+// registered by RegisterBuildVocabulary from the embedded build vocabulary; this
+// helper holds no
 // hardcoded distro/format list. Returns false when the vocabulary is unregistered
 // (no false positives), leaving the explicit removed-field cases to fire.
 func looksLikeDistroOrFormatKey(key string) bool {

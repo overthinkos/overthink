@@ -11,8 +11,9 @@ import (
 
 // GPU auto-allocation: turn a VM-targeted claimant's `requires_exclusive:`
 // token into a concrete PCI `<hostdev>` block, automatically, at
-// `charly vm create`. The token → vendor mapping is YAML config (build.yml
-// `resource:`); the device is discovered live via DetectVFIO. This replaces
+// `charly vm create`. The token → vendor mapping is YAML config (the embedded
+// `resource:` vocabulary in charly/charly.yml); the device is discovered live
+// via DetectVFIO. This replaces
 // the manual `charly vm gpu list` → paste-into-instance.yml workflow.
 //
 // Operator directive: "if a resource is required either add it automatically
@@ -103,7 +104,8 @@ func requiredGPUResource(cnode *BundleNode, resources map[string]*ResourceDef) (
 
 // autoAllocateExclusiveGPUs is the create-time hook. When the VM's claimant
 // (the deploy/bed that references it via requires_exclusive) needs a GPU
-// resource defined in build.yml `resource:`, it:
+// resource defined in the embedded `resource:` vocabulary (charly/charly.yml),
+// it:
 //
 //   - defers to any operator-authored hostdev (vm.yml spec OR instance.yml
 //     overlay) — no double-inject, no re-detection;

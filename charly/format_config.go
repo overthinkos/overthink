@@ -6,7 +6,7 @@ import (
 
 // --- Distro Config ---
 
-// DistroConfig represents the `distro:` section of build.yml.
+// DistroConfig represents the `distro:` section of the embedded vocabulary (charly/charly.yml).
 // Each distro defines bootstrap behavior AND package format definitions.
 type DistroConfig struct {
 	Distro map[string]*DistroDef `yaml:"distro" json:"distro"`
@@ -47,7 +47,7 @@ type DistroDef struct {
 
 	// Bootstrap-builder strategy configurations. Each is optional; only
 	// distros that support the strategy populate the corresponding block.
-	// Used by the kind:bootstrap builders in build.yml `builder:` section
+	// Used by the kind:bootstrap builders in the embedded `builder:` vocabulary
 	// to render the actual bootstrap command (pacstrap, debootstrap, etc.)
 	Pacstrap        *PacstrapDef        `yaml:"pacstrap,omitempty" json:"pacstrap,omitempty"`
 	Debootstrap     *DebootstrapDef     `yaml:"debootstrap,omitempty" json:"debootstrap,omitempty"`
@@ -188,8 +188,8 @@ type CacheMountDef struct {
 //     target prefers phase.install.container when set and falls back to
 //     install_template otherwise.
 //
-// Keeping both fields lets us migrate build.yml per-format one at a time
-// (Task 4 / 7 migrations) without breaking OCI output for the rest.
+// Keeping both fields lets us migrate the embedded build vocabulary per-format
+// one at a time (Task 4 / 7 migrations) without breaking OCI output for the rest.
 type FormatDef struct {
 	CacheMount      []CacheMountDef   `yaml:"cache_mount" json:"cache_mount"`
 	SectionFields   map[string]string `yaml:"section_field" json:"section_field"`
@@ -204,8 +204,9 @@ type FormatDef struct {
 	// replacement for the former Go-side `name == "aur"` special-case: a
 	// distro's PrimaryFormat() skips every Secondary format, and the candy
 	// parser only routes a secondary sub-block under a distro/format-family that
-	// declares it. Adding a new secondary build format is therefore a build.yml
-	// edit, not a code change. Defaults false (a primary install format).
+	// declares it. Adding a new secondary build format is therefore an
+	// embedded-vocabulary (charly/charly.yml) edit, not a code change. Defaults
+	// false (a primary install format).
 	Secondary bool `yaml:"secondary,omitempty" json:"secondary,omitempty"`
 
 	// UninstallTemplate is the host-venue package-removal command rendered at
@@ -274,7 +275,7 @@ type LocalPkgDef struct {
 	// For pac: `command -v pacman`; rpm: `command -v dnf`; deb: `command -v apt-get`.
 	Probe string `yaml:"probe" json:"probe"`
 
-	// DepBuilder is the builder name (a key in build.yml `builder:`) used by the
+	// DepBuilder is the builder name (a key in the embedded `builder:` vocabulary) used by the
 	// aur-CANDY deploy path to build a candy's `aur:` packages into installable
 	// files before installing them via InstallTemplate (the localpkg step itself
 	// auto-resolves and needs no builder). For pac: `aur`. Empty for rpm/deb.
@@ -550,7 +551,7 @@ func bareDistroName(tag string) string {
 // `inherits:` ancestor of a tag whose distro def opts into package inheritance
 // via `inherit_packages: true` — most-specific authored tags kept first,
 // ancestors appended as the least-specific levels. This is the SOLE driver of
-// package-cascade inheritance, sourced entirely from build.yml:
+// package-cascade inheritance, sourced entirely from the embedded build vocabulary:
 //
 //   - cachyos (inherits arch, inherit_packages: true) → [cachyos, arch]: an
 //     `arch:` candy block reaches cachyos.
@@ -590,7 +591,7 @@ func (dc *DistroConfig) expandPackageInheritance(tags []string) []string {
 }
 
 // PrimaryFormat returns the distro's primary package format — the single
-// source for "what package format does this resolved build.yml distro use".
+// source for "what package format does this resolved distro use".
 // The primary format is the one base-distro format among the distro's `Format`
 // map that is NOT flagged `secondary: true` (the aur build format is always
 // secondary to the pac primary); among the base formats (rpm/deb/pac) a distro
@@ -699,7 +700,7 @@ func (d *DistroDef) LocalPkgFormat(primaryFormat string) (string, *LocalPkgDef) 
 
 // --- Builder Config ---
 
-// BuilderConfig represents the `builder:` section of build.yml.
+// BuilderConfig represents the `builder:` section of the embedded vocabulary (charly/charly.yml).
 type BuilderConfig struct {
 	Builder map[string]*BuilderDef `yaml:"builder" json:"builder"`
 }

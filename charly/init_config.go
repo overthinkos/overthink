@@ -9,7 +9,7 @@ import (
 
 // --- Init Config ---
 
-// InitConfig represents the `init:` section of build.yml.
+// InitConfig represents the `init:` section of the embedded vocabulary (charly/charly.yml).
 // Each init system defines how to detect, build, assemble, and manage services.
 type InitConfig struct {
 	Init map[string]*InitDef `yaml:"init" json:"init"`
@@ -320,7 +320,7 @@ func (def *InitDef) RenderManagementCommand(operation, serviceName string) (stri
 
 // --- Loading ---
 // Init config is loaded as part of LoadBuildConfigForBox in format_config.go.
-// The `init:` section of build.yml is optional — absent/empty means no init system.
+// The `init:` section of the embedded vocabulary (charly/charly.yml) is optional — absent/empty means no init system.
 
 // InitNames returns a sorted list of all init system names.
 func (ic *InitConfig) InitNames() []string {

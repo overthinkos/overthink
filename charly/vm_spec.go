@@ -239,7 +239,8 @@ type VmSource struct {
 
 	// --- Bootstrap branch (Kind == "bootstrap") ---
 	//
-	// Builder names a kind:bootstrap builder declared in build.yml
+	// Builder names a kind:bootstrap builder declared in the embedded
+	// build vocabulary (charly/charly.yml)
 	// (e.g. "pacstrap", "debootstrap", "alpine-bootstrap"). The builder
 	// definition supplies the rootfs-creation template; the Distro field
 	// supplies the per-distro config (base packages, keyring init,
@@ -253,7 +254,8 @@ type VmSource struct {
 	// privileged bootstrap builders.
 	BuilderImage string `yaml:"builder_image,omitempty" json:"builder_image,omitempty"`
 
-	// Distro selects the DistroDef in build.yml whose Pacstrap /
+	// Distro selects the DistroDef in the embedded build vocabulary
+	// (charly/charly.yml) whose Pacstrap /
 	// Debootstrap / AlpineBootstrap / Bootloader sub-blocks drive the
 	// bootstrap and bootloader install. Examples: "arch", "cachyos",
 	// "debian", "ubuntu", "alpine".

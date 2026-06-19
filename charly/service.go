@@ -108,7 +108,7 @@ func resolveServiceInit(box, instance string) (engine, containerName string, ini
 		return "", "", nil, fmt.Errorf("cannot read image metadata: %w", err)
 	}
 	if meta == nil || meta.Init == "" {
-		return "", "", nil, fmt.Errorf("no init system configured for container %s (rebuild image with build.yml init: section support)", containerName)
+		return "", "", nil, fmt.Errorf("no init system configured for container %s (rebuild image with the embedded init: vocabulary)", containerName)
 	}
 
 	// Load init config to get management commands
@@ -121,9 +121,9 @@ func resolveServiceInit(box, instance string) (engine, containerName string, ini
 }
 
 // wellKnownInitDefs is the runtime fallback registry for image-label-only
-// deploys (where the source repo's build.yml init: section is unavailable).
-// Custom init systems declared via build.yml are honored during build only;
-// at runtime, only entries here are recognized.
+// deploys (where the build-time init: vocabulary is unavailable).
+// Custom init systems declared via the embedded init: vocabulary (charly/charly.yml)
+// are honored during build only; at runtime, only entries here are recognized.
 //
 // Adding a new init system at runtime is a one-table-edit: add entrypoint +
 // management commands here and the rest of the codebase picks it up via
@@ -154,13 +154,13 @@ var wellKnownInitDefs = map[string]*InitDef{
 
 // resolveInitDefFromMeta returns the InitDef registered for meta.Init in
 // wellKnownInitDefs. Errors when the init system is unrecognized — the
-// hint asks the operator to declare the init system in build.yml init:
-// (which honors arbitrary names at build time).
+// hint asks the operator to declare the init system in the embedded init:
+// vocabulary (which honors arbitrary names at build time).
 func resolveInitDefFromMeta(meta *BoxMetadata) (*InitDef, error) {
 	if def, ok := wellKnownInitDefs[meta.Init]; ok {
 		return def, nil
 	}
-	return nil, fmt.Errorf("unknown init system %q; cannot determine management commands (no build.yml init: section found)", meta.Init)
+	return nil, fmt.Errorf("unknown init system %q; cannot determine management commands (no matching embedded init: vocabulary entry)", meta.Init)
 }
 
 // execInitCommand executes a service management command inside a container.

@@ -4,11 +4,11 @@ package main
 // ARTIFACTS (.pkg.tar.zst / .rpm / .deb) for a candy's localpkg sources.
 //
 // This is the release-artifact counterpart of the deploy-time localpkg step:
-// both build the package the SAME way — through the format's build.yml
+// both build the package the SAME way — through the format's embedded build vocabulary's
 // `local_pkg.build_template` rendered by buildLocalPkgOnHost (R3) — so there is
 // ONE per-format build definition and ZERO distro-specific Go here. The command
 // is format-blind: it looks up each requested format's local_pkg block in
-// build.yml and the candy's per-format source dir, builds, and copies the
+// the embedded build vocabulary and the candy's per-format source dir, builds, and copies the
 // produced files into the output dir.
 
 import (
@@ -72,7 +72,7 @@ func (c *BoxPkgCmd) Run() error {
 		}
 		lp := lookupLocalPkgDef(dc, format)
 		if lp == nil {
-			return fmt.Errorf("no distro in build.yml declares a local_pkg block for format %q", format)
+			return fmt.Errorf("no distro in the embedded build vocabulary declares a local_pkg block for format %q", format)
 		}
 		srcDir := resolveLocalPkgDir(src, lyr.SourceDir, dir, lp.SourceSentinel)
 		if srcDir == "" {
@@ -97,7 +97,7 @@ func (c *BoxPkgCmd) Run() error {
 // lookupLocalPkgDef finds the first distro in the build config that declares a
 // local_pkg block for the given package format, returning its contract. The
 // per-format build/install/glob/sentinel all come from this config — the only
-// distro knowledge lives in build.yml, never here.
+// distro knowledge lives in the embedded build vocabulary (charly/charly.yml), never here.
 func lookupLocalPkgDef(dc *DistroConfig, format string) *LocalPkgDef {
 	if dc == nil {
 		return nil

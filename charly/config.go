@@ -217,7 +217,7 @@ type ResolvedBox struct {
 	GID  int    // group ID
 	Home string // resolved home directory (detected or /home/<user>)
 	// UserAdopted is true when the resolved user came from the distro's
-	// base_user declaration (build.yml `distro.<name>.base_user`) rather
+	// base_user declaration (the embedded vocabulary's `distro.<name>.base_user`) rather
 	// than being created by the bootstrap. Consulted by writeBootstrap to
 	// skip the useradd step — the base image already ships this account.
 	UserAdopted bool
@@ -244,10 +244,10 @@ type ResolvedBox struct {
 	Network string
 
 	// Build config (resolved per-image via charly.yml import: + the binary-embedded build vocabulary)
-	DistroConfig  *DistroConfig  `json:"-"` // distro section of build.yml
+	DistroConfig  *DistroConfig  `json:"-"` // distro section of the embedded vocabulary (charly/charly.yml)
 	DistroDef     *DistroDef     `json:"-"` // resolved distro definition (cached)
-	BuilderConfig *BuilderConfig `json:"-"` // builder section of build.yml
-	InitConfig    *InitConfig    `json:"-"` // init section of build.yml
+	BuilderConfig *BuilderConfig `json:"-"` // builder section of the embedded vocabulary (charly/charly.yml)
+	InitConfig    *InitConfig    `json:"-"` // init section of the embedded vocabulary (charly/charly.yml)
 	InitSystem    string         `json:"-"` // resolved init system name ("supervisord", "systemd", "")
 	InitDef       *InitDef       `json:"-"` // resolved init definition (cached)
 
@@ -512,7 +512,7 @@ func (c *Config) ResolveBox(name string, calverTag string, dir string, opts Reso
 	switch policy {
 	case "adopt":
 		if baseUser == nil {
-			return nil, fmt.Errorf("image %s: user_policy: adopt requires distro %v to declare base_user in build.yml", name, resolved.Distro)
+			return nil, fmt.Errorf("image %s: user_policy: adopt requires distro %v to declare base_user in the embedded vocabulary (charly/charly.yml)", name, resolved.Distro)
 		}
 		resolved.User = baseUser.Name
 		resolved.UID = baseUser.UID

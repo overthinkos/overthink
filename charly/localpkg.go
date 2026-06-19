@@ -2,7 +2,8 @@ package main
 
 // localpkg.go — build a bundled package SOURCE dir on the host and install the
 // resulting package FILE onto a deploy target, fully driven by the package
-// format's `local_pkg:` config (build.yml `distro.<name>.format.<fmt>.local_pkg`).
+// format's `local_pkg:` config (the embedded build vocabulary (charly/charly.yml)
+// `distro.<name>.format.<fmt>.local_pkg`).
 //
 // This is the execution machinery behind LocalPkgInstallStep (the IR form of a
 // candy's `localpkg:` field). NOTHING here hardcodes a package-format command:

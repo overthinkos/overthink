@@ -93,7 +93,8 @@ type LocalDeployTarget struct {
 	Cfg        *Config
 	ProjectDir string
 
-	// DistroCfg is the resolved build.yml distro section. Used by the
+	// DistroCfg is the resolved distro: section of the embedded vocabulary
+	// (charly/charly.yml). Used by the
 	// host-venue package renderer (renderSystemPackageCommand) to look up the
 	// format's phase.install.host template — the SAME config the OCI container
 	// path reads. Populated by the deploy dispatcher from dctx.DistroCfg.
@@ -458,7 +459,8 @@ func (t *LocalDeployTarget) renderSystemPackageCommand(s *SystemPackagesStep) (s
 }
 
 // renderHostPackageCommand renders the host-venue package-install command for a
-// SystemPackagesStep from the format's build.yml phase.install.host cell — the
+// SystemPackagesStep from the format's phase.install.host cell in the embedded
+// vocabulary (charly/charly.yml) — the
 // SAME PhaseTemplate + NewInstallContext + RenderTemplate path OCITarget uses
 // for the container venue (R3). No hardcoded dnf/apt/pacman dispatch: the format
 // (rpm/deb/pac) selects the template; the command is config-driven.
@@ -564,7 +566,8 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, _ *InstallPlan, opts Emi
 		// crun bug on common podman 5.x / crun 1.27 combinations.
 		//
 		// AUR is a special case: yay/makepkg refuse root by design, so the
-		// aur builder's phase.install.host cell (build.yml builder.aur, the
+		// aur builder's phase.install.host cell (builder.aur in the embedded
+	// vocabulary charly/charly.yml, the
 		// host analog of stage_template) starts as root, configures NOPASSWD
 		// for the unprivileged user, then drops to that user via `sudo -u` for
 		// the yay invocation. Result: yay runs as user (no root warnings), but
@@ -1345,7 +1348,8 @@ type hostBuilderContext struct {
 // renderBuilderScript turns a BuilderStep into the bash script that runs inside
 // the builder container. It is the host-side analog of the container
 // stage_template, and is now fully config-driven: it renders the builder's
-// phase.install.host cell (build.yml builder.<name>.phase.install.host) via the
+// phase.install.host cell (builder.<name>.phase.install.host in the embedded
+// vocabulary charly/charly.yml) via the
 // SAME RenderTemplate engine the OCI path uses for stage_template — no hardcoded
 // per-builder Go. HOME/PIXI_CACHE_DIR/NPM_CONFIG_PREFIX/CARGO_HOME are injected
 // by BuilderRunOpts.Env before the script starts.
@@ -1355,7 +1359,7 @@ func renderBuilderScript(s *BuilderStep, hostHome string) (string, error) {
 	}
 	tmpl := s.BuilderDef.PhaseTemplate(PhaseInstall, VenueHostNative)
 	if tmpl == "" {
-		return "", fmt.Errorf("builder %q: no phase.install.host template in build.yml", s.Builder)
+		return "", fmt.Errorf("builder %q: no phase.install.host template in the embedded build vocabulary", s.Builder)
 	}
 	ctx := hostBuilderContext{
 		HostHome: hostHome,

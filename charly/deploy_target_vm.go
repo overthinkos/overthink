@@ -68,7 +68,7 @@ type VmDeployTarget struct {
 	// sourcing managed block, and the cross-host builder artifact transfer.
 	guestHome string
 
-	// DistroCfg is the resolved build.yml distro section. Used by
+	// DistroCfg is the resolved distro: section of the embedded vocabulary (charly/charly.yml). Used by
 	// execSystemPackages to render the format's phase.install.host template —
 	// the SAME config-driven path LocalDeployTarget + the OCI container path
 	// use (R3). Populated by the deploy dispatcher from dctx.DistroCfg.
@@ -484,7 +484,7 @@ func (t *VmDeployTarget) detectGuestShell(ctx context.Context) ShellKind {
 }
 
 // execSystemPackages runs the distro's package install command on the guest.
-// Renders the format's phase.install.host template from build.yml via the SHARED
+// Renders the format's phase.install.host template from the embedded build vocabulary via the SHARED
 // config-driven renderer (renderHostPackageCommand) — the SAME path
 // LocalDeployTarget uses and the same FormatDef the OCI container path reads (R3).
 func (t *VmDeployTarget) execSystemPackages(ctx context.Context, s *SystemPackagesStep, _ *InstallPlan, opts EmitOpts) error {
@@ -746,7 +746,7 @@ func (t *VmDeployTarget) execBuilder(ctx context.Context, s *BuilderStep, _ *Ins
 				fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping builder step %q (--skip-incompatible)\n", s.Builder)
 				return nil
 			}
-			return fmt.Errorf("builder %q on VM target has no phase.install.host cell in build.yml (candy=%s). Run with --skip-incompatible to skip, or add the host cell", s.Builder, s.CandyName)
+			return fmt.Errorf("builder %q on VM target has no phase.install.host cell in the embedded build vocabulary (candy=%s). Run with --skip-incompatible to skip, or add the host cell", s.Builder, s.CandyName)
 		}
 		return t.execHomeArtifactBuilder(ctx, s, opts)
 	}

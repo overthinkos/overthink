@@ -8,8 +8,8 @@ package main
 // selector is what turns "I need the nvidia-gpu token" into a concrete PCI
 // `<hostdev>`.
 //
-// YAML-configured in build.yml (the selector lives in config, never hardcoded
-// in Go):
+// YAML-configured in the embedded build vocabulary (charly/charly.yml) — the
+// selector lives in config, never hardcoded in Go:
 //
 //	resource:
 //	  nvidia-gpu:            # SAME token used in requires_exclusive / preemptible.holds

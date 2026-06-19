@@ -145,7 +145,7 @@ func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) 
 		return nil, err
 	}
 
-	// Populate init systems on candies from build.yml config
+	// Populate init systems on candies from the embedded build vocabulary
 	PopulateCandyInitSystem(layers, defaultInitCfg)
 
 	if err := Validate(cfg, layers, dir, opts); err != nil {
@@ -414,7 +414,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	// Emit scratch stages for each candy
 	g.emitScratchStages(&b, candyOrder)
 
-	// Emit per-candy multi-stage build stages — fully config-driven from build.yml builder: section.
+	// Emit per-candy multi-stage build stages — fully config-driven from the embedded builder: vocabulary.
 	if err := g.emitBuilderStages(&b, boxName, img, candyOrder); err != nil {
 		return err
 	}
@@ -434,7 +434,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 		return CandyCapabilitiesError(g.Candies, candyOrder, missing)
 	}
 
-	// Detect active init systems from candies (driven by build.yml init: section config)
+	// Detect active init systems from candies (driven by the embedded init: vocabulary config)
 	activeInits := make(map[string]*InitDef)
 	if img.InitConfig != nil {
 		activeInits = img.InitConfig.ActiveInit(g.Candies, candyOrder)
@@ -491,7 +491,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	// themselves (metadata-only, ~0ms on disk) instead of invalidating the
 	// buildkit cache for every downstream RUN/COPY in a 100-step stack.
 
-	// Copy builder artifacts — fully config-driven from build.yml builder: section copy_artifacts/copy_binary
+	// Copy builder artifacts — fully config-driven from the embedded builder: vocabulary copy_artifacts/copy_binary
 	g.emitBuilderArtifacts(&b, img, candyOrder)
 
 	// Copy extracted files from multi-stage builds
@@ -510,7 +510,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 		inUserMode = g.writeCandySteps(&b, candyName, img, isLast && !needsRootAfter)
 	}
 
-	// Assemble init system configs (driven by build.yml init: section templates)
+	// Assemble init system configs (driven by the embedded init: vocabulary templates)
 	if err := g.emitInitAssembly(&b, candyOrder, activeInits, initHasFragments); err != nil {
 		return err
 	}
@@ -573,7 +573,7 @@ func (g *Generator) emitScratchStages(b *strings.Builder, candyOrder []string) {
 }
 
 // emitBuilderStages emits per-candy multi-stage build stages — fully
-// config-driven from the build.yml builder: section. Each builder declares
+// config-driven from the embedded builder: vocabulary. Each builder declares
 // detect_files and/or detect_config; for each matching candy the builder's
 // stage_template is rendered.
 func (g *Generator) emitBuilderStages(b *strings.Builder, boxName string, img *ResolvedBox, candyOrder []string) error {
@@ -627,7 +627,7 @@ func (g *Generator) emitExtractStages(b *strings.Builder, candyOrder []string) {
 }
 
 // emitBuilderArtifacts copies builder artifacts/binaries into the main image —
-// fully config-driven from the build.yml builder: section copy_artifacts/copy_binary.
+// fully config-driven from the embedded builder: vocabulary copy_artifacts/copy_binary.
 func (g *Generator) emitBuilderArtifacts(b *strings.Builder, img *ResolvedBox, candyOrder []string) {
 	if img.BuilderConfig == nil {
 		return
@@ -701,8 +701,8 @@ func (g *Generator) emitExtractedFiles(b *strings.Builder, img *ResolvedBox, can
 	}
 }
 
-// emitInitAssembly assembles init system configs (driven by build.yml init:
-// section templates): the assembly template, system-level service enablement,
+// emitInitAssembly assembles init system configs (driven by the embedded init:
+// vocabulary templates): the assembly template, system-level service enablement,
 // and any post-assembly step, per active init system.
 func (g *Generator) emitInitAssembly(b *strings.Builder, candyOrder []string, activeInits map[string]*InitDef, initHasFragments map[string]bool) error {
 	for initName, def := range activeInits {
@@ -1035,7 +1035,7 @@ func renderDnfConfWrite(d *DnfConfig) string {
 }
 
 // writeBootstrap writes the bootstrap preamble for external base images.
-// All distro-specific behavior is driven by build.yml distro: section config.
+// All distro-specific behavior is driven by the embedded distro: vocabulary config.
 func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedBox) {
 	b.WriteString("# Bootstrap\n")
 
@@ -1089,7 +1089,7 @@ func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedBox) {
 	//                        the policy layer blocks the collision case
 	//                        via auto/create semantics before we get here).
 	if img.UserAdopted {
-		fmt.Fprintf(b, "# User %s (uid=%d) adopted from base image (declared in build.yml distro.base_user) — no useradd needed\n\n", img.User, img.UID)
+		fmt.Fprintf(b, "# User %s (uid=%d) adopted from base image (declared in the embedded distro.base_user) — no useradd needed\n\n", img.User, img.UID)
 	} else {
 		fmt.Fprintf(b, "RUN if ! getent passwd %d >/dev/null 2>&1; then \\\n", img.UID)
 		fmt.Fprintf(b, "      (getent group %d >/dev/null 2>&1 || groupadd -g %d %s) && \\\n", img.GID, img.GID, img.User)
@@ -1551,7 +1551,7 @@ func (g *Generator) writeCandySteps(b *strings.Builder, candyName string, img *R
 		}
 	}
 
-	// 4. Inline builders (cargo, etc.) — config-driven from build.yml builder: section
+	// 4. Inline builders (cargo, etc.) — config-driven from the embedded builder: vocabulary
 	if img.BuilderConfig != nil {
 		for _, bName := range img.BuilderConfig.BuilderNames() {
 			bDef := img.BuilderConfig.Builder[bName]
@@ -1619,8 +1619,8 @@ func (g *Generator) writeCandySteps(b *strings.Builder, candyName string, img *R
 }
 
 // Old format-specific write functions removed — all generation is now
-// config-driven via build.yml distro: section format templates rendered by renderFormatInstall*
-// and build.yml builder: section templates rendered by buildStageContext + RenderTemplate.
+// config-driven via the embedded distro: vocabulary format templates rendered by renderFormatInstall*
+// and the embedded builder: vocabulary templates rendered by buildStageContext + RenderTemplate.
 
 // expandBuilderPath replaces {{.Home}} placeholders in copy artifact paths.
 func expandBuilderPath(path string, img *ResolvedBox) string {

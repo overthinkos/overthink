@@ -503,11 +503,11 @@ func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, boxName string, img *Reso
 		return fmt.Errorf("box %s: from: builder:%s requires bootstrap_builder_image: in charly.yml", boxName, builderName)
 	}
 	if img.BuilderConfig == nil {
-		return fmt.Errorf("box %s: build.yml builder: section is empty", boxName)
+		return fmt.Errorf("box %s: charly.yml builder: section is empty", boxName)
 	}
 	builder, ok := img.BuilderConfig.Builder[builderName]
 	if !ok {
-		return fmt.Errorf("box %s: builder %q is not declared in build.yml", boxName, builderName)
+		return fmt.Errorf("box %s: builder %q is not declared in charly.yml", boxName, builderName)
 	}
 	if !builder.IsBootstrap() {
 		return fmt.Errorf("box %s: builder %q is not kind: bootstrap (got kind=%q)", boxName, builderName, builder.Kind)

@@ -520,7 +520,7 @@ func buildStartArgs(engine, imageRef string, uid, gid int, ports []string, name 
 }
 
 // resolveEntrypointFromMeta determines the entrypoint from image metadata (runtime mode).
-// Uses well-known init system names; custom init systems declared via build.yml init: section are
+// Uses well-known init system names; custom init systems declared via the embedded `init:` vocabulary are
 // only honored during build.
 func resolveEntrypointFromMeta(meta *BoxMetadata) []string {
 	if meta.Init == "" {

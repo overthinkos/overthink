@@ -11,7 +11,7 @@ package main
 // shipped systemd unit with optional drop-in overrides) or a fully
 // structured spec (`exec`, `env`, `restart`, `after`, `before`,
 // `scope`, …) that gets rendered by the init-system's service_template
-// in build.yml.
+// in the embedded `init:` vocabulary (charly/charly.yml).
 //
 // This file declares the schema types, the rendering context, and the
 // template rendering helpers. It does NOT parse the candy manifest — that
@@ -59,7 +59,7 @@ type ServiceEntry struct {
 	UsePackaged string `yaml:"use_packaged,omitempty" json:"use_packaged,omitempty"`
 
 	// Custom-unit path — mutually exclusive with UsePackaged. The
-	// init-system's service_template (in build.yml) renders these into
+	// init-system's service_template (in the embedded `init:` vocabulary) renders these into
 	// the native unit format (supervisord INI or systemd unit file).
 	Exec             string            `yaml:"exec,omitempty" json:"exec,omitempty"`
 	Env              map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
@@ -149,7 +149,7 @@ func (e *ServiceEntry) EffectiveScope() string {
 // ---------------------------------------------------------------------------
 
 // ServiceRenderContext is the template-rendering context exposed to
-// build.yml's init.<name>.service_template and its siblings. Keeps the
+// the embedded `init:` vocabulary's init.<name>.service_template and its siblings. Keeps the
 // interface surface tight: anything the renderer needs is a field here;
 // nothing else is reachable.
 type ServiceRenderContext struct {
@@ -367,7 +367,7 @@ func renderTemplateString(name, tmpl string, data any) (string, error) {
 }
 
 // serviceRenderFuncs returns the per-init-system helper functions
-// referenced in build.yml templates. Adding a new init system means
+// referenced in the embedded init-system templates. Adding a new init system means
 // adding its helpers here so its templates stay readable.
 func serviceRenderFuncs() template.FuncMap {
 	return template.FuncMap{

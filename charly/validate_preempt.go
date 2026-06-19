@@ -92,8 +92,8 @@ func validatePreemptibleUnified(uf *UnifiedFile) error {
 	return nil
 }
 
-// validateResourceDefs checks the build.yml `resource:` vocabulary and its
-// interaction with VM-targeted claimants:
+// validateResourceDefs checks the embedded `resource:` vocabulary
+// (charly/charly.yml) and its interaction with VM-targeted claimants:
 //
 //   - a `gpu:` selector MUST carry a non-empty vendor (auto-allocation matches
 //     DetectVFIO's reported PCI vendor against it);

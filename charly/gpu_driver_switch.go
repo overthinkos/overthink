@@ -388,7 +388,8 @@ func deployNodeSharesGPU(node BundleNode, resources map[string]*ResourceDef) boo
 // auto-detected nvidia GPU device (engine.go's `--device nvidia.com/gpu=all`)
 // maps onto. "" when no gpu-backed nvidia token is configured (then there is no
 // arbitration label to claim). Lowest token name wins on the degenerate
-// multi-match case (determinism). Derived from build.yml `resource:` config —
+// multi-match case (determinism). Derived from the embedded `resource:`
+// vocabulary (charly/charly.yml) —
 // never hardcoded; the vendor match mirrors requiredGPUResource (gpu_allocate.go,
 // R3).
 func nvidiaTokenFromResources(resources map[string]*ResourceDef) string {

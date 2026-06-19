@@ -54,7 +54,7 @@ const MaxIncludeDepth = 8
 
 // UnifiedFile is the full schema of a single unified-format YAML document.
 // Every field is optional — a file with only `distro:` is valid (typical for
-// a build.yml-style include); a file with only `deploy:` is valid (typical
+// the embedded build vocabulary, charly/charly.yml); a file with only `deploy:` is valid (typical
 // for a charly.yml-style include); etc.
 //
 // Schema version 2 consolidates the legacy vms.yml + charly.yml split into one
@@ -74,7 +74,7 @@ type UnifiedFile struct {
 	// Import is the SINGLE composition statement (the legacy `include:` key
 	// was deleted in the 2026-05 import-namespace cutover). A list whose
 	// items are either a bare string (flat import into THIS root namespace —
-	// same-repo file splits + shared build.yml vocabulary) or a single-key
+	// same-repo file splits + shared build vocabulary) or a single-key
 	// map `alias: ref` (a namespaced child import — cross-repo entity
 	// cherry-pick, referenced qualified as `alias.entry`). See ImportList.
 	Import   ImportList             `yaml:"import,omitempty" json:"import,omitempty"`

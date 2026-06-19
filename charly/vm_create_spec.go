@@ -32,7 +32,7 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 		return fmt.Errorf("loading instance override for %s: %w", vmDomainName, err)
 	}
 	// GPU auto-allocation: when the claimant (the deploy/bed that references
-	// this VM via requires_exclusive) needs a build.yml `resource:` GPU and no
+	// this VM via requires_exclusive) needs a `resource:` GPU from the embedded build vocabulary and no
 	// hostdev is already configured, detect a matching card, persist its
 	// <hostdev> block into this domain's instance.yml, and fold it into ovr —
 	// or FAIL HARD if the required card is absent. See gpu_allocate.go.

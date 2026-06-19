@@ -143,7 +143,7 @@ func (c *VmBuildCmd) runVmSpecBuild(vmName string, spec *VmSpec, rt *ResolvedRun
 		// by the runtime — here we look them up from the runtime).
 		distroCfg, builderCfg, err := loadBuildYmlSections()
 		if err != nil {
-			return fmt.Errorf("loading build.yml builder/distro sections: %w", err)
+			return fmt.Errorf("loading builder/distro sections from the embedded build vocabulary: %w", err)
 		}
 		res, err := BuildBootstrapVM(spec, outputDir, vmStateDir, existingState, distroCfg, builderCfg)
 		if err != nil {
@@ -160,8 +160,9 @@ func (c *VmBuildCmd) runVmSpecBuild(vmName string, spec *VmSpec, rt *ResolvedRun
 	}
 }
 
-// loadBuildYmlSections loads the project's build.yml distro: + builder:
-// blocks. Mirrors the loader path used by charly box build for the same
+// loadBuildYmlSections loads the distro: + builder: blocks of the embedded
+// build vocabulary (charly/charly.yml). Mirrors the loader path used by charly
+// box build for the same
 // data — bootstrap VM builds need the distro.<name>.pacstrap and
 // .bootloader templates plus the matching builder.<name> bootstrap
 // template.

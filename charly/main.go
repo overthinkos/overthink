@@ -24,7 +24,7 @@ type CLI struct {
 	Host string `long:"host" env:"CHARLY_HOST" help:"Remote host (alias or user@host[:port]) to run this command on via SSH"`
 
 	// Dir is the project directory that every build-mode command resolves
-	// charly.yml / candy/ / build.yml relative to. Default is the process
+	// charly.yml / candy/ relative to. Default is the process
 	// cwd. Useful for MCP servers and remote agents that run outside a
 	// project checkout — set CHARLY_PROJECT_DIR or pass -C / --dir to point at
 	// a mounted project root. Build-mode commands call os.Getwd()
@@ -135,7 +135,7 @@ func (c *ValidateCmd) Run() error {
 		return err
 	}
 
-	// Populate init systems on candies from build.yml config
+	// Populate init systems on candies from the embedded build vocabulary
 	PopulateCandyInitSystem(layers, defaultInitCfg)
 
 	return Validate(cfg, layers, dir, ResolveOpts{IncludeDisabled: c.IncludeDisabled})
@@ -601,7 +601,7 @@ func (c *ListVolumesCmd) Run() error {
 // NewCmd groups scaffolding subcommands
 type NewCmd struct {
 	Candy   NewCandyCmd   `cmd:"" name:"candy" help:"Scaffold a candy directory"`
-	Project NewProjectCmd `cmd:"" help:"Scaffold a fresh charly project (charly.yml + build.yml ref + candy/)"`
+	Project NewProjectCmd `cmd:"" help:"Scaffold a fresh charly project (charly.yml + candy/)"`
 	Box     NewBoxCmd     `cmd:"" name:"box" help:"Add a new box entry to charly.yml"`
 }
 

@@ -233,7 +233,7 @@ type ReverseOp struct {
 
 	// UninstallCmd is the rendered host-venue package-removal command for a
 	// ReverseOpPackageRemove op, filled at record time from the format's
-	// uninstall_template (build.yml) by fillReverseUninstallCmds — the deploy
+	// uninstall_template (the embedded build vocabulary, charly/charly.yml) by fillReverseUninstallCmds — the deploy
 	// target has the DistroConfig at install time, the teardown (which reads
 	// the persisted ledger) does not, so the command is rendered up front and
 	// persisted. reverse_ops.go runs it verbatim, so there is NO hardcoded
@@ -276,7 +276,7 @@ type InstallStep interface {
 // ---------------------------------------------------------------------------
 
 // RepoSpec carries a structured repo entry from the candy manifest. Matches the
-// existing raw shape used by templates in build.yml; the host target
+// existing raw shape used by templates in the embedded build vocabulary (charly/charly.yml); the host target
 // reads this to decide whether --allow-repo-changes is required.
 type RepoSpec struct {
 	// Fields captured verbatim from the candy manifest. Different formats use
@@ -351,7 +351,7 @@ func (s *SystemPackagesStep) Reverse() []ReverseOp {
 }
 
 // CacheMountSpec mirrors the BuildKit cache-mount configuration carried in
-// build.yml format/builder definitions. The OCI target renders these as
+// the embedded build vocabulary's format/builder definitions (charly/charly.yml). The OCI target renders these as
 // `--mount=type=cache,...`; the host target ignores them.
 type CacheMountSpec struct {
 	Dst     string
@@ -389,7 +389,7 @@ type BuilderStep struct {
 	Artifacts    []ArtifactRef // outputs to extract (empty for user-scope pixi/npm/cargo; populated for aur)
 
 	// Builder-specific template context — the compiler populates this from
-	// the candy's manifest files + build.yml builder definition.
+	// the candy's manifest files + the embedded builder definition (charly/charly.yml).
 	RawStageContext map[string]any
 
 	// LocalPkg is the package format's localpkg contract, populated by the
@@ -397,11 +397,11 @@ type BuilderStep struct {
 	// files (.pkg.tar.zst) that the host/VM deploy targets install onto the
 	// venue via the SAME config-driven transfer+install leg the localpkg step
 	// uses (R3) — so the install command + package glob come from
-	// build.yml `pac.local_pkg`, never a hardcoded literal. Nil for
+	// the embedded `pac.local_pkg` vocabulary, never a hardcoded literal. Nil for
 	// pixi/npm/cargo (home-artifact builders, no package-file install).
 	LocalPkg *LocalPkgDef
 
-	// BuilderDef is the resolved build.yml builder definition for this builder
+	// BuilderDef is the resolved builder definition from the embedded build vocabulary (charly/charly.yml) for this builder
 	// (img.BuilderConfig.Builder[Builder]), populated by the compiler. The
 	// host-venue deploy targets render its phase.install.host cell via
 	// renderBuilderScript — the plain-shell analog of stage_template — so the
@@ -957,7 +957,7 @@ type LocalPkgInstallStep struct {
 	// format — the executor then treats the step as a clean no-op.
 	Format string
 
-	// LocalPkg is the format's localpkg contract resolved from build.yml at
+	// LocalPkg is the format's localpkg contract resolved from the embedded build vocabulary (charly/charly.yml) at
 	// compile time (DistroDef.LocalPkgFormat). It carries the build/install
 	// templates, package glob, source-dir sentinel, and probe command — so the
 	// executor renders every package-manager command from config instead of

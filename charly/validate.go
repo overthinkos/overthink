@@ -310,7 +310,7 @@ func Validate(cfg *Config, layers map[string]*Candy, dir string, opts ResolveOpt
 	// Validate data candies and data images
 	validateDataCandies(cfg, layers, errs)
 
-	// Validate init system dependencies (driven by build.yml init: section)
+	// Validate init system dependencies (driven by the embedded init: vocabulary)
 	if defaultInitCfg != nil {
 		validateInitDependencies(cfg, defaultInitCfg, layers, errs)
 	}
@@ -578,7 +578,7 @@ func checkDualInitFallback(initName string, resolved []string, layers map[string
 }
 
 // validateBuildAndDistro validates build: and distro: entries.
-// build: entries are checked against build.yml distro format definitions.
+// build: entries are checked against the embedded distro format definitions (charly/charly.yml).
 // distro: is free-form (any string, including distro:version).
 func validateBuildAndDistro(cfg *Config, distroCfg *DistroConfig, errs *ValidationError) {
 	validateBuild := func(context string, build BuildFormats) {
@@ -607,7 +607,7 @@ func validateBuildAndDistro(cfg *Config, distroCfg *DistroConfig, errs *Validati
 		}
 		validateBuild(fmt.Sprintf("box %q", name), img.Build)
 		// box check_level enum is enforced by #Box; the build-format set is
-		// dynamic (build.yml, not a static CUE enum) so it stays validated here.
+		// dynamic (the embedded vocabulary, not a static CUE enum) so it stays validated here.
 	}
 }
 
@@ -1193,7 +1193,7 @@ func validateBuilders(cfg *Config, layers map[string]*Candy, builderCfg *Builder
 		}
 
 		// Check if candies need builders that aren't configured.
-		// Detection is fully config-driven from build.yml builder: section:
+		// Detection is fully config-driven from the embedded builder: vocabulary:
 		//   detect_files: candy has any of these files
 		//   detect_config: candy has this format section with packages
 		candyOrder, err := ResolveCandyOrder(img.Candy, layers, nil)

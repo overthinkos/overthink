@@ -1044,9 +1044,9 @@ func resolveDistroDef(cfg *DistroConfig, distroTag string) *DistroDef {
 	return cfg.ResolveDistro([]string{distroTag})
 }
 
-// loadConfigForDeploy loads charly.yml + build.yml for the current
-// project directory. Runs RegisterBuildVocabulary as a side effect since the
-// candy scanner needs it.
+// loadConfigForDeploy loads charly.yml + the embedded build vocabulary for the
+// current project directory. Runs RegisterBuildVocabulary as a side effect since
+// the candy scanner needs it.
 func loadConfigForDeploy(dir string) (*Config, *DistroConfig, *BuilderConfig, error) {
 	cfg, err := LoadConfig(dir)
 	if err != nil {

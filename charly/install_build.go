@@ -52,7 +52,7 @@ type HostContext struct {
 
 	// BuilderImage overrides the default builder-image selection for
 	// VenueContainerBuilder steps. Populated from --builder-image. ""
-	// means "use build.yml default".
+	// means "use the embedded build vocabulary's default".
 	BuilderImage string
 }
 
@@ -502,8 +502,8 @@ func appendShellPathLines(body string, paths []string, shell, home string) strin
 //
 // For the IR we additionally break each install into the three-phase
 // structure (prepare/install/cleanup) so the host target can gate
-// PhasePrepare on --allow-repo-changes. Current build.yml only has one
-// phase per format (the monolithic install_template); Task 4 will split
+// PhasePrepare on --allow-repo-changes. The embedded vocabulary (charly/charly.yml)
+// currently has only one phase per format (the monolithic install_template); Task 4 will split
 // templates into phases. Until then, we emit everything as PhaseInstall.
 // compileSystemPackageSteps resolves a candy's package surface for an image via
 // the distro-specificity CASCADE and emits ONE SystemPackagesStep for the
@@ -555,14 +555,14 @@ func compileSystemPackageSteps(layer *Candy, img *ResolvedBox, _ HostContext) []
 // A `distro: deb:` candy block therefore applies to EVERY deb-format distro
 // (debian + ubuntu + their versions), `pac:` to arch + cachyos, `rpm:` to
 // fedora — the family-generic level of the YAML-configured
-// deb/pac/rpm → distro → version hierarchy. img.Pkg is the build.yml-declared
-// primary package format, so the hierarchy lives entirely in YAML.
+// deb/pac/rpm → distro → version hierarchy. img.Pkg is the primary package format
+// declared by the embedded vocabulary (charly/charly.yml), so the hierarchy lives entirely in YAML.
 //
 // Distro INHERITANCE is the complementary YAML mechanism: img.Distro is already
 // expanded (at resolve time, expandPackageInheritance) to include any
 // `inherit_packages: true` ancestor, so a cachyos image/VM carries [cachyos, …,
 // arch] and a `distro: arch:` block DOES reach cachyos — while ubuntu (no flag)
-// stays isolated from debian. Both knobs live entirely in build.yml.
+// stays isolated from debian. Both knobs live entirely in the embedded vocabulary (charly/charly.yml).
 func cascadeTagChain(img *ResolvedBox) []string {
 	chain := append([]string(nil), img.Distro...)
 	if img.Pkg != "" {
@@ -776,7 +776,7 @@ func compileBuilderSteps(layer *Candy, img *ResolvedBox, hostCtx HostContext) []
 		// The host/VM targets install those package files via the SAME
 		// config-driven transfer+install leg as the localpkg step, so carry
 		// the package format's localpkg contract (install command + glob)
-		// resolved from build.yml — no hardcoded pacman/glob in the executor.
+		// resolved from the embedded build vocabulary — no hardcoded pacman/glob in the executor.
 		if bName == "aur" {
 			step.Artifacts = []ArtifactRef{{
 				ContainerPath: "/tmp/aur-pkgs/",

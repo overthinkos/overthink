@@ -11,75 +11,6 @@ import (
 	"text/template"
 )
 
-// SidecarDef is a sidecar container template. The default set is the
-// binary-embedded charly.yml `sidecar:` library (embed_defaults.go); a project
-// may override or extend it (a root `sidecar:` map, or a per-deploy override
-// under `deploy.<name>.sidecar:`).
-//
-// The `Parameter` field carries BOTH the template's parameter
-// declarations (the embedded charly.yml `sidecar:` section: each key maps to
-// an empty-string sentinel for "required, must be supplied by deploy") AND the
-// per-deploy override values (each key maps to the operator-chosen string).
-// After MergeSidecar, every required parameter must have a non-empty
-// value or ResolveSidecar errors out with a remediation hint.
-//
-// Example template (embedded charly.yml `sidecar:` section):
-//
-//	sidecar:
-//	  tailscale:
-//	    parameter:
-//	      tailnet: ""   # empty = required, deploy must supply
-//
-// Example per-deploy override (charly.yml):
-//
-//	deploy:
-//	  my-app:
-//	    sidecar:
-//	      tailscale:
-//	        parameter:
-//	          tailnet: armadillo-quail.ts.net
-type SidecarDef struct {
-	Description string            `yaml:"description,omitempty" json:"description,omitempty"`
-	Image       string            `yaml:"image,omitempty" json:"image,omitempty"`
-	Env         map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
-	Parameter   map[string]string `yaml:"parameter,omitempty" json:"parameter,omitempty"`
-	Secret      []SidecarSecret   `yaml:"secret,omitempty" json:"secret,omitempty"`
-	Volume      []SidecarVolume   `yaml:"volume,omitempty" json:"volume,omitempty"`
-	Security    *SecurityConfig   `yaml:"security,omitempty" json:"security,omitempty"`
-}
-
-// SidecarSecret is a credential store secret injected as an env var into the sidecar.
-//
-// `Env` is the target env var name INSIDE the container (e.g. TS_AUTHKEY —
-// the name tailscale's binary expects).
-//
-// `EnvFrom` is an optional text/template expression that resolves to the
-// HOST-side env var name to read the value from. When empty, the host
-// env var name = Env (legacy single-tailnet behavior).
-//
-// Multi-tailnet usage: template against the resolved Parameter map of
-// the SidecarDef. The `tailnetEnvSuffix` template func normalizes a
-// MagicDNS suffix into a valid env-var-name fragment:
-//
-//	env_from: "TS_AUTHKEY_{{.Parameter.tailnet | tailnetEnvSuffix}}"
-//
-// With `Parameter.tailnet=armadillo-quail.ts.net`, EnvFrom renders to
-// `TS_AUTHKEY_ARMADILLO_QUAIL_TS_NET`. The operator stores per-tailnet
-// keys under that env name in `.secrets`:
-//
-//	charly secrets gpg set TS_AUTHKEY_ARMADILLO_QUAIL_TS_NET tskey-auth-XXXX
-//
-// direnv loads `.secrets` into the shell env; `charly config` reads the
-// resolved host env var via the standard credential-store chain
-// (env-var-first), and injects the value into the container as
-// `TS_AUTHKEY=<value>`.
-type SidecarSecret struct {
-	Name        string `yaml:"name" json:"name"`                                   // credential store key / podman secret name suffix
-	Env         string `yaml:"env" json:"env"`                                     // target env var in container (the name the app expects)
-	EnvFrom     string `yaml:"env_from,omitempty" json:"env_from,omitempty"`       // host-side env var name to read; text/template (empty = same as Env)
-	Description string `yaml:"description,omitempty" json:"description,omitempty"` // human-readable description
-}
-
 // SidecarKeyContext is the template input for SidecarSecret.EnvFrom rendering.
 // Exposes the resolved Parameter map as `.Parameter` (so templates can
 // reference {{.Parameter.tailnet}} etc.).
@@ -171,21 +102,6 @@ func extractParameterRefs(tmplStr string) map[string]struct{} {
 		idx = start + end
 	}
 	return out
-}
-
-// SidecarVolume is a named volume for a sidecar container.
-type SidecarVolume struct {
-	Name string `yaml:"name" json:"name"` // volume name suffix (full: charly-<image>-<sidecar>-<name>)
-	Path string `yaml:"path" json:"path"` // container mount path
-}
-
-// SidecarConfig is the inline sidecar-wrapper shape authored under a
-// kind:pod template's `sidecar:` list (PodSpec.Sidecar []SidecarConfig).
-// The default sidecar-template library is NOT loaded through this type — it
-// lives in the binary-embedded charly.yml `sidecar:` section and is read as
-// UnifiedFile.Sidecar by the unified loader (embed_defaults.go).
-type SidecarConfig struct {
-	Sidecar map[string]SidecarDef `yaml:"sidecar" json:"sidecar"`
 }
 
 // ResolvedSidecar is a fully resolved sidecar ready for quadlet generation.

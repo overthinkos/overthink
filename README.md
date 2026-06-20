@@ -151,8 +151,38 @@ authoring-with-agents and management).
 
 ### Schema kinds
 
-Beyond `candy` and `box`, the schema has these kinds — each a
-discriminator key nested under the entity name (`<name>: {<kind>: …}`):
+A `charly.yml` is a recursive **name → kind** map: every key is an
+entity NAME, and its value opens with exactly one **kind** — a reserved
+discriminator word (`box`, `candy`, `pod`, `vm`, `k8s`, `local`,
+`android`, `bundle`, plus the build vocabulary `distro` / `builder` /
+`init` / `resource` / `sidecar` / `agent` / …). A kind's value is
+**exactly one of** three shapes:
+
+1. **a list of kinds** — composition (a box's candy list, a pod's
+   container set);
+2. **another name → kind map** — nesting (a resource deployed *into* a
+   bundle, a sidecar *alongside* a pod; tree position *is* the deploy
+   relationship);
+3. **a reserved-word leaf** — the entity's own scalar params, typed by
+   that kind's CUE definition.
+
+This grammar is **enforced at load time**: every document is validated
+against one closed CUE schema (`#NodeDoc`) *before* it executes — the
+sole load gate — and a non-node-form document is rejected with a
+`charly migrate` hint pointing at the one-shot upgrade.
+
+**One schema, one source.** The schema lives in `charly/schema/*.cue`.
+The Go param structs, the reserved-word kind/verb vocabulary, and the
+per-verb live-probe method allowlists are all
+**generated / derived** from those `.cue` files by `task cue:gen` —
+never hand-maintained in parallel. A reserved-word → Go-handler
+registry, checked by a **startup bijection gate**, guarantees every
+kind and verb in the schema is wired to exactly one Go handler, and
+every handler to a schema word. Changing the schema is a **CUE-only
+edit → `task cue:gen`**; the Go side follows
+(recipe: `/charly-internals:go`).
+
+Beyond `candy` and `box`, the deployable kinds are:
 
 - **Pod** (`pod:`) — multi-container deploy shape: containers,
   sidecars, tunnels. Deployed as a Podman pod with a quadlet per

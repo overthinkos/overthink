@@ -22,5 +22,8 @@ func buildCandy(gn *genericNode) (name string, ic *InlineCandy, err error) {
 	if err := decodeNodeValue(gn, &c); err != nil {
 		return "", nil, err
 	}
+	// Name is the node KEY in node-form (the migration moves a legacy body
+	// `name:` up to the key), so stamp it — the decoded body carries no `name:`.
+	c.Name = gn.name
 	return gn.name, &InlineCandy{CandyYAML: c}, nil
 }

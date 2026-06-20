@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v3"
 )
 
 // Ensures Kind() returns the correct verb for each single-verb Check and
@@ -251,7 +250,7 @@ func TestCheck_ExpandVars(t *testing.T) {
 		"HOST_PORT:6379": "16379",
 		"CONTAINER_IP":   "10.0.0.5",
 	}
-	missing := c.ExpandVars(env)
+	missing := opExpandVars(&c, env)
 
 	if c.File != "/home/user/.redis" {
 		t.Errorf("File = %q", c.File)
@@ -481,7 +480,7 @@ capture: writer_pid
 capture_extract: "pid=([0-9]+)"
 `
 	var c Op
-	if err := yaml.Unmarshal([]byte(yamlSrc), &c); err != nil {
+	if err := decodeViaCUEForTest(t, yamlSrc, &c); err != nil {
 		t.Fatalf("yaml unmarshal: %v", err)
 	}
 	if c.Capture != "writer_pid" {
@@ -537,7 +536,7 @@ kill: "${CAPTURED:writer_pid}"
 signal: KILL
 `
 	var c Op
-	if err := yaml.Unmarshal([]byte(yamlSrc), &c); err != nil {
+	if err := decodeViaCUEForTest(t, yamlSrc, &c); err != nil {
 		t.Fatalf("yaml unmarshal: %v", err)
 	}
 	if c.Kill != "${CAPTURED:writer_pid}" {

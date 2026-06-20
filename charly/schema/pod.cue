@@ -13,7 +13,7 @@
 	// sidecar templates (PodSpec.Sidecar []SidecarConfig).
 	sidecar?: [...#PodSidecar]
 	secret?: [...#DeploySecret]
-	env_default?: [...#EnvVar]
+	env_default?: [...#EnvVar] @go(EnvDefaults)
 	plan?: [...#Step]
 }
 

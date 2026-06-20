@@ -7,7 +7,7 @@ import (
 )
 
 func TestReadinessConfig_ResolveDefaults(t *testing.T) {
-	rr, err := (*ReadinessConfig)(nil).Resolve()
+	rr, err := readinessResolve(nil)
 	if err != nil {
 		t.Fatalf("nil/default resolve must succeed: %v", err)
 	}
@@ -20,7 +20,7 @@ func TestReadinessConfig_ResolveDefaults(t *testing.T) {
 }
 
 func TestReadinessConfig_ParseError(t *testing.T) {
-	_, err := (&ReadinessConfig{NoProgress: "ninety"}).Resolve()
+	_, err := readinessResolve(&ReadinessConfig{NoProgress: "ninety"})
 	if err == nil || !strings.Contains(err.Error(), "no_progress") {
 		t.Fatalf("bad duration must error, got %v", err)
 	}
@@ -28,19 +28,19 @@ func TestReadinessConfig_ParseError(t *testing.T) {
 
 func TestReadinessConfig_OrderingRejected(t *testing.T) {
 	// poll_interval_heavy (120s) > no_progress (90s default) — the env-bypass case.
-	_, err := (&ReadinessConfig{PollIntervalHeavy: "120s"}).Resolve()
+	_, err := readinessResolve(&ReadinessConfig{PollIntervalHeavy: "120s"})
 	if err == nil || !strings.Contains(err.Error(), "no_progress") {
 		t.Fatalf("interval>no_progress must be rejected, got %v", err)
 	}
 	// stop_grace > absolute_cap.
-	_, err = (&ReadinessConfig{StopGrace: "40m"}).Resolve()
+	_, err = readinessResolve(&ReadinessConfig{StopGrace: "40m"})
 	if err == nil || !strings.Contains(err.Error(), "absolute_cap") {
 		t.Fatalf("stop_grace>absolute_cap must be rejected, got %v", err)
 	}
 }
 
 func TestReadinessConfig_ValidOverride(t *testing.T) {
-	rr, err := (&ReadinessConfig{NoProgress: "5m", AbsoluteCap: "1h"}).Resolve()
+	rr, err := readinessResolve(&ReadinessConfig{NoProgress: "5m", AbsoluteCap: "1h"})
 	if err != nil {
 		t.Fatalf("valid override: %v", err)
 	}

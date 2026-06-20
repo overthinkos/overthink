@@ -6,22 +6,11 @@ import (
 	"text/template"
 )
 
-// CacheMount is the single source of truth for `--mount=type=cache` emission.
-// Every cache-mount string in generated Containerfiles flows through here so
-// (a) the BuildKit syntax is defined exactly once, and (b) the stable `id=`
-// derivation that makes caches survive layer-hash changes is always applied.
-//
-// Without an explicit `id=`, BuildKit/buildah keys cache mounts by the
-// surrounding RUN step's hash — so any upstream layer-content change drops
-// the old cache and re-downloads every package. The id derivation here keys
-// each cache by its destination path (and uid for uid-scoped caches), so the
-// same cache survives across iterations regardless of layer-hash churn.
-//
-// Two flavors:
-//   - Shared (sharing=locked): root-installed system caches like dnf/apt/pacman.
-//   - Owned (uid/gid): non-root user caches like pixi/npm/cargo. The id includes
-//     `-uid<N>` so different-uid builds don't collide on file ownership inside
-//     the same cache volume.
+// CacheMount is the RENDER-time cache-mount value (a resolved Containerfile
+// `--mount=type=cache,…` directive). Distinct from the authoring
+// spec.CacheMount (CacheMountDef — dst/sharing/owned): this one carries the
+// concrete uid/gid the owned form resolved to (sentinel UID == -1 = the shared
+// form). Produced by SharedCacheMount/OwnedCacheMount from the authoring def.
 type CacheMount struct {
 	Dst     string // Container-side mount path; canonical id source.
 	Sharing string // "locked"/"shared"/"private" for shared caches; ignored for owned.

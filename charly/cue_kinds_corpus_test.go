@@ -1,8 +1,9 @@
 package main
 
-// Generic corpus validation for the collection kinds: for each root-shape
-// charly.yml, extract each kind's map and validate every entity against its
-// #<Kind>. Proves the registered schemas accept the whole real corpus.
+// Generic corpus validation for every kind: for each node-form charly.yml,
+// iterate its top-level `<name>: {<kind>: …}` nodes and validate each entity
+// against #NodeDoc's per-entity grammar. Proves the registered schemas accept the
+// whole real corpus.
 
 import (
 	"os"
@@ -14,7 +15,7 @@ import (
 	"cuelang.org/go/cue/errors"
 )
 
-// TestCueBox_Corpus validates every discovered box entity (kind-keyed
+// TestCueBox_Corpus validates every discovered box entity (node-form
 // box/<distro>/box/<name>/charly.yml) against #Box.
 func TestCueBox_Corpus(t *testing.T) {
 	matches, err := filepath.Glob("../box/*/box/*/charly.yml")
@@ -56,9 +57,9 @@ func TestCueBox_Corpus(t *testing.T) {
 	}
 }
 
-func rootShapeFiles() []string {
+func nodeFormCorpusFiles() []string {
 	return []string{
-		"../charly.yml",          // repo root (pod/local/k8s/vm/check/android collections)
+		"../charly.yml",          // repo root (pod/local/k8s/vm/check/android entities)
 		"../box/arch/charly.yml", // box submodule stacks
 		"../box/fedora/charly.yml",
 		"../box/debian/charly.yml",
@@ -70,7 +71,8 @@ func rootShapeFiles() []string {
 
 func TestCueKinds_Corpus(t *testing.T) {
 	// Unified node-form discovery: a top-level `<name>: {<kind>: …}` node IS an
-	// entity of <kind> (vs the legacy kind-keyed `<kind>: {<name>: …}` map). Each
+	// entity of <kind> (the legacy kind-keyed `<kind>: {<name>: …}` map is rejected
+	// at load — node-form is the only authoring surface). Each
 	// entity node is validated through #NodeDoc's per-entity pattern constraint
 	// (`{[!~dir]: #Node}`) via FillPath — the SAME non-concrete, closedness-only
 	// gate validateNodeDocCUE (the loader's validate-before-execute) uses, so the
@@ -80,17 +82,17 @@ func TestCueKinds_Corpus(t *testing.T) {
 	if docDef.Err() != nil {
 		t.Fatalf("#NodeDoc schema not found: %v", docDef.Err())
 	}
-	// The recognized entity discriminators — the production set (kept in lockstep
-	// with schema/node.cue), sorted for deterministic discovery + logging.
-	kinds := make([]string, 0, len(nodeEntityKinds))
-	for k := range nodeEntityKinds {
+	// The recognized entity discriminators — the CUE-derived kind vocabulary
+	// (spec.KindWords), sorted for deterministic discovery + logging.
+	kinds := make([]string, 0, len(kindWordSet))
+	for k := range kindWordSet {
 		kinds = append(kinds, k)
 	}
 	sort.Strings(kinds)
 
 	counts := map[string]int{}
 	total := 0
-	for _, f := range rootShapeFiles() {
+	for _, f := range nodeFormCorpusFiles() {
 		data, err := os.ReadFile(f)
 		if err != nil {
 			continue // layout may omit a file
@@ -107,7 +109,7 @@ func TestCueKinds_Corpus(t *testing.T) {
 		}
 		for it.Next() {
 			name := it.Selector().Unquoted()
-			if nodeDocDirectives[name] {
+			if docDirectiveSet[name] {
 				continue // version/repo/import/discover/defaults/provides — not entities
 			}
 			node := it.Value()

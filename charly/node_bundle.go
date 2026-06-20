@@ -82,13 +82,10 @@ func buildBundleNode(gn *genericNode) (*BundleNode, error) {
 }
 
 // isResourceDisc reports whether a discriminator names a deploy-substrate kind
-// (the markers of a bundle member / bundle-shaped node).
+// (the markers of a bundle member / bundle-shaped node) — the CUE-derived
+// resourceKindSet (#ResourceKind).
 func isResourceDisc(d string) bool {
-	switch d {
-	case "pod", "vm", "k8s", "local", "android", "host", "bundle":
-		return true
-	}
-	return false
+	return resourceKindSet[d]
 }
 
 // bundleTargetForDisc maps a node discriminator to the BundleNode Target.

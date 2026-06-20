@@ -213,7 +213,7 @@ func (t *OCITarget) emitSystemPackages(s *SystemPackagesStep) error {
 	if formatDef == nil {
 		return fmt.Errorf("no format %q in distro", s.Format)
 	}
-	template := formatDef.PhaseTemplate(s.Phase, VenueContainerBuilder)
+	template := formatPhaseTemplate(formatDef, s.Phase, VenueContainerBuilder)
 	if template == "" {
 		// No template for this phase/venue is not an error — some phases
 		// simply have nothing to emit in the container (e.g. cleanup

@@ -38,8 +38,8 @@ priority: 10
 	if cfg.Priority != 10 {
 		t.Fatalf("Priority = %d, want 10", cfg.Priority)
 	}
-	if cfg.ByShell != nil {
-		t.Fatalf("ByShell = %v, want nil", cfg.ByShell)
+	if cfg.ByShell() != nil {
+		t.Fatalf("ByShell = %v, want nil", cfg.ByShell())
 	}
 }
 
@@ -58,11 +58,11 @@ fish:
 	if err := decodeViaCUEForTest(t, string(src), &cfg); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if cfg.ByShell["fish"] == nil {
+	if cfg.ByShell()["fish"] == nil {
 		t.Fatal("ByShell[fish] missing")
 	}
-	if !strings.Contains(cfg.ByShell["fish"].Init, "direnv hook fish | source") {
-		t.Fatalf("fish init: %q", cfg.ByShell["fish"].Init)
+	if !strings.Contains(cfg.ByShell()["fish"].Init, "direnv hook fish | source") {
+		t.Fatalf("fish init: %q", cfg.ByShell()["fish"].Init)
 	}
 }
 
@@ -82,9 +82,7 @@ func TestShellConfig_RejectsUnknownShell(t *testing.T) {
 func TestResolveShellSpec_SelectionRule(t *testing.T) {
 	cfg := &ShellConfig{
 		Init: `check "$(direnv hook ${SHELL_NAME})"`,
-		ByShell: map[string]*ShellSpec{
-			"fish": {Init: "direnv hook fish | source"},
-		},
+		Fish: &ShellSpec{Init: "direnv hook fish | source"},
 	}
 	// fish: per-shell override wins, no substitution.
 	_, body, _, ok := resolveShellSpec(cfg, "fish")
@@ -257,15 +255,15 @@ func TestDeployShellOverlay_YAMLParse(t *testing.T) {
 	if o1.ID != "direnv" {
 		t.Errorf("o1.ID = %q", o1.ID)
 	}
-	if o1.ByShell["fish"] == nil || !strings.Contains(o1.ByShell["fish"].Init, "--no-prompt") {
-		t.Errorf("o1.ByShell[fish]: %+v", o1.ByShell)
+	if o1.ByShell()["fish"] == nil || !strings.Contains(o1.ByShell()["fish"].Init, "--no-prompt") {
+		t.Errorf("o1.ByShell()[fish]: %+v", o1.ByShell())
 	}
 	// Second is a fresh deploy-scope entry.
 	o2 := overlays[1]
 	if o2.Origin != "deploy" {
 		t.Errorf("o2.Origin = %q", o2.Origin)
 	}
-	if o2.ByShell["bash"] == nil {
+	if o2.ByShell()["bash"] == nil {
 		t.Errorf("o2 missing bash sub-block")
 	}
 	// Third is a skip.
@@ -293,9 +291,9 @@ func TestDeployShellOverlay_YAMLParse(t *testing.T) {
 		},
 	}
 	merged := MergeDeployShell(baked, []ShellEntry{
-		overlays[0].ToShellEntry(),
-		overlays[1].ToShellEntry(),
-		overlays[2].ToShellEntry(),
+		shellOverlayToEntry(&overlays[0]),
+		shellOverlayToEntry(&overlays[1]),
+		shellOverlayToEntry(&overlays[2]),
 	})
 	// direnv entry should now reflect the overlay's fish override.
 	if len(merged.Candy) == 0 || merged.Candy[0].ID != "direnv" {

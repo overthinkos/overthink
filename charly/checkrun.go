@@ -349,9 +349,9 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 	if r.Mode == RunModeBox {
 		wantCtx, modeName = CtxBuild, "box"
 	}
-	if !c.InContext(wantCtx) {
+	if !opInContext(c, wantCtx) {
 		result.Status = TestSkip
-		result.Message = fmt.Sprintf("context %v not active in %s mode", c.EffectiveContexts(), modeName)
+		result.Message = fmt.Sprintf("context %v not active in %s mode", opEffectiveContexts(c), modeName)
 		result.Elapsed = time.Since(start)
 		result.Attempts = 1
 		result.TotalElapsed = result.Elapsed
@@ -359,7 +359,7 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 	}
 	// Per-step VENUE dispatch (loader-derived from tree position — the former
 	// authored `on:`). Swap executor + resolver + image for the duration of this
-	// check only; restore on return. The self-swap guard (`c.venue != r.Box`)
+	// check only; restore on return. The self-swap guard (`c.Venue != r.Box`)
 	// skips the swap when the step's venue is already the active target: the
 	// scored-step path (check_runner_live.go) pre-buckets by venue and sets r.Box
 	// to the bucket venue, so its in-bucket steps need no re-swap; the
@@ -371,11 +371,11 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 	// reads r.Box to build `charly check <verb> <method> <venue> ...` argv) routes
 	// against the venue's pod, not the plan run's default pod.
 	origExec, origResolver, origImage := r.Exec, r.Resolver, r.Box
-	if c.venue != "" && c.venue != r.Box && r.TargetResolver != nil {
-		newResolver, newExec, terr := r.TargetResolver(c.venue)
+	if c.Venue != "" && c.Venue != r.Box && r.TargetResolver != nil {
+		newResolver, newExec, terr := r.TargetResolver(c.Venue)
 		if terr != nil {
 			result.Status = TestFail
-			result.Message = fmt.Sprintf("venue %q — %v", c.venue, terr)
+			result.Message = fmt.Sprintf("venue %q — %v", c.Venue, terr)
 			result.Elapsed = time.Since(start)
 			result.Attempts = 1
 			result.TotalElapsed = result.Elapsed
@@ -387,7 +387,7 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 		if newResolver != nil {
 			r.Resolver = newResolver
 		}
-		r.Box = c.venue
+		r.Box = c.Venue
 		defer func() {
 			r.Exec = origExec
 			r.Resolver = origResolver
@@ -402,7 +402,7 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 	// behavior.
 	expanded := *c
 	env := r.effectiveEnv()
-	missing := expanded.ExpandVars(env)
+	missing := opExpandVars(&expanded, env)
 	if len(missing) > 0 {
 		// An unresolved cross-deployment var (${HOST}/${HOST})
 		// means the peer/subject this probe targets is UNREACHABLE — the
@@ -442,7 +442,7 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 		// own handler, so do:act there falls through to the assert dispatch
 		// below (the handler IS the act). Agent steps never reach runOne —
 		// they route to the grader in runUnit (description_run.go).
-		if expanded.EffectiveDo() == DoAct {
+		if opEffectiveDo(&expanded) == DoAct {
 			if act, ok := r.runProvisionAct(ctx, &expanded, kind); ok {
 				return act
 			}

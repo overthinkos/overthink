@@ -235,7 +235,7 @@ func isStepNode(m *yaml.Node) bool {
 		return false
 	}
 	for i := 0; i+1 < len(m.Content); i += 2 {
-		if nodeStepVerbs[m.Content[i].Value] {
+		if stepKeywordSet[m.Content[i].Value] {
 			return true
 		}
 	}

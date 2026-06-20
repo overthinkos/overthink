@@ -4,7 +4,7 @@
 // `{gpu: {vendor: ...}}` (selector token). No #Step.
 
 #Resource: {
-	gpu?: #GpuSelector
+	gpu?: #GpuSelector @go(Gpu,optional=nillable)
 }
 
 // vendor required + non-empty; NOT regex-pinned (normalizePCIVendor accepts

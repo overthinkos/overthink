@@ -7,7 +7,7 @@ package main
 // (both retired). flattenBundleVenues runs at load time, AFTER the tree is
 // built (buildBundleNode) and BEFORE foldMembers + validation, and:
 //
-//   1. stamps every step's `venue` (Op.venue) from its tree position:
+//   1. stamps every step's `venue` (Op.Venue) from its tree position:
 //        - a step directly under a WORKLOAD root R          → "R"
 //        - a step under a sibling MEMBER M                  → "M"            (bare)
 //        - a step under a NESTED child C of parent path P   → "P.C"         (dotted)
@@ -53,7 +53,7 @@ func flattenBundleOne(root *BundleNode, rootName string) error {
 		return fmt.Errorf("bundle %q is a group (no workload cross-ref) but carries %d direct plan step(s) — a group has no venue; place each step under a member/nested resource node", rootName, len(root.Plan))
 	}
 	for i := range root.Plan {
-		root.Plan[i].venue = rootName
+		root.Plan[i].Venue = rootName
 	}
 	// 2. Members (siblings) are addressed by their BARE name (foldMembers
 	//    promotes them to top-level; an agent-provisioned member resolves via
@@ -79,7 +79,7 @@ func hoistVenueSubtree(root, node *BundleNode, venuePath string) {
 	}
 	for i := range node.Plan {
 		s := node.Plan[i]
-		s.venue = venuePath
+		s.Venue = venuePath
 		root.Plan = append(root.Plan, s)
 	}
 	node.Plan = nil

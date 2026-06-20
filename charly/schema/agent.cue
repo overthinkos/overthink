@@ -4,16 +4,16 @@
 
 #Agent: {
 	description?: string & !=""
-	command: [string, ...string]            // >=1, all strings
-	prompt_via: *"argv" | "file"
-	version_command?: [...string]
-	timeout?: #Duration
-	env?: #StrMap
-	working_dir?: string & !=""
+	command: [string, ...string] // >=1, all strings
+	prompt_via:                  *"argv" | "file" @go(PromptVia)
+	version_command?: [...string] @go(VersionCommand)
+	timeout?:     #Duration
+	env?:         #StrMap
+	working_dir?: string & !="" @go(WorkingDir)
 	credential?: [...#CredentialMount]
-	progress_check_interval?:         #Duration
-	progress_no_improvement_timeout?: #Duration
-	output_format: *"" | "stream-json"
+	progress_check_interval?:         #Duration           @go(ProgressCheckInterval)
+	progress_no_improvement_timeout?: #Duration           @go(ProgressNoImprovementTimeout)
+	output_format:                    *"" | "stream-json" @go(OutputFormat)
 }
 
 #CredentialMount: {

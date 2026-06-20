@@ -6,15 +6,18 @@ import (
 	"strings"
 )
 
-// Distro represents the detected Linux distribution.
+// osReleasePath is the path to the os-release file, overridable for testing.
+var osReleasePath = "/etc/os-release"
+
+// Distro is the HOST distribution detected at runtime (from /etc/os-release).
+// Distinct from the build-vocabulary distro definition (spec.DistroDef / the
+// CUE #Distro) — this one describes the machine charly runs ON, not an image's
+// package format.
 type Distro struct {
 	ID      string // "arch", "fedora", "debian", "ubuntu", etc.
 	Name    string // "Arch Linux", "Fedora Linux", etc.
 	Manager string // "pacman -S", "sudo dnf install", "sudo apt-get install"
 }
-
-// osReleasePath is the path to the os-release file, overridable for testing.
-var osReleasePath = "/etc/os-release"
 
 // detectDistro reads /etc/os-release and returns the detected distribution.
 func detectDistro() Distro {

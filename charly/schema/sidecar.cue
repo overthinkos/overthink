@@ -13,13 +13,13 @@
 	parameter?: #StrMap
 	secret?: [...#SidecarSecret]
 	volume?: [...#SidecarVolume]
-	security?: #Security
+	security?: #Security @go(Security,optional=nillable)
 }
 
 #SidecarSecret: {
 	name:         string & !=""
 	env:          string & !=""
-	env_from?:    string // Go text/template, rendered later; CUE checks string only
+	env_from?:    string @go(EnvFrom) // Go text/template, rendered later; CUE checks string only
 	description?: string & !=""
 }
 

@@ -410,7 +410,7 @@ func TestRenderRelayTemplate(t *testing.T) {
 		RelayTemplate: relayTmpl,
 	}
 
-	conf, err := def.RenderRelayTemplate(9222, "chrome", 1)
+	conf, err := initRenderRelayTemplate(def, 9222, "chrome", 1)
 	if err != nil {
 		t.Fatalf("RenderRelayTemplate() error = %v", err)
 	}

@@ -193,7 +193,7 @@ func runUnit(ctx context.Context, r *Runner, fs flatStep, stepCtx *ScenarioConte
 	// resolveCheckApk anchors a candy's committed APK against CandyDirs[origin]).
 	op := step.Op
 	op.Origin = fs.origin
-	op.intentDo = step.DoMode()
+	op.IntentDo = string(stepDoMode(&step))
 	if subIdx >= 0 {
 		indexVar := op.IndexVar
 		if indexVar == "" {

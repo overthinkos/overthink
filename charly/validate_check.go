@@ -41,13 +41,13 @@ func validateOps(cfg *Config, layers map[string]*Candy, errs *ValidationError) {
 	validatePlanOps := func(plan []Step, who string) {
 		for i := range plan {
 			op := &plan[i].Op
-			if len(op.verbsSet()) == 0 {
+			if len(op.VerbsSet()) == 0 {
 				continue // agent / include / verb-less step
 			}
 			// Stamp the step keyword's do-mode onto the op so validateCheck's
 			// act-form rules (e.g. a run: step whose verb has no build/deploy
 			// install path) are keyword-aware — mirroring runUnit's stamping.
-			op.intentDo = plan[i].DoMode()
+			op.IntentDo = string(stepDoMode(&plan[i]))
 			validateCheck(op, fmt.Sprintf("%s step[%d]", who, i), errs)
 		}
 	}
@@ -78,7 +78,7 @@ func validateCheck(c *Op, loc string, errs *ValidationError) {
 		errs.Add("%s: port verb requires a non-zero port number", loc)
 	}
 	if spec, ok := VerbCatalog[verb]; ok {
-		for _, ctx := range c.EffectiveContexts() {
+		for _, ctx := range opEffectiveContexts(c) {
 			if !spec.HasContext(ctx) {
 				errs.Add("%s: verb %q is not legal in context %q", loc, verb, ctx)
 			}
@@ -90,8 +90,8 @@ func validateCheck(c *Op, loc string, errs *ValidationError) {
 	// act verbs (file/user/group/kernel-param/mount/http/dbus/cdp/…) act via
 	// the check Runner's executor; in build/deploy the install verbs + command
 	// + package/service are the act surface (file creation = write/copy).
-	if c.EffectiveDo() == DoAct && !ActsInBuildDeploy(verb) {
-		for _, ctx := range c.EffectiveContexts() {
+	if opEffectiveDo(c) == DoAct && !ActsInBuildDeploy(verb) {
+		for _, ctx := range opEffectiveContexts(c) {
 			if ctx == CtxBuild || ctx == CtxDeploy {
 				errs.Add("%s: verb %q cannot act (do: act) in %s context — its act form is runtime-only (use context: [runtime]); create files in build/deploy with the write/copy verbs", loc, verb, ctx)
 			}
@@ -100,7 +100,7 @@ func validateCheck(c *Op, loc string, errs *ValidationError) {
 	// uid/gid non-negativity is enforced by #Op.
 
 	// Runtime-only variable references — illegal in a build-legal op.
-	if c.InContext(CtxBuild) {
+	if opInContext(c, CtxBuild) {
 		refs := collectCheckRefs(c)
 		for _, r := range refs {
 			if IsRuntimeOnlyVar(r) {
@@ -182,7 +182,7 @@ func validateCharlyVerb(c *Op, verb, loc string, errs *ValidationError) {
 
 	// Live-container verbs need a running target — they are runtime-context
 	// only; reject in build context (charly check correctly skips them there).
-	if c.InContext(CtxBuild) {
+	if opInContext(c, CtxBuild) {
 		errs.Add("%s: %s: verb is runtime-context only (needs a running container); not legal in build context", loc, verb)
 	}
 

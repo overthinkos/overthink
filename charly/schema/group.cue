@@ -7,15 +7,15 @@
 	name:         #EntityRef
 	description?: string & !=""
 	package?: [...#PackageItem]
-	distro?: {[string]: #DistroPackages}
-	hidden:       *false | bool
-	selected:     *false | bool
-	critical:     *false | bool
-	immutable:    *false | bool
-	expanded:     *false | bool
-	noncheckable: *false | bool
-	pre_install?:  string & !=""
-	post_install?: string & !=""
+	distro?: {[string]: #DistroPackages} @go(Distro,type=map[string]*DistroPackages)
+	hidden:        *false | bool
+	selected:      *false | bool
+	critical:      *false | bool
+	immutable:     *false | bool
+	expanded:      *false | bool
+	noncheckable:  *false | bool @go(NonCheckable)
+	pre_install?:  string & !="" @go(PreInstall)
+	post_install?: string & !="" @go(PostInstall)
 	source?:       string & !=""
 	subgroup?: [...#Group]
 	require?: [...(string & !="")]

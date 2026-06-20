@@ -13,7 +13,7 @@ func TestFormatDefPhaseTemplateLegacyFallback(t *testing.T) {
 	f := &FormatDef{InstallTemplate: "RUN dnf install -y {{.Packages}}"}
 
 	// (install, container) falls back to InstallTemplate.
-	if got := f.PhaseTemplate(PhaseInstall, VenueContainerBuilder); got != f.InstallTemplate {
+	if got := formatPhaseTemplate(f, PhaseInstall, VenueContainerBuilder); got != f.InstallTemplate {
 		t.Errorf("legacy fallback for (install, container) = %q, want %q", got, f.InstallTemplate)
 	}
 	// All other phase/venue combinations return "" (no legacy equivalent).
@@ -22,7 +22,7 @@ func TestFormatDefPhaseTemplateLegacyFallback(t *testing.T) {
 			if p == PhaseInstall && v == VenueContainerBuilder {
 				continue
 			}
-			if got := f.PhaseTemplate(p, v); got != "" {
+			if got := formatPhaseTemplate(f, p, v); got != "" {
 				t.Errorf("expected empty template for (%v, %v), got %q", p, v, got)
 			}
 		}
@@ -45,29 +45,29 @@ func TestFormatDefPhaseTemplateNewPathPreferred(t *testing.T) {
 	}
 
 	// New path wins over legacy for (install, container).
-	if got := f.PhaseTemplate(PhaseInstall, VenueContainerBuilder); got != "RUN new-container" {
+	if got := formatPhaseTemplate(f, PhaseInstall, VenueContainerBuilder); got != "RUN new-container" {
 		t.Errorf("(install, container) = %q, want RUN new-container", got)
 	}
 	// Host rendering comes from new path (no legacy equivalent).
-	if got := f.PhaseTemplate(PhaseInstall, VenueHostNative); got != "new-host" {
+	if got := formatPhaseTemplate(f, PhaseInstall, VenueHostNative); got != "new-host" {
 		t.Errorf("(install, host) = %q, want new-host", got)
 	}
 	// Prepare is only in new path.
-	if got := f.PhaseTemplate(PhasePrepare, VenueContainerBuilder); got != "RUN prepare-container" {
+	if got := formatPhaseTemplate(f, PhasePrepare, VenueContainerBuilder); got != "RUN prepare-container" {
 		t.Errorf("(prepare, container) = %q", got)
 	}
-	if got := f.PhaseTemplate(PhasePrepare, VenueHostNative); got != "prepare-host" {
+	if got := formatPhaseTemplate(f, PhasePrepare, VenueHostNative); got != "prepare-host" {
 		t.Errorf("(prepare, host) = %q", got)
 	}
 	// Cleanup phase is nil in PhaseSet → empty return.
-	if got := f.PhaseTemplate(PhaseCleanup, VenueContainerBuilder); got != "" {
+	if got := formatPhaseTemplate(f, PhaseCleanup, VenueContainerBuilder); got != "" {
 		t.Errorf("(cleanup, container) = %q, want empty", got)
 	}
 }
 
 func TestFormatDefPhaseTemplateNilSafe(t *testing.T) {
 	var f *FormatDef
-	if got := f.PhaseTemplate(PhaseInstall, VenueContainerBuilder); got != "" {
+	if got := formatPhaseTemplate(f, PhaseInstall, VenueContainerBuilder); got != "" {
 		t.Errorf("nil FormatDef lookup = %q, want empty", got)
 	}
 }
@@ -75,16 +75,16 @@ func TestFormatDefPhaseTemplateNilSafe(t *testing.T) {
 func TestBuilderDefPhaseTemplateLegacyFallbacks(t *testing.T) {
 	// Inline builder → falls back to InstallTemplate.
 	inline := &BuilderDef{Inline: true, InstallTemplate: "RUN cargo install"}
-	if got := inline.PhaseTemplate(PhaseInstall, VenueContainerBuilder); got != inline.InstallTemplate {
+	if got := builderPhaseTemplate(inline, PhaseInstall, VenueContainerBuilder); got != inline.InstallTemplate {
 		t.Errorf("inline builder fallback = %q, want %q", got, inline.InstallTemplate)
 	}
 	// Multi-stage builder → falls back to StageTemplate.
 	multi := &BuilderDef{StageTemplate: "FROM pixi AS build"}
-	if got := multi.PhaseTemplate(PhaseInstall, VenueContainerBuilder); got != multi.StageTemplate {
+	if got := builderPhaseTemplate(multi, PhaseInstall, VenueContainerBuilder); got != multi.StageTemplate {
 		t.Errorf("multi-stage fallback = %q, want %q", got, multi.StageTemplate)
 	}
 	// Host venue without phases → empty (no legacy shape for host).
-	if got := multi.PhaseTemplate(PhaseInstall, VenueHostNative); got != "" {
+	if got := builderPhaseTemplate(multi, PhaseInstall, VenueHostNative); got != "" {
 		t.Errorf("host-venue legacy = %q, want empty", got)
 	}
 }

@@ -10,22 +10,22 @@
 	// May be empty (a cluster-policy-only template runs no workload itself).
 	box: string
 
-	replica?:   int & >=0
-	resources?: #K8sResources
+	replica?:   int & >=0 @go(,type=*int)
+	resources?: #K8sResources @go(Resources,optional=nillable)
 	hostnames?: [...#K8sHostname]
 
-	kubeconfig_context?: string
-	admission_policy?:   "restricted" | "baseline" | "privileged"
-	default_namespace?:  *"default" | (string & =~"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$")
+	kubeconfig_context?: string                                                      @go(KubeconfigContext)
+	admission_policy?:   "restricted" | "baseline" | "privileged"                    @go(AdmissionPolicy)
+	default_namespace?:  *"default" | (string & =~"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$") @go(DefaultNamespace)
 
 	storage?:        #K8sStorage
 	ingress?:        #K8sIngressDefaults
-	gateway_api?:    #K8sGatewayAPI
+	gateway_api?:    #K8sGatewayAPI @go(GatewayAPI)
 	secret?:         #K8sSecretsBackend
-	image_default?:  #K8sImagesDefaults
-	pod_default?:    #K8sPodDefaults
+	image_default?:  #K8sImagesDefaults @go(ImageDefault)
+	pod_default?:    #K8sPodDefaults    @go(PodDefault)
 	observability?:  #K8sObservability
-	network_policy?: "auto" | "strict" | "none"
+	network_policy?: "auto" | "strict" | "none" @go(NetworkPolicy)
 	defaults?:       #K8sResourceDefaults
 
 	plan?: [...#Step]
@@ -36,30 +36,30 @@
 	limits?:   #K8sResourceValues
 }
 #K8sResourceValues: {
-	cpu?:    string & =~"^[0-9]+(\\.[0-9]+)?m?$"
+	cpu?:    string & =~"^[0-9]+(\\.[0-9]+)?m?$" @go(CPU)
 	memory?: string & =~"^[0-9]+(\\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|k|m)?$"
 }
 #K8sHostname: {
-	host: string & =~"^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
-	tls?:  bool
+	host:  string & =~"^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$"
+	tls?:  bool @go(TLS)
 	path?: string & =~"^/"
 }
 #K8sStorage: {
-	class_default?:       string
-	class_cheap?:         string
-	class_encrypted?:     string
-	class_fast?:          string
-	access_mode_default?: "ReadWriteOnce" | "ReadWriteMany" | "ReadOnlyMany" | "ReadWriteOncePod"
+	class_default?:       string @go(ClassDefault)
+	class_cheap?:         string @go(ClassCheap)
+	class_encrypted?:     string @go(ClassEncrypted)
+	class_fast?:          string @go(ClassFast)
+	access_mode_default?: ("ReadWriteOnce" | "ReadWriteMany" | "ReadOnlyMany" | "ReadWriteOncePod") @go(AccessModeDefault)
 }
 #K8sIngressDefaults: {
 	enabled?:           bool
 	class?:             string
-	cert_issuer?:       string
-	path_type_default?: "Prefix" | "Exact" | "ImplementationSpecific"
+	cert_issuer?:       string                                                 @go(CertIssuer)
+	path_type_default?: ("Prefix" | "Exact" | "ImplementationSpecific") @go(PathTypeDefault)
 }
 #K8sGatewayAPI: {
 	enabled?:       bool
-	gateway_class?: string
+	gateway_class?: string @go(GatewayClass)
 }
 #K8sSecretsBackend: {
 	backend?: "external-secrets" | "sealed-secrets" | "raw"
@@ -67,19 +67,19 @@
 	prefix?:  string
 }
 #K8sImagesDefaults: {
-	pull_policy?: "IfNotPresent" | "Always" | "Never"
-	pull_secrets?: [...string]
+	pull_policy?: ("IfNotPresent" | "Always" | "Never") @go(PullPolicy)
+	pull_secrets?: [...string] @go(PullSecrets)
 }
 #K8sPodDefaults: {
-	priority_class?: string
+	priority_class?: string @go(PriorityClass)
 	// Raw Kubernetes Toleration objects (Go []map[string]any) — genuine
 	// passthrough, so each element stays OPEN.
 	tolerations?: [...{...}]
-	node_selector?: [string]: string
+	node_selector?: {[string]: string} @go(NodeSelector)
 }
 #K8sObservability: {
-	service_monitor?:          bool
-	service_monitor_interval?: string
+	service_monitor?:          bool   @go(ServiceMonitor)
+	service_monitor_interval?: string @go(ServiceMonitorInterval)
 }
 #K8sResourceDefaults: {
 	labels?: [string]:      string

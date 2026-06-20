@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -263,6 +264,90 @@ func TestSaveBundleConfig_AtomicWriteLeavesNoTempLeftover(t *testing.T) {
 	}
 	if info.Mode().Perm() != 0600 {
 		t.Errorf("file mode = %o; want 0600", info.Mode().Perm())
+	}
+}
+
+// TestSaveBundleConfig_RefusesToClobberUnloadableConfig pins the per-host
+// persist fail-safe: when the on-disk ~/.config/charly/charly.yml currently
+// FAILS to load (e.g. the per-host migrate-path bug left it `version: <HEAD>` +
+// a legacy `deploy:` map that the node-form loader gate rejects), SaveBundleConfig
+// MUST abort with a `charly migrate` hint and leave the file byte-identical —
+// never overwrite the recoverable bytes with a degraded/empty config.
+//
+// This is the single-point defense behind the read-degraded write-backs that go
+// through loadDeployConfigForRead (config_image.go resolved-port / data-seeded /
+// secret-migration) — those would otherwise hand SaveBundleConfig an empty
+// BundleConfig and truncate the user's deploy state. It complements (does not
+// replace) loadDeployConfigForWrite's primary abort-on-load-error gate.
+func TestSaveBundleConfig_RefusesToClobberUnloadableConfig(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if err := os.MkdirAll(filepath.Join(dir, "charly"), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// A config the unified loader REJECTS: a legacy top-level `deploy:` map at
+	// HEAD version (the exact shape the per-host migrate-path bug produced —
+	// classifyDoc hard-rejects it as legacy kind-keyed config).
+	rejected := "version: " + LatestSchemaVersion().String() + "\n" +
+		"provides:\n" +
+		"    env:\n" +
+		"        - name: SOME_URL\n" +
+		"          value: http://example/api\n" +
+		"          source: legacy\n" +
+		"deploy:\n" +
+		"    web:\n" +
+		"        box: web\n" +
+		"    api:\n" +
+		"        box: api\n"
+	path := filepath.Join(dir, "charly", "charly.yml")
+	if err := os.WriteFile(path, []byte(rejected), 0o600); err != nil {
+		t.Fatalf("write rejected config: %v", err)
+	}
+	initialBytes, _ := os.ReadFile(path)
+
+	// Sanity: the fixture really is rejected by the loader (otherwise the test
+	// would pass vacuously).
+	if _, lerr := LoadBundleConfig(); lerr == nil {
+		t.Fatal("fixture loaded cleanly; expected it to be rejected by the node-form gate")
+	}
+
+	// A write that would otherwise truncate must be REFUSED.
+	err := SaveBundleConfig(&BundleConfig{Bundle: map[string]BundleNode{
+		"new-entry": {Target: "pod", Box: "new-entry"},
+	}})
+	if err == nil {
+		t.Fatal("SaveBundleConfig overwrote an unloadable config; expected a refuse-to-clobber error")
+	}
+	if !strings.Contains(err.Error(), "charly migrate") {
+		t.Errorf("error should hint at `charly migrate`, got: %v", err)
+	}
+
+	// The recoverable bytes are intact — nothing truncated, nothing deleted.
+	afterBytes, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatalf("config file went missing after refused write: %v", readErr)
+	}
+	if !bytes.Equal(initialBytes, afterBytes) {
+		t.Errorf("SaveBundleConfig mutated an unloadable config despite refusing\n--- before ---\n%s\n--- after ---\n%s", initialBytes, afterBytes)
+	}
+
+	// Positive control: once the unloadable file is gone (here: removed, as the
+	// migration would have replaced it with a clean node-form file), a normal
+	// save proceeds — the guard only blocks a present-but-unloadable file.
+	if err := os.Remove(path); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if err := SaveBundleConfig(&BundleConfig{Bundle: map[string]BundleNode{
+		"new-entry": {Target: "pod", Box: "new-entry"},
+	}}); err != nil {
+		t.Fatalf("SaveBundleConfig on an absent file should succeed: %v", err)
+	}
+	dc, err := LoadBundleConfig()
+	if err != nil {
+		t.Fatalf("reload after clean save: %v", err)
+	}
+	if _, ok := dc.Bundle["new-entry"]; !ok {
+		t.Errorf("clean save did not persist new-entry; got keys %v", bundleKeys(dc))
 	}
 }
 

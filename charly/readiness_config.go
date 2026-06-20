@@ -15,19 +15,6 @@ import (
 // RESOLVED post-env values — so an env override cannot smuggle in a nonsensical
 // bound). No magic literal survives at any call site.
 
-// ReadinessConfig is the YAML/CUE shape. All fields are duration strings
-// ("90s", "30m"); empty → the named fallback constant.
-type ReadinessConfig struct {
-	PollIntervalLocal  string `yaml:"poll_interval_local,omitempty" json:"poll_interval_local,omitempty"`
-	PollIntervalRemote string `yaml:"poll_interval_remote,omitempty" json:"poll_interval_remote,omitempty"`
-	PollIntervalHeavy  string `yaml:"poll_interval_heavy,omitempty" json:"poll_interval_heavy,omitempty"`
-	PerAttempt         string `yaml:"per_attempt,omitempty" json:"per_attempt,omitempty"`
-	PerAttemptHeavy    string `yaml:"per_attempt_heavy,omitempty" json:"per_attempt_heavy,omitempty"`
-	NoProgress         string `yaml:"no_progress,omitempty" json:"no_progress,omitempty"`
-	AbsoluteCap        string `yaml:"absolute_cap,omitempty" json:"absolute_cap,omitempty"`
-	StopGrace          string `yaml:"stop_grace,omitempty" json:"stop_grace,omitempty"`
-}
-
 // resolveReadinessDuration: env (CHARLY_READINESS_*) wins over the config
 // string, which wins over the named fallback. Parses + rejects non-positive.
 func resolveReadinessDuration(field, envKey, cfgVal string, fallback time.Duration) (time.Duration, error) {
@@ -50,7 +37,7 @@ func resolveReadinessDuration(field, envKey, cfgVal string, fallback time.Durati
 
 // Resolve materializes the validated ResolvedReadiness from this block plus env
 // overrides plus the named fallbacks. Nil-safe (nil → all fallbacks).
-func (rc *ReadinessConfig) Resolve() (ResolvedReadiness, error) {
+func readinessResolve(rc *ReadinessConfig) (ResolvedReadiness, error) {
 	if rc == nil {
 		rc = &ReadinessConfig{}
 	}
@@ -137,10 +124,10 @@ func loadedReadiness() ResolvedReadiness {
 		if uf, ok, err := LoadUnified("."); err == nil && ok && uf != nil {
 			def = uf.Defaults.Readiness
 		}
-		rr, err := def.Resolve()
+		rr, err := readinessResolve(def)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "readiness config invalid (%v) — using built-in defaults\n", err)
-			rr, _ = (*ReadinessConfig)(nil).Resolve()
+			rr, _ = readinessResolve(nil)
 		}
 		readinessCached = rr
 	})

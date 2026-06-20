@@ -230,14 +230,15 @@ box:
 
 func TestLoadUnified_DiscoverCandies(t *testing.T) {
 	root := t.TempDir()
-	// Canonical kind-keyed charly.yml manifests; discovery routes by shape.
-	writeFixture(t, root, "candy/chrome/charly.yml", `candy:
-  version: "1"
-  package: [chromium]
+	// Node-form charly.yml manifests; discovery routes by shape, registering the
+	// candy keyed by its directory base (chrome / firefox).
+	writeFixture(t, root, "candy/chrome/charly.yml", `chrome:
+  candy:
+    version: 2026.001.0001
 `)
-	writeFixture(t, root, "candy/firefox/charly.yml", `candy:
-  version: "1"
-  package: [firefox]
+	writeFixture(t, root, "candy/firefox/charly.yml", `firefox:
+  candy:
+    version: 2026.001.0001
 `)
 	writeFixture(t, root, "charly.yml", `version: 2026.169.0004
 discover:
@@ -260,9 +261,9 @@ discover:
 
 func TestLoadUnified_DiscoverExplicitWinsOverDiscovered(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "candy/chrome/charly.yml", `candy:
-  version: "from-disk"
-  package: [chromium]
+	writeFixture(t, root, "candy/chrome/charly.yml", `chrome:
+  candy:
+    version: 2026.001.0001
 `)
 	// Node-form: an explicit inline candy entry (`chrome: {candy: {…}}`) is
 	// defined directly in charly.yml. It must win over the discovered
@@ -288,7 +289,7 @@ chrome:
 	// The explicit inline entry won: it is defined IN-PLACE (From == ""), not a
 	// lazy `From: candy/chrome` directory reference the discovery walk would have
 	// registered, and its inline body (version 2026.100.0001) survived rather than
-	// the discovered manifest's ("from-disk").
+	// the discovered manifest's (2026.001.0001).
 	if il.From != "" {
 		t.Errorf("discovered dir clobbered the explicit entry: From = %q, want \"\" (inline)", il.From)
 	}
@@ -338,9 +339,9 @@ discover:
 // into the loader.
 func TestLoadUnified_DiscoverConfigurableManifest(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "stuff/widget/thing.yml", `candy:
-  version: "1"
-  package: [widget]
+	writeFixture(t, root, "stuff/widget/thing.yml", `widget:
+  candy:
+    version: 2026.001.0001
 `)
 	writeFixture(t, root, "charly.yml", `version: 2026.169.0004
 discover:
@@ -363,9 +364,9 @@ discover:
 // a generic discover spec merges as a box, not a candy.
 func TestLoadUnified_DiscoverRoutesNonCandyByShape(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "entities/myimg/entity.yml", `box:
-  name: myimg
-  base: quay.io/fedora/fedora:43
+	writeFixture(t, root, "entities/myimg/entity.yml", `myimg:
+  box:
+    base: quay.io/fedora/fedora:43
 `)
 	writeFixture(t, root, "charly.yml", `version: 2026.169.0004
 discover:

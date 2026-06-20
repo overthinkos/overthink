@@ -12,313 +12,12 @@ type DistroConfig struct {
 	Distro map[string]*DistroDef `yaml:"distro" json:"distro"`
 }
 
-// DistroDef defines distro-specific bootstrap, workarounds, and package formats.
-type DistroDef struct {
-	Inherits string `yaml:"inherits,omitempty" json:"inherits,omitempty"`
-	// InheritPackages, when true on a distro that also sets `inherits:`, makes
-	// the parent distro's package sections cascade onto this distro — a candy's
-	// `distro: <parent>:` block applies when building/deploying this distro. The
-	// canonical case is cachyos (`inherits: arch`, `inherit_packages: true`): an
-	// `arch:` package block reaches cachyos because cachyos is ABI-compatible
-	// with arch. Defaults false: `inherits:` alone inherits formats + bootstrap
-	// but NOT package sections, so ubuntu (`inherits: debian`) does NOT pull
-	// debian-only sections (debian and ubuntu diverge per-package). It is the
-	// single YAML signal that drives package-cascade inheritance — there is no
-	// Go-side hardcoded distro-inheritance table. See expandPackageInheritance.
-	InheritPackages bool `yaml:"inherit_packages,omitempty" json:"inherit_packages,omitempty"`
-	// Version is the canonical distro version (e.g. "13" for debian, "24.04" for
-	// ubuntu, "43" for fedora) — the single source for synthesizing the
-	// per-version tag chain ([<distro>:<version>, <distro>]) on a target that
-	// carries only a bare distro name (notably a VM deploy via syntheticVmBox,
-	// where no image-authored distro: tag supplies the version). Empty for rolling
-	// distros (arch/cachyos). Image builds already carry the version in their own
-	// distro: tags. Inherited child-wins via resolveInherits. See distroTagChain.
-	Version     string                `yaml:"version,omitempty" json:"version,omitempty"`
-	Bootstrap   BootstrapDef          `yaml:"bootstrap" json:"bootstrap"`
-	Workarounds []string              `yaml:"workaround,omitempty" json:"workaround,omitempty"`
-	Format      map[string]*FormatDef `yaml:"format,omitempty" json:"format,omitempty"`
-	// BaseUser declares a pre-existing uid account that ships in the
-	// upstream base image — e.g. ubuntu:ubuntu uid 1000 on ubuntu:24.04.
-	// When present and the image's user_policy allows adoption, charly adopts
-	// this account verbatim instead of creating a new user at the
-	// configured uid. Nil on distros whose canonical base images ship no
-	// pre-existing user account (fedora, arch, plain debian:13).
-	BaseUser *BaseUserDef `yaml:"base_user,omitempty" json:"base_user,omitempty"`
-
-	// Bootstrap-builder strategy configurations. Each is optional; only
-	// distros that support the strategy populate the corresponding block.
-	// Used by the kind:bootstrap builders in the embedded `builder:` vocabulary
-	// to render the actual bootstrap command (pacstrap, debootstrap, etc.)
-	Pacstrap        *PacstrapDef        `yaml:"pacstrap,omitempty" json:"pacstrap,omitempty"`
-	Debootstrap     *DebootstrapDef     `yaml:"debootstrap,omitempty" json:"debootstrap,omitempty"`
-	AlpineBootstrap *AlpineBootstrapDef `yaml:"alpine_bootstrap,omitempty" json:"alpine_bootstrap,omitempty"`
-
-	// Bootloader install templates rendered during VM disk builds for
-	// bootstrap-flavored VMs. Drives the chroot grub-install + initramfs
-	// generation. Distinct from bootc-VM which handles its own bootloader
-	// install internally via `bootc install to-disk`.
-	Bootloader *BootloaderDef `yaml:"bootloader,omitempty" json:"bootloader,omitempty"`
-
-	// Dnf tunes dnf download behaviour for dnf-based distros (fedora). Nil on
-	// non-dnf distros. Rendered into /etc/dnf/dnf.conf during the bootstrap.
-	Dnf *DnfConfig `yaml:"dnf,omitempty" json:"dnf,omitempty"`
-}
-
-// DnfConfig holds dnf download-speed knobs written to /etc/dnf/dnf.conf during
-// the bootstrap, so they apply uniformly to the bootstrap install AND every
-// per-candy dnf install in this image and its descendants. These are
-// SPEED-only settings — they never change which packages are selected.
-type DnfConfig struct {
-	MaxParallelDownloads int  `yaml:"max_parallel_downloads,omitempty" json:"max_parallel_downloads,omitempty"` // dnf max_parallel_downloads (concurrent package downloads)
-	Fastestmirror        bool `yaml:"fastestmirror,omitempty" json:"fastestmirror,omitempty"`                   // dnf fastestmirror (sort mirrors by measured speed)
-}
-
-// PacstrapDef configures pacstrap-flavored bootstrap (Arch, CachyOS).
-type PacstrapDef struct {
-	BasePackages   []string       `yaml:"base_package,omitempty" json:"base_package,omitempty"`
-	KeyringInitCmd string         `yaml:"keyring_init_cmd,omitempty" json:"keyring_init_cmd,omitempty"`
-	MirrorlistURL  string         `yaml:"mirrorlist_url,omitempty" json:"mirrorlist_url,omitempty"`
-	ExtraRepos     []PacstrapRepo `yaml:"extra_repo,omitempty" json:"extra_repo,omitempty"`
-	// RuntimePacmanConf is the verbatim /etc/pacman.conf written into the
-	// bootstrapped rootfs (NOT the install config). pacstrap configures only the
-	// builder container's pacman.conf for the install; the booted guest is left
-	// with no working config, so a deploy that installs pac packages (add_candy)
-	// fails with "config file /etc/pacman.conf could not be read". When set, the
-	// shared pacstrap bootstrap template writes this content to
-	// {{.Target}}/etc/pacman.conf so every guest of this distro boots with a
-	// working pacman. Distinct from ExtraRepos (the install-time config) because
-	// the runtime repo set is deliberately curated (e.g. cachyos excludes the
-	// cachyos-extra repo, which serves no usable DB at runtime). Empty = leave
-	// whatever pacstrap installed. Single source of truth: replaces the per-VM
-	// cloud-init write_files: /etc/pacman.conf the cachyos VM entities duplicated.
-	RuntimePacmanConf string `yaml:"runtime_pacman_conf,omitempty" json:"runtime_pacman_conf,omitempty"`
-}
-
-// PacstrapRepo describes an additional pacman repo (e.g. CachyOS repos)
-// to inject into /etc/pacman.conf inside the bootstrap target before
-// running pacstrap.
-type PacstrapRepo struct {
-	Name     string `yaml:"name" json:"name"`
-	Server   string `yaml:"server" json:"server"`
-	SigLevel string `yaml:"siglevel,omitempty" json:"siglevel,omitempty"` // optional pacman SigLevel (e.g. "Optional TrustAll" for repos without trust chain)
-}
-
-// DebootstrapDef configures debootstrap-flavored bootstrap (Debian, Ubuntu).
-//
-// Two-stage flow:
-//  1. `debootstrap --variant=<Variant> --components=<Components>
-//     --include=<IncludePackages,...> <Suite> /target <Mirror>`
-//     unpacks a minimal apt-aware rootfs.
-//  2. `chroot /target apt-get install -y <BasePackages>` lands the
-//     kernel, bootloader, sshd, cloud-init, and any other VM-class
-//     packages that aren't part of the minbase set.
-type DebootstrapDef struct {
-	Suite           string            `yaml:"suite,omitempty" json:"suite,omitempty"`
-	Mirror          string            `yaml:"mirror,omitempty" json:"mirror,omitempty"`
-	Variant         string            `yaml:"variant,omitempty" json:"variant,omitempty"`                 // default: minbase
-	Components      string            `yaml:"components,omitempty" json:"components,omitempty"`           // "main" (Debian) | "main universe" (Ubuntu)
-	IncludePackages []string          `yaml:"include_package,omitempty" json:"include_package,omitempty"` // debootstrap --include=<csv>
-	BasePackages    []string          `yaml:"base_package,omitempty" json:"base_package,omitempty"`       // chroot apt-get install <list>
-	ExtraRepos      []DebootstrapRepo `yaml:"extra_repo,omitempty" json:"extra_repo,omitempty"`           // optional security/backports
-}
-
-// DebootstrapRepo describes an additional apt repo to inject into
-// /etc/apt/sources.list.d/<name>.list inside the bootstrap target
-// before the chroot apt-get install in stage 2.
-type DebootstrapRepo struct {
-	Name       string `yaml:"name" json:"name"`
-	URL        string `yaml:"url" json:"url"`
-	Suite      string `yaml:"suite,omitempty" json:"suite,omitempty"`
-	Components string `yaml:"components,omitempty" json:"components,omitempty"`
-}
-
-// AlpineBootstrapDef configures `apk add --root` style bootstrap (Alpine).
-type AlpineBootstrapDef struct {
-	MirrorURL string `yaml:"mirror_url,omitempty" json:"mirror_url,omitempty"`
-}
-
-// BootloaderDef holds per-distro bootloader-install templates rendered
-// during VM disk builds. {{.Mnt}} expands to the target mount point.
-type BootloaderDef struct {
-	InstallTemplate   string `yaml:"install_template,omitempty" json:"install_template,omitempty"`
-	InitramfsTemplate string `yaml:"initramfs_template,omitempty" json:"initramfs_template,omitempty"`
-	FstabTemplate     string `yaml:"fstab_template,omitempty" json:"fstab_template,omitempty"`
-}
-
-// BaseUserDef describes a user account that already exists in a base image.
-// All four fields are required when the block is declared.
-type BaseUserDef struct {
-	Name string `yaml:"name" json:"name"`
-	UID  int    `yaml:"uid" json:"uid"`
-	GID  int    `yaml:"gid" json:"gid"`
-	Home string `yaml:"home" json:"home"`
-}
-
-// BootstrapDef defines how to bootstrap a base image.
-type BootstrapDef struct {
-	InstallCmd string          `yaml:"install_cmd" json:"install_cmd"`
-	Package    []string        `yaml:"package" json:"package"`
-	CacheMount []CacheMountDef `yaml:"cache_mount" json:"cache_mount"`
-}
-
-// CacheMountDef defines a BuildKit cache mount.
-type CacheMountDef struct {
-	Dst     string `yaml:"dst" json:"dst"`
-	Sharing string `yaml:"sharing,omitempty" json:"sharing,omitempty"` // default: "locked"
-	// Owned renders this entry as a uid/gid-owned cache (user-writable)
-	// instead of the default shared/locked (root) form. Use for user-level
-	// build caches inside a builder stage that runs as the build user —
-	// makepkg SRCDEST, yay's AUR clone cache, etc. — so they persist across
-	// builds the same way the root pacman cache does. Rendered via
-	// cacheMountsAuto (which reads UID/GID from the stage). The default
-	// (false) keeps the shared/locked form for root system caches.
-	Owned bool `yaml:"owned,omitempty" json:"owned,omitempty"`
-}
-
-// FormatDef defines a package format (rpm, deb, pac, aur, apk, etc.).
-//
-// Template resolution:
-//
-//   - Legacy path: `install_template:` holds a monolithic Containerfile-
-//     shaped template used by the OCI target.
-//   - New path: `phase:` holds three-phase × two-venue templates where
-//     each entry carries both a container: (Containerfile directives with
-//     BuildKit cache mounts) and a host: (plain shell) rendering of the
-//     same operation. The host target requires the new path; the OCI
-//     target prefers phase.install.container when set and falls back to
-//     install_template otherwise.
-//
-// Keeping both fields lets us migrate the embedded build vocabulary per-format
-// one at a time (Task 4 / 7 migrations) without breaking OCI output for the rest.
-type FormatDef struct {
-	CacheMount      []CacheMountDef   `yaml:"cache_mount" json:"cache_mount"`
-	SectionFields   map[string]string `yaml:"section_field" json:"section_field"`
-	InstallTemplate string            `yaml:"install_template,omitempty" json:"install_template,omitempty"`
-	Phases          *PhaseSet         `yaml:"phase,omitempty" json:"phase,omitempty"`
-	Validate        []FormatRule      `yaml:"validate,omitempty" json:"validate,omitempty"`
-
-	// Secondary marks a build format that is layered ON TOP of a distro's
-	// primary install format rather than BEING one — built via a builder and
-	// installed from the produced files (the canonical case is `aur`, built by
-	// the `aur` builder and installed with `pacman -U`). It is the YAML-declared
-	// replacement for the former Go-side `name == "aur"` special-case: a
-	// distro's PrimaryFormat() skips every Secondary format, and the candy
-	// parser only routes a secondary sub-block under a distro/format-family that
-	// declares it. Adding a new secondary build format is therefore an
-	// embedded-vocabulary (charly/charly.yml) edit, not a code change. Defaults
-	// false (a primary install format).
-	Secondary bool `yaml:"secondary,omitempty" json:"secondary,omitempty"`
-
-	// UninstallTemplate is the host-venue package-removal command rendered at
-	// deploy-teardown (reverse_ops.go reversePackageRemove). It is a Go
-	// text/template over an InstallContext (.Packages = the installed package
-	// names) so the removal command (dnf remove / apt purge / pacman -Rs) comes
-	// from config, never a hardcoded per-format switch. Empty for formats with
-	// no host teardown.
-	UninstallTemplate string `yaml:"uninstall_template,omitempty" json:"uninstall_template,omitempty"`
-
-	// LocalPkg drives the candy `localpkg:` mechanism for this format —
-	// building a bundled package SOURCE dir on the host, installing the
-	// resulting package FILE(s) onto a deploy target, and resolving the
-	// built package's builder-resolvable dependency closure. It is the
-	// ONLY home for these operations: the format's `install_template:`
-	// describes installing REPO packages (from a candy's `package:` list),
-	// not building/installing a local source-built package file. Nil for
-	// formats that ship no localpkg support (rpm/deb today); populated for
-	// `pac` only. See LocalPkgDef.
-	LocalPkg *LocalPkgDef `yaml:"local_pkg,omitempty" json:"local_pkg,omitempty"`
-}
-
-// LocalPkgDef declares, per package format, how the `localpkg:` mechanism
-// builds and installs a SOURCE-built package — the config that the format's
-// repo-install templates cannot express. Every field is a Go text/template
-// (rendered via RenderTemplate) or a literal, so the localpkg executor carries
-// ZERO hardcoded package-manager / format strings: they all come from here.
-//
-// Template variables (LocalPkgContext):
-//   - BuildTemplate:   {{.SrcDir}}  {{.PkgDest}}            — build a source dir
-//   - InstallTemplate: {{.StageDir}} {{.Glob}}             — install package files
-//   - Probe: no variables (plain shell command)
-//
-// Populated for `pac` (makepkg / pacman -U), `rpm` (rpmbuild / dnf install), and
-// `deb` (dpkg-buildpackage / apt-get install). Every install command is the
-// format's AUTO-RESOLVING local-file install, so the package's dependencies are
-// satisfied from the target's repos — there is no dependency-closure builder.
-type LocalPkgDef struct {
-	// PkgGlob is the built-package filename glob (e.g. "*.pkg.tar.zst" for
-	// pacman, "*.rpm", "*.deb"). Used both to collect build output and to match
-	// the staged files for the install command.
-	PkgGlob string `yaml:"pkg_glob" json:"pkg_glob"`
-
-	// SourceSentinel is the filename (or glob) that marks a directory as this
-	// format's package SOURCE dir, used by resolveLocalPkgDir's walk-up search.
-	// For pac: "PKGBUILD"; rpm: "*.spec"; deb: "debian/control".
-	SourceSentinel string `yaml:"source_sentinel" json:"source_sentinel"`
-
-	// BuildTemplate renders the host-side command that builds the package
-	// SOURCE directory into PkgGlob artifacts under {{.PkgDest}}. Variables:
-	// {{.SrcDir}} (the resolved source dir), {{.PkgDest}} (a per-build temp
-	// output dir). For pac: `cd {{.SrcDir}} && PKGDEST={{.PkgDest}} makepkg
-	// -sf --noconfirm`; rpm/deb shell out to a distro-matched builder container.
-	BuildTemplate string `yaml:"build_template" json:"build_template"`
-
-	// InstallTemplate renders the target-venue command that installs the
-	// staged package files. Variables: {{.StageDir}} (the on-target staging
-	// dir), {{.Glob}} (PkgGlob). The AUTO-RESOLVING local-file install for the
-	// format — pac: `pacman -U`; rpm: `dnf install -y`; deb: `apt-get install
-	// -y` — so the package's repo dependencies resolve automatically. Runs via
-	// the executor's RunSystem (sudo).
-	InstallTemplate string `yaml:"install_template" json:"install_template"`
-
-	// Probe is the target-venue command that succeeds iff this package
-	// format's manager is present (gates whether the install leg runs).
-	// For pac: `command -v pacman`; rpm: `command -v dnf`; deb: `command -v apt-get`.
-	Probe string `yaml:"probe" json:"probe"`
-
-	// DepBuilder is the builder name (a key in the embedded `builder:` vocabulary) used by the
-	// aur-CANDY deploy path to build a candy's `aur:` packages into installable
-	// files before installing them via InstallTemplate (the localpkg step itself
-	// auto-resolves and needs no builder). For pac: `aur`. Empty for rpm/deb.
-	DepBuilder string `yaml:"dep_builder" json:"dep_builder"`
-
-	// DownloadTemplate is the URL the IMAGE build (OCITarget) curl-fetches the
-	// PUBLISHED package file from, when a candy with a `localpkg:` map is baked
-	// into an image. Deploy targets BUILD the package on the host (BuildTemplate);
-	// an image build has no host-package-build step, so it downloads the release
-	// asset and installs it via the SAME dep-resolving InstallTemplate (so the
-	// charly toolchain is OS-tracked + its deps resolved, identically to deploy).
-	// `${ARCH}` (BuildKit amd64/arm64) is substituted at build time. Empty → the
-	// candy's own task: install is the fallback (the legacy behavior).
-	DownloadTemplate string `yaml:"download_template" json:"download_template"`
-}
-
-// PhaseSet carries three-phase templates for a format or builder.
-// Phases run in order: prepare (repo config, key import, copr enable)
-// → install (the actual dnf/apt/pacman/pixi/cargo command) → cleanup
-// (copr disable, scratch cleanup). Each phase has separate container
-// and host renderings so cache-mount directives stay out of the host
-// path and shell-specific wrappers stay out of the container path.
-type PhaseSet struct {
-	Prepare *PhaseTemplates `yaml:"prepare,omitempty" json:"prepare,omitempty"`
-	Install *PhaseTemplates `yaml:"install,omitempty" json:"install,omitempty"`
-	Cleanup *PhaseTemplates `yaml:"cleanup,omitempty" json:"cleanup,omitempty"`
-}
-
-// PhaseTemplates carries both renderings (container + host) of one
-// phase. Either may be empty — a phase with only a host: block is valid
-// (e.g. repo mutations that only make sense on a real host), as is a
-// phase with only a container: block (cache cleanup inside the build).
-type PhaseTemplates struct {
-	Container string `yaml:"container,omitempty" json:"container,omitempty"`
-	Host      string `yaml:"host,omitempty" json:"host,omitempty"`
-}
-
 // PhaseTemplate looks up the template string for a (phase, venue)
 // lookup, with documented fallback behavior: if the new phase: block
 // lacks the requested cell, fall back to the legacy InstallTemplate for
 // (PhaseInstall, container) only — the combination covered by the
 // legacy field. All other lookups return "" when the new path is absent.
-func (f *FormatDef) PhaseTemplate(phase Phase, venue Venue) string {
+func formatPhaseTemplate(f *FormatDef, phase Phase, venue Venue) string {
 	if f == nil {
 		return ""
 	}
@@ -351,12 +50,6 @@ func (f *FormatDef) PhaseTemplate(phase Phase, venue Venue) string {
 		return f.InstallTemplate
 	}
 	return ""
-}
-
-// FormatRule is a validation rule for format section fields.
-type FormatRule struct {
-	Field string `yaml:"field" json:"field"`
-	Rule  string `yaml:"rule" json:"rule"`
 }
 
 // ResolveDistro finds the distro definition matching the image's distro tags.
@@ -590,32 +283,6 @@ func (dc *DistroConfig) expandPackageInheritance(tags []string) []string {
 	return out
 }
 
-// PrimaryFormat returns the distro's primary package format — the single
-// source for "what package format does this resolved distro use".
-// The primary format is the one base-distro format among the distro's `Format`
-// map that is NOT flagged `secondary: true` (the aur build format is always
-// secondary to the pac primary); among the base formats (rpm/deb/pac) a distro
-// declares exactly one. Returns "" when the distro declares no base format.
-// Deterministic. The secondary/primary distinction is read from the YAML
-// `secondary:` flag — there is no Go-side per-format-name special-case.
-func (d *DistroDef) PrimaryFormat() string {
-	if d == nil {
-		return ""
-	}
-	names := make([]string, 0, len(d.Format))
-	for name := range d.Format {
-		names = append(names, name)
-	}
-	sortStrings(names)
-	for _, name := range names {
-		if fd := d.Format[name]; fd != nil && fd.Secondary {
-			continue // secondary build format (declared in YAML), never primary
-		}
-		return name
-	}
-	return ""
-}
-
 // FindFormat returns the FormatDef for a format name (rpm/deb/pac/aur),
 // resolving distro `inherits:` chains. The first distro that defines the format
 // wins — a format's templates (install/uninstall, phase cells, cache mounts)
@@ -660,44 +327,6 @@ func indexOf(s string, c byte) int {
 	return -1
 }
 
-// LocalPkgFormat returns the format name and its LocalPkgDef for the format that
-// declares `local_pkg:` support on this distro, preferring `primaryFormat`
-// (the image's primary build format) when it carries one. Returns ("", nil)
-// when no format on this distro supports localpkg — the localpkg executor then
-// treats the step as a clean no-op (the candy's own curl/COPY fallback). This is
-// the single config-driven entry point that replaces every hardcoded
-// makepkg/pacman/glob literal: whichever format defines `local_pkg:` drives the
-// whole mechanism.
-func (d *DistroDef) LocalPkgFormat(primaryFormat string) (string, *LocalPkgDef) {
-	if d == nil {
-		return "", nil
-	}
-	// Try the caller's primary format, then the distro's own PrimaryFormat (the
-	// single source for "this distro's primary package format") when the caller
-	// gave no localpkg-capable hint.
-	for _, fmtName := range []string{primaryFormat, d.PrimaryFormat()} {
-		if fmtName == "" {
-			continue
-		}
-		if fd := d.Format[fmtName]; fd != nil && fd.LocalPkg != nil {
-			return fmtName, fd.LocalPkg
-		}
-	}
-	// Final fallback: any format on the distro that declares localpkg support
-	// (deterministic by sorted name so the choice is stable).
-	names := make([]string, 0, len(d.Format))
-	for name := range d.Format {
-		names = append(names, name)
-	}
-	sortStrings(names)
-	for _, name := range names {
-		if fd := d.Format[name]; fd != nil && fd.LocalPkg != nil {
-			return name, fd.LocalPkg
-		}
-	}
-	return "", nil
-}
-
 // --- Builder Config ---
 
 // BuilderConfig represents the `builder:` section of the embedded vocabulary (charly/charly.yml).
@@ -705,82 +334,10 @@ type BuilderConfig struct {
 	Builder map[string]*BuilderDef `yaml:"builder" json:"builder"`
 }
 
-// BuilderDef defines a multi-stage builder (pixi, npm, cargo, etc.).
-//
-// The legacy `stage_template:` / `install_template:` fields emit a
-// single Containerfile chunk. The new `phase:` field matches FormatDef
-// and lets a builder specify separate container + host renderings for
-// each of prepare/install/cleanup — required for LocalDeployTarget to
-// invoke the builder via `podman run` with HOME-remapped bind-mounts
-// rather than as a build stage.
-type BuilderDef struct {
-	DetectFiles     []string          `yaml:"detect_file,omitempty" json:"detect_file,omitempty"`
-	DetectConfig    string            `yaml:"detect_config,omitempty" json:"detect_config,omitempty"`
-	RequiresSrcDir  bool              `yaml:"requires_src_dir,omitempty" json:"requires_src_dir,omitempty"`
-	Inline          bool              `yaml:"inline,omitempty" json:"inline,omitempty"`
-	CacheMount      []CacheMountDef   `yaml:"cache_mount" json:"cache_mount"`
-	Env             map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
-	StageTemplate   string            `yaml:"stage_template,omitempty" json:"stage_template,omitempty"`
-	InstallTemplate string            `yaml:"install_template,omitempty" json:"install_template,omitempty"`
-	Phases          *PhaseSet         `yaml:"phase,omitempty" json:"phase,omitempty"`
-	InstallCommands map[string]string `yaml:"install_command,omitempty" json:"install_command,omitempty"`
-	ManylinuxFix    string            `yaml:"manylinux_fix,omitempty" json:"manylinux_fix,omitempty"`
-	BuildScript     string            `yaml:"build_script,omitempty" json:"build_script,omitempty"`
-	CopyArtifacts   []CopyDef         `yaml:"copy_artifact,omitempty" json:"copy_artifact,omitempty"`
-	CopyBinary      *CopyDef          `yaml:"copy_binary,omitempty" json:"copy_binary,omitempty"`
-
-	// PathContributions lists HOME-relative paths the builder's runtime
-	// artefacts live under (e.g. "~/.pixi/envs/default/bin"). When any
-	// candy in an image triggers the builder via DetectFiles/DetectConfig,
-	// these paths are emitted into the final image's `ENV PATH=...` and
-	// the `ai.opencharly.path_append` OCI label by writeCandyEnv +
-	// emitLabels in generate.go. Authors can also add candy-level entries
-	// via the candy manifest `path_append:` — both contribute to the same merged
-	// PATH. Empty list means the builder doesn't contribute (aur installs
-	// to /usr/bin via pacman -U).
-	PathContributions []string `yaml:"path_contribution,omitempty" json:"path_contribution,omitempty"`
-
-	// RuntimeEnv lists environment variables the builder contributes to the
-	// final image when triggered by any candy (e.g. PIXI_CACHE_DIR pointing
-	// at the user's persistent cache). Distinct from `Env` above — `Env`
-	// applies to the BUILDER stage of the multi-stage Containerfile;
-	// RuntimeEnv applies to the FINAL image's ENV directives. Tilde-prefixed
-	// values are expanded with the image's HOME at generate time.
-	RuntimeEnv map[string]string `yaml:"runtime_env,omitempty" json:"runtime_env,omitempty"`
-
-	// Kind discriminates between layer builders (default — produce
-	// artifacts COPY'd into the final image via multi-stage Containerfile)
-	// and bootstrap builders (produce a complete rootfs that REPLACES the
-	// FROM line via `FROM scratch + ADD`). Empty defaults to "layer".
-	Kind string `yaml:"kind,omitempty" json:"kind,omitempty"`
-
-	// Privileged builders run as a pre-build podman invocation outside
-	// `podman build` (because pacstrap/debootstrap need /dev, namespaces,
-	// mount, which buildah's RUN does not reliably grant). The output
-	// (typically a tarball) is staged and then ADDed by the Containerfile.
-	Privileged bool `yaml:"privileged,omitempty" json:"privileged,omitempty"`
-
-	// OutputArtifact is the absolute path inside the privileged builder
-	// container where the produced artifact lands. The pre-build phase
-	// copies it out to .build/<image>/<builder-name>.<ext>. Required when
-	// Privileged is true.
-	OutputArtifact string `yaml:"output_artifact,omitempty" json:"output_artifact,omitempty"`
-}
-
-// IsBootstrap reports whether this builder produces a rootfs that
-// replaces the FROM line (kind: bootstrap). Defaults to false (layer
-// builder) when Kind is empty.
-func (b *BuilderDef) IsBootstrap() bool {
-	if b == nil {
-		return false
-	}
-	return b.Kind == "bootstrap"
-}
-
 // PhaseTemplate is the BuilderDef analog of FormatDef.PhaseTemplate.
 // Same fallback rules apply: (PhaseInstall, container) falls back to
 // legacy InstallTemplate or StageTemplate when Phases is absent.
-func (b *BuilderDef) PhaseTemplate(phase Phase, venue Venue) string {
+func builderPhaseTemplate(b *BuilderDef, phase Phase, venue Venue) string {
 	if b == nil {
 		return ""
 	}
@@ -818,13 +375,6 @@ func (b *BuilderDef) PhaseTemplate(phase Phase, venue Venue) string {
 		return b.StageTemplate
 	}
 	return ""
-}
-
-// CopyDef defines a COPY directive for builder artifacts.
-type CopyDef struct {
-	Src   string `yaml:"src" json:"src"`
-	Dst   string `yaml:"dst" json:"dst"`
-	Chown bool   `yaml:"chown,omitempty" json:"chown,omitempty"`
 }
 
 // ValidBuilderType returns true if the given name is a defined builder.

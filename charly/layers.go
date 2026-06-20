@@ -14,157 +14,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// PortSpec represents a port declaration with an optional protocol annotation.
-// Supports both plain integer (defaults to "http") and "tcp:5900" string forms.
-type PortSpec struct {
-	Port     int
-	Protocol string // backend scheme: "http" (default), "https", "https+insecure", "tcp", "tls-terminated-tcp", "ssh", "rdp", "smb"
-}
-
 // PortSpec shorthand (scalar `8080` / `"tcp:5900"`) is canonicalized to the
 // {port, protocol} struct form by the CUE loader's normalizer (cue_normalize.go,
 // expandPortSpecNode); the custom UnmarshalYAML was deleted in the CUE loader
 // switch (Cutover 1).
-
-// VolumeYAML represents a volume declaration in the candy manifest
-type VolumeYAML struct {
-	Name string `yaml:"name" json:"name"`
-	Path string `yaml:"path" json:"path"`
-}
-
-// AliasYAML represents a command alias declaration in the candy manifest
-type AliasYAML struct {
-	Name    string `yaml:"name" json:"name"`
-	Command string `yaml:"command" json:"command"`
-}
-
-// ExtractYAML represents a file extraction from a Docker image
-type ExtractYAML struct {
-	Source string `yaml:"source" json:"source"` // Source image (e.g., "ghcr.io/immich-app/immich-server:v1.106.4")
-	Path   string `yaml:"path" json:"path"`     // Path to extract (e.g., "/usr/src/app")
-	Dest   string `yaml:"dest" json:"dest"`     // Destination in target image (e.g., "/opt/immich/server")
-}
-
-// DataYAML represents a data mapping from the candy directory to a volume staging area.
-// Data files are COPYed into /data/<volume>/[dest/] at build time and provisioned
-// into bind-backed volumes by charly config / charly update at deploy time.
-type DataYAML struct {
-	Src    string `yaml:"src" json:"src"`                       // source dir relative to candy dir (e.g., "data/notebooks")
-	Volume string `yaml:"volume" json:"volume"`                 // target volume name (must match a volumes[].name in the image chain)
-	Dest   string `yaml:"dest,omitempty" json:"dest,omitempty"` // optional subdirectory within the volume path
-}
-
-// CandyArtifact declares a file the candy publishes back to the operator
-// after its setup completes. Retricheck happens at `charly bundle add` finalization
-// via the target's back-channel (scp for SSH/VM, cp for host, podman cp for
-// container). The retrieved file is written to `RetrieveTo` with shell-style
-// ${ENV} expansion on the path. Optional `Rewrite` rules perform a literal
-// find/replace on the file contents before writing — used for rewriting
-// loopback addresses in kubeconfig files, etc.
-type CandyArtifact struct {
-	// Name is a human-readable identifier (e.g. "kubeconfig"). Used in
-	// log messages and as a dedupe key when multiple candies in the same
-	// deploy declare overlapping artifacts.
-	Name string `yaml:"name" json:"name"`
-
-	// Path is the on-target absolute path to retrieve. Required.
-	Path string `yaml:"path" json:"path"`
-
-	// RetrieveTo is the operator-side destination. Supports ${ENV} expansion
-	// (including ${deploy_name}, ${vm_name}, and any env vars already in
-	// scope). Parent directories are created with mode 0755. Required.
-	RetrieveTo string `yaml:"retrieve_to" json:"retrieve_to"`
-
-	// Mode is the file mode to apply on the retrieved destination (octal
-	// string like "0600"). Empty defaults to 0644.
-	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
-
-	// Rewrite applies literal find/replace pairs to the file contents
-	// before writing. Evaluated in order. Typical use: rewrite
-	// "server: https://127.0.0.1:6443" in a kubeconfig to the VM's
-	// reachable hostname so the kubeconfig is usable from the operator.
-	Rewrite []CandyArtifactRewrite `yaml:"rewrite,omitempty" json:"rewrite,omitempty"`
-
-	// Optional is ignored when true and the file doesn't exist on the
-	// target. Default: required (missing file fails the deploy).
-	Optional bool `yaml:"optional,omitempty" json:"optional,omitempty"`
-
-	// WaitSeconds is the deadline (in seconds) for the file to appear on
-	// the target before retricheck. Useful for candies whose service unit
-	// transitions to "active" BEFORE the artifact file is written —
-	// canonical case: k3s.service reaches active when the binary execs,
-	// but /etc/rancher/k3s/k3s.yaml lands ~3-15s later when the API
-	// server starts. Polls exec.GetFile every 1s until success or
-	// deadline. 0 (default) disables the wait — file must already exist
-	// at retricheck time. Recommended: 60-120s for k3s-class artifacts.
-	//
-	// This is a readiness probe (file existence is the synchronization
-	// primitive), not a sleep workaround — R4-compliant.
-	WaitSeconds int `yaml:"wait_second,omitempty" json:"wait_second,omitempty"`
-}
-
-// CandyArtifactRewrite is a single find/replace pair.
-type CandyArtifactRewrite struct {
-	Find    string `yaml:"find" json:"find"`
-	Replace string `yaml:"replace" json:"replace"`
-}
-
-// EnvDependency declares an env var or MCP server that a candy needs or can use.
-// Reused for env_requires, env_accepts, mcp_requires, mcp_accepts,
-// secret_accepts, and secret_requires.
-//
-// The Key field is only meaningful for secret_accepts/secret_requires entries:
-// it optionally overrides the credential store lookup key. Default is
-// ("charly/secret", Name). When set, the format is "<service>/<key>" and must
-// start with "charly/" (enforced by validate.go to prevent exfiltration of
-// unrelated user credentials). See plan §2.7.
-type EnvDependency struct {
-	Name        string `yaml:"name" json:"name"`
-	Description string `yaml:"description" json:"description"`
-	Default     string `yaml:"default,omitempty" json:"default,omitempty"`
-	Key         string `yaml:"key,omitempty" json:"key,omitempty"` // credential store path override (secret_* only), format "<service>/<key>", must start with "charly/"
-}
-
-// MCPServerYAML represents an MCP server declaration in the candy manifest.
-type MCPServerYAML struct {
-	Name      string `yaml:"name" json:"name"`
-	URL       string `yaml:"url" json:"url"`
-	Transport string `yaml:"transport,omitempty" json:"transport,omitempty"` // "http" (default), "sse"
-}
-
-// ShellConfig represents a candy's shell-init declarations (the `shell:`
-// field in the candy manifest). Mirrors the per-distro / per-package pattern: an
-// intrinsic body (init, path_append, path, priority) plus per-shell
-// sub-blocks (bash, zsh, fish, sh) that override the intrinsic for that
-// shell. Selection rule applied at install time: per-shell ByShell entry
-// wins when present; otherwise the intrinsic body is used with
-// ${SHELL_NAME} substituted.
-type ShellConfig struct {
-	Init       string                `yaml:"init,omitempty" json:"init,omitempty"`
-	PathAppend []string              `yaml:"path_append,omitempty" json:"path_append,omitempty"`
-	Path       string                `yaml:"path,omitempty" json:"path,omitempty"`
-	Priority   int                   `yaml:"priority,omitempty" json:"priority,omitempty"`
-	ByShell    map[string]*ShellSpec `yaml:"-" json:"by_shell,omitempty"` // populated by UnmarshalYAML for bash/zsh/fish/sh keys
-}
-
-// ShellSpec is one per-shell init declaration nested inside a ShellConfig
-// (the body of shell.bash:, shell.zsh:, shell.fish:, shell.sh:).
-type ShellSpec struct {
-	Init       string   `yaml:"init,omitempty" json:"init,omitempty"`
-	PathAppend []string `yaml:"path_append,omitempty" json:"path_append,omitempty"`
-	Path       string   `yaml:"path,omitempty" json:"path,omitempty"`
-}
 
 // ShellAllowlist enumerates valid per-shell sub-block keys inside `shell:`.
 // Adding a new shell here is a renderer change (new managed-block / drop-in
 // destination); keep in sync with deploy_target_local.go shell-detection
 // probe and OCITarget.emitShellSnippet destination table.
 var ShellAllowlist = map[string]bool{"bash": true, "zsh": true, "fish": true, "sh": true}
-
-// shellConfigKnownFields enumerates the intrinsic field keys inside `shell:`.
-var shellConfigKnownFields = map[string]bool{
-	"init": true, "path_append": true, "path": true, "priority": true,
-}
 
 // sortedEnvDeps returns a deterministic slice from a name-keyed map, sorted by Name.
 func sortedEnvDeps(m map[string]EnvDependency) []EnvDependency {
@@ -178,122 +37,6 @@ func sortedEnvDeps(m map[string]EnvDependency) []EnvDependency {
 		out = append(out, m[k])
 	}
 	return out
-}
-
-// CandyYAML represents the parsed candy manifest file.
-// Unknown top-level keys are captured as tag-based package sections
-// (e.g., "fedora:", "arch:", "fedora:43:", "debian,ubuntu:").
-type CandyYAML struct {
-	Version     string            `yaml:"version,omitempty" json:"version,omitempty"`         // CalVer version (YYYY.DDD.HHMM) of this candy definition
-	Description string            `yaml:"description,omitempty" json:"description,omitempty"` // plain-string self-description; first line = summary
-	Status      string            `yaml:"status,omitempty" json:"status,omitempty"`           // maturity rung: working | testing | broken (default testing)
-	Candy       []string          `yaml:"candy,omitempty" json:"candy,omitempty"`
-	Require     []string          `yaml:"require,omitempty" json:"require,omitempty"`
-	Engine      string            `yaml:"engine,omitempty" json:"engine,omitempty"` // required run engine: "docker" or "" (any)
-	Env         map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
-	PathAppend  []string          `yaml:"path_append,omitempty" json:"path_append,omitempty"`
-	Port        []PortSpec        `yaml:"port,omitempty" json:"port,omitempty"`
-	Route       *RouteYAML        `yaml:"route,omitempty" json:"route,omitempty"`
-	// Service is the unified service schema: a list of ServiceEntry.
-	// Each entry either reuses a packaged unit (use_packaged:) or
-	// defines a custom service (exec: ...).
-	Service       []ServiceEntry    `yaml:"service,omitempty" json:"service,omitempty"`
-	Volume        []VolumeYAML      `yaml:"volume,omitempty" json:"volume,omitempty"`
-	Alias         []AliasYAML       `yaml:"alias,omitempty" json:"alias,omitempty"`
-	Extract       []ExtractYAML     `yaml:"extract,omitempty" json:"extract,omitempty"`
-	Security      *SecurityConfig   `yaml:"security,omitempty" json:"security,omitempty"`
-	Libvirt       []string          `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
-	Hook          *HooksConfig      `yaml:"hook,omitempty" json:"hook,omitempty"`
-	PortRelay     []int             `yaml:"port_relay,omitempty" json:"port_relay,omitempty"`
-	SecretYAML    []SecretYAML      `yaml:"secret,omitempty" json:"secret,omitempty"`
-	Data          []DataYAML        `yaml:"data,omitempty" json:"data,omitempty"`
-	EnvProvides   map[string]string `yaml:"env_provide,omitempty" json:"env_provide,omitempty"`       // env vars provided to OTHER containers when this service is deployed
-	EnvRequire    []EnvDependency   `yaml:"env_require,omitempty" json:"env_require,omitempty"`       // env vars this candy MUST have from the environment
-	EnvAccept     []EnvDependency   `yaml:"env_accept,omitempty" json:"env_accept,omitempty"`         // env vars this candy CAN optionally use
-	SecretAccept  []EnvDependency   `yaml:"secret_accept,omitempty" json:"secret_accept,omitempty"`   // credential-store-backed env vars this candy CAN optionally use
-	SecretRequire []EnvDependency   `yaml:"secret_require,omitempty" json:"secret_require,omitempty"` // credential-store-backed env vars this candy MUST have
-	MCPProvide    []MCPServerYAML   `yaml:"mcp_provide,omitempty" json:"mcp_provide,omitempty"`       // MCP servers provided to OTHER containers when this service is deployed
-	MCPRequire    []EnvDependency   `yaml:"mcp_require,omitempty" json:"mcp_require,omitempty"`       // MCP servers this candy MUST have from the environment
-	MCPAccept     []EnvDependency   `yaml:"mcp_accept,omitempty" json:"mcp_accept,omitempty"`         // MCP servers this candy CAN optionally use
-
-	// Calamares-aligned package surface (2026-05 cutover). The unified
-	// flat top-level `packages:` is the Calamares group / module package
-	// list shape. Per-distro overrides + format-specific extras (copr,
-	// repos, options, exclude, modules, AUR sub-block) live
-	// under `distro:` keyed by distro name (or distro-version e.g.
-	// `debian-13`, `ubuntu-24.04`).
-	Package []PackageItem              `yaml:"package,omitempty" json:"package,omitempty"`
-	Distro  map[string]*DistroPackages `yaml:"distro,omitempty" json:"distro,omitempty"`
-
-	// Apk is the Android app-install package format — a list of apps the
-	// candy installs onto a `kind: android` device (apkeep by package id, or
-	// a committed local APK). Parallel to package:/aur: but device-scoped, not
-	// OS-distro-scoped, so it lives at the top level rather than under distro:.
-	// Compiled into an ApkInstallStep; executed ONLY by a `target: android`
-	// deploy (every other target skips it). See android_spec.go ApkPackageSpec.
-	Apk []ApkPackageSpec `yaml:"apk,omitempty" json:"apk,omitempty"`
-
-	// LocalPkg maps a package FORMAT (pac/rpm/deb) to a bundled native-package
-	// SOURCE directory (relative to the candy dir or the project root, or
-	// absolute). On a DEPLOY target charly picks the entry matching the target
-	// distro's package format, builds the package from that source on the HOST,
-	// and installs the result onto the target via the format's auto-resolving
-	// local-file install (pacman -U / dnf install / apt-get install) — delivering
-	// an OS-package-tracked binary instead of an ad-hoc curl. Compiled into a
-	// LocalPkgInstallStep; skipped at image build (no host package build in a
-	// container). The canonical user is the `charly` candy:
-	// {pac: pkg/arch, rpm: pkg/fedora, deb: pkg/debian}. A legacy scalar is
-	// rejected at load with an `charly migrate` hint. See LocalPkgInstallStep.
-	LocalPkg LocalPkgMap `yaml:"localpkg,omitempty" json:"localpkg,omitempty"`
-
-	// Reboot requests a reboot of the deploy target after this candy's
-	// steps (a trailing RebootStep). For kernel-module candies (e.g.
-	// nvidia-open-dkms) whose module only loads on a fresh boot with the
-	// conflicting in-tree driver blacklisted. Honored by target:vm (reboots
-	// the guest over SSH + waits for it to return); skipped at image build
-	// (OCI/pod) and on target:local (never reboots the operator host).
-	Reboot bool `yaml:"reboot,omitempty" json:"reboot,omitempty"`
-
-	// Vars holds candy-local variables for ${VAR} substitution in plan run:
-	// steps. (The former separate `task:` list is retired — install operations
-	// are now `run:` steps in the unified `plan:`.)
-	Vars map[string]string `yaml:"var,omitempty" json:"var,omitempty"`
-
-	// Shell-init declarations: an intrinsic body (init/path_append/path/
-	// priority) plus per-shell sub-blocks (bash/zsh/fish/sh). Travels in
-	// the ai.opencharly.shell OCI label (candy section) and is applied
-	// at `charly box build` time (snippets land in /etc/profile.d/,
-	// /etc/fish/conf.d/) and at `charly bundle add` time on target:local /
-	// target:vm (managed-block in user rc files; per-candy drop-in for
-	// fish). See ShellConfig type and /charly-build:layer "Shell Init Surface".
-	Shell *ShellConfig `yaml:"shell,omitempty" json:"shell,omitempty"`
-
-	// Plan carries the unified ordered step list contributed by this candy:
-	// run: (the install timeline) + check:/agent-check: (acceptance) +
-	// agent-run:/include:. The check:/agent-check: + runtime-context run:
-	// steps travel in the ai.opencharly.description OCI label (candy section)
-	// and run under `charly check` (build) / `charly check live` (deploy);
-	// build/deploy-context run: steps lower into the InstallPlan. See
-	// description_spec.go for the Step type.
-	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
-
-	// Artifacts are files a candy publishes back to the operator after its
-	// setup runs successfully. Each artifact is retrieved from the deploy
-	// venue (scp for VM/SSH targets, plain copy for host target, podman cp
-	// for container target) and written to `retrieve_to:`, optionally
-	// rewritten via `rewrite:` rules. Used by e.g. the k3s-server candy to
-	// publish `/etc/rancher/k3s/k3s.yaml` back to `~/.cache/charly/clusters/
-	// <deploy>/kubeconfig.yaml` so the operator can `kubectl` the new
-	// cluster without manual scp. Generic — not k3s-specific.
-	Artifact []CandyArtifact `yaml:"artifact,omitempty" json:"artifact,omitempty"`
-
-	// Capabilities are candy-contributed image-level facts (preserve_user,
-	// needs_root_after_init, init_system_hint, data_only, oci_labels).
-	// Aggregated at image resolve time via AggregateCandyCapabilities.
-	// Replaces the magic image-level booleans (image.bootc, image.data_image)
-	// with a declarative candy-derived surface.
-	Capability         *CandyCapabilities `yaml:"capability,omitempty" json:"capability,omitempty"`
-	RequiresCapability []string           `yaml:"requires_capability,omitempty" json:"requires_capability,omitempty"`
 }
 
 // candyYAMLKnownFields lists non-format top-level keys in the candy manifest.
@@ -536,12 +279,6 @@ type TagPkgConfig struct {
 	Raw     map[string]any `yaml:"-"`
 }
 
-// RouteYAML represents a route declaration in the candy manifest
-type RouteYAML struct {
-	Host string `yaml:"host" json:"host"`
-	Port int    `yaml:"port" json:"port"`
-}
-
 // Format-specific structs (RpmConfig, DebConfig, PacConfig, AurConfig) removed.
 // All format sections are now parsed dynamically as PackageSection via the embedded distro format names.
 // See PackageSection type and CandyYAML.UnmarshalYAML for the generic parsing.
@@ -726,7 +463,7 @@ func parseCandyYAML(path string) (*CandyYAML, error) {
 	// Unified node-form: a single name-first node `<name>: {candy: …, <children>}`.
 	// (The `candy` discriminator is NESTED under the node name, so the kind-keyed
 	// branch below — which looks for a TOP-LEVEL `candy:` key — won't match.)
-	if len(inner.Content) == 2 && !kindKeysSet[inner.Content[0].Value] {
+	if len(inner.Content) == 2 && !kindWordSet[inner.Content[0].Value] {
 		if gn, perr := parseNode(inner.Content[0].Value, inner.Content[1], false); perr == nil && gn.disc == "candy" {
 			_, ic, berr := buildCandy(gn)
 			if berr != nil {
@@ -1028,7 +765,7 @@ func (l *Candy) runOps() []Op {
 			continue
 		}
 		op := step.Op
-		if op.InContext(CtxRuntime) && !op.InContext(CtxBuild) && !op.InContext(CtxDeploy) {
+		if opInContext(&op, CtxRuntime) && !opInContext(&op, CtxBuild) && !opInContext(&op, CtxDeploy) {
 			continue
 		}
 		out = append(out, op)

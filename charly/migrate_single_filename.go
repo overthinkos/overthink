@@ -355,8 +355,9 @@ func localBuildMatchesEmbeddedVocab(data []byte) bool {
 	// default flows through (mergeUnifiedDocs → classifyDoc → normalizeNodeInto),
 	// so both sides get identical normalization + defaults materialization (a raw
 	// yaml.Unmarshal would skip the node-form normalizer + default fill, making a
-	// content-identical vocab compare unequal). Bilingual: handles a legacy-shape
-	// OR node-form build.yml.
+	// content-identical vocab compare unequal). A legacy-shape build.yml fails
+	// classifyDoc (mergeUnifiedDocs errors) → returns false → the build.yml is left
+	// imported (the safe fallback), exactly as a customized vocab is.
 	var local UnifiedFile
 	if _, err := mergeUnifiedDocs(&local, data, "local build.yml", ""); err != nil {
 		return false

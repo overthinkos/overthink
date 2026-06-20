@@ -50,8 +50,8 @@ func TestFlattenBundleVenues_StampsAndHoists(t *testing.T) {
 	if len(def.Plan) != 1 {
 		t.Fatalf("default: want 1 hoisted step, got %d", len(def.Plan))
 	}
-	if def.Plan[0].venue != "os" {
-		t.Errorf("default member step venue = %q, want %q", def.Plan[0].venue, "os")
+	if def.Plan[0].Venue != "os" {
+		t.Errorf("default member step venue = %q, want %q", def.Plan[0].Venue, "os")
 	}
 	if p := def.Members["os"].Plan; len(p) != 0 {
 		t.Errorf("default member os.Plan should be cleared after hoist, got %d steps", len(p))
@@ -64,7 +64,7 @@ func TestFlattenBundleVenues_StampsAndHoists(t *testing.T) {
 	}
 	venues := map[string]bool{}
 	for _, s := range cross.Plan {
-		venues[s.venue] = true
+		venues[s.Venue] = true
 	}
 	if !venues["cross"] {
 		t.Errorf("cross: missing root-venue step (venue %q); got venues %v", "cross", venues)

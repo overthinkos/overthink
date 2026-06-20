@@ -1095,14 +1095,14 @@ func stepShortName(id string) string {
 }
 
 // warnMissingInScopePods probes the running container set and warns once per
-// missing fixture pod referenced by the in-scope plan steps' Op.venue. The
+// missing fixture pod referenced by the in-scope plan steps' Op.Venue. The
 // harness contract requires earlier-phase fixture pods to persist for
 // cumulative scoring; this is a soft signal to the AI. Best-effort.
 func warnMissingInScopePods(plan []Step) {
 	uniquePods := map[string]bool{}
 	for _, s := range plan {
-		if s.venue != "" {
-			rootPod := s.venue
+		if s.Venue != "" {
+			rootPod := s.Venue
 			if i := strings.IndexByte(rootPod, '.'); i > 0 {
 				rootPod = rootPod[:i]
 			}

@@ -480,7 +480,7 @@ func renderHostPackageCommand(distroCfg *DistroConfig, s *SystemPackagesStep) (s
 	if formatDef == nil {
 		return "", fmt.Errorf("no format %q in distro config", s.Format)
 	}
-	tmpl := formatDef.PhaseTemplate(PhaseInstall, VenueHostNative)
+	tmpl := formatPhaseTemplate(formatDef, PhaseInstall, VenueHostNative)
 	if tmpl == "" {
 		return "", nil // no host cell for this format → skip
 	}
@@ -567,7 +567,7 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, _ *InstallPlan, opts Emi
 		//
 		// AUR is a special case: yay/makepkg refuse root by design, so the
 		// aur builder's phase.install.host cell (builder.aur in the embedded
-	// vocabulary charly/charly.yml, the
+		// vocabulary charly/charly.yml, the
 		// host analog of stage_template) starts as root, configures NOPASSWD
 		// for the unprivileged user, then drops to that user via `sudo -u` for
 		// the yay invocation. Result: yay runs as user (no root warnings), but
@@ -1357,7 +1357,7 @@ func renderBuilderScript(s *BuilderStep, hostHome string) (string, error) {
 	if s.BuilderDef == nil {
 		return "", fmt.Errorf("builder %q: no builder definition (BuilderDef unset)", s.Builder)
 	}
-	tmpl := s.BuilderDef.PhaseTemplate(PhaseInstall, VenueHostNative)
+	tmpl := builderPhaseTemplate(s.BuilderDef, PhaseInstall, VenueHostNative)
 	if tmpl == "" {
 		return "", fmt.Errorf("builder %q: no phase.install.host template in the embedded build vocabulary", s.Builder)
 	}

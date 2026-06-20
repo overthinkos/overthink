@@ -741,7 +741,7 @@ func (t *VmDeployTarget) execBuilder(ctx context.Context, s *BuilderStep, _ *Ins
 	// host build script (renderBuilderScript errors on a nil BuilderDef cell);
 	// --skip-incompatible skips it.
 	if s.LocalPkg == nil {
-		if s.BuilderDef == nil || s.BuilderDef.PhaseTemplate(PhaseInstall, VenueHostNative) == "" {
+		if s.BuilderDef == nil || builderPhaseTemplate(s.BuilderDef, PhaseInstall, VenueHostNative) == "" {
 			if opts.SkipIncompatible {
 				fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping builder step %q (--skip-incompatible)\n", s.Builder)
 				return nil

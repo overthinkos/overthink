@@ -1,24 +1,24 @@
 package main
 
-// CUE-validation Core (lead-owned). One compiled schema instance (all
+// CUE-validation Core. One compiled schema instance (all
 // schema/*.cue unified — shared #Step lives once in _common.cue, R3), a kind
 // registry populated by each cue_kind_<name>.go via init(), and a per-entity
-// validator. Validation is PER ENTITY: extract an entity (the `candy:` value of
-// a kind-keyed file, or each value of a `pod:`/`k8s:`/… collection map) and
-// unify it with #<Kind>. Runs ALONGSIDE the existing Go loader during the
-// cutover; the old shape-routing + hand-written validators are deleted once
-// every kind reaches corpus parity.
+// validator. Per-entity validation extracts an entity (the `candy:` value of a
+// legacy kind-keyed file, or each value of a `pod:`/`k8s:`/… collection map)
+// and unifies it with #<Kind>; a unified node-form document is validated whole
+// against #NodeDoc — the sole load gate. The legacy shape-routing +
+// hand-written validators are deleted; CUE is the single schema source.
 
 import (
 	"embed"
 	"fmt"
-	"sort"
-	"strings"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
 	"cuelang.org/go/cue/errors"
 	cueyaml "cuelang.org/go/encoding/yaml"
+
+	"github.com/overthinkos/overthink/charly/internal/schemaconcat"
 )
 
 //go:embed schema/*.cue
@@ -29,28 +29,15 @@ var cueSchemaCtx = cuecontext.New()
 
 // sharedCueSchema is every schema/*.cue file unified into one value (no package
 // clauses → one shared scope, so kind defs reference the shared #Step/#Context).
+// The concatenation is the SINGLE contract shared with the dev-time generator
+// (schemaconcat.ConcatSchema — R3), so the compiled schema can never drift from the
+// generated Go types.
 var sharedCueSchema = func() cue.Value {
-	entries, err := schemaFS.ReadDir("schema")
+	body, _, err := schemaconcat.ConcatSchema(schemaFS, "schema", nil)
 	if err != nil {
-		panic(fmt.Sprintf("read embedded schema dir: %v", err))
+		panic(fmt.Sprintf("read embedded schema: %v", err))
 	}
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), ".cue") {
-			names = append(names, e.Name())
-		}
-	}
-	sort.Strings(names) // deterministic concatenation
-	var b strings.Builder
-	for _, n := range names {
-		data, err := schemaFS.ReadFile("schema/" + n)
-		if err != nil {
-			panic(fmt.Sprintf("read embedded schema %s: %v", n, err))
-		}
-		b.Write(data)
-		b.WriteString("\n")
-	}
-	v := cueSchemaCtx.CompileString(b.String())
+	v := cueSchemaCtx.CompileString(body)
 	if v.Err() != nil {
 		panic(fmt.Sprintf("CUE schema failed to compile: %v", errors.Details(v.Err(), nil)))
 	}

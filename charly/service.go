@@ -170,7 +170,7 @@ func execInitCommand(engine, containerName string, initDef *InitDef, operation s
 		serviceName = args[0]
 	}
 
-	rendered, err := initDef.RenderManagementCommand(operation, serviceName)
+	rendered, err := initRenderManagementCommand(initDef, operation, serviceName)
 	if err != nil {
 		return err
 	}

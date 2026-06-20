@@ -6,20 +6,20 @@
 #Target: {
 	name:         string & =~"^[a-z0-9]+(-[a-z0-9]+)*$"
 	description?: string & !=""
-	"modules-search"?: [...(string & !="")]
-	instance?: [...#TargetInstance]
-	sequence?: #TargetSequence
-	branding?: string & !=""
-	"prompt-install": *false | bool
-	"dont-chroot":    *false | bool
-	"oem-setup":      *false | bool
-	"disable-cancel": *false | bool
+	"modules-search"?: [...(string & !="")] @go(ModulesSearch)
+	instance?: [...#TargetInstance] @go(Instances)
+	sequence?:        #TargetSequence
+	branding?:        string & !=""
+	"prompt-install": *false | bool @go(PromptInstall)
+	"dont-chroot":    *false | bool @go(DontChroot)
+	"oem-setup":      *false | bool @go(OemSetup)
+	"disable-cancel": *false | bool @go(DisableCancel)
 	group?: [...(string & !="")]
 	box?: [...(string & !="")]
 }
 
 #TargetInstance: {
-	id:      string & !=""
+	id:      string & !="" @go(ID)
 	module:  string & !=""
 	config?: string & !=""
 }

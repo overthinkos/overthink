@@ -11,12 +11,13 @@ import (
 // `box: {k8s: …}` to the name-first `k8s: {box: …}`, where the top-level key `k8s`
 // collides with the `k8s` kind keyword. Two loader/validate sites must handle it:
 //
-//   - applyDiscoveredManifest routed by firstKindKey, which returns `k8s` for the
-//     node-form value → it mis-decoded the box as a k8s-kind entity (`box` as a
-//     string ref). The fix routes via classifyDoc (docShapeNode wins).
-//   - validateVocabularyCollections (the LEGACY root-shape collection validator)
-//     read top-level `k8s:` as the k8s collection and validated the `box` child
-//     against #K8s. The fix skips node-form files (isNodeFormFile).
+//   - applyDiscoveredManifest routes every discovered manifest via classifyDoc,
+//     which inspects the VALUE shape (nodeShapedValue: a `<kind>` discriminator)
+//     and reports docShapeNode — so the box named `k8s` is parsed as a node-form
+//     box, not mis-decoded as a k8s-kind entity.
+//   - validateVocabularyCollections (the root-shape collection validator) would
+//     read top-level `k8s:` as the k8s collection and validate the `box` child
+//     against #K8s; it skips node-form files (isNodeFormFile).
 //
 // Without either fix this test FAILS (load error / validation error).
 func TestNodeForm_KindNamedEntity(t *testing.T) {

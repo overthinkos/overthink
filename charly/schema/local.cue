@@ -7,7 +7,7 @@
 	// Ordered candy stack applied to the host. Required (empty list permitted —
 	// a staged name-reservation stub; the loader warns, not errors).
 	candy!: [...#CandyRef]
-	install_opts?: #InstallOpts
+	install_opts?: #InstallOpts @go(InstallOpts,optional=nillable)
 	env?: [...#EnvVar]
 	description?: string & !=""
 	plan?: [...#Step]

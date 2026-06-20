@@ -3,7 +3,6 @@ package main
 import (
 	"testing"
 
-	"gopkg.in/yaml.v3"
 )
 
 // TestDebootstrapDef_YamlParse verifies the new fields added to DebootstrapDef
@@ -35,7 +34,7 @@ distro:
           components: "main"
 `
 	var dc DistroConfig
-	if err := yaml.Unmarshal([]byte(yamlText), &dc); err != nil {
+	if err := decodeViaCUEForTest(t, yamlText, &dc); err != nil {
 		t.Fatalf("unmarshaling debootstrap distro: %v", err)
 	}
 	def, ok := dc.Distro["debian"]
@@ -100,7 +99,7 @@ distro:
       base_package: [linux-image-generic]
 `
 	var dc DistroConfig
-	if err := yaml.Unmarshal([]byte(yamlText), &dc); err != nil {
+	if err := decodeViaCUEForTest(t, yamlText, &dc); err != nil {
 		t.Fatalf("unmarshaling: %v", err)
 	}
 	resolved := dc.ResolveDistro([]string{"ubuntu"})

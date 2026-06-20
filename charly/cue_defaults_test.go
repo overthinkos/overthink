@@ -3,7 +3,6 @@ package main
 import (
 	"testing"
 
-	"gopkg.in/yaml.v3"
 )
 
 // A richly-populated vm entity exercising every subtree applyCueDefaults must
@@ -63,7 +62,7 @@ libvirt:
 func defaultedFidelitySpec(t *testing.T) *VmSpec {
 	t.Helper()
 	var spec VmSpec
-	if err := yaml.Unmarshal([]byte(fidelityVmYAML), &spec); err != nil {
+	if err := decodeViaCUEForTest(t, fidelityVmYAML, &spec); err != nil {
 		t.Fatalf("unmarshal fixture: %v", err)
 	}
 	if spec.Firmware != "" {
@@ -164,7 +163,7 @@ func TestApplyCueDefaults_PreservesLibvirtDevices(t *testing.T) {
 // A vm that explicitly sets firmware must keep it (default never clobbers).
 func TestApplyCueDefaults_VmPreservesSetFirmware(t *testing.T) {
 	var spec VmSpec
-	if err := yaml.Unmarshal([]byte("firmware: uefi-insecure\nsource:\n  kind: cloud_image\n  url: https://x/i.qcow2\n"), &spec); err != nil {
+	if err := decodeViaCUEForTest(t, "firmware: uefi-insecure\nsource:\n  kind: cloud_image\n  url: https://x/i.qcow2\n", &spec); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if err := applyCueDefaults("vm", &spec); err != nil {

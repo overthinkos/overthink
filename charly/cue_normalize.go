@@ -37,8 +37,6 @@ var cueShorthandExpanders = map[reflect.Type]shorthandExpander{
 	reflect.TypeOf(PackageItem{}):              expandPackageItemNode,
 	reflect.TypeOf(PortSpec{}):                 expandPortSpecNode,
 	reflect.TypeOf(ContainsList{}):             expandContainsListNode,
-	reflect.TypeOf(ShellConfig{}):              expandShellConfigNode,
-	reflect.TypeOf(DeployShellOverlay{}):       expandShellConfigNode, // same bash/zsh→by_shell shape (extra intrinsic keys id/origin/skip stay)
 	reflect.TypeOf(LibvirtGraphicsListeners{}): expandLibvirtListenersNode,
 	reflect.TypeOf(PreemptibleConfig{}):        expandPreemptibleNode,
 	reflect.TypeOf(TunnelYAML{}):               expandTunnelNode,
@@ -146,6 +144,12 @@ func flattenYamlFields(t reflect.Type) map[string]reflect.Type {
 	out := map[string]reflect.Type{}
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
+		// Wire key: the yaml tag. The CUE-generated spec types carry DOUBLED
+		// yaml+json tags (cue:gen -mode=retag doubles every json tag into a
+		// matching yaml tag), so every generated snake_case field is reachable
+		// by its yaml tag — the former json fallback is redundant (R3). The only
+		// hand union type with json-only fields, Matcher{Op,Value}, is reached but
+		// inert (its wire form is a scalar/operator-map, never op:/value: keys).
 		tag := f.Tag.Get("yaml")
 		name, opts, _ := strings.Cut(tag, ",")
 		inline := strings.Contains(opts, "inline")
@@ -244,40 +248,6 @@ func expandContainsListNode(node *yaml.Node) error {
 	orig := *node
 	elem := promote(&orig)
 	*node = yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: []*yaml.Node{elem}}
-	return nil
-}
-
-// expandShellConfigNode: move the dynamic per-shell keys (bash/zsh/fish/sh)
-// under a `by_shell:` mapping (the ByShell field's json key), leaving the
-// intrinsic keys (init/path_append/path/priority) in place.
-func expandShellConfigNode(node *yaml.Node) error {
-	if node.Kind != yaml.MappingNode {
-		return nil
-	}
-	var kept []*yaml.Node
-	var byShell []*yaml.Node
-	for i := 0; i+1 < len(node.Content); i += 2 {
-		k := node.Content[i].Value
-		v := node.Content[i+1]
-		switch {
-		case shellConfigKnownFields[k]:
-			kept = append(kept, node.Content[i], v)
-		case ShellAllowlist[k]:
-			byShell = append(byShell, node.Content[i], v)
-		case k == "by_shell":
-			// already canonical — keep as is
-			byShell = append(byShell, v.Content...)
-		default:
-			kept = append(kept, node.Content[i], v) // unknown — let CUE report
-		}
-	}
-	if len(byShell) > 0 {
-		kept = append(kept,
-			scalarNode("by_shell"),
-			&yaml.Node{Kind: yaml.MappingNode, Tag: "!!map", Content: byShell},
-		)
-	}
-	node.Content = kept
 	return nil
 }
 

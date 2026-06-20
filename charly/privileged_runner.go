@@ -183,7 +183,7 @@ func readEngineRootful() (string, error) {
 // bootstrap builder against a render context. The template's available
 // fields are documented at the call site (charly/build.go runPrivilegedBuilders).
 func renderBootstrapScript(builder *BuilderDef, ctx any) (string, error) {
-	tmpl := builder.PhaseTemplate(PhaseInstall, VenueContainerBuilder)
+	tmpl := builderPhaseTemplate(builder, PhaseInstall, VenueContainerBuilder)
 	if tmpl == "" {
 		return "", fmt.Errorf("builder has no phase.install.container template")
 	}

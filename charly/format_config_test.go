@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v3"
 )
 
 func TestLoadDistroConfigFromFile(t *testing.T) {
@@ -232,7 +231,7 @@ func TestLoadBuildConfigForImageFallback(t *testing.T) {
 
 func TestDnfConfigParse(t *testing.T) {
 	var d DistroDef
-	if err := yaml.Unmarshal([]byte("dnf:\n  max_parallel_downloads: 10\n  fastestmirror: true\n"), &d); err != nil {
+	if err := decodeViaCUEForTest(t, "dnf:\n  max_parallel_downloads: 10\n  fastestmirror: true\n", &d); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if d.Dnf == nil {
@@ -321,7 +320,7 @@ func TestDistroConfigFindFormat(t *testing.T) {
 			t.Errorf("FindFormat(%q) = nil, want a FormatDef", f)
 			continue
 		}
-		if fd.PhaseTemplate(PhaseInstall, VenueHostNative) == "" {
+		if formatPhaseTemplate(fd, PhaseInstall, VenueHostNative) == "" {
 			t.Errorf("format %q has no phase.install.host cell", f)
 		}
 		if fd.UninstallTemplate == "" {

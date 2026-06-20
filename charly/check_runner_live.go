@@ -1,9 +1,9 @@
 package main
 
 // check_runner_live.go — score a plan's check:/agent-check: steps against the
-// live deployments they target via the step's loader-derived Op.venue field.
+// live deployments they target via the step's loader-derived Op.Venue field.
 //
-// Each scored step carries an Op.venue (stamped from its bundle-tree position
+// Each scored step carries an Op.Venue (stamped from its bundle-tree position
 // by flattenBundleVenues) naming the container its probe runs against. The
 // scorer groups steps by venue, runs each group against
 // `charly-<venue>` (or a dotted deploy chain), and classifies pass/fail. run:
@@ -69,7 +69,7 @@ func RunCheckLive(ctx context.Context, deployment, scoreName string, plan []Step
 
 	// Defensive pod check on scored steps (validator catches earlier).
 	for _, e := range entries {
-		if isScored(e.step) && e.step.venue == "" {
+		if isScored(e.step) && e.step.Venue == "" {
 			return nil, fmt.Errorf("scored step %q has empty venue (no tree position resolved) — refusing to score", e.id)
 		}
 	}
@@ -97,7 +97,7 @@ func RunCheckLive(ctx context.Context, deployment, scoreName string, plan []Step
 		}
 		out.Step = append(out.Step, StepScore{
 			ID:            e.id,
-			Origin:        "pod:" + e.step.venue,
+			Origin:        "pod:" + e.step.Venue,
 			Text:          e.step.KeywordText(),
 			Tag:           EffectiveTags(e.step.Tag),
 			Status:        "fail",
@@ -117,7 +117,7 @@ func RunCheckLive(ctx context.Context, deployment, scoreName string, plan []Step
 // recording them in verdictByID. Split out of RunCheckLive, which keeps the
 // outer pod-grouping loop.
 func scoreOnePodBucket(ctx context.Context, bucket []scoredStep, deployRoots map[string]BundleNode, opts RunScoringOpts, out *CheckRunResults, verdictByID map[string]string) {
-	pod := bucket[0].step.venue
+	pod := bucket[0].step.Venue
 
 	var ephemeralCleanup func(bool)
 	if pod != "" && isEphemeralDeploy(deployRoots, pod) {
@@ -317,15 +317,15 @@ func groupScoredByPod(sorted []scoredStep) [][]scoredStep {
 	}
 	var buckets [][]scoredStep
 	cur := []scoredStep{sorted[0]}
-	curPod := sorted[0].step.venue
+	curPod := sorted[0].step.Venue
 	for _, e := range sorted[1:] {
-		if e.step.venue == curPod {
+		if e.step.Venue == curPod {
 			cur = append(cur, e)
 			continue
 		}
 		buckets = append(buckets, cur)
 		cur = []scoredStep{e}
-		curPod = e.step.venue
+		curPod = e.step.Venue
 	}
 	buckets = append(buckets, cur)
 	return buckets
@@ -384,7 +384,7 @@ func synthesizeScoreBaseline(scoreName string, plan []Step) ([]StepScore, map[st
 		id := EffectiveStepID(&s, scoredPlanOrigin, i)
 		out = append(out, StepScore{
 			ID:      id,
-			Origin:  "pod:" + s.venue,
+			Origin:  "pod:" + s.Venue,
 			Text:    s.KeywordText(),
 			Tag:     EffectiveTags(s.Tag),
 			Keyword: string(keywordOf(&s)),

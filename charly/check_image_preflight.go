@@ -19,7 +19,7 @@ import (
 )
 
 // ensureScoreImages collects every image identifier the iterate plan's
-// scored steps may spawn (per-step Op.venue values, loader-derived from tree
+// scored steps may spawn (per-step Op.Venue values, loader-derived from tree
 // position), deduplicates, and ensures each is present via the canonical
 // EnsureImagePresent helper. Idempotent. A dotted venue (a nested child) names
 // no directly-pullable image and is skipped; an agent-provisioned venue is an
@@ -36,14 +36,14 @@ func ensureScoreImages(ctx context.Context, plan []Step, uf *UnifiedFile, projec
 	for _, s := range plan {
 		// Skip empty + dotted venues (nested children resolve through the
 		// agent-deployed tree, not a pullable image).
-		if s.venue == "" || strings.Contains(s.venue, ".") {
+		if s.Venue == "" || strings.Contains(s.Venue, ".") {
 			continue
 		}
 		// Skip agent-provisioned venues — the AI builds those images in-run.
-		if venueIsAgentProvisioned(uf, s.venue) {
+		if venueIsAgentProvisioned(uf, s.Venue) {
 			continue
 		}
-		want[s.venue] = struct{}{}
+		want[s.Venue] = struct{}{}
 	}
 	if len(want) == 0 {
 		return nil

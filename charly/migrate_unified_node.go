@@ -286,7 +286,7 @@ func explodeFields(name string, body, value, content *yaml.Node, used, skip map[
 			// dropped (name → node key; target/nested/peer handled elsewhere)
 		case k.Value == "plan":
 			appendStepChildren(name, v, content, used)
-		case nodeDataKeys[k.Value]:
+		case dataKeySet[k.Value]:
 			child := &yaml.Node{Kind: yaml.MappingNode, Content: []*yaml.Node{k, v}}
 			content.Content = append(content.Content, scalarNode(uniqueChildName(used, name+"-"+k.Value)), child)
 		default:

@@ -261,8 +261,8 @@ const (
 	// this is the generous never-hang backstop, not a mid-pass guillotine.
 	readinessPerAttemptHeavyFallback = 15 * time.Minute
 	readinessNoProgressFallback      = 90 * time.Second
-	readinessAbsoluteCapFallback    = 30 * time.Minute
-	readinessStopGraceFallback      = 180 * time.Second
+	readinessAbsoluteCapFallback     = 30 * time.Minute
+	readinessStopGraceFallback       = 180 * time.Second
 )
 
 func (rr ResolvedReadiness) interval(class PollClass) time.Duration {

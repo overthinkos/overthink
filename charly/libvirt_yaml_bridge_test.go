@@ -14,7 +14,6 @@ import (
 	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v3"
 )
 
 func TestRenderDomainXML_Skeleton(t *testing.T) {
@@ -80,7 +79,7 @@ devices:
     model: virtio
 `
 	var lv LibvirtDomain
-	if err := yaml.Unmarshal([]byte(yamlStr), &lv); err != nil {
+	if err := decodeViaCUEForTest(t, yamlStr, &lv); err != nil {
 		t.Fatalf("yaml unmarshal: %v", err)
 	}
 	spec := &VmSpec{
@@ -329,7 +328,7 @@ devices:
       target: workspace
 `
 	var lv LibvirtDomain
-	if err := yaml.Unmarshal([]byte(yamlStr), &lv); err != nil {
+	if err := decodeViaCUEForTest(t, yamlStr, &lv); err != nil {
 		t.Fatalf("yaml unmarshal: %v", err)
 	}
 	spec := &VmSpec{Firmware: "bios", Libvirt: &lv}
@@ -369,7 +368,7 @@ devices:
       target: data
 `
 	var lv LibvirtDomain
-	if err := yaml.Unmarshal([]byte(yamlStr), &lv); err != nil {
+	if err := decodeViaCUEForTest(t, yamlStr, &lv); err != nil {
 		t.Fatalf("yaml unmarshal: %v", err)
 	}
 	spec := &VmSpec{Firmware: "bios", Libvirt: &lv}
@@ -400,7 +399,7 @@ devices:
       name: org.qemu.guest_agent.0
 `
 	var lv LibvirtDomain
-	if err := yaml.Unmarshal([]byte(yamlStr), &lv); err != nil {
+	if err := decodeViaCUEForTest(t, yamlStr, &lv); err != nil {
 		t.Fatalf("yaml unmarshal: %v", err)
 	}
 	spec := &VmSpec{Firmware: "bios", Libvirt: &lv}
@@ -423,14 +422,14 @@ devices:
 // VmSpec.Autostart (the field VmCreateCmd reads to set the libvirt flag).
 func TestVmSpecAutostartYAMLRoundTrip(t *testing.T) {
 	var on VmSpec
-	if err := yaml.Unmarshal([]byte("autostart: true\nbackend: libvirt\n"), &on); err != nil {
+	if err := decodeViaCUEForTest(t, "autostart: true\nbackend: libvirt\n", &on); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if !on.Autostart {
 		t.Error("autostart: true did not parse into VmSpec.Autostart")
 	}
 	var off VmSpec
-	if err := yaml.Unmarshal([]byte("backend: libvirt\n"), &off); err != nil {
+	if err := decodeViaCUEForTest(t, "backend: libvirt\n", &off); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if off.Autostart {

@@ -43,7 +43,7 @@ func TestRunner_PerProbeNeverHang(t *testing.T) {
 	r.ProbeTimeout = 100 * time.Millisecond // a tight per-probe bound for the test
 
 	checks := []Op{
-		{Command: "WEDGEPROBE check"},                  // wedges → must be cancelled at ProbeTimeout
+		{Command: "WEDGEPROBE check"},                      // wedges → must be cancelled at ProbeTimeout
 		{Command: "echo healthy", Stdout: matcherEq("ok")}, // must still run after the wedge
 	}
 
@@ -129,19 +129,19 @@ func TestResolvedReadiness_PerAttemptHeavyForPollHeavy(t *testing.T) {
 func TestReadinessConfig_PerAttemptHeavyOrdering(t *testing.T) {
 	t.Run("valid passes", func(t *testing.T) {
 		rc := &ReadinessConfig{PerAttempt: "120s", PerAttemptHeavy: "15m", AbsoluteCap: "30m"}
-		if _, err := rc.Resolve(); err != nil {
+		if _, err := readinessResolve(rc); err != nil {
 			t.Fatalf("valid config rejected: %v", err)
 		}
 	})
 	t.Run("heavy < per_attempt rejected", func(t *testing.T) {
 		rc := &ReadinessConfig{PerAttempt: "120s", PerAttemptHeavy: "60s"}
-		if _, err := rc.Resolve(); err == nil {
+		if _, err := readinessResolve(rc); err == nil {
 			t.Fatal("expected error: per_attempt_heavy < per_attempt")
 		}
 	})
 	t.Run("heavy > absolute_cap rejected", func(t *testing.T) {
 		rc := &ReadinessConfig{PerAttemptHeavy: "40m", AbsoluteCap: "30m"}
-		if _, err := rc.Resolve(); err == nil {
+		if _, err := readinessResolve(rc); err == nil {
 			t.Fatal("expected error: per_attempt_heavy > absolute_cap")
 		}
 	})

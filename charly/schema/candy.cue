@@ -24,33 +24,43 @@
 	// --- composition ---
 	candy?: [...#CandyRef]
 	require?: [...#CandyRef]
-	requires_capability?: [...(string & !="")]
-	capability?: #CandyCapability
+	requires_capability?: [...(string & !="")] @go(RequiresCapability)
+	capability?: #CandyCapability @go(Capability,optional=nillable)
 
 	// --- runtime env / local vars / PATH ---
 	// env forbids PATH (validate.go: use path_append instead). Values are
-	// Go-coerced scalars (#StrVal) — an unquoted `PORT: 8080` is a string.
-	env?: {PATH?: _|_, [string]: #StrVal}
-	var?: {[=~"^[A-Z_][A-Z0-9_]*$"]: #StrVal}
-	path_append?: [...(string & !="")]
+	// Go-coerced scalars (#StrVal) — an unquoted `PORT: 8080` is a string. The Go
+	// field is map[string]string (yaml.v3 coerces the scalar), so pin the shape
+	// (gengotypes degrades the #StrVal value to `any`).
+	env?: {PATH?: _|_, [string]: #StrVal} @go(Env,type=map[string]string)
+	// var: Go field is `Vars map[string]string`; gengotypes degrades the
+	// pattern-keyed map to an empty struct, so pin name + shape.
+	var?: {[=~"^[A-Z_][A-Z0-9_]*$"]: #StrVal} @go(Vars,type=map[string]string)
+	path_append?: [...(string & !="")] @go(PathAppend)
 
 	// --- package surface (Calamares-aligned) ---
 	package?: [...#PackageItem]
-	distro?: {[string]: #DistroPackages}
-	apk?: [...#CandyApk]
+	distro?: {[string]: #DistroPackages} @go(Distro,type=map[string]*DistroPackages)
+	apk?: [...#CandyApk] @go(Apk,type=[]ApkPackageSpec)
 	// localpkg maps a native package FORMAT to a bundled source dir; a scalar
 	// form is rejected by Go. Closed to the three known formats.
+	// localpkg Go field is `LocalPkg map[string]string` (a per-format → source-dir
+	// map); pin name + shape (gengotypes would emit an inline struct named
+	// `Localpkg`).
 	localpkg?: {
 		pac?: string & !=""
 		rpm?: string & !=""
 		deb?: string & !=""
-	}
+	} @go(LocalPkg,type=map[string]string)
 
 	// --- networking / routing ---
-	// PortSpec: a plain int OR a "proto:port" string (proto ∈ http/https/tcp/…).
-	port?: [...(int & >0 & <=65535 | string & =~"^[a-z+-]+:[0-9]+$")]
-	port_relay?: [...(int & >0 & <=65535)]
-	route?: #CandyRoute
+	// PortSpec: a plain int OR a "proto:port" string (proto ∈ http/https/tcp/…);
+	// the Go normalizer canonicalizes either form to the {port, protocol}
+	// PortSpec struct, so the Go field is []PortSpec (gengotypes degrades the
+	// scalar|string disjunction element to `any`).
+	port?: [...(int & >0 & <=65535 | string & =~"^[a-z+-]+:[0-9]+$")] @go(Port,type=[]PortSpec)
+	port_relay?: [...(int & >0 & <=65535)] @go(PortRelay,type=[]int)
+	route?: #CandyRoute @go(Route,optional=nillable)
 
 	// --- services / volumes / aliases / extract / data ---
 	service?: [...#CandyService]
@@ -60,23 +70,30 @@
 	data?: [...#CandyData]
 
 	// --- security / libvirt / hooks ---
-	security?: #Security
+	security?: #Security @go(Security,optional=nillable)
 	libvirt?: [...(string & !="")]
-	hook?: #CandyHook
+	hook?: #CandyHook @go(Hook,optional=nillable)
 
 	// --- env/secret/mcp dependency + provides surface ---
-	env_provide?: #StrMap
-	env_require?: [...#CandyEnvDep]
-	env_accept?: [...#CandyEnvDep]
-	secret_accept?: [...#CandySecretDep]
-	secret_require?: [...#CandySecretDep]
-	mcp_provide?: [...#CandyMCPProvide]
-	mcp_require?: [...#CandyMCPDep]
-	mcp_accept?: [...#CandyMCPDep]
-	secret?: [...#CandySecret]
+	// All six env/secret/mcp dependency lists decode into the ONE Go type
+	// []EnvDependency (pinned via @go(...,type=[]EnvDependency)); the per-context
+	// CUE refinements (env-var name regex; the charly/ secret-key prefix) only
+	// TIGHTEN validation — they don't change the emitted Go type (an inline
+	// `#EnvDependency & {…}` would otherwise make gengotypes emit an anonymous
+	// struct). mcp_* keep the base shape (an MCP server name is not env-var-
+	// constrained).
+	env_provide?: #StrMap @go(EnvProvides)
+	env_require?: [...(#EnvDependency & {name: string & =~"^[A-Za-z_][A-Za-z0-9_]*$"})] @go(EnvRequire,type=[]EnvDependency)
+	env_accept?: [...(#EnvDependency & {name: string & =~"^[A-Za-z_][A-Za-z0-9_]*$"})] @go(EnvAccept,type=[]EnvDependency)
+	secret_accept?: [...(#EnvDependency & {name: string & =~"^[A-Za-z_][A-Za-z0-9_]*$", key?: string & =~"^charly/[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9_-]*$"})] @go(SecretAccept,type=[]EnvDependency)
+	secret_require?: [...(#EnvDependency & {name: string & =~"^[A-Za-z_][A-Za-z0-9_]*$", key?: string & =~"^charly/[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9_-]*$"})] @go(SecretRequire,type=[]EnvDependency)
+	mcp_provide?: [...#CandyMCPProvide] @go(MCPProvide)
+	mcp_require?: [...#EnvDependency] @go(MCPRequire)
+	mcp_accept?: [...#EnvDependency] @go(MCPAccept)
+	secret?: [...#CandySecret] @go(SecretYAML)
 
 	// --- shell init (same shape as box shell) ---
-	shell?: #Shell
+	shell?: #Shell @go(Shell,optional=nillable)
 
 	// --- operator-facing artifacts ---
 	artifact?: [...#CandyArtifact]
@@ -90,29 +107,29 @@
 // rule (mixed-entry polymorphism allows the SAME name twice: one packaged form,
 // one exec form) — neither is required at the CUE layer.
 #CandyService: {
-	name:          string & !=""
-	use_packaged?: string & !=""
-	exec?:         string & !=""
-	env?: #StrMap
+	name:               string & !=""
+	use_packaged?:      string & !="" @go(UsePackaged)
+	exec?:              string & !=""
+	env?:               #StrMap
 	restart?:           "no" | "on-failure" | "always" | "unless-stopped"
-	working_directory?: string & !=""
+	working_directory?: string & !="" @go(WorkingDirectory)
 	user?:              string & !=""
 	after?: [...(string & !="")]
 	before?: [...(string & !="")]
-	wanted_by?: [...(string & !="")]
-	stdout?:       string & !="" // "journal" | "none" | "file:<path>"
-	stop_timeout?: (string & !="") | int // "20s" or an unquoted 20 (Go-coerced)
+	wanted_by?: [...(string & !="")] @go(WantedBy)
+	stdout?:       string & !=""         // "journal" | "none" | "file:<path>"
+	stop_timeout?: (string & !="") | int @go(StopTimeout,type=string) // "20s" or an unquoted 20 (Go-coerced; Go field is string)
 	scope?:        "system" | "user"
 	enable?:       bool
-	overrides?:    #CandyServiceOverrides
+	overrides?:    #CandyServiceOverrides @go(Overrides,optional=nillable)
 	kind?:         "program" | "eventlistener"
-	event?:        string & !=""
-	auto_start?:   bool
-	start_retry?:  int & >=0
-	start_sec?:    int & >=0
-	stop_signal?:  string & !=""
-	exit_code?:    string & !=""
-	priority?:     int
+	event?:        string & !="" @go(Events)
+	auto_start?:   bool          @go(AutoStart,type=*bool)
+	start_retry?:  int & >=0     @go(StartRetries,type=int)
+	start_sec?:    int & >=0     @go(StartSecs,type=int)
+	stop_signal?:  string & !="" @go(StopSignal)
+	exit_code?:    string & !="" @go(ExitCode)
+	priority?:     int           @go(,type=int)
 }
 #CandyServiceOverrides: {
 	env?: #StrMap
@@ -150,32 +167,28 @@
 	dest?:  string & !=""
 }
 
-// EnvDependency for env_require/env_accept — name must be a valid env var name
-// (isValidEnvVarName), description is mandatory (validate.go).
-#CandyEnvDep: {
-	name:        string & =~"^[A-Za-z_][A-Za-z0-9_]*$"
-	description: string & !=""
-	default?:    string
-}
-
-// EnvDependency for secret_accept/secret_require — adds the optional credential
-// store key override, which must be "<service>/<key>" under the charly/ prefix.
-#CandySecretDep: {
-	#CandyEnvDep
-	key?: string & =~"^charly/[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9_-]*$"
-}
-
-// EnvDependency for mcp_require/mcp_accept — the name is an MCP server name
-// (lowercase-hyphen, NOT env-var-constrained); description mandatory.
-#CandyMCPDep: {
+// EnvDependency (layers.go) — ONE Go type reused for env_require/env_accept,
+// secret_accept/secret_require, AND mcp_require/mcp_accept. The hand struct is a
+// single SUPERSET {name, description, default, key}; the three former CUE defs
+// (#CandyEnvDep/#CandySecretDep/#CandyMCPDep) were distinct only in their
+// per-context name regex (env-var name vs mcp-server name) and the secret-only
+// `key` override — all of which Go validate.go enforces. gengotypes cannot emit
+// THREE shapes for ONE Go type, and a faithful drop-in for []EnvDependency
+// requires every usage to carry all four fields (mcp_require's former 2-field
+// def is missing default/key), so the three collapse to ONE shared
+// #EnvDependency (R3 — one shared abstraction; per-context strictness stays in
+// Go).
+#EnvDependency: {
 	name:        string & !=""
 	description: string & !=""
+	default?:    string
+	key?:        string & !=""
 }
 
 // MCPServerYAML — mcp_provide entry exposed to peer containers.
 #CandyMCPProvide: {
 	name:       string & !=""
-	url:        string & !=""
+	url:        string & !="" @go(URL)
 	transport?: *"http" | "sse"
 }
 
@@ -188,18 +201,18 @@
 
 // HooksConfig — lifecycle hook scripts.
 #CandyHook: {
-	post_enable?: string & !=""
-	pre_remove?:  string & !=""
+	post_enable?: string & !="" @go(PostEnable)
+	pre_remove?:  string & !="" @go(PreRemove)
 }
 
 // CandyArtifact — a file the candy publishes back to the operator post-setup.
 #CandyArtifact: {
-	name:        string & !=""
-	path:        string & !=""
-	retrieve_to: string & !=""
-	mode?:       string & =~"^0[0-7]{3,4}$"
-	optional?:   bool
-	wait_second?: int & >=0
+	name:         string & !=""
+	path:         string & !=""
+	retrieve_to:  string & !="" @go(RetrieveTo)
+	mode?:        string & =~"^0[0-7]{3,4}$"
+	optional?:    bool
+	wait_second?: int & >=0 @go(WaitSeconds,type=int)
 	rewrite?: [...#CandyArtifactRewrite]
 }
 #CandyArtifactRewrite: {
@@ -210,26 +223,26 @@
 // CandyCapabilities — image-level facts a candy contributes (aggregated at
 // resolve time). oci_label is a genuine open string→string passthrough.
 #CandyCapability: {
-	preserve_user?:         bool
-	needs_root_after_init?: bool
-	init_system_hint?:      string & !=""
-	data_only?:             bool
-	oci_label?: {[string]: string}
+	preserve_user?:         bool          @go(PreserveUser)
+	needs_root_after_init?: bool          @go(NeedsRootAfterInit)
+	init_system_hint?:      string & !="" @go(InitSystemHint)
+	data_only?:             bool          @go(DataOnly)
+	oci_label?: {[string]: string} @go(OCILabels)
 }
 
 // ApkPackageSpec — one Android app install. package (apkeep by id) XOR apk
 // (committed local APK path) — exactly one.
 #CandyApk: {
-	package?:     string & !=""
-	apk?:         string & !=""
-	source?:      *"apk-pure" | "google-play" | "f-droid" | "huawei-app-gallery"
-	arch?:        string & !=""
-	app_version?: string & !=""
-	// exactly one of package/apk (disjunction keeps it CLOSED; matchN would open it).
-} & ({package!: _, apk?: _|_} | {apk!: _, package?: _|_})
+									package?:     string & !=""
+									apk?:         string & !=""
+									source?:      *"apk-pure" | "google-play" | "f-droid" | "huawei-app-gallery"
+									arch?:        string & !=""
+									app_version?: string & !=""
+									// exactly one of package/apk (disjunction keeps it CLOSED; matchN would open it).
+} & ({package!: _, apk?: _|_} | {apk!: _, package?: _|_}) @go(-) // gengotypes: hand ApkPackageSpec (spec/union_types.go)
 
 // RouteYAML — generic service-route metadata (traefik / tunnel).
 #CandyRoute: {
 	host: string & !=""
-	port: int & >0 & <=65535
+	port: int & >0 & <=65535 @go(,type=int)
 }

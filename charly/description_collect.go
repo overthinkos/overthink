@@ -25,7 +25,7 @@ func bakeableSteps(plan []Step) []Step {
 		switch {
 		case s.Check != "" || s.AgentCheck != "":
 			out = append(out, s)
-		case s.Run != "" && s.InContext(CtxRuntime):
+		case s.Run != "" && opInContext(&s.Op, CtxRuntime):
 			out = append(out, s)
 		}
 	}

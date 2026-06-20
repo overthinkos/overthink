@@ -378,11 +378,21 @@ func migrationSteps() []MigrationStep {
 		// `<kind>: {name → entity}` map, and `deploy:`/`check:` → `bundle` nodes with
 		// member children). Comment-preserving + idempotent (a node-form doc has no
 		// legacy kind-map key → no-op). TouchesHost false so remote-cache
-		// auto-migration converts fetched repos too. The calver-schema stamp (below)
-		// then raises every file to HEAD so an older `charly` REJECTS node-form.
+		// auto-migration converts fetched repos too. ALSO converts the per-host
+		// deploy overlay (ctx.HostDeployPath, set by host-charly-yml to the runtime
+		// ~/.config/charly/charly.yml) via migrateHostOverlayDoc — its legacy
+		// `deploy:` map would otherwise stay un-converted (HEAD-stamped but
+		// loader-rejected); the host portion self-gates on a non-empty
+		// HostDeployPath so the project-only runner still skips host state. The
+		// calver-schema stamp (below) then raises every file to HEAD so an older
+		// `charly` REJECTS node-form.
 		{mustCalVer("2026.169.0001"), "unified-node", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateUnifiedNode(c.Dir, c.DryRun)
-			return len(w) > 0, err
+			if err != nil {
+				return len(w) > 0, err
+			}
+			hostChanged, herr := migrateHostOverlayDoc(c, migrateUnifiedNodeDoc)
+			return len(w) > 0 || hostChanged, herr
 		}},
 		// step-venue — the 2026-06 venue-from-position cutover. Retires the
 		// step-level venue OVERRIDES (`pod:` per-step container, `on:`
@@ -393,13 +403,23 @@ func migrationSteps() []MigrationStep {
 		// `${PEER_HOST:m}`/`${PEER_ENDPOINT:m:p}` rewrite to the unified
 		// `${HOST:…}`. Runs AFTER unified-node so it operates on node-form.
 		// Comment-preserving + idempotent. TouchesHost false (remote-cache
-		// auto-migration converts fetched repos; the per-host overlay carries no
-		// venue steps). The dotted VM phase's disc is a best-effort `pod`
-		// scaffold — the genuine vm/pod disc is hand-authored in the cutover
-		// (CHANGELOG/). See migrate_step_venue.go.
+		// auto-migration converts fetched repos). ALSO runs the node-form transform
+		// over the per-host overlay (ctx.HostDeployPath) via migrateHostOverlayDoc
+		// for R3 symmetry with unified-node — the overlay carries no venue steps so
+		// this is a no-op there, but the shared call keeps the host overlay on the
+		// SAME node-form pipeline as the project files (and stays correct should a
+		// future overlay ever carry one); the host portion self-gates on a
+		// non-empty HostDeployPath so the project-only runner still skips host
+		// state. The dotted VM phase's disc is a best-effort `pod` scaffold — the
+		// genuine vm/pod disc is hand-authored in the cutover (CHANGELOG/). See
+		// migrate_step_venue.go.
 		{mustCalVer("2026.169.0003"), "step-venue", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateStepVenue(c.Dir, c.DryRun)
-			return len(w) > 0, err
+			if err != nil {
+				return len(w) > 0, err
+			}
+			hostChanged, herr := migrateHostOverlayDoc(c, stepVenueDoc)
+			return len(w) > 0 || hostChanged, herr
 		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up
 		// and every versioned file lands on this CalVer. This is the integer→CalVer

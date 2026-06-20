@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -33,11 +32,13 @@ var namespaceAliasRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 // items, never the canonical layout.
 //
 // Key properties:
-//   - singular kind keys, routed by SHAPE (the top-level kind-key), never by filename;
+//   - name-first node-form documents (`<name>: {<kind>: …}`), routed by SHAPE —
+//     a legacy kind-keyed / root-shape document is hard-rejected at classifyDoc
+//     with a `charly migrate` hint — never by filename;
 //   - import: for composition — a flat root-merge string OR a namespaced child import;
-//   - discover: for recursive directory scan of kind-keyed standalone files;
-//   - every file is read as a multi-document YAML stream so bundles of
-//     kind-keyed entities (`---` separated) work naturally.
+//   - discover: for recursive directory scan of node-form standalone files;
+//   - every file is read as a multi-document YAML stream so concatenated
+//     (`---` separated) node-form documents work naturally.
 // -----------------------------------------------------------------------------
 
 // UnifiedFileName is the canonical root file of the unified format.
@@ -294,138 +295,14 @@ type DeploymentsSection struct {
 }
 
 // -----------------------------------------------------------------------------
-// Kind-keyed single-entity document forms (Part E).
-//
-// A document containing exactly one top-level kind key (`candy:` / `box:` /
-// `deployment:` / `builder:` / `distro:` / `init:`) + a `name:` inside the
-// body is a self-describing standalone entity. Multiple such documents can be
-// concatenated via YAML `---` separators to form a bundle file.
-// -----------------------------------------------------------------------------
-
-type kindKeyedDoc struct {
-	Candy   *CandyDoc   `yaml:"candy,omitempty" json:"candy,omitempty"`
-	Image   *BoxDoc     `yaml:"box,omitempty" json:"box,omitempty"`
-	Deploy  *DeployDoc  `yaml:"deploy,omitempty" json:"deploy,omitempty"`
-	Builder *BuilderDoc `yaml:"builder,omitempty" json:"builder,omitempty"`
-	Distro  *DistroDoc  `yaml:"distro,omitempty" json:"distro,omitempty"`
-	Init    *InitDoc    `yaml:"init,omitempty" json:"init,omitempty"`
-	VM      *VmDoc      `yaml:"vm,omitempty" json:"vm,omitempty"`
-	// Schema v4 first-class target templates.
-	Pod     *PodDoc     `yaml:"pod,omitempty" json:"pod,omitempty"`
-	K8s     *K8sDoc     `yaml:"k8s,omitempty" json:"k8s,omitempty"`
-	Local   *LocalDoc   `yaml:"local,omitempty" json:"local,omitempty"`
-	Android *AndroidDoc `yaml:"android,omitempty" json:"android,omitempty"`
-	// AI-CLI catalog (the iterate-loop graders).
-	Agent *AgentDoc `yaml:"agent,omitempty" json:"agent,omitempty"`
-	// 2026-05 Calamares cutover.
-	Group  *GroupDoc  `yaml:"group,omitempty" json:"group,omitempty"`
-	Target *TargetDoc `yaml:"target,omitempty" json:"target,omitempty"`
-	Module *ModuleDoc `yaml:"module,omitempty" json:"module,omitempty"`
-	// Exclusive host-resource definition (GPU auto-allocation vocabulary).
-	Resource *ResourceDoc `yaml:"resource,omitempty" json:"resource,omitempty"`
-}
-
-// AgentDoc wraps a single AgentConfig with an explicit Name — the kind:agent
-// standalone form. Bundles of `kind: agent` + `name: <name>` documents
-// can be concatenated via YAML --- separators in check.yml.
-type AgentDoc struct {
-	Name        string `yaml:"name" json:"name"`
-	AgentConfig `yaml:",inline"`
-}
-
-// PodDoc wraps a single PodSpec with an explicit Name — the kind:pod
-// standalone form.
-type PodDoc struct {
-	Name    string `yaml:"name" json:"name"`
-	PodSpec `yaml:",inline"`
-}
-
-// K8sDoc wraps a single K8sSpec with an explicit Name — the kind:k8s
-// standalone form.
-type K8sDoc struct {
-	Name    string `yaml:"name" json:"name"`
-	K8sSpec `yaml:",inline"`
-}
-
-// LocalDoc wraps a single LocalSpec with an explicit Name — the kind:host
-// standalone form.
-type LocalDoc struct {
-	Name      string `yaml:"name" json:"name"`
-	LocalSpec `yaml:",inline"`
-}
-
-// AndroidDoc wraps a single AndroidSpec with an explicit Name — the
-// kind:android standalone form (authored in android.yml or inline).
-type AndroidDoc struct {
-	Name        string `yaml:"name" json:"name"`
-	AndroidSpec `yaml:",inline"`
-}
-
-// CandyDoc wraps a CandyYAML body with an explicit Name — the standalone form
-// authored as a standalone candy manifest post-migration.
-type CandyDoc struct {
-	Name      string `yaml:"name" json:"name"`
-	CandyYAML `yaml:",inline"`
-}
-
-// BoxDoc wraps a single BoxConfig with an explicit Name — the standalone
-// form authored as a standalone box doc post-migration.
-type BoxDoc struct {
-	Name      string `yaml:"name" json:"name"`
-	BoxConfig `yaml:",inline"`
-}
-
-// DeployDoc wraps a single BundleNode.
-type DeployDoc struct {
-	Name       string `yaml:"name" json:"name"`
-	BundleNode `yaml:",inline"`
-}
-
-// BuilderDoc wraps a single BuilderDef.
-type BuilderDoc struct {
-	Name       string `yaml:"name" json:"name"`
-	BuilderDef `yaml:",inline"`
-}
-
-// DistroDoc wraps a single DistroDef.
-type DistroDoc struct {
-	Name      string `yaml:"name" json:"name"`
-	DistroDef `yaml:",inline"`
-}
-
-// InitDoc wraps a single InitDef.
-type InitDoc struct {
-	Name    string `yaml:"name" json:"name"`
-	InitDef `yaml:",inline"`
-}
-
-// VmDoc wraps a single VmSpec with an explicit name. The standalone
-// form is authored as a top-level `kind: vm` + `name: <name>` document
-// (often as a paired entry in the same file as a kind:box entry for
-// bootc images — see migrate vm-spec).
-type VmDoc struct {
-	Name        string `yaml:"name" json:"name"`
-	Version     string `yaml:"version,omitempty" json:"version,omitempty"`
-	Description string `yaml:"description,omitempty" json:"description,omitempty"` // plain-string self-description; first line = summary
-	Spec        VmSpec `yaml:"spec" json:"spec"`
-}
-
-// -----------------------------------------------------------------------------
 // Entity kind table — drives scanner + router + merge path.
 // -----------------------------------------------------------------------------
 
-// kindKeys is the schema's kind vocabulary — the top-level keys that mark a
-// document as kind-keyed (vs root-shape). It exists ONLY for shape
-// classification (kindKeysSet). Files are generic kind-containers routed by
-// shape; there is no per-kind filename — discovery + every per-kind filename
-// are configured in charly.yml, never baked into the code.
-var kindKeys = []string{
-	"candy", "box", "deploy", "builder", "distro", "init",
-	"pod", "vm", "k8s", "local", "android",
-	"agent",
-	"group", "target", "module",
-	"resource",
-}
+// The kind vocabulary for shape classification is the CUE-derived kindWordSet
+// (reserved_registry.go); the former hand kindKeys/kindKeysSet lists were deleted
+// in the CUE-single-source cutover. Files are generic kind-containers routed by
+// shape; there is no per-kind filename — discovery + every per-kind filename are
+// configured in charly.yml, never baked into the code.
 
 // -----------------------------------------------------------------------------
 // Loader entry point.
@@ -873,6 +750,9 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	if err := validateCheckBeds(merged); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
+	if err := validateAndroidDevices(merged); err != nil {
+		return nil, true, fmt.Errorf("%s: %w", root, err)
+	}
 	if err := validateMembers(merged); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
@@ -1055,9 +935,9 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 	}
 
 	// Parse + merge every document in the file via the SHARED routing core
-	// (mergeUnifiedDocs → classifyDoc → mergeUnified/mergeKindDoc). The SAME
-	// mergeUnifiedDocs parses the data compiled from the binary-embedded
-	// charly.yml (embeddedDefaults, embed_defaults.go), so the
+	// (mergeUnifiedDocs → classifyDoc → #NodeDoc gate → normalizeNodeInto →
+	// mergeUnified). The SAME mergeUnifiedDocs parses the data compiled from the
+	// binary-embedded charly.yml (embeddedDefaults, embed_defaults.go), so the
 	// default config flows through EXACTLY the same code path as any project
 	// charly.yml. Imports are returned for resolution below.
 	importQueue, err := mergeUnifiedDocs(merged, data, abs, filepath.Dir(abs))
@@ -1121,13 +1001,14 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 
 // mergeUnifiedDocs parses `data` as a multi-document YAML stream and merges
 // every document into `merged` via the shared routing core — classifyDoc to
-// determine each doc's shape, then mergeUnified (root-shape) or mergeKindDoc
-// (kind-keyed). srcLabel labels diagnostics; srcDir anchors relative discover
-// paths. Returns the concatenated `import:` queue of every root-shape doc (the
-// caller resolves imports). This is the SINGLE document-interpretation path:
-// both loadUnifiedInto (an on-disk charly.yml) and embeddedDefaults (the data
-// compiled from the binary-embedded charly.yml) call it, so the embedded default
-// is parsed EXACTLY like every other charly.yml.
+// determine each doc's shape (a legacy kind-keyed / root-shape doc is hard
+// rejected), the #NodeDoc validate-before-execute gate, then normalizeNodeInto
+// + mergeUnified for the node-form entities. srcLabel labels diagnostics; srcDir
+// anchors relative discover paths. Returns the concatenated `import:` queue of
+// every doc (the caller resolves imports). This is the SINGLE document-
+// interpretation path: both loadUnifiedInto (an on-disk charly.yml) and
+// embeddedDefaults (the data compiled from the binary-embedded charly.yml) call
+// it, so the embedded default is parsed EXACTLY like every other charly.yml.
 func mergeUnifiedDocs(merged *UnifiedFile, data []byte, srcLabel, srcDir string) (ImportList, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	docIdx := 0
@@ -1144,9 +1025,6 @@ func mergeUnifiedDocs(merged *UnifiedFile, data []byte, srcLabel, srcDir string)
 		if err != nil {
 			return nil, fmt.Errorf("%s:doc%d: %w", srcLabel, docIdx, err)
 		}
-		// Surface key misalignments (silently-dropped unknown keys) as
-		// non-fatal warnings before the lenient decode below.
-		warnUnknownYAMLKeys(&node, shape, fmt.Sprintf("%s:doc%d", srcLabel, docIdx))
 		switch shape {
 		case docShapeNode:
 			label := fmt.Sprintf("%s:doc%d", srcLabel, docIdx)
@@ -1293,87 +1171,35 @@ type docShape int
 
 const (
 	docShapeEmpty docShape = iota
-	docShapeRoot
-	docShapeKind
 	// docShapeNode — the unified name-first node-form: reserved document
 	// directives (version/import/discover/defaults/repo/provides) plus a flat
 	// map of arbitrary-name entity nodes (each `<name>: {<discriminator>: …}`),
-	// and NO top-level kind-map key. The one forward model; the legacy
-	// root/kind shapes are deleted once every config is migrated.
+	// and NO top-level kind-map key. The ONE authoring surface; a legacy
+	// kind-keyed / root-shape document is hard-rejected at classifyDoc.
 	docShapeNode
 )
 
-// docDirectiveKeys are the reserved DOCUMENT directives (present in both the
-// legacy root shape and node-form); they configure the document, not entities.
-var docDirectiveKeys = map[string]bool{
-	"version": true, "repo": true, "import": true, "discover": true,
-	"defaults": true, "provides": true,
-}
-
-// rootShapeKeys are the top-level keys that mark a doc as root-shaped.
-// Schema v4 uses singular keys uniformly: box/pod/vm/k8s/host/deployment.
-// Plural spellings (images:/vms:) are legacy; classifyDoc rejects them
-// with a migration hint.
-var rootShapeKeys = map[string]bool{
-	"version": true, "repo": true, "import": true, "discover": true, "defaults": true,
-	"provides": true,
-	// Field-singular cutover (2026-05): plurals collapsed.
-	"distro": true, "builder": true, "init": true,
-	"candy": true,
-	"box":   true, "pod": true, "vm": true, "k8s": true, "local": true,
-	"android": true,
-	"deploy":  true,
-	// The AI-CLI catalog `agent:` is a root-shape collection-map key (in
-	// addition to a valid kind-keyed form). Mirrors how box/pod/vm work.
-	"agent": true,
-	// kind:check disposable R10 beds — root-shape collection map
-	// (bed-name → BundleNode) authored in check.yml. The nested `check:`
-	// PROBE-LIST field never appears as a top-level document key, so this
-	// only ever matches the bed collection.
-	"check": true,
-	// Calamares-aligned kinds.
-	"group": true, "target": true, "module": true,
-	// Exclusive host-resource vocabulary (token -> hardware selector) driving
-	// GPU auto-allocation. Build-vocab VALUE map, like distro:; the embedded
-	// default set lives in the binary-embedded charly.yml.
-	"resource": true,
-	// Sidecar-container template library (sidecar name -> SidecarDef). A
-	// root-shape collection map like resource:; the embedded default set
-	// (tailscale) lives in the binary-embedded charly.yml.
-	"sidecar": true,
-}
-
-// kindKeysSet mirrors kindKeys for O(1) lookup.
-var kindKeysSet = func() map[string]bool {
-	m := make(map[string]bool, len(kindKeys))
-	for _, k := range kindKeys {
-		m[k] = true
-	}
-	return m
-}()
+// The reserved DOCUMENT directives + the legacy root-shape vocabulary are
+// CUE-derived (docDirectiveSet + rootShapeKeySet in reserved_registry.go); the
+// former hand docDirectiveKeys + rootShapeKeys lists were deleted in the
+// CUE-single-source cutover. rootShapeKeySet = doc directives ∪ every kind word ∪
+// the legacy {deploy, check} collection-map aliases.
 
 // nodeShapedValue reports whether a top-level entry's VALUE is a unified node-form
-// node body — a mapping carrying a reserved discriminator (kind/step/data) and NO
-// legacy `name:` key. It distinguishes a node-form entity (`vm: {vm: …}` — value's
-// sub-key is the discriminator) from a legacy kind-keyed single entity (`candy:
-// {name: …}` — has name) and a legacy root-shape map (`vm: {myvm: …}` — no
-// discriminator sub-key). Used by classifyDoc so a node named after a kind keyword
-// is not mistaken for that kind's legacy collection map.
+// node body — a mapping carrying a reserved kind discriminator (`<name>: {<kind>:
+// …}`). Used by classifyDoc so a node legitimately NAMED after a kind keyword
+// (`k8s: {box: …}` — a box named `k8s`) classifies as node-form rather than that
+// kind's legacy collection map.
 func nodeShapedValue(val *yaml.Node) bool {
 	if val == nil || val.Kind != yaml.MappingNode {
 		return false
 	}
-	hasDisc := false
 	for i := 0; i+1 < len(val.Content); i += 2 {
-		k := val.Content[i].Value
-		if k == "name" {
-			return false // legacy kind-keyed single-entity form
-		}
-		if nodeEntityKinds[k] {
-			hasDisc = true
+		if kindWordSet[val.Content[i].Value] {
+			return true
 		}
 	}
-	return hasDisc
+	return false
 }
 
 // classifyDoc inspects a document's top-level keys and returns its shape. A
@@ -1401,8 +1227,8 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 		return docShapeEmpty, nil
 	}
 
-	hasKind := false
-	hasKindMap := false // a non-directive kind-map key (box/candy/deploy/…) → legacy
+	legacy := false // a top-level kind-word / legacy collection-map key whose value
+	//                 is NOT node-shaped → a legacy (pre-node-form) document
 	var keys []string
 	hasLegacyBenchmarkKey := false
 	hasLegacyIncludeKey := false
@@ -1415,34 +1241,25 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 		if k == "include" {
 			hasLegacyIncludeKey = true
 		}
-		// Schema v4: the target-template kind keys (box/pod/vm/k8s/host/
-		// deployment) overlap with root-shape map keys. Disambiguate by
-		// value inspection — kind-keyed single-entity form has a `name:`
-		// scalar child; root-shape map form has child keys that are names
-		// themselves (no `name:` key at the first level of the value).
 		val := inner.Content[i+1]
 		switch {
-		case docDirectiveKeys[k]:
+		case docDirectiveSet[k]:
 			// reserved document directive (version/import/discover/…) — fine in
 			// node-form (a directives-only doc is a valid node-form document).
 		case nodeShapedValue(val):
-			// The VALUE carries a discriminator (and no legacy `name:`) → a
-			// node-form entity, regardless of the key's NAME. This is what lets a
-			// node legitimately named after a kind (`k8s: {box: …}`) classify as
+			// The VALUE carries a kind discriminator (a `<name>: {<kind>: …}` body)
+			// → a node-form entity, regardless of the key's NAME. This is what lets
+			// a node legitimately named after a kind (`k8s: {box: …}`) classify as
 			// node-form instead of a legacy kind-map.
-		case rootShapeKeys[k] && kindKeysSet[k]:
-			hasKindMap = true
-			if mapHasKey(val, "name") {
-				hasKind = true
-			}
-		case rootShapeKeys[k]:
-			hasKindMap = true
-		case kindKeysSet[k]:
-			hasKindMap = true
-			hasKind = true
+		case rootShapeKeySet[k]:
+			// A top-level KIND word (box/candy/vm/…) or a legacy collection-map
+			// alias (deploy/check) whose value is NOT a node body → a legacy
+			// kind-keyed or root-shape document. The bilingual reader was deleted;
+			// this is hard-rejected below with a `charly migrate` hint.
+			legacy = true
 		default:
 			// arbitrary entity name → a node-form node (parseNode validates the
-			// discriminator); a node-shaped value already matched above.
+			// discriminator; #NodeDoc is the grammar gate).
 		}
 	}
 	// Legacy `benchmark:` root key — predates the 2026-04 harness→check
@@ -1465,7 +1282,7 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 	// Node-form is the ONE authoring surface. A legacy kind-keyed or root-shape
 	// kind-map (box:/candy:/deploy:/vm:/… carrying entities) is a HARD error
 	// pointing at the migration — the bilingual reader was deleted.
-	if hasKindMap || hasKind {
+	if legacy {
 		return 0, fmt.Errorf(
 			"legacy kind-keyed config (top-level keys %v) is no longer accepted — the unified node-form `<name>: {<kind>: …}` is the only authoring surface. Run: charly migrate",
 			keys,
@@ -1503,8 +1320,8 @@ func validateAgentCatalog(u *UnifiedFile) error {
 // -----------------------------------------------------------------------------
 
 // mapHasKey reports whether a yaml mapping node contains a top-level key.
-// Used by classifyDoc to disambiguate kind-keyed (has `name:`) vs
-// root-shape (value is a map of named entries) forms.
+// Used by the raw-yaml node-form migrator (migrate_unified_node.go) to detect a
+// legacy single-entity body's `name:` key while rewriting it.
 func mapHasKey(node *yaml.Node, key string) bool {
 	if node == nil || node.Kind != yaml.MappingNode {
 		return false
@@ -1938,6 +1755,35 @@ func validateCheckBeds(uf *UnifiedFile) error {
 	return nil
 }
 
+// validateAndroidDevices enforces the kind:android device source invariant: a
+// device is EXACTLY ONE of an in-pod emulator (box:) XOR a remote/physical adb
+// endpoint (adb:) — never both, never neither. This is the entity-level XOR the
+// #Android CUE schema formerly expressed via a trailing `& ({box:_} | {adb:_})`
+// disjunction; that was dropped (gengotypes collapses an entity-level disjunction
+// to an empty struct — see schema/android.cue) and the rule moved here. Runs at
+// LOAD time alongside validateCheckBeds, so EVERY command that resolves a device
+// (charly bundle add android:, charly check run, charly box validate, …) sees the
+// same friendly error — the faithful breadth the CUE load-gate had.
+func validateAndroidDevices(uf *UnifiedFile) error {
+	if uf == nil {
+		return nil
+	}
+	for name, spec := range uf.Android {
+		if spec == nil {
+			continue
+		}
+		hasBox := spec.Box != ""
+		hasAdb := spec.Adb != nil
+		switch {
+		case hasBox && hasAdb:
+			return fmt.Errorf("kind:android device %q sets both box: and adb: — a device is EXACTLY ONE of an in-pod emulator (box:) or a remote/physical adb endpoint (adb:)", name)
+		case !hasBox && !hasAdb:
+			return fmt.Errorf("kind:android device %q sets neither box: nor adb: — a device must declare EXACTLY ONE source (box: <kind:box emulator> or adb: {host: …})", name)
+		}
+	}
+	return nil
+}
+
 // validateIterateBed enforces the iterate: benchmark invariants (replaces the
 // former validateScoreNode/validateHarnessSemantics). An iterate bed is exempt
 // from the deterministic R10 bed rules (target/disposable/cross-ref); instead:
@@ -2042,139 +1888,6 @@ func mergeBoxConfig(dst, src *BoxConfig) {
 	}
 }
 
-// mergeKindDoc routes a kind-keyed single-entity document into the correct
-// map on merged. Explicit map entries always win over discovered entries
-// (same rule as the discover scanner), so the check is "register unless
-// already present."
-func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
-	_ = srcDir
-	count := validateKindCount(kd)
-	if count > 1 {
-		return fmt.Errorf("ambiguous kind-keyed document: multiple kind wrappers set")
-	}
-	if count == 0 {
-		return nil
-	}
-	switch {
-	case kd.Candy != nil:
-		return registerKindEntity(&merged.Candy, kd.Candy.Name, "candy", &InlineCandy{CandyYAML: kd.Candy.CandyYAML})
-	case kd.Image != nil:
-		return registerKindEntity(&merged.Box, kd.Image.Name, "box", kd.Image.BoxConfig)
-	case kd.Deploy != nil:
-		return registerKindEntity(&merged.Bundle, kd.Deploy.Name, "deployment", kd.Deploy.BundleNode)
-	case kd.Builder != nil:
-		builder := kd.Builder.BuilderDef
-		return registerKindEntity(&merged.Builder, kd.Builder.Name, "builder", &builder)
-	case kd.Distro != nil:
-		distro := kd.Distro.DistroDef
-		return registerKindEntity(&merged.Distro, kd.Distro.Name, "distro", &distro)
-	case kd.Init != nil:
-		initDef := kd.Init.InitDef
-		return registerKindEntity(&merged.Init, kd.Init.Name, "init", &initDef)
-	case kd.Resource != nil:
-		resDef := kd.Resource.ResourceDef
-		return registerKindEntity(&merged.Resource, kd.Resource.Name, "resource", &resDef)
-	case kd.VM != nil:
-		spec := kd.VM.Spec
-		return registerKindEntity(&merged.VM, kd.VM.Name, "vm", &spec)
-	case kd.Pod != nil:
-		spec := kd.Pod.PodSpec
-		return registerKindEntity(&merged.Pod, kd.Pod.Name, "pod", &spec)
-	case kd.K8s != nil:
-		spec := kd.K8s.K8sSpec
-		return registerKindEntity(&merged.K8s, kd.K8s.Name, "k8s", &spec)
-	case kd.Local != nil:
-		spec := kd.Local.LocalSpec
-		return registerKindEntity(&merged.Local, kd.Local.Name, "host", &spec)
-	case kd.Android != nil:
-		spec := kd.Android.AndroidSpec
-		return registerKindEntity(&merged.Android, kd.Android.Name, "android", &spec)
-	case kd.Agent != nil:
-		spec := kd.Agent.AgentConfig
-		return registerKindEntity(&merged.Agent, kd.Agent.Name, "agent", &spec)
-	case kd.Group != nil:
-		spec := kd.Group.GroupSpec
-		return registerKindEntity(&merged.Group, kd.Group.Name, "group", &spec)
-	case kd.Target != nil:
-		spec := kd.Target.TargetSpec
-		return registerKindEntity(&merged.Target, kd.Target.Name, "target", &spec)
-	case kd.Module != nil:
-		spec := kd.Module.ModuleSpec
-		return registerKindEntity(&merged.Module, kd.Module.Name, "module", &spec)
-	}
-	return nil
-}
-
-// validateKindCount reports how many kind wrappers are set on a single
-// kind-keyed document. A well-formed document sets exactly one; the count
-// drives the ambiguity (>1) and empty-document (0) checks in mergeKindDoc.
-func validateKindCount(kd *kindKeyedDoc) int {
-	count := 0
-	if kd.Candy != nil {
-		count++
-	}
-	if kd.Image != nil {
-		count++
-	}
-	if kd.Deploy != nil {
-		count++
-	}
-	if kd.Builder != nil {
-		count++
-	}
-	if kd.Distro != nil {
-		count++
-	}
-	if kd.Init != nil {
-		count++
-	}
-	if kd.VM != nil {
-		count++
-	}
-	if kd.Pod != nil {
-		count++
-	}
-	if kd.K8s != nil {
-		count++
-	}
-	if kd.Local != nil {
-		count++
-	}
-	if kd.Android != nil {
-		count++
-	}
-	if kd.Agent != nil {
-		count++
-	}
-	if kd.Group != nil {
-		count++
-	}
-	if kd.Target != nil {
-		count++
-	}
-	if kd.Module != nil {
-		count++
-	}
-	return count
-}
-
-// registerKindEntity inserts a single named entity into the destination kind
-// map, applying the uniform rule shared by every kind: a missing name is an
-// error; the map is created lazily; and an entry already present is never
-// overwritten (explicit map entries win over discovered ones).
-func registerKindEntity[T any](dst *map[string]T, name, kind string, value T) error {
-	if name == "" {
-		return fmt.Errorf("%s: missing name", kind)
-	}
-	if *dst == nil {
-		*dst = map[string]T{}
-	}
-	if _, exists := (*dst)[name]; !exists {
-		(*dst)[name] = value
-	}
-	return nil
-}
-
 // -----------------------------------------------------------------------------
 // Discovery scanner (Part D).
 // -----------------------------------------------------------------------------
@@ -2257,12 +1970,14 @@ func findEntityDirs(path, filename string, recursive bool) ([]string, error) {
 }
 
 // applyDiscoveredManifest loads one discovered manifest and routes every
-// document it contains by SHAPE — determined from the document's top-level
-// kind-key WITHOUT parsing the body. A candy-shaped doc registers a lazy
-// `From:` directory reference (scanCandy parses + validates the manifest and
-// resolves the candy's assets relative to its dir); every other shape decodes
-// and merges inline via mergeKindDoc. The conflict rule "explicit entry wins"
-// applies to discovered candies.
+// document it contains by SHAPE through the SAME classifier the main loader uses
+// (classifyDoc): a legacy kind-keyed / root-shape manifest is hard-rejected with
+// a `charly migrate` hint, an empty/directive-only doc is skipped, and a unified
+// node-form doc is validated against #NodeDoc (the sole grammar gate) before its
+// entities are registered. A `candy` node registers a lazy `From:` directory
+// reference (scanCandy parses + validates the manifest and resolves the candy's
+// assets relative to its dir); every other kind normalizes inline. The conflict
+// rule "explicit entry wins" applies to discovered candies.
 func (uf *UnifiedFile) applyDiscoveredManifest(dir, manifest, rootDir string) error {
 	target := filepath.Join(dir, manifest)
 	data, err := os.ReadFile(target)
@@ -2278,124 +1993,54 @@ func (uf *UnifiedFile) applyDiscoveredManifest(dir, manifest, rootDir string) er
 			}
 			return fmt.Errorf("%s: %w", target, err)
 		}
-		// A node-form manifest whose node is NAMED after a kind keyword (e.g. a box
-		// named `k8s`: `k8s: {box: …}`) makes firstKindKey return that kind, which
-		// would mis-route to the legacy kind decode below. classifyDoc inspects the
-		// VALUE shape (a discriminator + no `name:`) and correctly reports node-form,
-		// so force the node-form branch (fkk == "") in that case.
-		fkk := firstKindKey(&node)
-		if shape, cerr := classifyDoc(&node); cerr == nil && shape == docShapeNode {
-			fkk = ""
+		shape, cerr := classifyDoc(&node)
+		if cerr != nil {
+			return fmt.Errorf("%s: %w", target, cerr)
 		}
-		switch fkk {
-		case "":
-			// No top-level kind key → either an empty/directive-only doc OR a
-			// unified node-form manifest (name-first nodes). Parse it: a `candy`
-			// node registers a lazy From ref (scanCandy parses + probes assets,
-			// keyed by dir base as the legacy scanner did); any other kind
-			// normalizes inline.
-			_, nfNodes, perr := parseNodeTree(&node)
-			if perr != nil {
-				// A malformed node-form manifest is a HARD error, never silently
-				// dropped (a swallowed parse error would discover "0 candies").
-				return fmt.Errorf("%s: %w", target, perr)
-			}
-			for _, gn := range nfNodes {
-				if gn.disc == "candy" {
-					name := filepath.Base(dir)
-					if uf.Candy == nil {
-						uf.Candy = map[string]*InlineCandy{}
-					}
-					if _, exists := uf.Candy[name]; exists {
-						continue // explicit entry wins
-					}
-					rel, relErr := filepath.Rel(rootDir, dir)
-					if relErr != nil {
-						rel = dir
-					}
-					uf.Candy[name] = &InlineCandy{From: rel, manifest: manifest}
-					continue
+		if shape == docShapeEmpty {
+			continue // empty / directive-only document — nothing to register
+		}
+		// VALIDATE-BEFORE-EXECUTE: the whole node-form manifest against #NodeDoc
+		// (strict + closed) — the SAME grammar gate mergeUnifiedDocs applies to the
+		// root charly.yml, so #NodeDoc is the sole load-time gate for EVERY loaded
+		// document, discovered manifests included.
+		raw, merr := yaml.Marshal(&node)
+		if merr != nil {
+			return fmt.Errorf("%s: re-marshal node-form doc: %w", target, merr)
+		}
+		if verr := validateNodeDocCUE(target, raw); verr != nil {
+			return verr
+		}
+		_, nfNodes, perr := parseNodeTree(&node)
+		if perr != nil {
+			// A malformed node-form manifest is a HARD error, never silently
+			// dropped (a swallowed parse error would discover "0 candies").
+			return fmt.Errorf("%s: %w", target, perr)
+		}
+		for _, gn := range nfNodes {
+			if gn.disc == "candy" {
+				// Candy: register a lazy directory reference (name = dir base, as
+				// the legacy scanner did). scanCandy does the real parse later.
+				name := filepath.Base(dir)
+				if uf.Candy == nil {
+					uf.Candy = map[string]*InlineCandy{}
 				}
-				if err := normalizeNodeInto(gn, uf); err != nil {
-					return fmt.Errorf("%s: %w", target, err)
+				if _, exists := uf.Candy[name]; exists {
+					continue // explicit entry wins
 				}
+				rel, relErr := filepath.Rel(rootDir, dir)
+				if relErr != nil {
+					rel = dir
+				}
+				uf.Candy[name] = &InlineCandy{From: rel, manifest: manifest}
+				continue
 			}
-			continue // empty / directive-only document — nothing more to register
-		case "candy":
-			// Candy: register a lazy directory reference (name = dir base, as
-			// the legacy scanner did). scanCandy does the real parse later.
-			name := filepath.Base(dir)
-			if uf.Candy == nil {
-				uf.Candy = map[string]*InlineCandy{}
-			}
-			if _, exists := uf.Candy[name]; exists {
-				continue // explicit entry wins
-			}
-			rel, relErr := filepath.Rel(rootDir, dir)
-			if relErr != nil {
-				rel = dir
-			}
-			uf.Candy[name] = &InlineCandy{From: rel, manifest: manifest}
-		default:
-			// Any other kind: decode + merge inline, defaulting an empty entity
-			// name to the discovered directory's base.
-			var kd kindKeyedDoc
-			if err := decodeEntityViaCUE(&node, reflect.TypeOf(kindKeyedDoc{}), &kd, target); err != nil {
-				return err
-			}
-			defaultKindDocName(&kd, filepath.Base(dir))
-			if err := mergeKindDoc(uf, &kd, dir); err != nil {
+			if err := normalizeNodeInto(gn, uf); err != nil {
 				return fmt.Errorf("%s: %w", target, err)
 			}
 		}
 	}
 	return nil
-}
-
-// firstKindKey returns the first top-level kind-key present in a document
-// (candy / box / deploy / …), or "" if none. It inspects keys only — the body
-// is never parsed — so discovery routes by shape without validating content.
-func firstKindKey(node *yaml.Node) string {
-	inner := node
-	if node.Kind == yaml.DocumentNode {
-		if len(node.Content) == 0 {
-			return ""
-		}
-		inner = node.Content[0]
-	}
-	if inner.Kind != yaml.MappingNode {
-		return ""
-	}
-	for i := 0; i+1 < len(inner.Content); i += 2 {
-		if kindKeysSet[inner.Content[i].Value] {
-			return inner.Content[i].Value
-		}
-	}
-	return ""
-}
-
-// defaultKindDocName fills an empty Name on whichever kind a discovered doc
-// carries, defaulting it to the discovered directory's base name (parity with
-// the legacy per-kind discovery scanners).
-func defaultKindDocName(kd *kindKeyedDoc, name string) {
-	switch {
-	case kd.Image != nil && kd.Image.Name == "":
-		kd.Image.Name = name
-	case kd.Deploy != nil && kd.Deploy.Name == "":
-		kd.Deploy.Name = name
-	case kd.Builder != nil && kd.Builder.Name == "":
-		kd.Builder.Name = name
-	case kd.Distro != nil && kd.Distro.Name == "":
-		kd.Distro.Name = name
-	case kd.Init != nil && kd.Init.Name == "":
-		kd.Init.Name = name
-	case kd.Pod != nil && kd.Pod.Name == "":
-		kd.Pod.Name = name
-	case kd.K8s != nil && kd.K8s.Name == "":
-		kd.K8s.Name = name
-	case kd.Local != nil && kd.Local.Name == "":
-		kd.Local.Name = name
-	}
 }
 
 // -----------------------------------------------------------------------------

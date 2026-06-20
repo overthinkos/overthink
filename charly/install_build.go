@@ -399,7 +399,7 @@ func resolveShellSpec(cfg *ShellConfig, shell string) (*ShellSpec, string, []str
 	if cfg == nil {
 		return nil, "", nil, false
 	}
-	if spec, ok := cfg.ByShell[shell]; ok && spec != nil {
+	if spec, ok := cfg.ByShell()[shell]; ok && spec != nil {
 		// Per-shell override. We do NOT substitute ${SHELL_NAME} here —
 		// the override is meant to be shell-specific, so the author wrote
 		// the literal shell syntax already.
@@ -661,7 +661,7 @@ func compileOpSteps(layer *Candy, img *ResolvedBox) []InstallStep {
 		op := &step.Op
 		// A run: step scoped runtime-only (and NOT build/deploy) is handled by
 		// the check Runner live; everything else is the install timeline.
-		if op.InContext(CtxRuntime) && !op.InContext(CtxBuild) && !op.InContext(CtxDeploy) {
+		if opInContext(op, CtxRuntime) && !opInContext(op, CtxBuild) && !opInContext(op, CtxDeploy) {
 			continue
 		}
 		if s := compileActOp(op, layer, img); s != nil {

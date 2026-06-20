@@ -76,11 +76,41 @@ func runDocMigration(dir string, dryRun bool, candidateFiles func(string) []stri
 	return rewritten, nil
 }
 
+// migrateHostOverlayDoc applies a node-form document transform to the per-host
+// deploy overlay at ctx.HostDeployPath, IN ADDITION to the project files a
+// node-form migration step rewrites through runDocMigration. The per-host
+// overlay (~/.config/charly/charly.yml) carries a legacy top-level `deploy:`
+// map that the node-form loader gate (classifyDoc → #NodeDoc) HARD-REJECTS
+// until it is converted to name-first node-form — but the project-dir drivers
+// (runDocMigration over opUnifyCandidateFiles) never reach it. A node-form step
+// that omits this call therefore leaves the overlay un-converted (the trailing
+// calver-schema stamp bumps its `version:` to HEAD yet its body stays a legacy
+// `deploy:` map), and every subsequent `charly` load of that overlay hard-fails
+// with no migrate path to recover it. This shares the EXACT transform the
+// project files receive (R3 — one node-form conversion for project and host)
+// via the single-doc rewriteDocFile driver (which writes a .bak.<unix-ts>
+// before overwrite — extra data safety for the user's live config).
+//
+// Gated on a non-empty ctx.HostDeployPath: the project-only runner
+// (RunProjectMigrations, used by remote-cache auto-migration) leaves
+// HostDeployPath empty, so a remote fetch NEVER mutates the user's per-host
+// state — the SAME self-gate the calver-schema host stamp uses. A node-form
+// step thus keeps TouchesHost=false (its project transform MUST run under the
+// project-only runner so fetched remotes convert too); only this host portion
+// self-gates on HostDeployPath. Returns whether the host overlay changed.
+func migrateHostOverlayDoc(ctx *MigrateContext, transform func(*yaml.Node) bool) (bool, error) {
+	if ctx.HostDeployPath == "" {
+		return false, nil
+	}
+	return rewriteDocFile(ctx.HostDeployPath, ctx.DryRun, transform)
+}
+
 // rewriteDocFile drives a single-document file rewrite: it reads path, decodes
 // ONE YAML document, applies transform, and — when it changed — re-encodes
 // (4-space indent) and writes it back (0644) unless dryRun, after saving a
 // .bak.<unix-ts> copy of the original. A missing/unparseable file is a no-op
-// (false, nil). Shared by the init-candy-keys / recipe-section-values steps.
+// (false, nil). Shared by the init-candy-keys / recipe-section-values steps and
+// the per-host-overlay node-form conversion (migrateHostOverlayDoc).
 func rewriteDocFile(path string, dryRun bool, transform func(*yaml.Node) bool) (bool, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

@@ -15,73 +15,6 @@ type InitConfig struct {
 	Init map[string]*InitDef `yaml:"init" json:"init"`
 }
 
-// InitDef defines an init system (supervisord, systemd, s6, etc.).
-type InitDef struct {
-	// Detection: which candy manifest fields and file patterns trigger this init system
-	CandyFields  []string `yaml:"candy_field,omitempty" json:"candy_field,omitempty"`
-	CandyFiles   []string `yaml:"candy_file,omitempty" json:"candy_file,omitempty"`       // glob patterns (e.g., "*.service")
-	DependsCandy string   `yaml:"depends_candy,omitempty" json:"depends_candy,omitempty"` // candy name required in dependency chain
-	// RequiresCapabilities lists candy-aggregated capability names that
-	// must be present in the image composition for this init system to
-	// be selected. Replaces the previous RequiresBootc boolean — generic
-	// across any candy-contributed capability (preserve_user, data_only,
-	// gpu_required, ...). Empty means "no requirement, always eligible".
-	// Names match the keys used in AggregatedCandyCaps.Provided.
-	RequiresCapability []string `yaml:"requires_capability,omitempty" json:"requires_capability,omitempty"`
-
-	// Build model: "fragment_assembly" or "file_copy"
-	Model string `yaml:"model" json:"model"`
-
-	// Fragment assembly model
-	HeaderFile  string `yaml:"header_file,omitempty" json:"header_file,omitempty"`
-	FragmentDir string `yaml:"fragment_dir,omitempty" json:"fragment_dir,omitempty"` // subdir under .build/<image>/
-	// FragmentTemplate removed — the unified service: schema uses
-	// ServiceSchema.ServiceTemplate, rendered per-entry via RenderService.
-	RelayTemplate string `yaml:"relay_template,omitempty" json:"relay_template,omitempty"`
-
-	// Containerfile stage
-	StageName         string `yaml:"stage_name,omitempty" json:"stage_name,omitempty"`
-	StageHeaderCopy   string `yaml:"stage_header_copy,omitempty" json:"stage_header_copy,omitempty"`
-	StageFragmentCopy string `yaml:"stage_fragment_copy,omitempty" json:"stage_fragment_copy,omitempty"` // Go template
-
-	// Containerfile assembly
-	AssemblyTemplate     string `yaml:"assembly_template,omitempty" json:"assembly_template,omitempty"`
-	SystemEnableTemplate string `yaml:"system_enable_template,omitempty" json:"system_enable_template,omitempty"`
-	PostAssemblyTemplate string `yaml:"post_assembly_template,omitempty" json:"post_assembly_template,omitempty"`
-
-	// Runtime
-	Entrypoint         []string `yaml:"entrypoint,omitempty" json:"entrypoint,omitempty"`
-	FallbackEntrypoint []string `yaml:"fallback_entrypoint,omitempty" json:"fallback_entrypoint,omitempty"`
-
-	// Service management (charly service commands)
-	ManagementTool     string            `yaml:"management_tool,omitempty" json:"management_tool,omitempty"`
-	ManagementCommands map[string]string `yaml:"management_command,omitempty" json:"management_command,omitempty"`
-
-	// OCI label key for service list
-	LabelKey string `yaml:"label_key,omitempty" json:"label_key,omitempty"`
-
-	// ServiceSchema: templates for the unified `services:` schema
-	// introduced in the BuildTarget refactor. Nil on init systems that
-	// only support the legacy `service:` (raw INI) path; populated for
-	// systemd and future init systems that consume the structured spec.
-	ServiceSchema *ServiceSchemaDef `yaml:"service_schema,omitempty" json:"service_schema,omitempty"`
-}
-
-// ServiceSchemaDef carries the templates that turn a ServiceEntry into
-// a native unit for a given init system. Matches the design in the
-// final plan: each init system provides service_template (custom unit
-// body), unit_path_template (where to install it), dropin_template /
-// dropin_path_template (for use_packaged: entries), plus a flag that
-// says whether use_packaged is supported at all (supervisord isn't,
-// since it doesn't consume systemd units).
-type ServiceSchemaDef struct {
-	ServiceTemplate    string `yaml:"service_template,omitempty" json:"service_template,omitempty"`
-	UnitPathTemplate   string `yaml:"unit_path_template,omitempty" json:"unit_path_template,omitempty"`
-	DropinTemplate     string `yaml:"dropin_template,omitempty" json:"dropin_template,omitempty"`
-	DropinPathTemplate string `yaml:"dropin_path_template,omitempty" json:"dropin_path_template,omitempty"`
-	SupportsPackaged   bool   `yaml:"supports_packaged,omitempty" json:"supports_packaged,omitempty"`
-}
-
 // FragmentContext is the template context for fragment_template rendering.
 type FragmentContext struct {
 	Content   string
@@ -295,13 +228,13 @@ func initDefRequirementsMet(def *InitDef, caps *AggregatedCandyCaps) bool {
 }
 
 // HasRelayTemplate returns true if this init definition has a relay template.
-func (def *InitDef) HasRelayTemplate() bool {
+func initHasRelayTemplate(def *InitDef) bool {
 	return def.RelayTemplate != ""
 }
 
 // EntrypointArgs returns the entrypoint command as a string slice.
 // Returns fallback_entrypoint if the init has no entrypoint (e.g., systemd).
-func (def *InitDef) EntrypointArgs() []string {
+func initEntrypointArgs(def *InitDef) []string {
 	if len(def.Entrypoint) > 0 {
 		return def.Entrypoint
 	}
@@ -309,7 +242,7 @@ func (def *InitDef) EntrypointArgs() []string {
 }
 
 // RenderManagementCommand renders a management command template with the given service name.
-func (def *InitDef) RenderManagementCommand(operation, serviceName string) (string, error) {
+func initRenderManagementCommand(def *InitDef, operation, serviceName string) (string, error) {
 	tmplStr, ok := def.ManagementCommands[operation]
 	if !ok {
 		return "", fmt.Errorf("init system %q has no management command for %q", def.ManagementTool, operation)
@@ -336,7 +269,7 @@ func (ic *InitConfig) InitNames() []string {
 }
 
 // RenderStageFragmentCopy renders the stage_fragment_copy template.
-func (def *InitDef) RenderStageFragmentCopy(boxName, fileName string) (string, error) {
+func initRenderStageFragmentCopy(def *InitDef, boxName, fileName string) (string, error) {
 	if def.StageFragmentCopy == "" {
 		return "", nil
 	}
@@ -355,7 +288,7 @@ func (def *InitDef) RenderStageFragmentCopy(boxName, fileName string) (string, e
 // Function deleted; fragment_template field removed from InitDef.
 
 // RenderRelayTemplate renders the relay_template for a port relay.
-func (def *InitDef) RenderRelayTemplate(port int, candyName string, index int) (string, error) {
+func initRenderRelayTemplate(def *InitDef, port int, candyName string, index int) (string, error) {
 	if def.RelayTemplate == "" {
 		return "", fmt.Errorf("init system has no relay_template")
 	}
@@ -375,7 +308,7 @@ func (def *InitDef) RenderRelayTemplate(port int, candyName string, index int) (
 }
 
 // RenderAssemblyTemplate renders the assembly_template.
-func (def *InitDef) RenderAssemblyTemplate() (string, error) {
+func initRenderAssemblyTemplate(def *InitDef) (string, error) {
 	if def.AssemblyTemplate == "" {
 		return "", nil
 	}
@@ -383,7 +316,7 @@ func (def *InitDef) RenderAssemblyTemplate() (string, error) {
 }
 
 // RenderSystemEnableTemplate renders the system_enable_template.
-func (def *InitDef) RenderSystemEnableTemplate(units []string) (string, error) {
+func initRenderSystemEnableTemplate(def *InitDef, units []string) (string, error) {
 	if def.SystemEnableTemplate == "" || len(units) == 0 {
 		return "", nil
 	}
@@ -392,7 +325,7 @@ func (def *InitDef) RenderSystemEnableTemplate(units []string) (string, error) {
 }
 
 // RenderPostAssemblyTemplate renders the post_assembly_template.
-func (def *InitDef) RenderPostAssemblyTemplate() (string, error) {
+func initRenderPostAssemblyTemplate(def *InitDef) (string, error) {
 	if def.PostAssemblyTemplate == "" {
 		return "", nil
 	}

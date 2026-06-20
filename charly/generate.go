@@ -711,7 +711,7 @@ func (g *Generator) emitInitAssembly(b *strings.Builder, candyOrder []string, ac
 		// system_enable_template and post_assembly_template are independent
 		// and still run below.
 		if initHasFragments[initName] {
-			assembly, err := def.RenderAssemblyTemplate()
+			assembly, err := initRenderAssemblyTemplate(def)
 			if err != nil {
 				return fmt.Errorf("rendering assembly for %s: %w", initName, err)
 			}
@@ -737,7 +737,7 @@ func (g *Generator) emitInitAssembly(b *strings.Builder, candyOrder []string, ac
 				}
 			}
 		}
-		sysEnable, err := def.RenderSystemEnableTemplate(systemUnits)
+		sysEnable, err := initRenderSystemEnableTemplate(def, systemUnits)
 		if err != nil {
 			return fmt.Errorf("rendering system enable for %s: %w", initName, err)
 		}
@@ -750,7 +750,7 @@ func (g *Generator) emitInitAssembly(b *strings.Builder, candyOrder []string, ac
 		}
 
 		// Post-assembly step (e.g., bootc container lint)
-		postAssembly, err := def.RenderPostAssemblyTemplate()
+		postAssembly, err := initRenderPostAssemblyTemplate(def)
 		if err != nil {
 			return fmt.Errorf("rendering post-assembly for %s: %w", initName, err)
 		}
@@ -826,7 +826,7 @@ func (g *Generator) emitInitFragmentStages(b *strings.Builder, boxName string, i
 				hasFragments = true
 				break
 			}
-			if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
+			if initHasRelayTemplate(def) && len(layer.PortRelayPorts) > 0 {
 				hasFragments = true
 				break
 			}
@@ -856,17 +856,17 @@ func (g *Generator) emitInitFragmentStages(b *strings.Builder, boxName string, i
 				// Use the SHORT name (not the map key) — a remote candy's key is
 				// a slashed github ref that would create bogus nested dirs.
 				fileName := fmt.Sprintf("%02d-%s.conf", i+1, layer.Name)
-				copyLine, err := def.RenderStageFragmentCopy(boxName, fileName)
+				copyLine, err := initRenderStageFragmentCopy(def, boxName, fileName)
 				if err != nil {
 					return nil, fmt.Errorf("rendering stage fragment copy for %s/%s: %w", initName, candyName, err)
 				}
 				b.WriteString(copyLine + "\n")
 			}
 			// Relay fragments
-			if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
+			if initHasRelayTemplate(def) && len(layer.PortRelayPorts) > 0 {
 				for _, port := range layer.PortRelayPorts {
 					confName := fmt.Sprintf("%02d-relay-%d.conf", i+1, port)
-					copyLine, err := def.RenderStageFragmentCopy(boxName, confName)
+					copyLine, err := initRenderStageFragmentCopy(def, boxName, confName)
 					if err != nil {
 						return nil, fmt.Errorf("rendering relay copy for %s/%s port %d: %w", initName, candyName, port, err)
 					}
@@ -877,7 +877,7 @@ func (g *Generator) emitInitFragmentStages(b *strings.Builder, boxName string, i
 			if def.Model == "file_copy" && len(layer.ServiceFiles()) > 0 {
 				for _, svcPath := range layer.ServiceFiles() {
 					svcName := filepath.Base(svcPath)
-					copyLine, err := def.RenderStageFragmentCopy(boxName, svcName)
+					copyLine, err := initRenderStageFragmentCopy(def, boxName, svcName)
 					if err != nil {
 						return nil, fmt.Errorf("rendering service file copy for %s/%s: %w", initName, candyName, err)
 					}
@@ -1389,9 +1389,9 @@ func (g *Generator) generateInitFragments(boxName, initName string, def *InitDef
 
 		// Port relay fragments (unchanged — use candy position in filename to
 		// match Containerfile's stage_fragment_copy naming).
-		if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
+		if initHasRelayTemplate(def) && len(layer.PortRelayPorts) > 0 {
 			for _, port := range layer.PortRelayPorts {
-				content, err := def.RenderRelayTemplate(port, candyName, idx)
+				content, err := initRenderRelayTemplate(def, port, candyName, idx)
 				if err != nil {
 					return fmt.Errorf("rendering relay for %s/%s port %d: %w", initName, candyName, port, err)
 				}

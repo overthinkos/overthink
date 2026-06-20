@@ -53,11 +53,11 @@ func TestPreemptibleConfig_UnmarshalYAML(t *testing.T) {
 	if got := listForm.PreemptionHolds(); len(got) != 2 || got[0] != "gpu" || got[1] != "tpu" {
 		t.Fatalf("list shorthand holds = %v, want [gpu tpu]", got)
 	}
-	if listForm.Preemptible.EffectiveStop() != PreemptStopShutdown {
-		t.Errorf("default stop = %q, want shutdown", listForm.Preemptible.EffectiveStop())
+	if preemptEffectiveStop(listForm.Preemptible) != PreemptStopShutdown {
+		t.Errorf("default stop = %q, want shutdown", preemptEffectiveStop(listForm.Preemptible))
 	}
-	if listForm.Preemptible.EffectiveRestore() != PreemptRestoreAlways {
-		t.Errorf("default restore = %q, want always", listForm.Preemptible.EffectiveRestore())
+	if preemptEffectiveRestore(listForm.Preemptible) != PreemptRestoreAlways {
+		t.Errorf("default restore = %q, want always", preemptEffectiveRestore(listForm.Preemptible))
 	}
 
 	// Block form.
@@ -66,8 +66,8 @@ func TestPreemptibleConfig_UnmarshalYAML(t *testing.T) {
 	if err := decodeViaCUEForTest(t, blockYAML, &blockForm); err != nil {
 		t.Fatalf("block unmarshal: %v", err)
 	}
-	if blockForm.Preemptible.EffectiveRestore() != PreemptRestoreSuccess {
-		t.Errorf("block restore = %q, want on-success", blockForm.Preemptible.EffectiveRestore())
+	if preemptEffectiveRestore(blockForm.Preemptible) != PreemptRestoreSuccess {
+		t.Errorf("block restore = %q, want on-success", preemptEffectiveRestore(blockForm.Preemptible))
 	}
 
 	// Scalar (e.g. `preemptible: true`) is rejected — a holder must name what

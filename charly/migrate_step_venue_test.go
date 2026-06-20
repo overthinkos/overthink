@@ -129,7 +129,7 @@ func TestMigrateStepVenue_FlatToTree(t *testing.T) {
 	gotVenues := map[string]bool{}
 	for _, name := range []string{"default", "cross"} {
 		for _, s := range uf.Bundle[name].Plan {
-			gotVenues[s.venue] = true
+			gotVenues[s.Venue] = true
 		}
 	}
 	// `chrome` is a child of the WORKLOAD root `cross` (box: web), so its venue is

@@ -3,7 +3,6 @@ package main
 import (
 	"testing"
 
-	"gopkg.in/yaml.v3"
 )
 
 // Note: VmSpec carries no Disposable / Lifecycle fields and
@@ -20,7 +19,7 @@ disposable: true
 lifecycle: dev
 `
 	var c BundleNode
-	if err := yaml.Unmarshal([]byte(yamlStr), &c); err != nil {
+	if err := decodeViaCUEForTest(t, yamlStr, &c); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if !c.IsDisposable() {
@@ -36,7 +35,7 @@ lifecycle: dev
 func TestDeployBoxConfig_LifecycleAloneDoesNotAuthorize(t *testing.T) {
 	yamlStr := `lifecycle: dev`
 	var c BundleNode
-	if err := yaml.Unmarshal([]byte(yamlStr), &c); err != nil {
+	if err := decodeViaCUEForTest(t, yamlStr, &c); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if c.IsDisposable() {
@@ -67,7 +66,7 @@ deploy:
     disposable: true
 `
 	var cfg BundleConfig
-	if err := yaml.Unmarshal([]byte(yamlStr), &cfg); err != nil {
+	if err := decodeViaCUEForTest(t, yamlStr, &cfg); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	tests := []struct {

@@ -8,16 +8,16 @@
 
 // Package formats (BoxConfig.Build / BuildFormats). Named #BuildFormat to avoid
 // colliding with distro.cue's #Format (the package-format definition struct).
-#BuildFormat: "rpm" | "deb" | "pac" | "aur"
+#BuildFormat: "rpm" | "deb" | "pac" | "aur" @go(-)
 
 // Builder build-type slots (BoxConfig.Produce + BoxConfig.Builder keys).
-#BuildType: "pixi" | "npm" | "cargo" | "aur"
+#BuildType: "pixi" | "npm" | "cargo" | "aur" @go(-)
 
 // MergeConfig (config.go). CLOSED.
 #BoxMerge: {
 	auto?:         bool
-	max_mb?:       int & >=0
-	max_total_mb?: int & >=0
+	max_mb?:       int & >=0 @go(MaxMB,type=int)
+	max_total_mb?: int & >=0 @go(MaxTotalMB,type=int)
 }
 
 // AliasConfig (config.go). CLOSED. command defaults to name when omitted.
@@ -34,71 +34,83 @@
 // invariants (interval <= no_progress <= absolute_cap; poll_interval_local <=
 // stop_grace <= absolute_cap) are cross-field and stay in Go (validateOrdering).
 #Readiness: {
-	poll_interval_local?:  #Duration
-	poll_interval_remote?: #Duration
-	poll_interval_heavy?:  #Duration
-	per_attempt?:          #Duration
-	per_attempt_heavy?:    #Duration
-	no_progress?:          #Duration
-	absolute_cap?:         #Duration
-	stop_grace?:           #Duration
+	poll_interval_local?:  #Duration @go(PollIntervalLocal)
+	poll_interval_remote?: #Duration @go(PollIntervalRemote)
+	poll_interval_heavy?:  #Duration @go(PollIntervalHeavy)
+	per_attempt?:          #Duration @go(PerAttempt)
+	per_attempt_heavy?:    #Duration @go(PerAttemptHeavy)
+	no_progress?:          #Duration @go(NoProgress)
+	absolute_cap?:         #Duration @go(AbsoluteCap)
+	stop_grace?:           #Duration @go(StopGrace)
 }
 
 // base and from are mutually exclusive; neither is also valid (scratch box).
-// matchN is applied via `&` (NOT embedded) so the struct literal stays CLOSED —
-// an embedded matchN silently disables closedness.
+// The entity-level base⊻from mutual-exclusion is enforced in GO
+// (BoxConfig.HasBaseFromConflict, surfaced by validateBoxBaseFrom in validate.go
+// and resolveBase in config.go) — NOT by a trailing `& ({from?: _|_} |
+// {base?: _|_})` disjunction. `cue exp gengotypes` collapses an entity-level
+// top-level disjunction to an EMPTY `struct{}`, which would make spec.Box useless
+// as a drop-in for BoxConfig; the plain closed struct below generates the full
+// field set, and the Go rule restores the XOR. The struct stays CLOSED (no `...`)
+// so an unknown key is still a typo.
 #Box: {
 	name?:        #EntityRef
 	version?:     #CalVer
 	description?: string & !=""
-	enabled?:     bool
+	enabled?:     bool @go(,type=*bool)
 
 	base?:                    string & !=""
 	from?:                    string & =~"^builder:[a-z0-9]+(-[a-z0-9]+)*$"
-	bootstrap_builder_image?: string & !=""
+	bootstrap_builder_image?: string & !="" @go(BootstrapBuilderImage)
 
-	platform?: [...(string & =~"^[a-z][a-z0-9]*/[a-z0-9]+")]
+	platform?: [...(string & =~"^[a-z][a-z0-9]*/[a-z0-9]+")] @go(Platforms)
 	tag?:      string & !=""
 	registry?: string & !=""
 
 	distro?: [...(string & !="")]
-	build?:  #BuildFormat | [...#BuildFormat]
+	// BuildFormats: a scalar OR a list on the wire (#BuildFormats UnmarshalYAML
+	// normalizes "rpm" → ["rpm"]); the Go field is []string. gengotypes degrades
+	// the disjunction to `any`, so pin the Go shape explicitly (the typed enum is
+	// a future enhancement — collapse for now).
+	build?: (#BuildFormat | [...#BuildFormat]) @go(Build,type=[]string)
 
 	candy?: [...#CandyRef]
 
 	// box-level port: is RETIRED (rejectLegacyBoxPort) — ports inherit from candies.
-	port?: _|_
+	// Parsed only to hard-reject a residual box `port:`; the Go field stays
+	// []string (rejection carrier), so pin the shape (gengotypes emits `any`).
+	port?: _|_ @go(Port,type=[]string)
 
 	user?:        string & !=""
-	uid?:         int & >=0
-	gid?:         int & >=0
-	user_policy?: *"auto" | "adopt" | "create"
+	uid?:         int & >=0 @go(UID,type=*int)
+	gid?:         int & >=0 @go(GID,type=*int)
+	user_policy?: *"auto" | "adopt" | "create" @go(UserPolicy)
 
 	builder?: {[string]: string & !=""}
 	produce?: [...#BuildType]
 
 	env?: [...#EnvVar]
-	env_file?:   string & !=""
-	security?:   #Security
+	env_file?:   string & !="" @go(EnvFile)
+	security?:   #Security @go(Security,optional=nillable)
 	network?:    string & !=""
 	init?:       "supervisord" | "systemd"
-	data_image?: bool
+	data_image?: bool @go(DataImage)
 	bootc?:      bool // image is bootc-bootable (for `charly vm build` → qcow2)
-	readiness?:  #Readiness
+	readiness?:  #Readiness @go(Readiness,optional=nillable)
 
-	jobs?:            int & >=1
-	podman_jobs?:     int & >=0 // 0 = auto (min(NCPU, cap))
-	podman_jobs_cap?: int & >=1
-	context_ignore?: [...(string & !="")]
+	jobs?:            int & >=1 @go(,type=*int)
+	podman_jobs?:     int & >=0 @go(PodmanJobs,type=*int) // 0 = auto (min(NCPU, cap))
+	podman_jobs_cap?: int & >=1 @go(PodmanJobsCap,type=*int)
+	context_ignore?: [...(string & !="")] @go(ContextIgnore)
 	cache?:           "image" | "registry" | "gha" | "none"
-	keep_images?:     int & >=0
-	keep_check_runs?: int & >=0
+	keep_images?:     int & >=0 @go(KeepImages,type=*int)
+	keep_check_runs?: int & >=0 @go(KeepCheckRuns,type=*int)
 
-	merge?: #BoxMerge
+	merge?: #BoxMerge @go(Merge,optional=nillable)
 	alias?: [...#BoxAlias]
 
 	plan?: [...#Step]
-	check_level?: *"noagent" | "none" | "build" | "agent"
+	check_level?: *"noagent" | "none" | "build" | "agent" @go(CheckLevel)
 
-	shell?: #Shell
-} & ({from?: _|_} | {base?: _|_}) // at most one of base/from (disjunction keeps it CLOSED; matchN would open it)
+	shell?: #Shell @go(Shell,optional=nillable)
+}

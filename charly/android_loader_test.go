@@ -1,29 +1,37 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
-// TestMergeKindDoc_Android verifies a standalone `kind: android` document
-// routes into UnifiedFile.Android, and that a missing name is rejected.
-func TestMergeKindDoc_Android(t *testing.T) {
-	merged := &UnifiedFile{}
-	kd := &kindKeyedDoc{Android: &AndroidDoc{
-		Name:        "pixel9a-36",
-		AndroidSpec: AndroidSpec{Box: "android-emulator", Device: "pixel_9a", ApiLevel: 36},
-	}}
-	if err := mergeKindDoc(merged, kd, "/tmp"); err != nil {
-		t.Fatalf("mergeKindDoc(android) err: %v", err)
+// TestLoadUnified_AndroidNodeForm verifies a unified node-form `android` entity
+// loads into UnifiedFile.Android through the standard loader. The legacy
+// kind-keyed routing was deleted in the #NodeDoc-sole-gate cutover — node-form is
+// the only authoring surface.
+func TestLoadUnified_AndroidNodeForm(t *testing.T) {
+	dir := t.TempDir()
+	doc := `version: "` + latestSchemaVersion.String() + `"
+pixel9a-36:
+  android:
+    box: android-emulator
+    device: pixel_9a
+    api_level: 36
+`
+	if err := os.WriteFile(filepath.Join(dir, UnifiedFileName), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	got := merged.Android["pixel9a-36"]
+	uf, _, err := LoadUnified(dir)
+	if err != nil {
+		t.Fatalf("LoadUnified(android node-form): %v", err)
+	}
+	got := uf.Android["pixel9a-36"]
 	if got == nil {
-		t.Fatal("kind:android doc not registered in merged.Android")
+		t.Fatalf("android node-form entity not registered in uf.Android; got %v", uf.Android)
 	}
 	if got.Box != "android-emulator" || got.Device != "pixel_9a" || got.ApiLevel != 36 {
 		t.Errorf("android spec round-trip wrong: %+v", got)
-	}
-
-	// Missing name is an error.
-	if err := mergeKindDoc(&UnifiedFile{}, &kindKeyedDoc{Android: &AndroidDoc{}}, "/tmp"); err == nil {
-		t.Error("kind:android with empty name should error")
 	}
 }
 

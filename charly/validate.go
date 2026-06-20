@@ -38,10 +38,10 @@ func (e *ValidationError) HasErrors() bool {
 }
 
 // validateCandyCUESchemas validates each loaded candy's on-disk manifest against
-// the #Candy CUE schema. Additive/transitional during the CUE cutover — it runs
-// ALONGSIDE the hand-written candy validators; the Go validators are removed only
-// once the CUE schemas reach parity. Inline/synthesized candies with no manifest
-// file on disk are skipped.
+// the candy CUE schema (via validateCandyManifestCUE — #Candy for a legacy
+// kind-keyed manifest, #NodeDoc for a node-form manifest). This is the sole
+// candy-schema validator; the former hand-written Go candy validators are
+// deleted. Inline/synthesized candies with no manifest file on disk are skipped.
 func validateCandyCUESchemas(layers map[string]*Candy, errs *ValidationError) {
 	for name, c := range layers {
 		if c == nil || c.Path == "" {
@@ -126,6 +126,26 @@ func validateProjectCUESchemas(cfg *Config, dir string, opts ResolveOpts, errs *
 			continue
 		}
 		validateVocabularyCollections(doc, collectionKinds, f, errs.Add)
+	}
+}
+
+// validateBoxBaseFrom surfaces the box entity-level base⊻from mutual-exclusion
+// as a collected validation error. The #Box CUE schema formerly expressed this
+// via a trailing `& ({from?: _|_} | {base?: _|_})` disjunction; that was dropped
+// (gengotypes collapses an entity-level disjunction to an empty struct — see
+// schema/box.cue) and the rule moved to Go. resolveBase already aborts on the
+// conflict, but validateBoxDAG SKIPS unresolvable boxes (continue-on-error), so
+// without this explicit pass a base+from box would slip past `charly box
+// validate`. Both seams call the ONE predicate BoxConfig.HasBaseFromConflict (R3).
+// Neither field set stays valid (a scratch box) — only BOTH is a conflict.
+func validateBoxBaseFrom(cfg *Config, opts ResolveOpts, errs *ValidationError) {
+	for name, img := range cfg.Box {
+		if !img.IsEnabled() && !opts.shouldIncludeDisabled(name) {
+			continue
+		}
+		if img.HasBaseFromConflict() {
+			errs.Add("box %q: from: and base: are mutually exclusive (set one; omit both for a scratch box)", name)
+		}
 	}
 }
 
@@ -226,11 +246,15 @@ func Validate(cfg *Config, layers map[string]*Candy, dir string, opts ResolveOpt
 	// Validate candy contents
 	validateCandyContents(layers, errs)
 
-	// Validate candy manifests against the CUE schema (additive during the cutover)
+	// Validate candy manifests against the CUE schema
 	validateCandyCUESchemas(layers, errs)
 
 	// Validate non-candy entities (box/deploy/check/vm/pod/...) against CUE
 	validateProjectCUESchemas(cfg, dir, opts, errs)
+
+	// Box base⊻from mutual-exclusion (the #Box entity-level XOR moved out of CUE
+	// to Go — see schema/box.cue + validateBoxBaseFrom).
+	validateBoxBaseFrom(cfg, opts, errs)
 
 	// Validate tasks: field (replaces root.yml/user.yml)
 	validateCandyTasks(layers, errs)
@@ -544,7 +568,7 @@ func collectInitSystemNeeds(initName string, def *InitDef, resolved []string, la
 			needsInit = append(needsInit, candyName+" ("+initName+")")
 		}
 		// port_relay triggers init systems with relay_template
-		if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
+		if initHasRelayTemplate(def) && len(layer.PortRelayPorts) > 0 {
 			needsInit = append(needsInit, candyName+" (port_relay)")
 		}
 	}
@@ -767,7 +791,7 @@ func validateCandyShell(candyName string, cfg *ShellConfig, errs *ValidationErro
 	}
 	// Per-shell sub-block keys (bash/zsh/fish/sh) are enforced by the closed
 	// #Shell def; here we validate each sub-block's init/path semantics.
-	for shell, spec := range cfg.ByShell {
+	for shell, spec := range cfg.ByShell() {
 		checkSpec(shell, spec)
 	}
 }

@@ -101,6 +101,9 @@ func TestBuildCandy_RoundTrip(t *testing.T) {
 	if name != "redis" {
 		t.Fatalf("candy name = %q, want redis", name)
 	}
+	// In node-form the candy NAME is the top-level key (buildCandy stamps it);
+	// the kind-first body fixture carries no `name:`, so reflect that here.
+	want.Name = name
 	if !reflect.DeepEqual(ic.CandyYAML, want) {
 		t.Fatalf("node-form candy != kind-first candy\n node-form: %#v\n kind-first: %#v", ic.CandyYAML, want)
 	}

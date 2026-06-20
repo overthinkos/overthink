@@ -21,6 +21,17 @@
 // cannot shadow a kind keyword.
 _reservedNode: "^(box|candy|bundle|pod|vm|k8s|local|android|host|distro|builder|init|resource|sidecar|agent|group|module|target)$"
 
+// #ResourceKind — the DEPLOYABLE subset of the kind keywords: the kinds whose
+// #Node arm admits a sub-ENTITY (resource) child (a deploy-into / alongside
+// member), so a `<name>: {<kind>:…, <child>: {<resource-kind>:…}}` node is a
+// bundle-shaped node. Every OTHER kind admits only data + step children. The
+// loader (node_parse.go) classifies a resource child against this set; schemagen
+// emits it as spec.ResourceKinds so the Go side derives the deployable vocabulary
+// from this ONE CUE source instead of a hand list. (node.cue's per-arm child gate
+// stays structural `_` — the deployable-vs-not check is the layered loader check;
+// this enum is its single vocabulary source.)
+#ResourceKind: ("pod" | "vm" | "k8s" | "local" | "android" | "host" | "bundle") @go(-)
+
 // ---------------------------------------------------------------------------
 // Per-kind node VALUES — the COMPLETE per-kind def. A node's collections /
 // composition / objects live in CHILD nodes, so they are ABSENT from the value
@@ -50,7 +61,7 @@ _reservedNode: "^(box|candy|bundle|pod|vm|k8s|local|android|host|distro|builder|
 // structural nested/peer maps + the derived target — all loader-derived from
 // tree position, so authoring any of them is a closed-schema rejection
 // (`run: charly migrate`)).
-#BundleValue: #Deploy & {nested?: _|_, peer?: _|_, target?: _|_}
+#BundleValue: #Deploy & {nested?: _|_, peer?: _|_, target?: _|_, member_of?: _|_, inside?: _|_}
 
 // `host:` venue node — names a host (local default implicit); children deploy onto it.
 #HostValue: close({
@@ -71,24 +82,24 @@ _reservedNode: "^(box|candy|bundle|pod|vm|k8s|local|android|host|distro|builder|
 // `env` also exists on #Step, so #DataChild|#StepChild never resolves) — the layered
 // loader checks are exact and fast.
 // ---------------------------------------------------------------------------
-#BoxArm:     close({box: #BoxValue, {[!~_reservedNode]: _}})
-#CandyArm:   close({candy: #CandyValue, {[!~_reservedNode]: _}})
-#PodArm:     close({pod: #PodValue, {[!~_reservedNode]: _}})
-#VmArm:      close({vm: #VmValue, {[!~_reservedNode]: _}})
-#K8sArm:     close({k8s: #K8sValue, {[!~_reservedNode]: _}})
-#LocalArm:   close({local: #LocalValue, {[!~_reservedNode]: _}})
+#BoxArm: close({box: #BoxValue, {[!~_reservedNode]: _}})
+#CandyArm: close({candy: #CandyValue, {[!~_reservedNode]: _}})
+#PodArm: close({pod: #PodValue, {[!~_reservedNode]: _}})
+#VmArm: close({vm: #VmValue, {[!~_reservedNode]: _}})
+#K8sArm: close({k8s: #K8sValue, {[!~_reservedNode]: _}})
+#LocalArm: close({local: #LocalValue, {[!~_reservedNode]: _}})
 #AndroidArm: close({android: #AndroidValue, {[!~_reservedNode]: _}})
-#BundleArm:  close({bundle: #BundleValue, {[!~_reservedNode]: _}})
-#HostArm:    close({host: #HostValue, {[!~_reservedNode]: _}})
-#DistroArm:   close({distro: #DistroValue, {[!~_reservedNode]: _}})
-#BuilderArm:  close({builder: #BuilderValue, {[!~_reservedNode]: _}})
-#InitArm:     close({init: #InitValue, {[!~_reservedNode]: _}})
+#BundleArm: close({bundle: #BundleValue, {[!~_reservedNode]: _}})
+#HostArm: close({host: #HostValue, {[!~_reservedNode]: _}})
+#DistroArm: close({distro: #DistroValue, {[!~_reservedNode]: _}})
+#BuilderArm: close({builder: #BuilderValue, {[!~_reservedNode]: _}})
+#InitArm: close({init: #InitValue, {[!~_reservedNode]: _}})
 #ResourceArm: close({resource: #ResourceValue, {[!~_reservedNode]: _}})
-#SidecarArm:  close({sidecar: #SidecarValue, {[!~_reservedNode]: _}})
-#AgentArm:    close({agent: #AgentValue, {[!~_reservedNode]: _}})
-#GroupArm:    close({group: #GroupValue, {[!~_reservedNode]: _}})
-#ModuleArm:   close({module: #ModuleValue, {[!~_reservedNode]: _}})
-#TargetArm:   close({target: #TargetValue, {[!~_reservedNode]: _}})
+#SidecarArm: close({sidecar: #SidecarValue, {[!~_reservedNode]: _}})
+#AgentArm: close({agent: #AgentValue, {[!~_reservedNode]: _}})
+#GroupArm: close({group: #GroupValue, {[!~_reservedNode]: _}})
+#ModuleArm: close({module: #ModuleValue, {[!~_reservedNode]: _}})
+#TargetArm: close({target: #TargetValue, {[!~_reservedNode]: _}})
 
 // The unified node — a disjunction of the closed per-kind arms.
 #Node: #BoxArm | #CandyArm | #BundleArm | #PodArm | #VmArm | #K8sArm | #LocalArm |
@@ -99,9 +110,9 @@ _reservedNode: "^(box|candy|bundle|pod|vm|k8s|local|android|host|distro|builder|
 // directives plus a flat map of name-first entity nodes. Validating a document
 // against #NodeDoc is the load-time "validate-before-execute" gate.
 #NodeDoc: close({
-	version?: #CalVer
-	repo?:    string & !=""
-	import?:  _
+	version?:  #CalVer
+	repo?:     string & !=""
+	import?:   _
 	discover?: _
 	defaults?: _
 	provides?: _

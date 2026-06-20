@@ -15,7 +15,7 @@
         "ca-certs",
         "ca_certs",
         "chef",
-        "disable-ec2-metadata",
+        "disable-ec2-metadata",/work
         "disable_ec2_metadata",
         "disk-setup",
         "disk_setup",

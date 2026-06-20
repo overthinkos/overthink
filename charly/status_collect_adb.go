@@ -78,7 +78,7 @@ func collectAndroidDeployNodes(opts CollectOpts) []androidDeployNode {
 	var out []androidDeployNode
 	for _, name := range sortedDeployKeys(merged.Bundle) {
 		root := merged.Bundle[name]
-		_ = root.WalkPreOrder(name, func(path string, node *BundleNode) error {
+		_ = bundleWalkPreOrder(&root, name, func(path string, node *BundleNode) error {
 			if node != nil && node.Target == "android" {
 				out = append(out, androidDeployNode{path: path, node: *node})
 			}

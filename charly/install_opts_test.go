@@ -12,7 +12,7 @@ func TestInstallOptsApplyTo(t *testing.T) {
 		Verify:           true,
 		BuilderImage:     "fedora-builder:2026.04",
 	}
-	got := o.ApplyTo(base)
+	got := installOptsApplyTo(o, base)
 	if !got.WithServices {
 		t.Errorf("WithServices not applied")
 	}
@@ -35,7 +35,7 @@ func TestInstallOptsCLIOverridesWin(t *testing.T) {
 	// clobbering a true with a false.)
 	base := EmitOpts{AllowRootTasks: true}
 	o := &InstallOptsConfig{AllowRootTasks: false}
-	got := o.ApplyTo(base)
+	got := installOptsApplyTo(o, base)
 	if !got.AllowRootTasks {
 		t.Errorf("CLI-set AllowRootTasks was overwritten by zero deploy.yml value")
 	}
@@ -44,7 +44,7 @@ func TestInstallOptsCLIOverridesWin(t *testing.T) {
 func TestInstallOptsNilReceiver(t *testing.T) {
 	var o *InstallOptsConfig
 	base := EmitOpts{Verify: true}
-	got := o.ApplyTo(base)
+	got := installOptsApplyTo(o, base)
 	if got.Verify != true {
 		t.Errorf("nil receiver modified opts: %+v", got)
 	}
@@ -54,13 +54,13 @@ func TestInstallOptsBuilderImageMerge(t *testing.T) {
 	// CLI override wins; deploy.yml fallback applies when CLI empty.
 	cli := EmitOpts{BuilderImageOverride: "cli-choice"}
 	o := &InstallOptsConfig{BuilderImage: "yaml-choice"}
-	got := o.ApplyTo(cli)
+	got := installOptsApplyTo(o, cli)
 	if got.BuilderImageOverride != "cli-choice" {
 		t.Errorf("CLI builder image was overwritten: %q", got.BuilderImageOverride)
 	}
 
 	noCli := EmitOpts{}
-	got = o.ApplyTo(noCli)
+	got = installOptsApplyTo(o, noCli)
 	if got.BuilderImageOverride != "yaml-choice" {
 		t.Errorf("deploy.yml builder fallback not applied: %q", got.BuilderImageOverride)
 	}

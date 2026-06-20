@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -73,12 +74,46 @@ shop:
 	}
 	foundWebVenue := false
 	for _, s := range shop.Plan {
-		if s.venue == "web" {
+		if s.Venue == "web" {
 			foundWebVenue = true
 		}
 	}
 	if !foundWebVenue {
 		t.Errorf("expected a hoisted step with venue %q in shop.Plan", "web")
+	}
+}
+
+// TestLoadUnified_RejectsLegacyShapes proves the #NodeDoc-sole-gate cutover:
+// classifyDoc hard-rejects a legacy kind-keyed document AND a legacy root-shape
+// collection map (both superseded by the unified node-form), each with a
+// `charly migrate` hint — the bilingual reader was deleted.
+func TestLoadUnified_RejectsLegacyShapes(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		// legacy kind-keyed single entity: `candy: {name: …}`
+		{"kind-keyed candy", "candy:\n  name: redis\n  version: \"2026.150.0000\"\n"},
+		// legacy root-shape collection map: `vm: {<name>: …}`
+		{"root-shape vm collection", "vm:\n  myvm:\n    source: {kind: cloud_image}\n"},
+		// legacy deploy-collection alias
+		{"root-shape deploy collection", "deploy:\n  app:\n    box: coder\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			doc := "version: \"" + latestSchemaVersion.String() + "\"\n" + tc.body
+			if err := os.WriteFile(filepath.Join(dir, UnifiedFileName), []byte(doc), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			_, _, err := LoadUnified(dir)
+			if err == nil {
+				t.Fatalf("LoadUnified accepted a legacy %s doc; want a hard rejection", tc.name)
+			}
+			if !strings.Contains(err.Error(), "charly migrate") {
+				t.Errorf("legacy rejection must point at `charly migrate`, got: %v", err)
+			}
+		})
 	}
 }
 

@@ -208,7 +208,7 @@ func (c *CheckRunLocalCmd) Run() error {
 		notesSnap, _ = ReadNote(projectDir, c.Score)
 	}
 
-	mcp := iterate.EffectiveMCPEndpoint()
+	mcp := iterateEffectiveMCPEndpoint(iterate)
 
 	aiVer := LocalCaptureVersion(ctx, ai)
 

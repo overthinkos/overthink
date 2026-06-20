@@ -195,7 +195,7 @@ func (a *ResourceArbiter) holdersToStop(tokens []string, claimant string) []pree
 		toStop = append(toStop, preemptedHolder{
 			Addr:    addr,
 			Holds:   shared,
-			Restore: node.Preemptible.EffectiveRestore(),
+			Restore: preemptEffectiveRestore(node.Preemptible),
 		})
 	}
 	return toStop

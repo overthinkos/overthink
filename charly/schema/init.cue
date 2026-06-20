@@ -4,41 +4,43 @@
 // `string`). No #Step (init has no plan).
 
 #Init: {
-	candy_field?: [...(string & !="")]
-	candy_file?: [...(string & !="")]
-	depends_candy?:       string & !=""
-	requires_capability?: [...(string & =~"^[a-z][a-z0-9_]*$")]
+	candy_field?: [...(string & !="")] @go(CandyFields)
+	candy_file?: [...(string & !="")] @go(CandyFiles)
+	depends_candy?: string & !="" @go(DependsCandy)
+	requires_capability?: [...(string & =~"^[a-z][a-z0-9_]*$")] @go(RequiresCapability)
 
 	// The one mandatory field: the build model.
 	model: "fragment_assembly" | "file_copy"
 
-	header_file?:    string & !=""
-	fragment_dir?:   string & !=""
-	relay_template?: string
+	header_file?:    string & !="" @go(HeaderFile)
+	fragment_dir?:   string & !="" @go(FragmentDir)
+	relay_template?: string        @go(RelayTemplate)
 
-	stage_name?:          string & !=""
-	stage_header_copy?:   string
-	stage_fragment_copy?: string
+	stage_name?:          string & !="" @go(StageName)
+	stage_header_copy?:   string        @go(StageHeaderCopy)
+	stage_fragment_copy?: string        @go(StageFragmentCopy)
 
-	assembly_template?:      string
-	system_enable_template?: string
-	post_assembly_template?: string
+	assembly_template?:      string @go(AssemblyTemplate)
+	system_enable_template?: string @go(SystemEnableTemplate)
+	post_assembly_template?: string @go(PostAssemblyTemplate)
 
 	entrypoint?: [...(string & !="")]
-	fallback_entrypoint?: [...(string & !="")]
+	fallback_entrypoint?: [...(string & !="")] @go(FallbackEntrypoint)
 
-	management_tool?: string & !=""
-	management_command?: [string]: string & !=""
+	management_tool?: string & !="" @go(ManagementTool)
+	management_command?: {
+		[string]: string & !=""
+	} @go(ManagementCommands)
 
-	label_key?: string & =~"^ai\\.opencharly\\.service\\.[a-z0-9]+$"
+	label_key?: string & =~"^ai\\.opencharly\\.service\\.[a-z0-9]+$" @go(LabelKey)
 
-	service_schema?: #InitServiceSchema
+	service_schema?: #InitServiceSchema @go(ServiceSchema,optional=nillable)
 }
 
 #InitServiceSchema: {
-	service_template?:     string
-	unit_path_template?:   string
-	dropin_template?:      string
-	dropin_path_template?: string
-	supports_packaged?:    bool
+	service_template?:     string @go(ServiceTemplate)
+	unit_path_template?:   string @go(UnitPathTemplate)
+	dropin_template?:      string @go(DropinTemplate)
+	dropin_path_template?: string @go(DropinPathTemplate)
+	supports_packaged?:    bool   @go(SupportsPackaged)
 }

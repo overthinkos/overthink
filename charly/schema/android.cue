@@ -3,29 +3,25 @@
 // XOR a remote/physical adb endpoint (adb) — never both, never neither. Shared
 // #Step from _common.cue.
 //
-// CLOSED: the base struct (no trailing `...`) models every authored key,
-// INCLUDING `box`/`adb` so the closed base permits them — a CLOSED base unified
-// with `& ({box:_} | {adb:_})` arms that introduced new keys would reject those
-// keys (CUE forbids adding fields outside a closed struct's set). The arms here
-// reference only already-allowed `box`/`adb`, tightening them to the
-// required-XOR-forbidden (`_|_`) discriminated union without widening the set.
+// CLOSED: the base struct (no trailing `...`) models every authored key, so an
+// unknown key is still a typo. The box⊻adb exactly-one mutual-exclusion is
+// enforced in GO (validateAndroidDevices in unified.go, the load-time sibling of
+// validateCheckBeds) — NOT by a trailing `& ({box:_} | {adb:_})` disjunction:
+// `cue exp gengotypes` collapses an entity-level top-level disjunction to an
+// EMPTY `struct{}`, which would make spec.Android useless as a drop-in for
+// AndroidSpec. The plain closed struct below generates the full field set, and
+// the Go rule restores the exactly-one-of-box/adb XOR.
 #Android: {
 	serial?:         string & !=""
 	device?:         string & !=""
-	api_level?:      int & >=1
-	google_account?: #GoogleAccount
+	api_level?:      int & >=1     @go(ApiLevel,type=int)
+	google_account?: #GoogleAccount @go(GoogleAccount,optional=nillable)
 	plan?: [...#Step]
 
-	// Device source (exactly one — the disjunction below enforces XOR).
+	// Device source — exactly one of box/adb (enforced in Go, see header).
 	box?: string & =~"^[a-z0-9]+(-[a-z0-9]+)*$"
-	adb?: #AdbEndpoint
-} & ({
-	box:  _
-	adb?: _|_
-} | {
-	adb:  _
-	box?: _|_
-})
+	adb?: #AdbEndpoint @go(Adb,optional=nillable)
+}
 
 // adb endpoint host is "host:port" but MAY carry a ${HOST_PORT:N} var-ref
 // (resolved at deploy time), so only non-emptiness is enforced.
@@ -34,6 +30,6 @@
 }
 
 #GoogleAccount: {
-	email_secret?: string & !=""
-	token_secret?: string & !=""
+	email_secret?: string & !="" @go(EmailSecret)
+	token_secret?: string & !="" @go(TokenSecret)
 }

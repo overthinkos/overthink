@@ -33,7 +33,7 @@ func TestWalkPreOrder_RootThenChildren(t *testing.T) {
 	tree := makeTree()
 	root := tree["stack"]
 	var paths []string
-	err := root.WalkPreOrder("stack", func(path string, node *BundleNode) error {
+	err := bundleWalkPreOrder(&root, "stack", func(path string, node *BundleNode) error {
 		paths = append(paths, path)
 		return nil
 	})
@@ -50,7 +50,7 @@ func TestWalkPostOrder_ChildrenThenRoot(t *testing.T) {
 	tree := makeTree()
 	root := tree["stack"]
 	var paths []string
-	err := root.WalkPostOrder("stack", func(path string, node *BundleNode) error {
+	err := bundleWalkPostOrder(&root, "stack", func(path string, node *BundleNode) error {
 		paths = append(paths, path)
 		return nil
 	})

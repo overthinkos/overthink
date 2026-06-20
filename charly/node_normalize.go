@@ -2,13 +2,13 @@ package main
 
 // node_normalize.go — the normalizer dispatcher: turn a parsed genericNode into
 // its domain struct and register it in the UnifiedFile. This is the node-form
-// authoring surface's decode path. The legacy kind-keyed routing
-// (classifyDoc-for-kinds / mergeKindDoc / kindKeyedDoc / the per-kind Doc
-// wrappers) STILL COEXISTS in the loader during this transition (the reader is
-// bilingual — node-form + legacy); its deletion is the next cutover. Every kind
-// flows through the ONE generic value-decoder (node_build.go), so node-form
-// yields the exact same domain structs the kind-first decode produced (proven by
-// the *_RoundTrip tests).
+// authoring surface's decode path, and the ONLY one: the legacy kind-keyed
+// routing (the kind-first decode + per-kind document wrappers) was DELETED in the
+// #NodeDoc-sole-gate cutover — a legacy kind-keyed / root-shape document is now
+// hard-rejected at classifyDoc with a `charly migrate` hint. Every kind flows
+// through the ONE generic value-decoder (node_build.go),
+// so node-form yields the exact same domain structs the kind-first decode
+// produced (proven by the *_RoundTrip tests).
 
 import "fmt"
 
@@ -117,12 +117,12 @@ func buildStandaloneResource(gn *genericNode, uf *UnifiedFile) error {
 }
 
 // resourceChildren returns gn's children whose discriminator is itself a
-// resource/bundle kind (the markers of a bundle-shaped node).
+// resource/bundle kind (the markers of a bundle-shaped node). The deployable set
+// is the CUE-derived resourceKindSet (#ResourceKind).
 func resourceChildren(gn *genericNode) []*genericNode {
 	var out []*genericNode
 	for _, ch := range gn.children {
-		switch ch.disc {
-		case "pod", "vm", "k8s", "local", "android", "host", "bundle":
+		if resourceKindSet[ch.disc] {
 			out = append(out, ch)
 		}
 	}

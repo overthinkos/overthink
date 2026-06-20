@@ -43,7 +43,7 @@ func validateNodeDocCUE(label string, data []byte) error {
 	}
 	for iter.Next() {
 		name := iter.Selector().Unquoted()
-		if nodeDocDirectives[name] {
+		if docDirectiveSet[name] {
 			continue // version/repo/import/discover/defaults/provides — not entities
 		}
 		// Validate ONE entity through #NodeDoc's pattern constraint (`{[!~dir]:

@@ -55,7 +55,7 @@ func shellConfigToEntry(cfg *ShellConfig, origin string) *ShellEntry {
 		return nil
 	}
 	hasGeneric := cfg.Init != "" || len(cfg.PathAppend) > 0 || cfg.Path != ""
-	if !hasGeneric && len(cfg.ByShell) == 0 {
+	if !hasGeneric && len(cfg.ByShell()) == 0 {
 		return nil
 	}
 	entry := &ShellEntry{
@@ -69,9 +69,9 @@ func shellConfigToEntry(cfg *ShellConfig, origin string) *ShellEntry {
 			Path:       cfg.Path,
 		}
 	}
-	if len(cfg.ByShell) > 0 {
-		entry.ByShell = make(map[string]*ShellSpec, len(cfg.ByShell))
-		for k, v := range cfg.ByShell {
+	if len(cfg.ByShell()) > 0 {
+		entry.ByShell = make(map[string]*ShellSpec, len(cfg.ByShell()))
+		for k, v := range cfg.ByShell() {
 			if v == nil {
 				continue
 			}

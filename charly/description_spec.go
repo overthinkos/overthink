@@ -20,9 +20,6 @@ import (
 	"strings"
 )
 
-// StepKeyword is the intent discriminator on a Step.
-type StepKeyword string
-
 const (
 	KwRun        StepKeyword = "run"
 	KwCheck      StepKeyword = "check"
@@ -31,103 +28,14 @@ const (
 	KwInclude    StepKeyword = "include"
 )
 
-// StepKeywords lists the valid step discriminators in document order.
-var StepKeywords = []StepKeyword{KwRun, KwCheck, KwAgentRun, KwAgentCheck, KwInclude}
+// StepKind / keywordsSet / KeywordText / IsAgent / IsInclude / Mutates are now
+// methods on the spec.Step type (charly/spec — union_types.go + charly_methods.go),
+// reached through the `type Step = spec.Step` alias. Only the keyword→do-mode
+// dispatch stays here as a free function (DoMode is a package-main enum).
 
-// Step is a single plan step. Exactly one of Run/Check/AgentRun/AgentCheck/Include
-// is non-empty (validated by StepKind()). The embedded Op is inline-promoted, so
-// authors write:
-//
-//   - check: the server replies with PONG
-//     command: redis-cli ping
-//     stdout: PONG
-//     context: [runtime]
-type Step struct {
-	Run        string `yaml:"run,omitempty"         json:"run,omitempty"`
-	Check      string `yaml:"check,omitempty"       json:"check,omitempty"`
-	AgentRun   string `yaml:"agent-run,omitempty"   json:"agent-run,omitempty"`
-	AgentCheck string `yaml:"agent-check,omitempty" json:"agent-check,omitempty"`
-	Include    string `yaml:"include,omitempty"     json:"include,omitempty"`
-
-	Op `yaml:",inline"  json:",inline"`
-}
-
-// StepKind returns the step's intent keyword and an error if zero or multiple
-// keyword discriminators are set. Parallel to Op.Kind().
-func (s *Step) StepKind() (StepKeyword, error) {
-	set := s.keywordsSet()
-	if len(set) == 0 {
-		return "", fmt.Errorf("step has no keyword (expected exactly one of: %s)", strings.Join(stepKeywordNames(), ", "))
-	}
-	if len(set) > 1 {
-		names := make([]string, len(set))
-		for i, k := range set {
-			names[i] = string(k)
-		}
-		return "", fmt.Errorf("step has multiple keywords (%s); exactly one is required", strings.Join(names, ", "))
-	}
-	return set[0], nil
-}
-
-func stepKeywordNames() []string {
-	out := make([]string, len(StepKeywords))
-	for i, k := range StepKeywords {
-		out[i] = string(k)
-	}
-	return out
-}
-
-// keywordsSet returns the keyword discriminators currently non-zero, in document order.
-func (s *Step) keywordsSet() []StepKeyword {
-	var set []StepKeyword
-	if s.Run != "" {
-		set = append(set, KwRun)
-	}
-	if s.Check != "" {
-		set = append(set, KwCheck)
-	}
-	if s.AgentRun != "" {
-		set = append(set, KwAgentRun)
-	}
-	if s.AgentCheck != "" {
-		set = append(set, KwAgentCheck)
-	}
-	if s.Include != "" {
-		set = append(set, KwInclude)
-	}
-	return set
-}
-
-// KeywordText returns the populated keyword's prose regardless of which
-// discriminator holds it. For include: it returns the `<kind>:<name>` ref.
-func (s *Step) KeywordText() string {
-	switch {
-	case s.Run != "":
-		return s.Run
-	case s.Check != "":
-		return s.Check
-	case s.AgentRun != "":
-		return s.AgentRun
-	case s.AgentCheck != "":
-		return s.AgentCheck
-	case s.Include != "":
-		return s.Include
-	}
-	return ""
-}
-
-// IsAgent reports whether the step is agent-graded (agent-run / agent-check).
-func (s *Step) IsAgent() bool { return s.AgentRun != "" || s.AgentCheck != "" }
-
-// IsInclude reports whether the step is an include: composition directive.
-func (s *Step) IsInclude() bool { return s.Include != "" }
-
-// Mutates reports whether the step changes system state (run / agent-run).
-// `charly check live` (verify-only mode) skips mutating steps.
-func (s *Step) Mutates() bool { return s.Run != "" || s.AgentRun != "" }
-
-// DoMode maps the step keyword to the internal act/assert/instruct dispatch enum.
-func (s *Step) DoMode() DoMode {
+// stepDoMode maps the step keyword to the internal act/assert/instruct dispatch
+// enum (DoMode is a package-main type, so this stays a free function in main).
+func stepDoMode(s *Step) DoMode {
 	switch {
 	case s.Run != "":
 		return DoAct

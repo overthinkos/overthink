@@ -665,8 +665,8 @@ func TestDiscoverRemoteCandies(t *testing.T) {
 func TestCandyCopySource(t *testing.T) {
 	g := &Generator{
 		Candies: map[string]*Candy{
-			"pixi":                             {Name: "pixi", Remote: false},
-			"github.com/test/repo/layers/cuda": {Name: "cuda", Version: "2026.167.1200", Remote: true, RepoPath: "github.com/test/repo"},
+			"pixi":                              {Name: "pixi", Remote: false},
+			"github.com/test/repo/layers/cuda":  {Name: "cuda", Version: "2026.167.1200", Remote: true, RepoPath: "github.com/test/repo"},
 			"github.com/test/repo/layers/nover": {Name: "nover", Remote: true, RepoPath: "github.com/test/repo"},
 		},
 	}

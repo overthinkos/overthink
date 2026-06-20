@@ -27,49 +27,6 @@ import (
 // Types
 // ---------------------------------------------------------------------------
 
-// AgentConfig is one entry under the top-level `agent:` map. Authoring shape:
-//
-//	ai:
-//	  claude:
-//	    description:
-//	      feature: "Anthropic Claude Code CLI"
-//	    command: [claude, -p, "${PROMPT}"]
-//	    prompt_via: argv
-//	    version_command: [claude, --version]
-//	    timeout: 30m
-//	    credential:
-//	      - {src: ~/.claude/.credentials.json, dst: ~/.claude/.credentials.json}
-type AgentConfig struct {
-	Description    string            `yaml:"description,omitempty" json:"description,omitempty"`
-	Command        []string          `yaml:"command" json:"command"`
-	PromptVia      string            `yaml:"prompt_via,omitempty" json:"prompt_via,omitempty"`
-	VersionCommand []string          `yaml:"version_command,omitempty" json:"version_command,omitempty"`
-	Timeout        string            `yaml:"timeout,omitempty" json:"timeout,omitempty"`
-	Env            map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
-	WorkingDir     string            `yaml:"working_dir,omitempty" json:"working_dir,omitempty"`
-	Credential     []CredentialMount `yaml:"credential,omitempty" json:"credential,omitempty"`
-
-	// ProgressCheckInterval / ProgressNoImprovementTimeout drive the
-	// score-progress watchdog. Hidden from the AI by construction — they
-	// only affect the harness Go process. Empty defaults to 5m / 30m.
-	// Set ProgressNoImprovementTimeout to "0s" to disable watchdog
-	// termination (e.g. for fully-unbounded development sessions); set
-	// ProgressCheckInterval to "0s" to disable periodic logging too.
-	// See plugins/charly/skills/harness/SKILL.md "Score-progress watchdog".
-	ProgressCheckInterval        string `yaml:"progress_check_interval,omitempty" json:"progress_check_interval,omitempty"`
-	ProgressNoImprovementTimeout string `yaml:"progress_no_improvement_timeout,omitempty" json:"progress_no_improvement_timeout,omitempty"`
-
-	// OutputFormat declares the structured-output mode the AI's stdout
-	// emits. Empty means plain text (stdout+stderr merged into runner.log
-	// — codex/gemini default). "stream-json" means newline-delimited
-	// JSON (one event per line — claude with `--output-format stream-json
-	// --verbose`); the harness splits stdout/stderr, parses each line
-	// into a RunnerEvent, and embeds the event timeline into the
-	// per-iteration record in result-{calver}.yml. Validated in
-	// validateHarnessSemantics; only "" and "stream-json" are accepted.
-	OutputFormat string `yaml:"output_format,omitempty" json:"output_format,omitempty"`
-}
-
 // AIOutputFormat* constants enumerate the legal values of
 // AgentConfig.OutputFormat. The validator in validateHarnessSemantics
 // rejects anything else with a list-of-legal-values hint.
@@ -87,19 +44,6 @@ const (
 	DefaultProgressCheckInterval        = 5 * time.Minute
 	DefaultProgressNoImprovementTimeout = 30 * time.Minute
 )
-
-// CredentialMount names one host file whose contents are synced into the
-// target deployment BEFORE the first AI invocation. `~` in dst resolves
-// against the target's $HOME.
-//
-// Defined here (not in benchmark_config.go any more) — this is the
-// canonical location going forward.
-type CredentialMount struct {
-	Src      string `yaml:"src" json:"src"`
-	Dst      string `yaml:"dst" json:"dst"`
-	Mode     string `yaml:"mode,omitempty" json:"mode,omitempty"`         // "copy" (default) | "bind"
-	Optional bool   `yaml:"optional,omitempty" json:"optional,omitempty"` // missing src: warn, don't fail
-}
 
 // DefaultAgentTimeout is the Go-level default applied by ResolveAgent when an
 // AI entry's `timeout:` field is empty. Empty string = no per-iteration

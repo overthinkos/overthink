@@ -349,7 +349,7 @@ func (c *BundleAddCmd) resolveNodeOverlays(path string, node *BundleNode, parent
 			tag = node.Version
 		}
 		if node.InstallOpts != nil {
-			opts = node.InstallOpts.ApplyTo(opts)
+			opts = installOptsApplyTo(node.InstallOpts, opts)
 		}
 		if len(addCandies) == 0 && len(node.AddCandy) > 0 {
 			addCandies = append([]string(nil), node.AddCandy...)
@@ -388,7 +388,7 @@ func resolveNodeTemplate(target, path, dir string, node *BundleNode, addCandies 
 		merged = append(merged, addCandies...)
 		addCandies = merged
 		// Fill install_opts gaps from the template.
-		opts = tmpl.InstallOpts.ApplyTo(opts)
+		opts = installOptsApplyTo(tmpl.InstallOpts, opts)
 	}
 	return addCandies, opts, nil
 }

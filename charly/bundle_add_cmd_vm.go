@@ -223,6 +223,22 @@ func resolveVmSshPort(spec *VmSpec, vmName string) (int, error) {
 // ~/.config/charly/charly.yml for the given deploy name. Idempotent —
 // overwrites the deploy.<name>.vm_state block.
 func saveVmDeployState(deployName string, state *VmDeployState, _ *VmSpec) error {
+	// Serialize the load→modify→save against concurrent charly processes — the
+	// SAME blocking deploy-config lock saveDeployState / cleanDeployEntry use
+	// (filelock.go). Without it two parallel `charly vm create` persist-auto-port
+	// writers (or a vm-create racing a `charly bundle add vm:<name>`) load → modify
+	// → save the shared ~/.config/charly/charly.yml and silently drop each other's
+	// entry. Reentrancy audit: the only deploy-config-lock holders are
+	// saveDeployState + cleanDeployEntry, neither of which calls saveVmDeployState;
+	// its callers (vm_create_spec.go persist-auto-port, VmUnifiedTarget.Add,
+	// removeVmDeployEntry's siblings) hold NO deploy-config lock — so acquiring
+	// here is exactly one level, no self-deadlock (flock is per-open-fd, blocking).
+	unlock, lockErr := acquireDeployConfigLock()
+	if lockErr != nil {
+		return fmt.Errorf("locking charly.yml for vm-state write: %w", lockErr)
+	}
+	defer func() { _ = unlock() }()
+
 	// Load existing charly.yml (or start fresh).
 	dc, err := LoadBundleConfig()
 	if err != nil {
@@ -257,6 +273,17 @@ func saveVmDeployState(deployName string, state *VmDeployState, _ *VmSpec) error
 
 // removeVmDeployEntry strips deploy.<deployName> from charly.yml.
 func removeVmDeployEntry(deployName string) error {
+	// Same shared-file serialization as saveVmDeployState / cleanDeployEntry: a VM
+	// destroy mutating the overlay must not race a concurrent writer's
+	// load→modify→save (the lost-update class). Reentrancy: its caller
+	// (VmDestroyCmd) holds no deploy-config lock — single-level acquire, no
+	// self-deadlock.
+	unlock, lockErr := acquireDeployConfigLock()
+	if lockErr != nil {
+		return fmt.Errorf("locking charly.yml for vm-entry removal: %w", lockErr)
+	}
+	defer func() { _ = unlock() }()
+
 	dc, err := LoadBundleConfig()
 	if err != nil {
 		return err

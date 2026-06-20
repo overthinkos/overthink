@@ -249,7 +249,7 @@ func relocateHostStateForCharly(ctx *MigrateContext) ([]string, error) {
 		{filepath.Join(shareDir, "ov"), filepath.Join(shareDir, "charly")},
 	}
 	for _, r := range relocs {
-		mod, err := renameProjectPath(r[0], r[1], ctx.DryRun)
+		mod, err := mergeHostStateDir(r[0], r[1], ctx.DryRun)
 		if err != nil {
 			return changed, err
 		}
@@ -258,7 +258,7 @@ func relocateHostStateForCharly(ctx *MigrateContext) ([]string, error) {
 		}
 	}
 
-	// New host file locations after the ~/.config/charly → ~/.config/charly move.
+	// New host file locations after the ~/.config/ov → ~/.config/charly move.
 	newDeploy := filepath.Join(cfgDir, "charly", "deploy.yml")
 	newConfig := filepath.Join(cfgDir, "charly", "config.yml")
 
@@ -275,6 +275,63 @@ func relocateHostStateForCharly(ctx *MigrateContext) ([]string, error) {
 	if !ctx.DryRun {
 		ctx.HostDeployPath = newDeploy
 		ctx.HostConfigPath = newConfig
+	}
+	return changed, nil
+}
+
+// mergeHostStateDir relocates a per-host state directory from→to, recovering the
+// "destination pre-exists EMPTY" orphan: when an earlier rename was skipped
+// because `to` already existed (e.g. ~/.config/charly was created empty by an
+// unrelated tool) while `from` still holds the real config, a plain
+// renameProjectPath no-ops and the chain then retargets ctx.HostDeployPath onto a
+// PHANTOM `to` path while the live overlay stays orphaned at `from`. This helper
+// MERGES instead so `charly migrate` recovers such a host with no manual dir
+// removal:
+//
+//   - `from` absent → nothing to relocate (false, nil).
+//   - `to` absent   → straight whole-tree rename (the fast path; preserves
+//     sub-dirs like env.d/ + direct/ in one move).
+//   - both exist    → move every top-level entry of `from` that does NOT already
+//     exist in `to` (NEVER clobbering a pre-existing entry — a non-empty/in-use
+//     `to` keeps its own files), then remove `from` when it empties. So an EMPTY
+//     `to` (or one merely LACKING deploy.yml/charly.yml) receives the entire real
+//     config and `from` disappears; a `to` that already carries real config is
+//     left intact and `from` survives as a stale backup.
+func mergeHostStateDir(from, to string, dryRun bool) (bool, error) {
+	fi, err := os.Stat(from)
+	if err != nil {
+		return false, nil // from absent — nothing to relocate
+	}
+	if _, terr := os.Stat(to); terr != nil {
+		// to absent — relocate the whole tree in one rename (file or dir).
+		return renameProjectPath(from, to, dryRun)
+	}
+	if !fi.IsDir() {
+		return false, nil // from is a FILE and to exists — never clobber.
+	}
+	entries, err := os.ReadDir(from)
+	if err != nil {
+		return false, err
+	}
+	changed := false
+	for _, e := range entries {
+		src := filepath.Join(from, e.Name())
+		dst := filepath.Join(to, e.Name())
+		if _, derr := os.Stat(dst); derr == nil {
+			continue // a same-named entry already in `to` — never clobber.
+		}
+		changed = true
+		if dryRun {
+			continue
+		}
+		if rerr := os.Rename(src, dst); rerr != nil {
+			return changed, fmt.Errorf("relocate %s -> %s: %w", src, dst, rerr)
+		}
+	}
+	if !dryRun {
+		if remaining, rerr := os.ReadDir(from); rerr == nil && len(remaining) == 0 {
+			_ = os.Remove(from) // drop the now-empty source dir.
+		}
 	}
 	return changed, nil
 }

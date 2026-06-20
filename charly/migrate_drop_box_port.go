@@ -19,9 +19,6 @@ package main
 // yaml.v3 node API, idempotent.
 
 import (
-	"io/fs"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -108,43 +105,10 @@ func isAutoOnlyPortSeq(n *yaml.Node) bool {
 
 // dropBoxPortCandidateFiles returns the project YAML files that can carry a box
 // `port:` or a deploy `port: [auto]`: box/<name>/charly.yml + root-level YAML
-// siblings (inline boxes / deploys / eval beds). NOT candy/ (candies keep ports)
-// and NOT the box/<distro> submodules (separate repos). Self-migrates the repo's
-// own charly/testdata fixtures. Sorted, deduplicated.
+// siblings (inline boxes / deploys / eval beds). NOT candy/ (candies keep ports).
+// Delegates to the shared scanner (migrateCandidateYAMLFiles), which skips the
+// box/<distro> submodules (separate repos) AND every testdata fixture dir.
+// Sorted, deduplicated.
 func dropBoxPortCandidateFiles(dir string) []string {
-	seen := map[string]struct{}{}
-	addYAMLTree := func(root string) {
-		_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return nil
-			}
-			if d.IsDir() {
-				if isGitSubmoduleDir(p, root) {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if strings.HasSuffix(p, ".yml") || strings.HasSuffix(p, ".yaml") {
-				seen[filepath.Clean(p)] = struct{}{}
-			}
-			return nil
-		})
-	}
-	addYAMLTree(filepath.Join(dir, "box"))
-	if entries, err := os.ReadDir(dir); err == nil {
-		for _, e := range entries {
-			if !e.IsDir() && (strings.HasSuffix(e.Name(), ".yml") || strings.HasSuffix(e.Name(), ".yaml")) {
-				seen[filepath.Clean(filepath.Join(dir, e.Name()))] = struct{}{}
-			}
-		}
-	}
-	if _, err := os.Stat(filepath.Join(dir, "charly", "go.mod")); err == nil {
-		addYAMLTree(filepath.Join(dir, "charly", "testdata"))
-	}
-	out := make([]string, 0, len(seen))
-	for p := range seen {
-		out = append(out, p)
-	}
-	sortStrings(out)
-	return out
+	return migrateCandidateYAMLFiles(dir, []string{"box"})
 }

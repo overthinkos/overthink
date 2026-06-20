@@ -394,6 +394,23 @@ func migrationSteps() []MigrationStep {
 			hostChanged, herr := migrateHostOverlayDoc(c, migrateUnifiedNodeDoc)
 			return len(w) > 0 || hostChanged, herr
 		}},
+		// install-strategy-key — completes the 2026-06 ov→charly rebrand's
+		// coverage of the per-host VM deploy STATE. The rebrand renamed every
+		// authored brand surface but missed the INTERNAL vm_state key
+		// `ov_install_strategy:` (the current name is `charly_install_strategy`,
+		// VmDeployState.CharlyInstallStrategy); a recovered/old overlay keeps the
+		// legacy key and the loader silently drops it (the install strategy is lost
+		// on the next VM destroy→create). This step renames the key in the per-host
+		// overlay AND any project YAML. It is a COMPLETION of an already-shipped
+		// rename (the charly_install_strategy format landed at schema < 2026.169),
+		// NOT a new format change, so it does NOT raise HEAD — it slots in as an
+		// intra-HEAD step AFTER unified-node converts the overlay to node-form and
+		// BEFORE the calver-schema stamp. `charly migrate` runs the whole chain
+		// regardless of a config's stamp, so it reaches a stale overlay whether
+		// stamped below HEAD or mis-stamped AT HEAD by a prior buggy run.
+		// TouchesHost false (project rewrite runs under remote-cache auto-migration;
+		// the host overlay portion self-gates on ctx.HostDeployPath). See CHANGELOG/.
+		{mustCalVer("2026.169.0002"), "install-strategy-key", false, MigrateInstallStrategyKey},
 		// step-venue — the 2026-06 venue-from-position cutover. Retires the
 		// step-level venue OVERRIDES (`pod:` per-step container, `on:`
 		// cross-member driver) in favor of TREE POSITION: each distinct `pod:`

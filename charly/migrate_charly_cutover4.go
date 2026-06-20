@@ -189,10 +189,14 @@ func cutover4Scalar(v string) string {
 	for _, svc := range charly4CredServicePrefixes {
 		v = strings.ReplaceAll(v, "ov/"+svc, "charly/"+svc)
 	}
-	// VM cloud-init schema field `ov_install:` → `charly_install:` (and the
-	// persisted `ov_install_strategy:` in deploy.yml — covered by the same
-	// substring rewrite). The Go struct tag was renamed to charly_install in the
-	// rebrand; legacy configs still authoring ov_install migrate here.
+	// VM cloud-init schema field `ov_install:` → `charly_install:` in the PROJECT
+	// YAML this step walks. The Go struct tag was renamed to charly_install in the
+	// rebrand; legacy configs still authoring ov_install migrate here. NOTE: the
+	// PER-HOST overlay's persisted vm_state key `ov_install_strategy:` is NOT
+	// reached by this step (cutover4 walks ctx.Dir project files, never
+	// ctx.HostDeployPath) — that host-overlay key is renamed by the dedicated
+	// install-strategy-key step (migrate_install_strategy_key.go), which processes
+	// the overlay after it reaches node-form.
 	v = strings.ReplaceAll(v, "ov_install", "charly_install")
 	// Charly-first power-user box names.
 	for _, r := range charly4EntityRenames {

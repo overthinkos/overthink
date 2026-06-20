@@ -2,7 +2,6 @@ package main
 
 import (
 	"testing"
-
 )
 
 // TestDebootstrapDef_YamlParse verifies the new fields added to DebootstrapDef

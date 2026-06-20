@@ -106,12 +106,12 @@ func concatSchema(dir string, exclude func(name string) bool) (string, []string,
 // the file-level `@go(spec)` attribute — what `cue exp gengotypes` consumes to
 // emit `package spec`. The cue API (vocab mode) compiles the same string. The
 // exclude filter scopes the param-gen input (see excludeParamGen).
-func specSource(dir string, exclude func(name string) bool) (string, []string, error) {
-	body, names, err := concatSchema(dir, exclude)
+func specSource(dir string, exclude func(name string) bool) (string, error) {
+	body, _, err := concatSchema(dir, exclude)
 	if err != nil {
-		return "", nil, err
+		return "", err
 	}
-	return "package spec\n\n@go(spec)\n\n" + body, names, nil
+	return "package spec\n\n@go(spec)\n\n" + body, nil
 }
 
 // ----------------------------------------------------------------------------
@@ -154,7 +154,7 @@ func retagFile(path string) error {
 // writeConcat emits the gengotypes input — the PARAM-GEN-scoped concatenation
 // (node.cue + egress_*.cue excluded; see excludeParamGen).
 func writeConcat(dir, out string) error {
-	src, _, err := specSource(dir, excludeParamGen)
+	src, err := specSource(dir, excludeParamGen)
 	if err != nil {
 		return err
 	}
@@ -186,7 +186,7 @@ func writeVocab(dir, out string) error {
 	// FULL schema (nil exclude): the vocab generator needs #Node's arms
 	// (node.cue) to derive KindWords, so this concatenation matches the runtime
 	// sharedCueSchema (every schema/*.cue).
-	src, _, err := specSource(dir, nil)
+	src, err := specSource(dir, nil)
 	if err != nil {
 		return err
 	}
@@ -263,17 +263,17 @@ func writeVocab(dir, out string) error {
 	}
 
 	code := renderVocab(vocabSets{
-		kinds:         kinds,
-		resourceKinds: resourceKinds,
-		directives:    directives,
-		stepKeywords:  stepKeywords,
-		contexts:      contexts,
-		dataKeys:      dataKeys,
-		opFields:      opFields,
-		opVerbs:       opVerbs,
+		kinds:          kinds,
+		resourceKinds:  resourceKinds,
+		directives:     directives,
+		stepKeywords:   stepKeywords,
+		contexts:       contexts,
+		dataKeys:       dataKeys,
+		opFields:       opFields,
+		opVerbs:        opVerbs,
 		authoringVerbs: authoringVerbs,
-		verbOrder:     verbOrder,
-		methods:       methods,
+		verbOrder:      verbOrder,
+		methods:        methods,
 	})
 	formatted, err := format.Source([]byte(code))
 	if err != nil {
@@ -297,6 +297,7 @@ var opRuntimeDerivedFields = []string{"origin", "venue", "intent_do"}
 //     forbidden by #BundleValue and rebuilt from tree position (nested, peer);
 //   - legacy inline-tolerated authoring (sidecar — the common tailscale sidecar
 //     map is persisted inline; kubernetes/resources/expose/storage/probes).
+//
 // Adding `<x>` here keeps a non-scalar #Deploy field inline-legal; omitting a NEW
 // non-scalar field makes it a child-node DataKey (the node-form "everything is a
 // node" default). Behavior-preserving: this list is exactly the gap between
@@ -505,12 +506,12 @@ func renderVocab(s vocabSets) string {
 	b.WriteString("// enforces, now from one CUE source.\n")
 	b.WriteString("var LiveVerbMethods = map[string][]string{\n")
 	for _, v := range s.verbOrder {
-		b.WriteString(fmt.Sprintf("\t%q: {", v))
+		fmt.Fprintf(&b, "\t%q: {", v)
 		for i, m := range s.methods[v] {
 			if i > 0 {
 				b.WriteString(", ")
 			}
-			b.WriteString(fmt.Sprintf("%q", m))
+			fmt.Fprintf(&b, "%q", m)
 		}
 		b.WriteString("},\n")
 	}
@@ -519,10 +520,10 @@ func renderVocab(s vocabSets) string {
 }
 
 func writeStrSlice(b *bytes.Buffer, name, doc string, vals []string) {
-	b.WriteString(fmt.Sprintf("// %s is %s\n", name, doc))
-	b.WriteString(fmt.Sprintf("var %s = []string{\n", name))
+	fmt.Fprintf(b, "// %s is %s\n", name, doc)
+	fmt.Fprintf(b, "var %s = []string{\n", name)
 	for _, v := range vals {
-		b.WriteString(fmt.Sprintf("\t%q,\n", v))
+		fmt.Fprintf(b, "\t%q,\n", v)
 	}
 	b.WriteString("}\n\n")
 }

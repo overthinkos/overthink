@@ -498,12 +498,12 @@ func (c *Config) resolveDistro(resolved *ResolvedBox, img BoxConfig) {
 // defaults; required unless a data image) and the primary cache-mount format.
 // Split out of ResolveBox.
 func (c *Config) resolveBuild(resolved *ResolvedBox, img BoxConfig, name string) error {
-	buildFmts := []string(img.Build)
+	buildFmts := img.Build
 	if len(buildFmts) == 0 {
 		buildFmts = c.walkBaseChainBuild(resolved.Base)
 	}
 	if len(buildFmts) == 0 {
-		buildFmts = []string(c.Defaults.Build)
+		buildFmts = c.Defaults.Build
 	}
 	if len(buildFmts) == 0 && !img.DataImage {
 		return fmt.Errorf("image %s: build: field required (set in image, base, or defaults)", name)
@@ -762,7 +762,7 @@ func (c *Config) walkBaseChainBuild(baseName string) []string {
 			return nil // external base or disabled
 		}
 		if len(baseImg.Build) > 0 {
-			return []string(baseImg.Build)
+			return baseImg.Build
 		}
 		if baseImg.Base == "" {
 			return nil

@@ -63,7 +63,7 @@ func TestMergeHostStateDir(t *testing.T) {
 	t.Run("to NON-EMPTY → conflicting kept, non-conflicting merged, from survives", func(t *testing.T) {
 		base := t.TempDir()
 		from := filepath.Join(base, "ov")
-		writeTreeFile(t, filepath.Join(from, "deploy.yml"), "OV-deploy\n")  // conflicts
+		writeTreeFile(t, filepath.Join(from, "deploy.yml"), "OV-deploy\n") // conflicts
 		writeTreeFile(t, filepath.Join(from, "config.yml"), "OV-config\n") // unique
 		to := filepath.Join(base, "charly")
 		writeTreeFile(t, filepath.Join(to, "deploy.yml"), "CHARLY-deploy\n") // pre-existing real config

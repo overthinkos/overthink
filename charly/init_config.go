@@ -232,15 +232,6 @@ func initHasRelayTemplate(def *InitDef) bool {
 	return def.RelayTemplate != ""
 }
 
-// EntrypointArgs returns the entrypoint command as a string slice.
-// Returns fallback_entrypoint if the init has no entrypoint (e.g., systemd).
-func initEntrypointArgs(def *InitDef) []string {
-	if len(def.Entrypoint) > 0 {
-		return def.Entrypoint
-	}
-	return def.FallbackEntrypoint
-}
-
 // RenderManagementCommand renders a management command template with the given service name.
 func initRenderManagementCommand(def *InitDef, operation, serviceName string) (string, error) {
 	tmplStr, ok := def.ManagementCommands[operation]

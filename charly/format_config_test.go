@@ -4,7 +4,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
 )
 
 func TestLoadDistroConfigFromFile(t *testing.T) {

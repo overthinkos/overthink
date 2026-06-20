@@ -1,14 +1,14 @@
 // Hand-written types for shapes `cue exp gengotypes` cannot express faithfully:
 //
 //   - PortSpec       — the candy `port:` element is a (int | "proto:port")
-//                      disjunction the Go normalizer canonicalizes to {port,
-//                      protocol}; gengotypes degrades the disjunction to `any`.
+//     disjunction the Go normalizer canonicalizes to {port,
+//     protocol}; gengotypes degrades the disjunction to `any`.
 //   - VmDeployState  — MACHINE-WRITTEN runtime deploy state. Its CUE def carries
-//                      an open `...` tail (forward-evolving state record), which
-//                      makes gengotypes degrade the whole def to `map[string]any`.
-//                      The hand Go field is a CONCRETE struct, so #VmDeployState
-//                      is @go(-)'d and the faithful struct (+ its nested state
-//                      sub-types) is mirrored HERE.
+//     an open `...` tail (forward-evolving state record), which
+//     makes gengotypes degrade the whole def to `map[string]any`.
+//     The hand Go field is a CONCRETE struct, so #VmDeployState
+//     is @go(-)'d and the faithful struct (+ its nested state
+//     sub-types) is mirrored HERE.
 //
 // Ported from the package-main param structs (the source of truth); keep in
 // lockstep until WF-B repoints package main onto this package. STANDALONE — no

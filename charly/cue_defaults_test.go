@@ -2,7 +2,6 @@ package main
 
 import (
 	"testing"
-
 )
 
 // A richly-populated vm entity exercising every subtree applyCueDefaults must

@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
 )
 
 // Ensures Kind() returns the correct verb for each single-verb Check and

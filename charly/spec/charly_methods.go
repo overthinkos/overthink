@@ -38,6 +38,7 @@ func (c *Op) Kind() (string, error) {
 	return set[0], nil
 }
 
+//nolint:gocyclo // flat exactly-one-verb enumeration over the Op verb fields; extraction would relocate the cases without clarifying
 func (c *Op) VerbsSet() []string {
 	var set []string
 	if c.Mkdir != "" {

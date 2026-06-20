@@ -672,7 +672,7 @@ func createIntermediate(name, parentName string, uid int, pathCandies []string, 
 		inheritedDistro = cfg.Defaults.Distro
 	}
 	if len(inheritedBuilds) == 0 {
-		inheritedBuilds = []string(cfg.Defaults.Build)
+		inheritedBuilds = cfg.Defaults.Build
 	}
 
 	// An auto-intermediate hosts candies hoisted out of its consuming images.

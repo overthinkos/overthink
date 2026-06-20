@@ -13,7 +13,6 @@ package main
 import (
 	"strings"
 	"testing"
-
 )
 
 func TestRenderDomainXML_Skeleton(t *testing.T) {

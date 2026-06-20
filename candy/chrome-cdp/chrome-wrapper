@@ -80,6 +80,14 @@ CHROME_MAJOR=${CHROME_VER%%.*}
 WIN_UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_MAJOR}.0.0.0 Safari/537.36"
 WIN_EXT="$HOME/.local/share/chrome-windows"
 
+# Launch flags live HERE (single source). The supervised [program:chrome] service
+# (selkies-core) and chrome-restart call this wrapper with no flags; "$@" forwards any
+# caller flags. The exec previously lacked "$@", so the flags those callers passed were
+# silently DROPPED — Chrome showed its first-run welcome dialog and opened un-maximized.
+# --no-first-run + --no-default-browser-check suppress the welcome / "make default"
+# dialog; --start-maximized opens maximized. (--force-renderer-accessibility, which the
+# old callers passed but the dropped-flags bug made inert, is intentionally NOT restored —
+# CDP automation does not need forced renderer a11y.)
 exec $CHROME_BIN $CHROME_FLAGS \
     $VAAPI_FLAGS \
     $PROXY_FLAGS \
@@ -88,4 +96,6 @@ exec $CHROME_BIN $CHROME_FLAGS \
     --user-data-dir="$HOME/.chrome-debug" \
     --user-agent="$WIN_UA" \
     --load-extension="$WIN_EXT" \
-    --disable-session-crashed-bubble
+    --disable-session-crashed-bubble \
+    --no-first-run --no-default-browser-check --start-maximized \
+    "$@"

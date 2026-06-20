@@ -1,6 +1,6 @@
 selkies-core:
     candy:
-        version: 2026.155.2227
+        version: 2026.170.2327
         description: |
             Single shared streaming spine for every selkies flavor; supervises the desktop's Chrome for both labwc and KDE.
             Compositor-agnostic core of the selkies streaming desktop: the pixelflux
@@ -58,7 +58,7 @@ selkies-core:
             # chrome-sway (not selkies-core) and is unaffected — it is not
             # pixelflux-nested and does not hit the race.
             - name: chrome
-              exec: "%(ENV_HOME)s/.local/bin/chrome-wrapper --force-renderer-accessibility --no-first-run --start-maximized"
+              exec: "%(ENV_HOME)s/.local/bin/chrome-wrapper"
               env:
                 WAYLAND_DISPLAY: wayland-0
               restart: always
@@ -105,3 +105,45 @@ selkies-core:
         contains:
             - contains: "[program:chrome]"
             - contains: "chrome-wrapper"
+    selkies-core-chrome-launch-flags:
+        check: the supervised Chrome browser launched with --no-first-run (the first-run "welcome / make Chrome default" dialog is suppressed) and --start-maximized
+        id: selkies-core-chrome-launch-flags
+        command: |
+            for pid in $(pgrep -x chrome); do
+              cmd=$(tr '\0' ' ' < /proc/$pid/cmdline 2>/dev/null)
+              case "$cmd" in *--type=*) continue ;; esac
+              case "$cmd" in *--no-first-run*) ;; *) continue ;; esac
+              case "$cmd" in *--start-maximized*) echo "ok: browser pid $pid carries --no-first-run + --start-maximized"; exit 0 ;; esac
+            done
+            echo "FAIL: no Chrome browser process carrying --no-first-run + --start-maximized"; exit 1
+        exit_status: 0
+        in_container: true
+        eventually: 45s
+        retry_interval: 3s
+        stdout:
+            - contains: "ok: browser"
+        context:
+            - runtime
+    selkies-core-chrome-maximized:
+        check: the supervised Chrome window actually fills the streamed virtual screen (maximize took effect, not merely the flag)
+        id: selkies-core-chrome-maximized
+        cdp: eval
+        tab: "1"
+        expression: "(window.outerWidth >= screen.availWidth - 60 && window.outerHeight >= screen.availHeight - 60) ? 'MAXOK' : ('MAXBAD win ' + window.outerWidth + 'x' + window.outerHeight + ' avail ' + screen.availWidth + 'x' + screen.availHeight)"
+        eventually: 60s
+        retry_interval: 5s
+        stdout:
+            - contains: "MAXOK"
+        context:
+            - runtime
+    selkies-core-frame-not-uniform:
+        check: the streamed desktop frame is real composited content, not an all-black / uniform frame — a deterministic frame-content guard so the bed cannot false-green on a blank stream
+        id: selkies-core-frame-not-uniform
+        wl: screenshot
+        artifact: /tmp/selkies-core-frame.png
+        artifact_min_bytes: 5000
+        artifact_not_uniform: true
+        eventually: 45s
+        retry_interval: 5s
+        context:
+            - runtime

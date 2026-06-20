@@ -1,6 +1,6 @@
 chrome-cdp:
     candy:
-        version: 2026.144.1443
+        version: 2026.170.2101
         description: |
             Chrome DevTools Protocol automation suite exposing CDP on port 9222 via the cdp-proxy service
             A CDP automation toolkit layered on /charly-selkies:chrome for

@@ -14,7 +14,7 @@ sleep 0.5
 SWAYSOCK=$(ls -t /tmp/sway-ipc.*.sock 2>/dev/null | head -1)
 if [ -n "$SWAYSOCK" ]; then
     export SWAYSOCK
-    swaymsg exec "chrome-wrapper --force-renderer-accessibility --no-first-run --start-maximized" &
+    swaymsg exec "chrome-wrapper" &
 else
-    chrome-wrapper --force-renderer-accessibility --no-first-run --start-maximized &
+    chrome-wrapper &
 fi

@@ -72,6 +72,7 @@ var CapabilityLabelMap = map[string]string{
 	// Init — auto-detected from candies (see init_config.go ResolveInitSystem).
 	// Engine moved to BundleNode in schema v4 (deploy-host choice).
 	"Init":         LabelInit,
+	"InitDef":      LabelInitDef, // build-resolved init contract (entrypoint + management surface); read label-first at deploy
 	"Service":      LabelService,
 	"ServiceNames": LabelInit, // per-init active names; baked alongside the init label
 

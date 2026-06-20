@@ -120,14 +120,17 @@ func resolveServiceInit(box, instance string) (engine, containerName string, ini
 	return engine, containerName, initDef, nil
 }
 
-// wellKnownInitDefs is the runtime fallback registry for image-label-only
-// deploys (where the build-time init: vocabulary is unavailable).
-// Custom init systems declared via the embedded init: vocabulary (charly/charly.yml)
-// are honored during build only; at runtime, only entries here are recognized.
+// wellKnownInitDefs is the legacy fallback for pre-init_def-label images —
+// images built before the ai.opencharly.init_def label existed, whose labels
+// cannot be re-baked. Current images carry their full init contract in that
+// label, so resolveInitDefFromMeta / resolveEntrypointFromMeta read it
+// label-first and only consult this table when meta.InitDef is absent.
 //
-// Adding a new init system at runtime is a one-table-edit: add entrypoint +
-// management commands here and the rest of the codebase picks it up via
-// resolveInitDefFromMeta and resolveEntrypointFromMeta.
+// Because the build-resolved def now travels in the label, init systems
+// declared ONLY in the embedded init: vocabulary (charly/charly.yml) work at
+// runtime too — they no longer need an entry here. This table is frozen at
+// the two init systems that predate the label; do NOT add new ones (declare
+// them in the vocabulary instead, where they bake into the label).
 var wellKnownInitDefs = map[string]*InitDef{
 	"supervisord": {
 		Entrypoint:     []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"},
@@ -152,15 +155,25 @@ var wellKnownInitDefs = map[string]*InitDef{
 	},
 }
 
-// resolveInitDefFromMeta returns the InitDef registered for meta.Init in
-// wellKnownInitDefs. Errors when the init system is unrecognized — the
-// hint asks the operator to declare the init system in the embedded init:
-// vocabulary (which honors arbitrary names at build time).
+// resolveInitDefFromMeta returns the init contract for management-command
+// rendering. Label-first: the build-resolved def is baked into the
+// ai.opencharly.init_def label (meta.InitDef), so any vocabulary-declared init
+// system — including custom ones — resolves at runtime. Falls back to
+// wellKnownInitDefs only for pre-init_def-label images (built before the
+// label existed).
 func resolveInitDefFromMeta(meta *BoxMetadata) (*InitDef, error) {
+	if meta.InitDef != nil {
+		return &InitDef{
+			Entrypoint:         meta.InitDef.Entrypoint,
+			FallbackEntrypoint: meta.InitDef.FallbackEntrypoint,
+			ManagementTool:     meta.InitDef.ManagementTool,
+			ManagementCommands: meta.InitDef.ManagementCommands,
+		}, nil
+	}
 	if def, ok := wellKnownInitDefs[meta.Init]; ok {
 		return def, nil
 	}
-	return nil, fmt.Errorf("unknown init system %q; cannot determine management commands (no matching embedded init: vocabulary entry)", meta.Init)
+	return nil, fmt.Errorf("unknown init system %q; cannot determine management commands (image predates the ai.opencharly.init_def label — rebuild it to bake the init contract)", meta.Init)
 }
 
 // execInitCommand executes a service management command inside a container.

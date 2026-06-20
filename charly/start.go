@@ -520,11 +520,21 @@ func buildStartArgs(engine, imageRef string, uid, gid int, ports []string, name 
 }
 
 // resolveEntrypointFromMeta determines the entrypoint from image metadata (runtime mode).
-// Uses well-known init system names; custom init systems declared via the embedded `init:` vocabulary are
-// only honored during build.
+// Label-first: the build-resolved init contract is baked into the
+// ai.opencharly.init_def label (meta.InitDef), so any init system declared in
+// the embedded `init:` vocabulary — including custom ones — now reaches
+// runtime. wellKnownInitDefs is consulted only for pre-init_def-label images
+// (built before the label existed; their labels cannot be re-baked).
 func resolveEntrypointFromMeta(meta *BoxMetadata) []string {
 	if meta.Init == "" {
 		return []string{"sleep", "infinity"}
+	}
+	if meta.InitDef != nil {
+		// The baked entrypoint is authoritative. An empty entrypoint means
+		// the container boots via the image's own init (systemd-on-bootc),
+		// exactly as the legacy registry encoded — fall through to the
+		// image default rather than overriding with sleep infinity.
+		return meta.InitDef.Entrypoint
 	}
 	if def, ok := wellKnownInitDefs[meta.Init]; ok {
 		return def.Entrypoint

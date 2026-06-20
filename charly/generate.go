@@ -1926,6 +1926,18 @@ func (g *Generator) writeLabels(b *strings.Builder, boxName string, candyOrder [
 		labelInitSystem, labelInitDef := img.InitConfig.ResolveInitSystem(g.Candies, candyOrder, "")
 		if labelInitSystem != "" && labelInitDef != nil {
 			fmt.Fprintf(b, "LABEL %s=%q\n", LabelInit, labelInitSystem)
+			// Init definition: bake the runtime-relevant subset of the
+			// build-resolved init def so deploy reads the entrypoint +
+			// management surface from the image instead of a hardcoded
+			// registry. Makes the init system TRUE single-source — init
+			// systems declared only in the embedded init: vocabulary now
+			// reach runtime through this label.
+			writeJSONLabel(b, LabelInitDef, CapabilityInitDef{
+				Entrypoint:         labelInitDef.Entrypoint,
+				FallbackEntrypoint: labelInitDef.FallbackEntrypoint,
+				ManagementTool:     labelInitDef.ManagementTool,
+				ManagementCommands: labelInitDef.ManagementCommands,
+			})
 			// Per-init service-name list (legacy candy-name summary; kept for
 			// `charly service status/restart` CLI ergonomics).
 			var serviceNames []string

@@ -39,8 +39,16 @@ const (
 	// LabelVm + LabelLibvirt: removed in the VM hard-cutover. VM specs
 	// now live in vm.yml as `kind: vm` entities; no longer embedded
 	// in container image OCI labels.
-	LabelRoute          = "ai.opencharly.route"
-	LabelInit           = "ai.opencharly.init"
+	LabelRoute = "ai.opencharly.route"
+	LabelInit  = "ai.opencharly.init"
+	// LabelInitDef — the build-resolved init definition (the runtime-relevant
+	// subset of the embedded init: vocabulary entry: container entrypoint,
+	// fallback entrypoint, and the in-container service-management surface).
+	// Baked at build time so deploy reads the init contract from the image
+	// itself instead of re-deriving it from a hardcoded registry. Makes the
+	// init system TRUE single-source — including init systems declared ONLY
+	// in the embedded init: vocabulary, which now reach runtime via this label.
+	LabelInitDef        = "ai.opencharly.init_def"
 	LabelEnvCandy       = "ai.opencharly.env_candy"
 	LabelPathAppend     = "ai.opencharly.path_append"
 	LabelPortProto      = "ai.opencharly.port_proto"
@@ -131,6 +139,21 @@ type CapabilityService struct {
 	Candy            string            `json:"candy,omitempty"` // source candy name
 }
 
+// CapabilityInitDef is the runtime-relevant subset of an InitDef baked into
+// the ai.opencharly.init_def OCI label. The build-time init: vocabulary
+// (charly/charly.yml) carries ~20 build-only fields (detection, stage and
+// assembly templates); only these four are consulted at deploy time — the
+// container entrypoint, its fallback, and the in-container service-management
+// surface. Baking them makes the init system TRUE single-source: deploy
+// reads this label instead of re-deriving the contract from a hardcoded
+// registry, so init systems declared only in the vocabulary work at runtime too.
+type CapabilityInitDef struct {
+	Entrypoint         []string          `json:"entrypoint,omitempty"`
+	FallbackEntrypoint []string          `json:"fallback_entrypoint,omitempty"`
+	ManagementTool     string            `json:"management_tool,omitempty"`
+	ManagementCommands map[string]string `json:"management_commands,omitempty"`
+}
+
 // LabelDataEntry represents a data mapping stored in the ai.opencharly.data label.
 type LabelDataEntry struct {
 	Volume  string `json:"volume"`         // target volume name
@@ -164,6 +187,7 @@ type BoxMetadata struct {
 	// container image OCI labels.
 	Route         []LabelRouteEntry
 	Init          string              // active init system name ("supervisord", "systemd", "")
+	InitDef       *CapabilityInitDef  // build-resolved init contract (LabelInitDef): entrypoint + management surface; deploy reads it label-first
 	Service       []CapabilityService // structured per-entry service specs (LabelService); source-less deploy reads these
 	ServiceNames  []string            // per-init service names (LabelInit companion); used by `charly service status/restart`
 	EnvCandy      map[string]string
@@ -369,6 +393,17 @@ func ExtractMetadata(engine, imageRef string) (*BoxMetadata, error) {
 
 	// Init system
 	meta.Init = labels[LabelInit]
+
+	// Init definition: build-resolved entrypoint + management surface. Deploy
+	// reads this label-first (resolveEntrypointFromMeta / resolveInitDefFromMeta);
+	// absent only on images built before the label existed.
+	if v := labels[LabelInitDef]; v != "" {
+		var idef CapabilityInitDef
+		if err := json.Unmarshal([]byte(v), &idef); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelInitDef, err)
+		}
+		meta.InitDef = &idef
+	}
 
 	// ServiceNames: read from init-specific label key
 	// The label key is stored as ai.opencharly.service.<init> (e.g., ai.opencharly.service.supervisord)

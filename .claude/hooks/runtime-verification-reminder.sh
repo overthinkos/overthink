@@ -21,12 +21,12 @@ not the rule itself):
 - R2 fix every cutover-surfaced issue now — never "out of scope"/"follow-up"
 - R3 no duplication — one shared, generic abstraction
 - R4 no ad-hoc workarounds — a sync primitive, not sleep/retry
-- R5 hard cutover — delete old path + ALL stale refs (grep self-test)
+- R5 hard cutover — delete old path + ALL stale refs + ALL transitional/dual-mode code (grep self-test)
 - R6 check git status/stashes before destructive working-tree actions
 - R7 unit tests != runtime — run the end-to-end bed gate
 - R8 verify Containerfile sections + OCI labels post-build
 - R9 deployed binary == source; runtime deps in package mgmt
 - R10 verify on `disposable: true`; prove on a FRESH rebuild; tier == proof
-- ONE PHASE through R10 (Hard Cutover); run the R10 gate by change class
+- ONE PHASE through R10 (Hard Cutover): approved plan = an immutable CONTRACT (no mid-execution change); transitional/legacy/deprecated code gone BEFORE the R10 acceptance run (FINAL code only); run the R10 gate by change class
 Detail: CLAUDE.md R0-R10 / RDD / ADE; load skills per the Skill Dispatcher.
 EOF

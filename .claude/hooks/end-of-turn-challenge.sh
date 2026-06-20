@@ -21,6 +21,10 @@ re-verify THIS turn for FULL CLAUDE.md compliance.
 - Did EVERY failure / warning / anomaly this turn get a proper RCA and a real
   fix per CLAUDE.md (R1)? "flake" / "transient" / "out of scope" / "follow-up"
   are FORBIDDEN framings (R2) — fix it now, or open its own immediate-next cutover.
+- Was the approved plan executed AS WRITTEN (no mid-execution narrow/widen/re-approach;
+  plan = CONTRACT, only STOP-and-ask)? Were ALL transitional/legacy/deprecated/dual-mode
+  paths deleted BEFORE the R10 acceptance run, so R10 hit the FINAL code? (CLAUDE.md "Hard
+  Cutover by Default")
 - Re-audit EVERY code/config change against R0-R10 + walk the "Acceptance
   checklist" (all three groups) + "Post-Execution Policies" box-by-box.
 - CHANGELOG: did EACH repo you changed record its entry in its current-month

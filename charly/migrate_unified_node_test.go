@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -307,6 +308,101 @@ check:
 	}
 	if findMappingValue(childVal, "local") == nil {
 		t.Errorf("nested arch-host should carry a `local:` disc; keys: %v", firstKeysOf(childVal))
+	}
+}
+
+// TestMigrateUnifiedNode_NodeNamedAfterKindWordIsIdempotent guards BUG 1: a
+// node-form entity literally NAMED after a kind word (`vm: {vm: …}` — a VM entity
+// whose top-level key happens to be `vm`, as the repo-root charly.yml carries)
+// must be left VERBATIM, because it is already node-form. Before the fix
+// migrateUnifiedNodeDoc matched legacyKindMapKeys["vm"], entered the legacy
+// kind-map path, rebuilt the entry byte-identically, and returned changed=true —
+// so `charly migrate --dry-run` from the repo root perpetually (wrongly) reported
+// `would apply unified-node`. The fix skips a top-level legacy-kind key whose
+// value is already node-shaped (nodeShapedValue && no `name:`).
+func TestMigrateUnifiedNode_NodeNamedAfterKindWordIsIdempotent(t *testing.T) {
+	const doc = `version: "` + "2026.169.0004" + `"
+vm:
+    vm:
+        source:
+            kind: cloud_image
+            url: https://example.invalid/fedora.qcow2
+            base_user: fedora
+        firmware: bios
+vm-libvirt:
+    vm: {}
+    vm-libvirt-libvirt:
+        libvirt:
+            devices:
+                video:
+                    - model: virtio
+`
+	var mig yaml.Node
+	if err := yaml.Unmarshal([]byte(doc), &mig); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if migrateUnifiedNodeDoc(&mig) {
+		t.Fatal("a node-form entity NAMED `vm` was re-migrated (changed=true) — perpetual dirty `charly migrate --dry-run`")
+	}
+	// Byte-identical: migrating produces output identical to a plain passthrough
+	// (parse → marshal with NO migration).
+	migrated, err := yaml.Marshal(&mig)
+	if err != nil {
+		t.Fatalf("marshal migrated: %v", err)
+	}
+	var passthrough yaml.Node
+	if err := yaml.Unmarshal([]byte(doc), &passthrough); err != nil {
+		t.Fatalf("unmarshal passthrough: %v", err)
+	}
+	want, err := yaml.Marshal(&passthrough)
+	if err != nil {
+		t.Fatalf("marshal passthrough: %v", err)
+	}
+	if !bytes.Equal(migrated, want) {
+		t.Errorf("node-form `vm` entity was mutated by migration:\n--- got ---\n%s\n--- want ---\n%s", migrated, want)
+	}
+}
+
+// TestMigrateUnifiedNode_LegacyVmCollectionStillConverts guards the other half of
+// BUG 1's fix: a GENUINE legacy `vm:` COLLECTION (`vm: {arch: {…}, cachyos: {…}}`,
+// whose children are ENTITY NAMES, not kind discriminators) is NOT node-shaped, so
+// the idempotency guard must NOT skip it — it still migrates to node-form.
+func TestMigrateUnifiedNode_LegacyVmCollectionStillConverts(t *testing.T) {
+	const legacy = `version: "` + "2026.169.0004" + `"
+vm:
+    arch:
+        source:
+            kind: cloud_image
+            url: https://example.invalid/arch.qcow2
+    cachyos:
+        source:
+            kind: cloud_image
+            url: https://example.invalid/cachyos.qcow2
+`
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(legacy), &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !migrateUnifiedNodeDoc(&doc) {
+		t.Fatal("a genuine legacy `vm:` collection was NOT converted (changed=false)")
+	}
+	root := rootMappingNode(&doc)
+	if root == nil {
+		t.Fatal("migrated doc has no mapping root")
+	}
+	// The collection key `vm` is gone; each entity is now a top-level node-form
+	// entry carrying the `vm` discriminator.
+	if findMappingValue(root, "vm") != nil {
+		t.Errorf("legacy `vm:` collection key survived; root keys: %v", firstKeysOf(root))
+	}
+	for _, name := range []string{"arch", "cachyos"} {
+		ent := findMappingValue(root, name)
+		if ent == nil {
+			t.Fatalf("entity %q missing after collection migration; root keys: %v", name, firstKeysOf(root))
+		}
+		if findMappingValue(ent, "vm") == nil {
+			t.Errorf("entity %q should carry a `vm:` discriminator; keys: %v", name, firstKeysOf(ent))
+		}
 	}
 }
 

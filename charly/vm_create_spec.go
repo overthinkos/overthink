@@ -133,7 +133,7 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 			st = entry.VmState
 		}
 		st.SshPort = sshPort
-		if err := saveVmDeployState(deployKey, st, spec); err != nil {
+		if err := saveVmDeployState(deployKey, vmName, st); err != nil {
 			return fmt.Errorf("persisting auto-allocated ssh port: %w", err)
 		}
 	}

@@ -501,7 +501,7 @@ func (t *VmUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []
 	state.KeyInjectionResolved = &VmKeyInjectionResolved{SMBIOS: smbiosOn, CloudInit: cloudInitOn}
 	state.CharlyInstallStrategy = string(ResolveCharlyInstallStrategy(spec))
 
-	if err := saveVmDeployState(deployName, state, spec); err != nil {
+	if err := saveVmDeployState(deployName, vmName, state); err != nil {
 		return fmt.Errorf("persisting VmDeployState: %w", err)
 	}
 

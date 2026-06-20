@@ -221,8 +221,12 @@ func resolveVmSshPort(spec *VmSpec, vmName string) (int, error) {
 
 // saveVmDeployState writes the updated VmDeployState into
 // ~/.config/charly/charly.yml for the given deploy name. Idempotent —
-// overwrites the deploy.<name>.vm_state block.
-func saveVmDeployState(deployName string, state *VmDeployState, _ *VmSpec) error {
+// overwrites the deploy.<name>.vm_state block. vmEntity is the kind:vm entity
+// the deploy targets ("" → derive from a legacy "vm:<name>" deployName prefix);
+// it is persisted as the entry's `vm:` cross-ref so a bundle-keyed entry (a
+// kind:check VM bed, whose deploy key e.g. `check-k3s-vm` differs from
+// `vm:<entity>`) carries the linkage teardown needs to find + remove it.
+func saveVmDeployState(deployName, vmEntity string, state *VmDeployState) error {
 	// Serialize the load→modify→save against concurrent charly processes — the
 	// SAME blocking deploy-config lock saveDeployState / cleanDeployEntry use
 	// (filelock.go). Without it two parallel `charly vm create` persist-auto-port
@@ -256,14 +260,18 @@ func saveVmDeployState(deployName string, state *VmDeployState, _ *VmSpec) error
 		entry = BundleNode{}
 	}
 	entry.Target = "vm"
-	// deployName may be a legacy "vm:<entity>" key (from charly vm create) OR a
-	// schema-v4 deploy key whose entity comes from the entry's `vm:` field
-	// (e.g. check-k3s-vm → vm: k3s-vm). Derive the entity from the prefix
-	// when present; otherwise PRESERVE the existing entry.Vm (a v4 key has
-	// no "vm:" prefix to parse, and clobbering it with "" would drop the
-	// cross-ref the rest of the deploy code relies on).
-	if vmName, perr := vmNameFromDeployName(deployName); perr == nil {
-		entry.Vm = vmName
+	// Persist the `vm:` cross-ref so the per-host entry is a well-formed bundle
+	// node AND so teardown can resolve a bundle-keyed entry back to its VM entity.
+	// Precedence: the explicit vmEntity (the canonical mapping the caller resolved,
+	// e.g. check-k3s-vm → k3s-vm) → a legacy "vm:<entity>" deployName prefix →
+	// PRESERVE the existing entry.Vm (never clobber a known cross-ref with "").
+	switch {
+	case vmEntity != "":
+		entry.Vm = vmEntity
+	default:
+		if vmName, perr := vmNameFromDeployName(deployName); perr == nil {
+			entry.Vm = vmName
+		}
 	}
 	entry.VmState = state
 	dc.Bundle[deployName] = entry
@@ -291,8 +299,8 @@ func removeVmDeployEntry(deployName string) error {
 	if dc == nil || dc.Bundle == nil {
 		return nil
 	}
-	entry, ok := dc.Bundle[deployName]
-	if !ok {
+	keys := vmDeployEntryKeys(dc, deployName)
+	if len(keys) == 0 {
 		return nil
 	}
 	// Destroying the VM invalidates only the RUNTIME state (vm_state). Clear
@@ -309,13 +317,59 @@ func removeVmDeployEntry(deployName string) error {
 	// delete it entirely (such entries must not accumulate; that's why
 	// destroy cleaned up the entry in the first place). Otherwise keep the
 	// now-stateless entry so its operator config survives.
-	entry.VmState = nil
-	if isAutoVmDeployEntry(entry) {
-		delete(dc.Bundle, deployName)
-	} else {
-		dc.Bundle[deployName] = entry
+	for _, key := range keys {
+		entry := dc.Bundle[key]
+		entry.VmState = nil
+		if isAutoVmDeployEntry(entry) {
+			delete(dc.Bundle, key)
+		} else {
+			dc.Bundle[key] = entry
+		}
 	}
 	return SaveBundleConfig(dc)
+}
+
+// vmDeployEntryKeys resolves the per-host charly.yml bundle key(s) a VM teardown
+// for deployName targets. It exists because the entry is WRITTEN and REMOVED
+// under DIFFERENT keys whenever a bundle's name differs from "vm:<entity>":
+//
+//   - WRITE: VmUnifiedTarget.Add persists vm_state via saveVmDeployState(dctx.Name)
+//     — keyed by the BUNDLE name (e.g. the kind:check VM bed bundle `check-k3s-vm`,
+//     which cross-refs `vm: k3s-vm`). (charly vm create's port_auto persist keys
+//     by the prefixed entity form `vm:<entity>`.)
+//   - REMOVE: every teardown caller passes the prefixed VM-ENTITY form
+//     `vm:<entity>` — VmUnifiedTarget.Del's dispatch rewrites t.NodeName to
+//     "vm:"+node.Vm, and `charly vm destroy` builds "vm:"+box.
+//
+// An exact-key delete on "vm:k3s-vm" therefore MISSES the `check-k3s-vm` bundle
+// entry, which leaks (the domain is destroyed; only the config entry lingers).
+// So target BOTH: the literal deployName key (legacy `vm:<name>` + plain-name
+// deploys where the key == bundle name), AND — when deployName is "vm:<entity>"
+// — every bundle whose `vm:` cross-ref names <entity> (the bundle-keyed write).
+func vmDeployEntryKeys(dc *BundleConfig, deployName string) []string {
+	var keys []string
+	seen := map[string]bool{}
+	add := func(k string) {
+		if seen[k] {
+			return
+		}
+		if _, ok := dc.Bundle[k]; ok {
+			seen[k] = true
+			keys = append(keys, k)
+		}
+	}
+	add(deployName)
+	// vmNameFromDeployName succeeds only for the prefixed "vm:<entity>" form; a
+	// plain-name deployName therefore takes the literal-key path only (no scan,
+	// so a non-prefixed name can never over-match unrelated bundles).
+	if entity, perr := vmNameFromDeployName(deployName); perr == nil {
+		for key, entry := range dc.Bundle {
+			if entry.Vm == entity {
+				add(key)
+			}
+		}
+	}
+	return keys
 }
 
 // hostArchRuntime returns runtime.GOARCH translated to the libvirt/

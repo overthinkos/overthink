@@ -76,7 +76,20 @@ func migrateUnifiedNodeDoc(doc *yaml.Node) bool {
 	used := map[string]bool{} // top-level names already taken (verbatim directives + assigned entities)
 	for i := 0; i+1 < len(root.Content); i += 2 {
 		k, v := root.Content[i], root.Content[i+1]
-		if !legacyKindMapKeys[k.Value] {
+		// Keep verbatim when the key is a non-kind directive OR the entry is
+		// ALREADY a node-form entity that merely happens to be NAMED after a kind
+		// word (`vm: {vm: …}` — a node named `vm`). Without this guard such an
+		// entity matches legacyKindMapKeys["vm"], enters the legacy-kind-map path,
+		// and is rebuilt byte-identically but with changed=true — so
+		// `charly migrate --dry-run` perpetually (wrongly) reports `would apply
+		// unified-node`. nodeShapedValue(v) detects the kind-discriminator child;
+		// the !mapHasKey(v,"name") guard keeps the skip UNAMBIGUOUS — a genuine
+		// legacy single-entity body (`vm: {name: …, …}`, which may even carry a
+		// kind-word CROSS-REF child like vm:/box:/local:) still has its `name:` key
+		// and migrates. A legacy COLLECTION (`vm: {arch: {…}, cachyos: {…}}`) has
+		// entity-name children (not kind words) so nodeShapedValue is false → it
+		// still converts.
+		if !legacyKindMapKeys[k.Value] || (nodeShapedValue(v) && !mapHasKey(v, "name")) {
 			slots = append(slots, nodeEmitSlot{verbatimK: k, verbatimV: v}) // directive or already a node → keep
 			used[k.Value] = true                                            // reserve so no entity is renamed onto it
 			continue

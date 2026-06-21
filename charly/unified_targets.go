@@ -287,20 +287,15 @@ func (t *AndroidUnifiedTarget) Executor() DeployExecutor { return nil }
 // method CONSTRUCTS the live embedded target from the DeployContext.
 // ---------------------------------------------------------------------------
 
-// canonicalTarget normalizes the legacy target spellings to the
-// canonical vocabulary (local|vm|pod|k8s|android). "container" → "pod",
-// "kubernetes" → "k8s", "host" → "local". An empty value is left empty
-// so ResolveTarget can raise the missing-target error. The `charly migrate`
-// deploy step rewrites these on-disk; this normalization keeps the
-// resolver tolerant of in-flight configs.
-func canonicalTarget(target string) string {
-	switch target {
-	case "container":
-		return "pod"
-	case "kubernetes":
-		return "k8s"
-	case "host":
-		return "local"
+// canonicalDeployWord normalizes a legacy target spelling to the canonical
+// vocabulary (local|vm|pod|k8s|android) via the provider registry's aliases
+// ("container" → "pod", "kubernetes" → "k8s", "host" → "local"; deploy_builtins.go).
+// An empty / unknown value is returned unchanged so ResolveTarget can raise the
+// missing-target error. The `charly migrate` deploy step rewrites these on-disk;
+// this keeps the resolver tolerant of in-flight configs.
+func canonicalDeployWord(target string) string {
+	if p, ok := providerRegistry.ResolveDeploy(target); ok {
+		return p.Reserved()
 	}
 	return target
 }
@@ -327,29 +322,18 @@ func ResolveTarget(node *BundleNode, name string) (UnifiedDeployTarget, error) {
 			"(local|vm|pod|k8s|android); run `charly migrate`", name)
 	}
 
-	switch canonicalTarget(node.Target) {
-	case "local":
-		return &LocalUnifiedTarget{NodeName: name}, nil
-
-	case "vm":
-		return &VmUnifiedTarget{NodeName: name}, nil
-
-	case "pod":
-		// BaseImageRef is the image the rebuild's build/check steps target;
-		// node.Box is the charly.yml `box:` field (Rebuild falls back to
-		// NodeName when empty).
-		return &PodUnifiedTarget{NodeName: name, BaseImageRef: node.Box}, nil
-
-	case "k8s":
-		return &K8sUnifiedTarget{NodeName: name}, nil
-
-	case "android":
-		return &AndroidUnifiedTarget{NodeName: name}, nil
-
-	default:
+	// Target dispatch is the provider registry (the switch is gone — C3). The
+	// legacy spellings resolve through the registered aliases (deploy_builtins.go).
+	prov, ok := providerRegistry.ResolveDeploy(node.Target)
+	if !ok {
 		return nil, fmt.Errorf("deployment %q: unknown target %q "+
 			"(want local|vm|pod|k8s|android)", name, node.Target)
 	}
+	dp, ok := prov.(DeployTargetProvider)
+	if !ok {
+		return nil, fmt.Errorf("deployment %q: target %q has no in-process resolver", name, node.Target)
+	}
+	return dp.ResolveTarget(node, name)
 }
 
 // compile-time assertion: every adapter satisfies the interfaces it

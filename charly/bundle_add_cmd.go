@@ -633,7 +633,7 @@ func (c *BundleDelCmd) resolveDelNode() (*BundleNode, string) {
 		if tree, _ := resolveTreeRoot(cwd); tree != nil {
 			if node, ok := tree[c.Name]; ok && node.Target != "" {
 				n := node
-				n.Target = canonicalTarget(node.Target)
+				n.Target = canonicalDeployWord(node.Target)
 				return &n, n.Target
 			}
 		}

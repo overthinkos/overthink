@@ -247,47 +247,16 @@ func (t *LocalDeployTarget) recordCandy(rec *CandyRecord, plan *InstallPlan, opt
 	})
 }
 
-// execStep runs one step and records its reversal ops in rec.
+// execStep runs one step (via its StepProvider's local emitter) and records its
+// reversal ops in rec. The per-kind type-switch is gone (C4); the apk/reboot
+// skip-and-note behaviour lives on their providers' EmitLocal (step_builtins.go).
 func (t *LocalDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord) error {
 	start := time.Now().UTC()
-	switch s := step.(type) {
-	case *ShellHookStep:
-		return t.execShellHook(s, plan, opts, rec, start)
-	case *SystemPackagesStep:
-		return t.execSystemPackages(s, plan, opts, rec, start)
-	case *BuilderStep:
-		return t.execBuilder(s, plan, opts, rec, start)
-	case *OpStep:
-		return t.execOp(s, plan, opts, rec, start)
-	case *FileStep:
-		return t.execFile(s, plan, opts, rec, start)
-	case *ServicePackagedStep:
-		return t.execServicePackaged(s, plan, opts, rec, start)
-	case *ServiceCustomStep:
-		return t.execServiceCustom(s, plan, opts, rec, start)
-	case *RepoChangeStep:
-		return t.execRepoChange(s, plan, opts, rec, start)
-	case *ShellSnippetStep:
-		return t.execShellSnippet(s, plan, opts, rec, start)
-	case *ApkInstallStep:
-		// apk packages install onto a `kind: android` device, not a host —
-		// a local deploy has no emulator. Record a skip and continue (a
-		// candy carrying apk: may also carry host-relevant steps).
-		t.noteStep(rec, StepKindApkInstall, s.Scope(), VenueSkip,
-			fmt.Sprintf("candy=%s skipped: apk installs only on a kind:android device", s.CandyName), start)
-		return nil
-	case *LocalPkgInstallStep:
-		return t.execLocalPkg(s, plan, opts, rec, start)
-	case *RebootStep:
-		// Never reboot the operator's host unattended. Record a skip and
-		// warn — a host that needs a kernel module reloaded should be
-		// rebooted by the operator, not by a deploy.
-		fmt.Fprintf(os.Stderr, "warning: candy %q requests a reboot; skipping on target:local (reboot the host yourself if a new kernel module must load)\n", s.CandyName)
-		t.noteStep(rec, StepKindReboot, s.Scope(), VenueSkip,
-			fmt.Sprintf("candy=%s skipped: reboot not performed on target:local", s.CandyName), start)
-		return nil
+	prov, ok := stepProviderFor(step.Kind())
+	if !ok {
+		return fmt.Errorf("LocalDeployTarget: unknown step kind %T", step)
 	}
-	return fmt.Errorf("LocalDeployTarget: unknown step kind %T", step)
+	return prov.EmitLocal(t, step, plan, opts, rec, start)
 }
 
 // execShellSnippet renders one (candy, shell) snippet onto the target

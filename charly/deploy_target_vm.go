@@ -292,92 +292,19 @@ func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts E
 		DeployedAt: time.Now().UTC().Format(time.RFC3339),
 	}
 
+	// Each step dispatches to its StepProvider's VM emitter (the per-kind
+	// type-switch is gone — C4). EmitVM preserves each cell's exact behaviour:
+	// the gate checks (RepoChange hard-errors without --allow-repo-changes;
+	// services silent-skip without --with-services), the ReverseOp collection
+	// (every step except builder/apk/localpkg/reboot), and the apk skip.
 	for _, step := range plan.Steps {
-		switch s := step.(type) {
-		case *SystemPackagesStep:
-			if err := t.execSystemPackages(ctx, s, plan, opts); err != nil {
-				return rec, err
-			}
-			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
-
-		case *OpStep:
-			if err := t.execOp(ctx, s, plan, opts); err != nil {
-				return rec, err
-			}
-			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
-
-		case *FileStep:
-			if err := t.execFile(ctx, s, plan, opts); err != nil {
-				return rec, err
-			}
-			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
-
-		case *ShellHookStep:
-			if err := t.execShellHook(ctx, s, plan, opts); err != nil {
-				return rec, err
-			}
-			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
-
-		case *RepoChangeStep:
-			if !opts.AllowRepoChanges {
-				return rec, fmt.Errorf("repo change in plan %s requires --allow-repo-changes", plan.Candy)
-			}
-			if err := t.execRepoChange(ctx, s, plan, opts); err != nil {
-				return rec, err
-			}
-			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
-
-		case *ServicePackagedStep:
-			if !opts.WithServices {
-				continue // gate silent when not enabled
-			}
-			if err := t.execServicePackaged(ctx, s, plan, opts); err != nil {
-				return rec, err
-			}
-			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
-
-		case *ServiceCustomStep:
-			if !opts.WithServices {
-				continue
-			}
-			if err := t.execServiceCustom(ctx, s, plan, opts); err != nil {
-				return rec, err
-			}
-			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
-
-		case *BuilderStep:
-			if err := t.execBuilder(ctx, s, plan, opts); err != nil {
-				return rec, err
-			}
-
-		case *ShellSnippetStep:
-			if err := t.execShellSnippet(ctx, s, plan, opts); err != nil {
-				return rec, err
-			}
-			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
-
-		case *ApkInstallStep:
-			// apk packages install onto a `kind: android` device, not a VM
-			// guest. Skip (a `target: android` deploy handles them).
-			fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping apk install (candy=%s) — apk installs only on a kind:android device\n", s.CandyName)
-
-		case *LocalPkgInstallStep:
-			// Build the package source on the host and install the result INTO
-			// THE GUEST — the proper-package counterpart of the candy's curl/COPY
-			// cmd: task. Gated (config-driven) on the GUEST having the format's
-			// package manager; an unsupported guest is a clean no-op (the candy's
-			// curl task installs it).
-			if err := execLocalPkgInstall(ctx, t.Exec, s, venueHasPkgManager(ctx, t.Exec, s.LocalPkg, opts), "vm:"+t.VMName, opts); err != nil {
-				return rec, err
-			}
-
-		case *RebootStep:
-			if err := t.execReboot(ctx, s, opts); err != nil {
-				return rec, err
-			}
-
-		default:
+		prov, ok := stepProviderFor(step.Kind())
+		if !ok {
 			fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping unsupported step kind %T\n", step)
+			continue
+		}
+		if err := prov.EmitVM(t, ctx, step, plan, opts, rec); err != nil {
+			return rec, err
 		}
 	}
 

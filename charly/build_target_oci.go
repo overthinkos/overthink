@@ -94,45 +94,16 @@ func (t *OCITarget) emitPlan(plan *InstallPlan, _ EmitOpts) error {
 	return nil
 }
 
-// emitStep dispatches to the per-kind emitter.
+// emitStep dispatches each step to its StepProvider's OCI emitter (the per-kind
+// type-switch is gone — C4). The skip-on-image-build behaviour for apk/reboot,
+// and the localpkg PRODUCTION-vs-checkbed install decision, live on their
+// providers' EmitOCI (step_builtins.go).
 func (t *OCITarget) emitStep(step InstallStep, plan *InstallPlan) error {
-	switch s := step.(type) {
-	case *ShellHookStep:
-		return t.emitShellHook(s)
-	case *SystemPackagesStep:
-		return t.emitSystemPackages(s)
-	case *BuilderStep:
-		return t.emitBuilder(s, plan)
-	case *OpStep:
-		return t.emitOp(s)
-	case *FileStep:
-		return t.emitFile(s)
-	case *ServicePackagedStep:
-		return t.emitServicePackaged(s)
-	case *ServiceCustomStep:
-		return t.emitServiceCustom(s)
-	case *RepoChangeStep:
-		return t.emitRepoChange(s)
-	case *ShellSnippetStep:
-		return t.emitShellSnippet(s)
-	case *ApkInstallStep:
-		// apk installs land on a RUNNING Android device, not the image
-		// being built — there is no device at image-build time. Skip
-		// silently (the deploy-time AndroidDeployTarget executes it).
-		return nil
-	case *LocalPkgInstallStep:
-		// Image-build install of a candy's localpkg package. PRODUCTION boxes
-		// download the PUBLISHED release; disposable check beds build the
-		// in-development package from local source — ONE shared decision in
-		// renderLocalPkgImageInstall. Both install via the SAME dep-resolving
-		// install_template (OS-tracked, not a bare COPY'd binary).
-		return t.emitLocalPkgInstall(s)
-	case *RebootStep:
-		// No machine to reboot during an image build — skip silently
-		// (a target:vm deploy of this candy performs the reboot).
-		return nil
+	prov, ok := stepProviderFor(step.Kind())
+	if !ok {
+		return fmt.Errorf("OCITarget: unknown step kind %q", step.Kind())
 	}
-	return fmt.Errorf("OCITarget: unknown step kind %q", step.Kind())
+	return prov.EmitOCI(t, step, plan)
 }
 
 // emitShellSnippet renders a candy's per-shell init snippet into the

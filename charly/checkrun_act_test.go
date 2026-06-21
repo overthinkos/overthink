@@ -1,14 +1,30 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
 
 // The act renderer produces the create/configure command for each
 // state-provision verb, and declines (ok=false) for observe-only verbs.
-// Act-ness is the enclosing step's `run:` keyword (intentDo=act); the renderer
-// itself keys on the verb, so the Op carries no `do:` field anymore.
+// Act-ness is the enclosing step's `run:` keyword (intentDo=act); the verb
+// provider's ProvisionActor renders it, so the Op carries no `do:` field anymore.
+//
+// actScriptForTest resolves a verb to its provider and renders the
+// act script via ProvisionActor — the same path runProvisionAct takes (C1b).
+func actScriptForTest(op *Op, verb string, distros []string) (string, bool) {
+	prov, ok := providerRegistry.ResolveVerb(verb)
+	if !ok {
+		return "", false
+	}
+	actor, ok := prov.(ProvisionActor)
+	if !ok {
+		return "", false
+	}
+	return actor.RenderProvisionScript(op, distros)
+}
+
 func TestRenderProvisionScript(t *testing.T) {
 	tr := true
 	cases := []struct {
@@ -29,7 +45,7 @@ func TestRenderProvisionScript(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got, ok := renderProvisionScript(&c.op, c.verb, nil)
+			got, ok := actScriptForTest(&c.op, c.verb, nil)
 			if ok != c.wantOK {
 				t.Fatalf("ok = %v, want %v (script=%q)", ok, c.wantOK, got)
 			}
@@ -37,5 +53,45 @@ func TestRenderProvisionScript(t *testing.T) {
 				t.Errorf("script %q does not contain %q", got, c.contains)
 			}
 		})
+	}
+}
+
+// TestRunProvisionActDispatch exercises the FULL act path end-to-end (C1b): the
+// verb resolves to its provider, ProvisionActor renders the script, and the
+// rendered script runs via the executor — pass on exit 0, fail on non-zero, and
+// ok=false (fall through) for a verb with no act form.
+func TestRunProvisionActDispatch(t *testing.T) {
+	ctx := context.Background()
+
+	// file is a ProvisionActor → renders `mkdir … && touch …`, execs, passes.
+	fe := &fakeExecutor{responses: []fakeResponse{{matchPrefix: "mkdir", exit: 0}}}
+	r := &Runner{Exec: fe, Mode: RunModeLive}
+	res, ok := r.runProvisionAct(ctx, &Op{File: "/tmp/x"}, "file")
+	if !ok {
+		t.Fatalf("runProvisionAct(file) ok=false, want true (file is a ProvisionActor)")
+	}
+	if res.Status != TestPass {
+		t.Fatalf("runProvisionAct(file) status=%v, want TestPass; msg=%q", res.Status, res.Message)
+	}
+	if len(fe.calls) != 1 || !strings.Contains(fe.calls[0], "mkdir") {
+		t.Fatalf("expected the rendered script to execute once; calls=%v", fe.calls)
+	}
+
+	// port has no act form → ok=false (caller falls through to the probe handler).
+	if _, ok := r.runProvisionAct(ctx, &Op{Port: 80}, "port"); ok {
+		t.Fatalf("runProvisionAct(port) ok=true, want false (no act form)")
+	}
+
+	// An unknown verb (no provider) → ok=false.
+	if _, ok := r.runProvisionAct(ctx, &Op{}, "no-such-verb"); ok {
+		t.Fatalf("runProvisionAct(unknown) ok=true, want false")
+	}
+
+	// Non-zero exit → fail.
+	feFail := &fakeExecutor{responses: []fakeResponse{{matchPrefix: "mkdir", exit: 1, stderr: "boom"}}}
+	rFail := &Runner{Exec: feFail, Mode: RunModeLive}
+	res2, ok := rFail.runProvisionAct(ctx, &Op{File: "/tmp/y"}, "file")
+	if !ok || res2.Status != TestFail {
+		t.Fatalf("runProvisionAct(file, exit 1) = (status=%v, ok=%v), want (TestFail, true)", res2.Status, ok)
 	}
 }

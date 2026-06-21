@@ -19,6 +19,16 @@ type CheckVerbProvider interface {
 	RunVerb(ctx context.Context, rt *Runner, op *Op) CheckResult
 }
 
+// ProvisionActor is the optional do:act half of a verb provider: it renders the
+// shell that performs a state-provision verb's side-effect on the live target
+// (ok=false for a verb with no act form — an action verb whose handler already
+// acts, or a pure observe verb). Only the state-provision verbs (file/package/
+// service/user/group/kernel-param/mount) implement it; runProvisionAct resolves
+// the verb and type-asserts ProvisionActor — the per-verb act switch is gone (C1b).
+type ProvisionActor interface {
+	RenderProvisionScript(op *Op, distros []string) (string, bool)
+}
+
 // builtinVerbBase supplies the in-proc-only Provider half (Class + a stub Invoke)
 // for every built-in verb provider. A compiled-in verb runs via RunVerb; it does
 // not serve itself out-of-process, so Invoke is an explicit error rather than a

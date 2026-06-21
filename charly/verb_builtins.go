@@ -12,8 +12,8 @@ import (
 // live-container verbs (cdp/wl/…) still funnel through runCharlyVerb + the
 // method-allowlist maps (checkrun_charly_verbs.go) inside their handler.
 //
-// The do-mode (act) dispatch (renderProvisionScript, checkrun_act.go) is a
-// SEPARATE switch migrated in the C1b follow-up.
+// The do-mode (act) half of the state-provision verbs is a ProvisionActor method
+// per provider (checkrun_act.go) — runProvisionAct resolves + type-asserts it (C1b).
 
 type fileVerb struct{ builtinVerbBase }
 

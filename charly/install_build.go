@@ -842,33 +842,13 @@ func collectBuilderContext(layer *Candy, builderName string, _ *BuilderDef, img 
 		"builder": builderName,
 		"home":    img.Home,
 	}
-	switch builderName {
-	case "pixi":
-		// Default pixi env name. A candy with pixi.toml using a
-		// [workspace] or [project] name overrides this; the host target
-		// can read pixi.toml at install time and amend.
-		ctx["env_name"] = pixiDefaultEnvName(layer)
-	case "cargo":
-		// Cargo binaries are knowable only by reading Cargo.toml's
-		// [[bin]] entries. For the skeleton we record the candy name as
-		// a placeholder — the host target will read the real names
-		// after `cargo install` and update the ledger. Empty list means
-		// "best-effort uninstall via cargo uninstall <candy-name>".
-	case "npm":
-		// npm packages come from package.json dependencies; the host
-		// target reads those at install time.
-	case "aur":
-		if section := layer.FormatSection("aur"); section != nil {
-			ctx["packages"] = append([]string(nil), section.Packages...)
-			// `replaces:` lists distro-repo packages that conflict with
-			// the AUR build artifact and must be removed (`pacman -Rs
-			// --noconfirm`) before `pacman -U`. Idempotent — host-side
-			// removal silently skips entries that aren't installed.
-			if raw, ok := section.Raw["replaces"]; ok {
-				if list, ok := stringSliceFromYAML(raw); ok {
-					ctx["replaces"] = list
-				}
-			}
+	// The builder-specific stage context lives on the builder provider (the switch
+	// is gone — C5): pixi → env_name, aur → packages/replaces; cargo/npm record
+	// nothing (the host target reads Cargo.toml/package.json at install time). A
+	// custom candy builder has no provider → base context only.
+	if bp, ok := builderProviderFor(builderName); ok {
+		for k, v := range bp.CollectContext(layer, img) {
+			ctx[k] = v
 		}
 	}
 	return ctx

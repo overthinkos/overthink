@@ -47,11 +47,6 @@ type LocalDeployTarget struct {
 	// a systemd InitDef with a populated ServiceSchema.
 	InitDef *InitDef
 
-	// BuilderImageResolver maps a builder name to a concrete image ref
-	// for `podman run`. Caller supplies — typically derived from
-	// charly.yml or --builder-image flag.
-	BuilderImageResolver func(builderName string) string
-
 	// Shell is the user's login shell (detected via DetectLoginShell
 	// by default). Drives env.d managed-block insertion.
 	Shell ShellKind
@@ -496,13 +491,9 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, _ *InstallPlan, opts Emi
 	// Builder image resolution mirrors VmDeployTarget.execBuilder:
 	//   1. EmitOpts.BuilderImageOverride (--builder-image flag)
 	//   2. BuilderStep.BuilderImage (compiled from charly.yml)
-	//   3. t.BuilderImageResolver (rarely wired)
 	image := opts.BuilderImageOverride
 	if image == "" {
 		image = s.BuilderImage
-	}
-	if image == "" && t.BuilderImageResolver != nil {
-		image = t.BuilderImageResolver(s.Builder)
 	}
 	if image == "" {
 		return fmt.Errorf("no builder image for %s (candy=%s); set --builder-image or define builder.%s in charly.yml", s.Builder, s.CandyName, s.Builder)
@@ -523,15 +514,19 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, _ *InstallPlan, opts Emi
 		return err
 	}
 	envVars := UserScopeEnv(t.HostHome)
+	// A staging builder (aur) needs a host tmpdir bind-mounted into the builder
+	// container for its built package files (read back after the build, below);
+	// the builder provider declares the mount point (BuilderStager — the
+	// `if s.Builder == "aur"` guard is gone, C5).
 	var aurStage string
-	if s.Builder == "aur" {
-		aurStage, err = os.MkdirTemp("", "charly-aur-")
+	if stager, ok := builderStagerFor(s.Builder); ok {
+		aurStage, err = os.MkdirTemp("", "charly-"+s.Builder+"-")
 		if err != nil {
 			return err
 		}
 		RegisterTempCleanup(aurStage)
 		defer func() { _ = os.RemoveAll(aurStage); UnregisterTempCleanup(aurStage) }()
-		bindMounts["/tmp/aur-pkgs"] = aurStage
+		bindMounts[stager.StagingMount()] = aurStage
 	}
 
 	// Render the builder-specific bash script. Each supported builder

@@ -424,50 +424,10 @@ func (s *BuilderStep) Venue() Venue       { return VenueContainerBuilder }
 func (s *BuilderStep) RequiresGate() Gate { return GateNone }
 
 func (s *BuilderStep) Reverse() []ReverseOp {
-	switch s.Builder {
-	case "aur":
-		// aur packages get installed into the host package DB; reverse
-		// is same as SystemPackagesStep. The compiler populates the
-		// package name list into RawStageContext["packages"] so the
-		// ledger records them.
-		if pkgs := extractStringSlice(s.RawStageContext, "packages"); len(pkgs) > 0 {
-			return []ReverseOp{{
-				Kind:    ReverseOpPackageRemove,
-				Format:  "pac",
-				Targets: pkgs,
-				Scope:   ScopeSystem,
-			}}
-		}
-	case "pixi":
-		// Pixi envs land at $HOME/.pixi/envs/<env-name>/ — the env name
-		// comes from the candy's pixi.toml (project name) or defaults to
-		// "default". Recorded under "env_name" in RawStageContext.
-		if env := extractString(s.RawStageContext, "env_name"); env != "" {
-			return []ReverseOp{{
-				Kind:    ReverseOpPixiEnvRemove,
-				Targets: []string{env},
-				Scope:   ScopeUser,
-				Extra:   map[string]string{"layer": s.CandyName},
-			}}
-		}
-	case "cargo":
-		// Cargo binaries: track by name from RawStageContext["binaries"].
-		if bins := extractStringSlice(s.RawStageContext, "binaries"); len(bins) > 0 {
-			return []ReverseOp{{
-				Kind:    ReverseOpCargoUninstall,
-				Targets: bins,
-				Scope:   ScopeUser,
-			}}
-		}
-	case "npm":
-		// Npm globals: track by package name from RawStageContext["packages"].
-		if pkgs := extractStringSlice(s.RawStageContext, "packages"); len(pkgs) > 0 {
-			return []ReverseOp{{
-				Kind:    ReverseOpNpmUninstallG,
-				Targets: pkgs,
-				Scope:   ScopeUser,
-			}}
-		}
+	// The builder-specific reverse-op lives on the builder provider (the switch is
+	// gone — C5). A custom candy builder has no provider → no reverse op.
+	if bp, ok := builderProviderFor(s.Builder); ok {
+		return bp.Reverse(s)
 	}
 	return nil
 }

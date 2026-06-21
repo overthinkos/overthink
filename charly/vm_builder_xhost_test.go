@@ -6,22 +6,18 @@ import (
 	"testing"
 )
 
-// D3: builder-image resolution order — override > compiled step > resolver,
-// hard-error when none resolves.
+// D3: builder-image resolution order — override > compiled step, hard-error when
+// none resolves (the dead resolver-fallback tier was removed in C5).
 func TestResolveBuilderImage(t *testing.T) {
-	tgt := &VmDeployTarget{BuilderImageResolver: func(string) string { return "from-resolver" }}
+	tgt := &VmDeployTarget{}
 
 	if img, _ := tgt.resolveBuilderImage(&BuilderStep{Builder: "npm", BuilderImage: "from-step"}, EmitOpts{BuilderImageOverride: "from-override"}); img != "from-override" {
 		t.Errorf("override should win, got %q", img)
 	}
 	if img, _ := tgt.resolveBuilderImage(&BuilderStep{Builder: "npm", BuilderImage: "from-step"}, EmitOpts{}); img != "from-step" {
-		t.Errorf("compiled step image should win over resolver, got %q", img)
+		t.Errorf("compiled step image should win, got %q", img)
 	}
-	if img, _ := tgt.resolveBuilderImage(&BuilderStep{Builder: "npm"}, EmitOpts{}); img != "from-resolver" {
-		t.Errorf("resolver fallback, got %q", img)
-	}
-	bare := &VmDeployTarget{}
-	if _, err := bare.resolveBuilderImage(&BuilderStep{Builder: "npm", CandyName: "claude-code"}, EmitOpts{}); err == nil {
+	if _, err := tgt.resolveBuilderImage(&BuilderStep{Builder: "npm", CandyName: "claude-code"}, EmitOpts{}); err == nil {
 		t.Error("no image resolvable → expected error")
 	}
 }
@@ -36,11 +32,8 @@ func TestVmExecBuilderRoutesHomeBuilders(t *testing.T) {
 		t.Fatalf("LoadBuildConfigForBox: %v", err)
 	}
 	for _, b := range []string{"npm", "pixi", "cargo"} {
-		tgt := &VmDeployTarget{
-			Exec:                 &recordingExec{},
-			BuilderImageResolver: func(string) string { return "test-builder:latest" },
-		}
-		s := &BuilderStep{Builder: b, CandyName: "x", CandyDir: "/tmp/x", BuilderDef: bc.Builder[b]}
+		tgt := &VmDeployTarget{Exec: &recordingExec{}}
+		s := &BuilderStep{Builder: b, CandyName: "x", CandyDir: "/tmp/x", BuilderDef: bc.Builder[b], BuilderImage: "test-builder:latest"}
 		if err := tgt.execBuilder(context.Background(), s, &InstallPlan{}, EmitOpts{DryRun: true}); err != nil {
 			t.Errorf("execBuilder(%s) dry-run routed to home-artifact builder errored: %v", b, err)
 		}

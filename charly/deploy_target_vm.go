@@ -42,11 +42,6 @@ type VmDeployTarget struct {
 	// transport.
 	Exec DeployExecutor
 
-	// BuilderImageResolver maps builder names to image refs for the
-	// runBuilder step. Same shape as LocalDeployTarget's resolver —
-	// builders run on the host, artifacts are scp'd into the guest.
-	BuilderImageResolver func(builderName string) string
-
 	// Distro mirrors LocalDeployTarget.Distro for gating decisions
 	// (e.g. aur on non-Arch host). For a VM target, this is the
 	// GUEST distro, not the host; resolved via ssh /etc/os-release.
@@ -783,16 +778,13 @@ func (t *VmDeployTarget) execBuilder(ctx context.Context, s *BuilderStep, _ *Ins
 }
 
 // resolveBuilderImage picks the builder image ref for a BuilderStep on a VM
-// target. Order: --builder-image override → compiled BuilderStep.BuilderImage
-// → BuilderImageResolver. The builder always runs on the HOST (podman); the
-// guest never needs a container runtime.
+// target. Order: --builder-image override → compiled BuilderStep.BuilderImage.
+// The builder always runs on the HOST (podman); the guest never needs a
+// container runtime.
 func (t *VmDeployTarget) resolveBuilderImage(s *BuilderStep, opts EmitOpts) (string, error) {
 	image := opts.BuilderImageOverride
 	if image == "" {
 		image = s.BuilderImage
-	}
-	if image == "" && t.BuilderImageResolver != nil {
-		image = t.BuilderImageResolver(s.Builder)
 	}
 	if image == "" {
 		return "", fmt.Errorf("no builder image for %s (candy=%s); set --builder-image or define builder.%s in charly.yml",

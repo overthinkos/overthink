@@ -2206,6 +2206,7 @@ func populateCandyFromYAML(layer *Candy, ly *CandyYAML) {
 	layer.Description = ly.Description
 	layer.Status = ly.Status
 	layer.Info = descriptionInfo(ly.Description)
+	layer.Plugin = ly.Plugin
 
 	layer.Require = toCandyRefs(ly.Require)
 	layer.IncludedCandy = toCandyRefs(ly.Candy)

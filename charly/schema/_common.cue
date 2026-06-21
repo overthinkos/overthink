@@ -19,7 +19,7 @@
 	"command" | "file" | "package" | "service" | "port" | "process" | "http" |
 	"dns" | "user" | "group" | "interface" | "kernel-param" | "mount" | "addr" |
 	"matching" | "cdp" | "wl" | "dbus" | "vnc" | "mcp" | "record" | "spice" |
-	"libvirt" | "k8s" | "adb" | "appium" | "summarize" | "kill") @go(-)
+	"libvirt" | "k8s" | "adb" | "appium" | "summarize" | "kill" | "plugin") @go(-)
 
 // ---------------------------------------------------------------------------
 // Plan steps: the unified run/check/agent-run/agent-check/include vocabulary.
@@ -85,6 +85,13 @@
 	summarize?:      string
 	kill?:           string
 	signal?:         "TERM" | "KILL"
+	// plugin — the generic PLUGIN-VERB discriminator. Its value is a reserved word
+	// served by a registered Provider (built-in or out-of-tree plugin); the host
+	// #Op cannot type per-plugin verb fields (an external plugin's vocabulary is
+	// not compiled in), so a plugin verb is authored via this generic envelope and
+	// dispatched through providerRegistry.ResolveVerb. plugin_input carries the
+	// params, validated by the PLUGIN's own spliced CUE schema (not base #Op).
+	plugin?: string
 
 	// --- shared resource-identity modifiers ---
 	name?:      string
@@ -115,6 +122,9 @@
 	// → Op.venue, yaml:"-"). Authoring it is a closed-schema rejection (run:
 	// charly migrate).
 	depends_on?: [...string] @go(DependsOn)
+	// plugin_input — generic params for a `plugin:` verb. Opaque to base #Op
+	// (accepts any shape); the plugin's own spliced CUE schema validates it.
+	plugin_input?: {...} @go(PluginInput,type=map[string]any)
 
 	// --- install/build modifiers ---
 	run_as?:  string @go(RunAs)

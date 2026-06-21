@@ -1,0 +1,42 @@
+package main
+
+import (
+	"fmt"
+
+	plugin "github.com/hashicorp/go-plugin"
+)
+
+// PluginInternalCmd is the hidden `__plugin` command group — the plugin
+// server/relay plumbing the registry spawns. Operators never type it; the normal
+// verbs (charly check, charly bundle add, …) drive it invisibly.
+type PluginInternalCmd struct {
+	Serve PluginServeCmd `cmd:"" help:"serve the in-process providers over go-plugin gRPC (internal)"`
+	List  PluginListCmd  `cmd:"" help:"list the registered providers and their capabilities"`
+}
+
+// PluginServeCmd exposes this charly instance's in-proc providerRegistry over
+// go-plugin gRPC. Used out-of-process for crash isolation and as the in-venue
+// server the ExecutorTransport reattaches to. plugin.Serve writes the handshake to
+// stdout and blocks serving until the host disconnects (then auto-exits — clean
+// teardown, no orphan).
+type PluginServeCmd struct{}
+
+func (c *PluginServeCmd) Run() error { //nolint:unparam // Kong Run signature requires error; plugin.Serve blocks until disconnect
+	set := newServedSet(CharlyVersion(), providerRegistry.allProviders())
+	plugin.Serve(&plugin.ServeConfig{
+		HandshakeConfig: charlyHandshake,
+		Plugins:         charlyPluginMap(set),
+		GRPCServer:      plugin.DefaultGRPCServer,
+	})
+	return nil
+}
+
+// PluginListCmd prints the registered providers ("<class>:<word>"), one per line.
+type PluginListCmd struct{}
+
+func (c *PluginListCmd) Run() error { //nolint:unparam // Kong Run signature requires the error return
+	for _, p := range providerRegistry.allProviders() {
+		fmt.Printf("%s:%s\n", p.Class(), p.Reserved())
+	}
+	return nil
+}

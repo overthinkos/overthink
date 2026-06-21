@@ -12,6 +12,9 @@ includes:
   cue:
     taskfile: ./taskfiles/Cue.yml
     dir: "{{.ROOT_DIR}}"
+  proto:
+    taskfile: ./taskfiles/Proto.yml
+    dir: "{{.ROOT_DIR}}"
 
 tasks:
   default:

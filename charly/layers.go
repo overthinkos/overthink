@@ -61,6 +61,7 @@ var candyYAMLKnownFields = map[string]bool{
 	"secret_accept": true, "secret_require": true,
 	"mcp_provide": true, "mcp_require": true, "mcp_accept": true,
 	"var": true, "plan": true,
+	"plugin":     true,
 	"artifact":   true,
 	"capability": true, "requires_capability": true,
 	"package": true, "distro": true,
@@ -291,7 +292,11 @@ type Candy struct {
 	Version     string // CalVer version from the candy manifest
 	Description string // plain-string self-description; first line = summary
 	Status      string // maturity rung: working | testing | broken (default testing)
-	Info        string // the description's first line — summary shown in listings
+	// Plugin is the candy's `plugin:` block (nil = an ordinary candy). Its presence
+	// makes the candy a PLUGIN — it provides reserved-word Providers (built-in or
+	// out-of-tree). See provider.go / validatePluginCandy.
+	Plugin *CandyPluginDecl
+	Info   string // the description's first line — summary shown in listings
 	// Parse-time filesystem-probe caches: each caches a single fileExists /
 	// dirExists check against SourceDir performed once at scan time. These stay
 	// fields (a remote candy's cache dir may be evicted before they're read,

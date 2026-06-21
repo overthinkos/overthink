@@ -258,6 +258,13 @@ var VerbCatalog = map[string]VerbSpec{
 	// meta.
 	"summarize": {ctxRuntimeOnly, DoAssert, false, ""},
 	"kill":      {ctxRuntimeOnly, DoAct, false, ""},
+
+	// plugin — the generic plugin-verb discriminator. Its VALUE (Op.Plugin) is the
+	// reserved word served by a registered Provider (built-in or out-of-tree). The
+	// handler is runOne's providerRegistry.ResolveVerb dispatch; context is
+	// permissive (a plugin verb may probe at build/deploy/runtime — the plugin's
+	// own check declares where it applies). DoAssert (a check), not reversible.
+	"plugin": {ctxBuildDeployRuntime, DoAssert, false, ""},
 }
 
 // installVerbs are the verbs that render directly to a generic OpStep install

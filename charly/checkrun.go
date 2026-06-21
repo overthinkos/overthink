@@ -504,6 +504,8 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 			dr = r.runSummarize(ctx, &expanded)
 		case "kill":
 			dr = r.runKill(ctx, &expanded)
+		case "plugin":
+			dr = r.runPluginVerb(ctx, &expanded)
 		default:
 			dr.Status = TestSkip
 			dr.Message = fmt.Sprintf("unknown verb %q", kind)

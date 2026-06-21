@@ -30,6 +30,7 @@ type (
 	CandyArtifact            = spec.CandyArtifact
 	CandyArtifactRewrite     = spec.CandyArtifactRewrite
 	CandyCapabilities        = spec.CandyCapabilities
+	CandyPluginDecl          = spec.Plugin
 	CandyYAML                = spec.CandyYAML
 	ContainsList             = spec.ContainsList
 	CredentialMount          = spec.CredentialMount

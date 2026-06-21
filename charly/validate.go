@@ -663,9 +663,12 @@ func validateCandyReferences(cfg *Config, layers map[string]*Candy, errs *Valida
 // validateCandyContents validates each candy has required files
 func validateCandyContents(layers map[string]*Candy, errs *ValidationError) {
 	for name, layer := range layers {
-		// Candy must have at least one install file, a candy: field (composition), or data declarations
-		if !layer.HasInstallFiles() && len(layer.IncludedCandy) == 0 && !layer.HasData() {
-			errs.Add("candy %q: must have at least one install file (candy manifest distro: packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml) or a candy: field", name)
+		// Candy must have at least one install file, a candy: field (composition),
+		// data declarations, OR a plugin: block — a plugin candy's content IS its
+		// provider declaration (its Go provider is compiled in or fetched+built),
+		// so it legitimately ships no install files.
+		if !layer.HasInstallFiles() && len(layer.IncludedCandy) == 0 && !layer.HasData() && layer.Plugin == nil {
+			errs.Add("candy %q: must have at least one install file (candy manifest distro: packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml), a candy: field, or a plugin: block", name)
 		}
 
 		// version: (mandatory CalVer) and status: (working|testing|broken enum)
@@ -703,6 +706,12 @@ func validateCandyContents(layers map[string]*Candy, errs *ValidationError) {
 		// (For the default case SourceDir == Path, which is guaranteed to exist.)
 		if layer.SourceDir != layer.Path && !dirExists(layer.SourceDir) {
 			errs.Add("candy %q: directory %q does not exist (resolved to %q)", name, layer.SourceDir, layer.SourceDir)
+		}
+
+		// Plugin block (when present): capabilities well-formed; builtin providers
+		// actually compiled into charly.
+		for _, issue := range validatePluginCandy(name, layer.Plugin) {
+			errs.Add("%s", issue)
 		}
 
 		// Cargo.toml requires src/ directory

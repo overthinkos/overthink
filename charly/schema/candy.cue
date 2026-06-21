@@ -27,6 +27,12 @@
 	requires_capability?: [...(string & !="")] @go(RequiresCapability)
 	capability?: #CandyCapability @go(Capability,optional=nillable)
 
+	// plugin — declaring this block makes the candy a PLUGIN: it provides
+	// reserved-word Providers (built-in OR out-of-tree). The candy is otherwise
+	// authored, validated, built, deployed, and checked like any candy (R3 — one
+	// authoring surface). See provider.go / plugin_loader.go.
+	plugin?: #Plugin @go(Plugin,optional=nillable)
+
 	// --- runtime env / local vars / PATH ---
 	// env forbids PATH (validate.go: use path_append instead). Values are
 	// Go-coerced scalars (#StrVal) — an unquoted `PORT: 8080` is a string. The Go
@@ -246,3 +252,21 @@
 	host: string & !=""
 	port: int & >0 & <=65535 @go(,type=int)
 }
+
+// #Plugin — the candy's plugin declaration. Its presence makes the candy a
+// plugin (Go: charly/checkspec.go via the generated Candy.Plugin field, consumed
+// by plugin_loader.go). CLOSED.
+#Plugin: close({
+	// providers: the "<class>:<word>" reserved-word capabilities this plugin
+	// serves (e.g. "verb:exampleprobe", "kind:my-thing"). Each is registered into
+	// providerRegistry — built-in (init()) or out-of-tree (gRPC).
+	providers: [...#PluginCapability]
+	// source: "builtin" (Go compiled into the charly binary, init()-registered) OR
+	// a git ref (github.com/org/repo[/sub][@tag]) fetched via the @github resolver +
+	// built into a provider binary. Default builtin.
+	source: *"builtin" | (string & =~"^github\\.com/[^/]+/[^/]+(/.+)?$")
+})
+
+// #PluginCapability — a "<class>:<word>" capability string. class ∈ the closed
+// ProviderClass set; word is lowercase-hyphenated.
+#PluginCapability: string & =~"^(kind|deploy|verb|step|builder):[a-z0-9][a-z0-9-]*$"

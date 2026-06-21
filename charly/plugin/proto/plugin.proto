@@ -1,0 +1,45 @@
+// The charly plugin gRPC contract.
+//
+// Design (matches the unified Provider model in charly/provider.go): the wire
+// carries JSON payloads for the domain types (Op / CheckResult / InstallPlan /
+// decoded entities) so the generated `spec` Go structs stay the SINGLE source of
+// truth — there is no parallel proto type system to drift (R3). Only the
+// control / streaming / handshake envelopes are typed proto.
+//
+// ONE Provider service mirrors the ONE in-proc Provider interface: a uniform
+// Invoke(reserved-word, op, params) keyed by reserved word, plus a streaming
+// form for the genuinely-streaming verbs (record / logcat / execute). PluginMeta
+// is read once on connect for capability advertisement + CalVer gating.
+syntax = "proto3";
+package charlyplugin;
+option go_package = "github.com/overthinkos/overthink/charly/plugin/proto";
+
+message Empty {}
+
+// PluginMeta — read once on connect.
+service PluginMeta {
+  rpc Describe(Empty) returns (Capabilities);
+}
+message Capabilities {
+  string calver = 1;               // the plugin's CalVer (CalVer is the version authority)
+  uint32 protocol_version = 2;     // thin secondary gate; never duplicates CalVer
+  repeated string provided = 3;    // ["verb:exampleprobe","kind:my-thing","deploy:my-target",...]
+}
+
+// Provider — the ONE uniform capability service. `reserved` is the reserved word
+// (the registry key); `op` selects the operation for that word's class
+// (load/validate/run/emit/render/resolve); params_json + env_json carry the
+// CUE-typed params + the serializable invocation context (snapshotCheckEnv).
+service Provider {
+  rpc Invoke(InvokeRequest) returns (InvokeReply);          // single-shot (the common path)
+  rpc InvokeStream(InvokeRequest) returns (stream Frame);   // streaming (record/logcat/execute)
+}
+message InvokeRequest {
+  string reserved = 1;     // the reserved word, e.g. "exampleprobe","cdp","local"
+  string op = 2;           // operation selector for the word's class
+  bytes  params_json = 3;  // the CUE-generated params (Op for verbs/steps; entity for kinds)
+  bytes  env_json = 4;     // snapshotCheckEnv / venue descriptor (serializable invocation ctx)
+  string class = 5;        // the ProviderClass ("verb"/"kind"/...) — words aren't unique across classes
+}
+message InvokeReply { bytes result_json = 1; }   // CheckResult / InstallPlan / Diagnostics, JSON
+message Frame       { bytes result_json = 1; }   // one streamed result frame (single-shot sends one)

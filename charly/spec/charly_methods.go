@@ -151,6 +151,9 @@ func (c *Op) VerbsSet() []string {
 	if c.Kill != "" {
 		set = append(set, "kill")
 	}
+	if c.Plugin != "" {
+		set = append(set, "plugin")
+	}
 	return set
 }
 

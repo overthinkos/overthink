@@ -82,6 +82,14 @@ type Op struct {
 
 	Signal string `yaml:"signal,omitempty" json:"signal,omitempty"`
 
+	// plugin — the generic PLUGIN-VERB discriminator. Its value is a reserved word
+	// served by a registered Provider (built-in or out-of-tree plugin); the host
+	// #Op cannot type per-plugin verb fields (an external plugin's vocabulary is
+	// not compiled in), so a plugin verb is authored via this generic envelope and
+	// dispatched through providerRegistry.ResolveVerb. plugin_input carries the
+	// params, validated by the PLUGIN's own spliced CUE schema (not base #Op).
+	Plugin string `yaml:"plugin,omitempty" json:"plugin,omitempty"`
+
 	// --- shared resource-identity modifiers ---
 	Name string `yaml:"name,omitempty" json:"name,omitempty"`
 
@@ -128,6 +136,10 @@ type Op struct {
 	// → Op.venue, yaml:"-"). Authoring it is a closed-schema rejection (run:
 	// charly migrate).
 	DependsOn []string `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
+
+	// plugin_input — generic params for a `plugin:` verb. Opaque to base #Op
+	// (accepts any shape); the plugin's own spliced CUE schema validates it.
+	PluginInput map[string]any `yaml:"plugin_input,omitempty" json:"plugin_input,omitempty"`
 
 	// --- install/build modifiers ---
 	RunAs string `yaml:"run_as,omitempty" json:"run_as,omitempty"`
@@ -832,6 +844,12 @@ type Candy struct {
 
 	Capability *CandyCapability `yaml:"capability,omitempty" json:"capability,omitempty"`
 
+	// plugin — declaring this block makes the candy a PLUGIN: it provides
+	// reserved-word Providers (built-in OR out-of-tree). The candy is otherwise
+	// authored, validated, built, deployed, and checked like any candy (R3 — one
+	// authoring surface). See provider.go / plugin_loader.go.
+	Plugin *Plugin `yaml:"plugin,omitempty" json:"plugin,omitempty"`
+
 	// --- runtime env / local vars / PATH ---
 	// env forbids PATH (validate.go: use path_append instead). Values are
 	// Go-coerced scalars (#StrVal) — an unquoted `PORT: 8080` is a string. The Go
@@ -934,6 +952,25 @@ type CandyCapability struct {
 
 	OCILabels map[string]string `yaml:"oci_label,omitempty" json:"oci_label,omitempty"`
 }
+
+// #Plugin — the candy's plugin declaration. Its presence makes the candy a
+// plugin (Go: charly/checkspec.go via the generated Candy.Plugin field, consumed
+// by plugin_loader.go). CLOSED.
+type Plugin struct {
+	// providers: the "<class>:<word>" reserved-word capabilities this plugin
+	// serves (e.g. "verb:exampleprobe", "kind:my-thing"). Each is registered into
+	// providerRegistry — built-in (init()) or out-of-tree (gRPC).
+	Providers []PluginCapability `yaml:"providers,omitempty" json:"providers"`
+
+	// source: "builtin" (Go compiled into the charly binary, init()-registered) OR
+	// a git ref (github.com/org/repo[/sub][@tag]) fetched via the @github resolver +
+	// built into a provider binary. Default builtin.
+	Source string `yaml:"source,omitempty" json:"source"`
+}
+
+// #PluginCapability — a "<class>:<word>" capability string. class ∈ the closed
+// ProviderClass set; word is lowercase-hyphenated.
+type PluginCapability string
 
 // RouteYAML — generic service-route metadata (traefik / tunnel).
 type CandyRoute struct {

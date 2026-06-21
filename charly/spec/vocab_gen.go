@@ -91,6 +91,7 @@ var DataKeys = []string{
 	"mcp_require",
 	"package",
 	"path_append",
+	"plugin",
 	"port",
 	"port_relay",
 	"preemptible",
@@ -233,6 +234,8 @@ var OpFields = []string{
 	"params",
 	"path",
 	"percent",
+	"plugin",
+	"plugin_input",
 	"port",
 	"process",
 	"property",
@@ -326,6 +329,7 @@ var OpVerbs = []string{
 	"appium",
 	"summarize",
 	"kill",
+	"plugin",
 }
 
 // AuthoringVerbs is the AUTHORABLE #Op field vocabulary (#Op fields minus the runtime-derived origin/venue/intent_do).
@@ -448,6 +452,8 @@ var AuthoringVerbs = []string{
 	"params",
 	"path",
 	"percent",
+	"plugin",
+	"plugin_input",
 	"port",
 	"process",
 	"property",

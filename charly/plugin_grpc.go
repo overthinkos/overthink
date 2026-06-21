@@ -140,6 +140,17 @@ func (g *grpcProvider) Invoke(ctx context.Context, op *Operation) (*Result, erro
 // defs). This is THE client-side construction — identical for an external plugin
 // and a builtin served out-of-process; the host never reads a candy schema/ dir.
 func buildUnit(conn *sdk.Conn, caps *pb.Capabilities) (*PluginUnit, error) {
+	// Version gate — a readable refusal here, never a later wire panic.
+	// ProtocolVersion is the ENFORCED wire-compatibility gate: a plugin built
+	// against a different charly proto/SDK speaks a different contract and is
+	// refused before any Invoke. CalVer is the plugin's advisory version stamp,
+	// surfaced in the refusal for the operator but NOT an equality gate — plugins
+	// are independent repos at independent CalVers, and a same-host builtin served
+	// out-of-process may advertise an empty/unstamped CalVer (identical binary).
+	if caps.GetProtocolVersion() != sdk.ProtocolVersion {
+		return nil, fmt.Errorf("plugin protocol version mismatch: plugin advertises protocol %d (CalVer %q), host requires protocol %d — rebuild the plugin against this charly",
+			caps.GetProtocolVersion(), caps.GetCalver(), sdk.ProtocolVersion)
+	}
 	provided := caps.GetProvided()
 	providers := make([]Provider, 0, len(provided))
 	inputDefs := make(map[string]string, len(provided))

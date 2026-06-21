@@ -91,10 +91,8 @@ func connectAndDescribe(ctx context.Context, client *plugin.Client) (*PluginUnit
 		client.Kill()
 		return nil, fmt.Errorf("plugin describe: %w", err)
 	}
-	// CalVer is the version authority (version.go). A plugin built from a fetched
-	// repo is CalVer-stamped; a gross mismatch is a readable refusal rather than a
-	// wire panic. An empty/unparseable plugin CalVer is tolerated for a same-host
-	// builtin served out-of-process (identical binary).
+	// buildUnit applies the protocol-version gate (a readable refusal, not a later
+	// wire panic) before lifting caps → unit.
 	unit, err := buildUnit(conn, caps)
 	if err != nil {
 		client.Kill()

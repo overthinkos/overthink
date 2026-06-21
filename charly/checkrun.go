@@ -447,68 +447,18 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 				return act
 			}
 		}
-		switch kind {
-		case "file":
-			dr = r.runFile(ctx, &expanded)
-		case "port":
-			dr = r.runPort(ctx, &expanded)
-		case "command":
-			dr = r.runCommand(ctx, &expanded)
-		case "http":
-			dr = r.runHTTP(ctx, &expanded)
-		case "package":
-			dr = r.runPackage(ctx, &expanded)
-		case "service":
-			dr = r.runService(ctx, &expanded)
-		case "process":
-			dr = r.runProcess(ctx, &expanded)
-		case "dns":
-			dr = r.runDNS(ctx, &expanded)
-		case "user":
-			dr = r.runUser(ctx, &expanded)
-		case "group":
-			dr = r.runGroup(ctx, &expanded)
-		case "interface":
-			dr = r.runInterface(ctx, &expanded)
-		case "kernel-param":
-			dr = r.runKernelParam(ctx, &expanded)
-		case "mount":
-			dr = r.runMount(ctx, &expanded)
-		case "addr":
-			dr = r.runAddr(ctx, &expanded)
-		case "matching":
-			dr = r.runMatching(ctx, &expanded)
-		case "cdp":
-			dr = r.runCdp(ctx, &expanded)
-		case "wl":
-			dr = r.runWl(ctx, &expanded)
-		case "dbus":
-			dr = r.runDbus(ctx, &expanded)
-		case "vnc":
-			dr = r.runVnc(ctx, &expanded)
-		case "mcp":
-			dr = r.runMcp(ctx, &expanded)
-		case "record":
-			dr = r.runRecord(ctx, &expanded)
-		case "spice":
-			dr = r.runSpice(ctx, &expanded)
-		case "libvirt":
-			dr = r.runLibvirt(ctx, &expanded)
-		case "k8s":
-			dr = r.runK8s(ctx, &expanded)
-		case "adb":
-			dr = r.runAdb(ctx, &expanded)
-		case "appium":
-			dr = r.runAppium(ctx, &expanded)
-		case "summarize":
-			dr = r.runSummarize(ctx, &expanded)
-		case "kill":
-			dr = r.runKill(ctx, &expanded)
-		case "plugin":
-			dr = r.runPluginVerb(ctx, &expanded)
-		default:
+		// Verb dispatch is the provider registry (the switch is gone — C1). Every
+		// built-in verb is a CheckVerbProvider (verb_builtins.go); an out-of-tree
+		// plugin verb arrives via the generic `plugin:` envelope (the pluginVerb
+		// provider → runPluginVerb).
+		if prov, ok := providerRegistry.ResolveVerb(kind); !ok {
 			dr.Status = TestSkip
 			dr.Message = fmt.Sprintf("unknown verb %q", kind)
+		} else if cv, ok := prov.(CheckVerbProvider); ok {
+			dr = cv.RunVerb(ctx, r, &expanded)
+		} else {
+			dr.Status = TestSkip
+			dr.Message = fmt.Sprintf("verb %q has no in-process check handler", kind)
 		}
 		return dr
 	}

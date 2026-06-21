@@ -469,11 +469,8 @@ func (c *BundleAddCmd) compileNodePlans(target, refStr, tag, path string, addCan
 }
 
 // classifyNodeTarget picks the target discriminator for a node. Uses
-// node.Target when non-empty. Returns canonical target values
-// (host|vm|pod|k8s); legacy "container"/"kubernetes" spellings are
-// normalized to pod/k8s for transition compatibility — the `charly
-// migrate deploy-v3` command converts them to the canonical values
-// on-disk.
+// node.Target when non-empty (canonical pod|vm|k8s|local|android, set from
+// the node-form kind by bundleTargetForDisc).
 //
 // For ref-based deploys with no charly.yml entry (e.g. `charly bundle add
 // foo ./box.yml` where foo isn't declared), the deploy name itself
@@ -482,18 +479,6 @@ func (c *BundleAddCmd) compileNodePlans(target, refStr, tag, path string, addCan
 // deploys are now always tree-backed with explicit target:vm.
 func classifyNodeTarget(node *BundleNode, path string) string {
 	if node != nil && node.Target != "" {
-		switch node.Target {
-		case "container":
-			return "pod"
-		case "kubernetes":
-			return "k8s"
-		case "host":
-			// Legacy spelling — schema v4 uses "local". Routed for
-			// graceful in-progress migration; the loader rejects
-			// authored target:host entries with a hard error pointing
-			// at `charly migrate`.
-			return "local"
-		}
 		return node.Target
 	}
 	if pathLeaf(path) == "host" || pathLeaf(path) == "local" {
@@ -615,7 +600,7 @@ func (c *BundleDelCmd) Run() error {
 // `charly bundle del` invocation. Precedence:
 //   - literal "host" name → synthetic local node (legacy)
 //   - "vm:<name>" prefix  → synthetic vm node (legacy ref-based del)
-//   - charly.yml entry    → the merged node, target normalized
+//   - charly.yml entry    → the merged node (canonical target)
 //   - no entry            → synthetic pod node (the default)
 //
 // The returned node always carries a non-empty Target so ResolveTarget
@@ -633,7 +618,6 @@ func (c *BundleDelCmd) resolveDelNode() (*BundleNode, string) {
 		if tree, _ := resolveTreeRoot(cwd); tree != nil {
 			if node, ok := tree[c.Name]; ok && node.Target != "" {
 				n := node
-				n.Target = canonicalDeployWord(node.Target)
 				return &n, n.Target
 			}
 		}

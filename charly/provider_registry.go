@@ -15,13 +15,11 @@ import (
 // lazily after the loader connects them (RegisterPluginProviders). Every reserved
 // word resolves through here regardless of transport.
 //
-// Migration status (the plugin program converts each built-in dispatch switch to
-// register here, one cutover at a time): VERBS (C1 — checkrun.go runOne) and DEPLOY
-// TARGETS (C3 — ResolveTarget) are registry-driven; their switches are DELETED, the
-// call site resolves + dispatches through here. KINDS (node_normalize.go), STEPS,
-// and BUILDERS are still switch-driven, migrated in later cutovers. The registry
-// also holds every plugin-contributed provider (its first consumer was the example
-// plugin in C0).
+// Every built-in dispatch is registry-driven: VERBS (C1), KINDS (C2), STEPS (C4),
+// BUILDERS (C5), and DEPLOY TARGETS (C3) all register here and their dispatch
+// switches are DELETED — the call site resolves + dispatches through the registry.
+// The registry also holds every plugin-contributed provider (its first consumer was
+// the example plugin in C0).
 var providerRegistry = newRegistry()
 
 // Registry maps (class, reserved-word) → Provider. Keyed by both because a word
@@ -30,12 +28,11 @@ type Registry struct {
 	mu      sync.RWMutex
 	byKey   map[string]Provider
 	origins map[string]string // key → "builtin" | "github.com/org/repo@tag" | "local:<bin>"
-	aliases map[string]string // provKey(class, legacy-spelling) → canonical reserved word (same class)
 	closers []io.Closer       // plugin connections, closed by Close()
 }
 
 func newRegistry() *Registry {
-	return &Registry{byKey: map[string]Provider{}, origins: map[string]string{}, aliases: map[string]string{}}
+	return &Registry{byKey: map[string]Provider{}, origins: map[string]string{}}
 }
 
 func provKey(c ProviderClass, word string) string { return string(c) + ":" + word }
@@ -114,33 +111,12 @@ func (r *Registry) RegisterPluginProviders(ps []Provider, origin string, conn io
 	return nil
 }
 
-// RegisterBuiltinAlias maps a legacy spelling to a canonical provider's reserved
-// word within the same class (e.g. ClassDeployTarget "container" → "pod"). resolve
-// follows the alias to the canonical provider, whose Reserved() stays canonical —
-// so a normalization caller recovers the canonical word via the resolved provider's
-// Reserved(). Replaces the deploy-target legacy-spelling switch (C3). Panics on an
-// empty arg (a startup invariant, like RegisterBuiltinProvider).
-func RegisterBuiltinAlias(class ProviderClass, alias, canonical string) {
-	if alias == "" || canonical == "" {
-		panic("RegisterBuiltinAlias: empty alias or canonical word")
-	}
-	r := providerRegistry
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.aliases[provKey(class, alias)] = canonical
-}
-
-// resolve returns the provider for (class, word), following a registered alias if
-// the word is a legacy spelling.
+// resolve returns the provider for (class, word).
 func (r *Registry) resolve(class ProviderClass, word string) (Provider, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	if p, ok := r.byKey[provKey(class, word)]; ok {
 		return p, true
-	}
-	if canon, ok := r.aliases[provKey(class, word)]; ok {
-		p, ok := r.byKey[provKey(class, canon)]
-		return p, ok
 	}
 	return nil, false
 }

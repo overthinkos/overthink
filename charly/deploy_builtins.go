@@ -2,8 +2,7 @@ package main
 
 // The built-in deploy targets as DeployTargetProviders. Each constructs its
 // UnifiedDeployTarget unchanged — the migration is behavior-preserving; the
-// ResolveTarget dispatch switch + the legacy-spelling alias switch are replaced by
-// providerRegistry.ResolveDeploy + RegisterBuiltinAlias.
+// ResolveTarget dispatch switch is replaced by providerRegistry.ResolveDeploy.
 
 type localTarget struct{ builtinDeployBase }
 
@@ -48,10 +47,6 @@ func init() {
 	} {
 		RegisterBuiltinProvider(p)
 	}
-	// Legacy spellings → canonical (the former alias-normalization switch).
-	RegisterBuiltinAlias(ClassDeployTarget, "host", "local")
-	RegisterBuiltinAlias(ClassDeployTarget, "container", "pod")
-	RegisterBuiltinAlias(ClassDeployTarget, "kubernetes", "k8s")
 	if err := checkDeployProviderBijection(); err != nil {
 		panic(err)
 	}

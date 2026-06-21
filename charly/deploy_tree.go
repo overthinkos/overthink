@@ -257,20 +257,13 @@ func sshParamsForVm(deployName string) *SSHExecutor {
 	}
 }
 
-// classifyTarget normalizes the Target field for dispatch. Empty
-// Target falls back to "pod" (default for named deploys). Legacy
-// "container"/"kubernetes" spellings normalize to pod/k8s so
-// downstream code speaks the canonical target vocabulary exclusively.
-// Target is the canonical source of truth (no name-prefix heuristic).
+// classifyTarget normalizes the Target field for dispatch. Empty Target
+// falls back to "pod" (the default for named deploys); otherwise Target is
+// the canonical source of truth (pod|vm|k8s|local|android — set from the
+// node-form kind by bundleTargetForDisc; no name-prefix heuristic).
 func classifyTarget(node *BundleNode) string {
 	if node == nil || node.Target == "" {
 		return "pod"
-	}
-	switch node.Target {
-	case "container":
-		return "pod"
-	case "kubernetes":
-		return "k8s"
 	}
 	return node.Target
 }

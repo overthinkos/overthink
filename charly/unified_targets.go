@@ -287,19 +287,6 @@ func (t *AndroidUnifiedTarget) Executor() DeployExecutor { return nil }
 // method CONSTRUCTS the live embedded target from the DeployContext.
 // ---------------------------------------------------------------------------
 
-// canonicalDeployWord normalizes a legacy target spelling to the canonical
-// vocabulary (local|vm|pod|k8s|android) via the provider registry's aliases
-// ("container" → "pod", "kubernetes" → "k8s", "host" → "local"; deploy_builtins.go).
-// An empty / unknown value is returned unchanged so ResolveTarget can raise the
-// missing-target error. The `charly migrate` deploy step rewrites these on-disk;
-// this keeps the resolver tolerant of in-flight configs.
-func canonicalDeployWord(target string) string {
-	if p, ok := providerRegistry.ResolveDeploy(target); ok {
-		return p.Reserved()
-	}
-	return target
-}
-
 // ResolveTarget returns the UnifiedDeployTarget for `name`, dispatching
 // on the node's canonical target. The node MUST be the dispatch-merged
 // BundleNode (project+operator field merge from resolveTreeRoot) —
@@ -322,8 +309,7 @@ func ResolveTarget(node *BundleNode, name string) (UnifiedDeployTarget, error) {
 			"(local|vm|pod|k8s|android); run `charly migrate`", name)
 	}
 
-	// Target dispatch is the provider registry (the switch is gone — C3). The
-	// legacy spellings resolve through the registered aliases (deploy_builtins.go).
+	// Target dispatch is the provider registry (the switch is gone — C3).
 	prov, ok := providerRegistry.ResolveDeploy(node.Target)
 	if !ok {
 		return nil, fmt.Errorf("deployment %q: unknown target %q "+

@@ -62,6 +62,32 @@ tasks:
         ( cd charly && go run ./internal/schemagen -mode=vocab -schema=schema -out=spec/vocab_gen.go )
         # 4) gofmt both committed generated files.
         gofmt -w charly/spec/cue_types_gen.go charly/spec/vocab_gen.go
+        # 5) Plugin param structs — each plugin's OWN self-contained schema → its
+        #    params package, via the SAME gengotypes pipeline as spec (-pkg=params
+        #    header, R3). A plugin schema is self-contained, so it compiles + gens
+        #    standalone; the host's base ++ plugin splice provides the collision
+        #    check. Covers every in-tree builtin unit AND the in-repo external
+        #    example (whose params its own module compiles against).
+        ROOT="$PWD"
+        for SCHEMA_DIR in charly/plugin/builtins/*/schema candy/plugin-example-external/schema; do
+          test -d "$SCHEMA_DIR" || continue
+          PARAMS_DIR="$(dirname "$SCHEMA_DIR")/params"
+          mkdir -p "$PARAMS_DIR"
+          PDIR="$(mktemp -d)"; mkdir -p "$PDIR/cue.mod"
+          cat > "$PDIR/cue.mod/module.cue" <<EOF
+        module: "github.com/overthinkos/overthink/charly/schema/params-codegen"
+        language: version: "{{.CUE_VERSION}}"
+        EOF
+          ( cd charly && go run ./internal/schemagen -mode=concat -pkg=params -schema="$ROOT/$SCHEMA_DIR" -out="$PDIR/p.cue" )
+          ( cd "$PDIR" && "$CUE" exp gengotypes ./p.cue )
+          PGEN="$(ls "$PDIR"/cue_types*_gen.go 2>/dev/null | head -1)"
+          test -n "$PGEN" || { echo "cue:gen: gengotypes produced no params for $SCHEMA_DIR" >&2; exit 1; }
+          cp "$PGEN" "$PARAMS_DIR/cue_types_gen.go"
+          ( cd charly && go run ./internal/schemagen -mode=retag -out="$ROOT/$PARAMS_DIR/cue_types_gen.go" )
+          gofmt -w "$PARAMS_DIR/cue_types_gen.go"
+          rm -rf "$PDIR"
+          echo "cue:gen: regenerated $PARAMS_DIR/cue_types_gen.go"
+        done
         echo "cue:gen: regenerated charly/spec/{cue_types_gen.go,vocab_gen.go}"
 
   bootstrap-cue:

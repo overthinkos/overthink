@@ -72,6 +72,30 @@ func RegisterBuiltinProvider(p Provider) {
 	}
 }
 
+// builtinPluginUnits holds every in-tree plugin UNIT registered from init() (a
+// candy with a `plugin: { source: builtin }` block — its providers + its embedded
+// self-contained CUE schema). It is the in-proc analogue of an external plugin's
+// served unit: loadBuiltinPluginUnits gates every one of these schemas at process
+// start through the SAME gate an external goes through.
+// Core C1–C5 providers (cdp/box/local/…) are NOT units — their params live in the
+// base schema (#Op/#Box), so they register via RegisterBuiltinProvider; only
+// `plugin:`-block candies contribute a splice-on unit.
+var builtinPluginUnits []PluginUnit
+
+// RegisterBuiltinPluginUnit registers a built-in plugin unit from init(): it
+// indexes the unit (so loadBuiltinPluginUnits can gate its schema) AND registers
+// every provider (panicking on conflict, a startup invariant like
+// RegisterBuiltinProvider — a built-in provider is available immediately, like a
+// core provider; only its schema gating is deferred to the process-start pass).
+func RegisterBuiltinPluginUnit(u PluginUnit) {
+	builtinPluginUnits = append(builtinPluginUnits, u)
+	for _, p := range u.Providers {
+		if err := providerRegistry.register(p, "builtin"); err != nil {
+			panic("RegisterBuiltinPluginUnit: " + err.Error())
+		}
+	}
+}
+
 // RegisterPluginProviders indexes the (already-connected) out-of-process
 // providers of one plugin, tracking the connection for Close(). Unlike a built-in
 // it returns an error rather than panicking — a misbehaving third-party plugin
@@ -129,6 +153,33 @@ func (r *Registry) ResolveDeploy(word string) (Provider, bool) {
 }
 func (r *Registry) ResolveStep(word string) (Provider, bool)    { return r.resolve(ClassStep, word) }
 func (r *Registry) ResolveBuilder(word string) (Provider, bool) { return r.resolve(ClassBuilder, word) }
+
+// allServedUnits expresses every in-proc provider as PluginUnits for
+// `charly __plugin serve`: each builtin plugin unit (carrying its self-contained
+// schema) plus a single schema-less unit wrapping the remaining core providers
+// (cdp/box/local/… — their params live in the base #Op/#Box, not a splice-on
+// schema). So a charly served out-of-process advertises plugin schemas over
+// Describe byte-identically to an external plugin.
+func (r *Registry) allServedUnits() []PluginUnit {
+	inUnit := map[string]bool{}
+	units := make([]PluginUnit, 0, len(builtinPluginUnits)+1)
+	for _, u := range builtinPluginUnits {
+		units = append(units, u)
+		for _, p := range u.Providers {
+			inUnit[provKey(p.Class(), p.Reserved())] = true
+		}
+	}
+	var rest []Provider
+	for _, p := range r.allProviders() {
+		if !inUnit[provKey(p.Class(), p.Reserved())] {
+			rest = append(rest, p)
+		}
+	}
+	if len(rest) > 0 {
+		units = append(units, PluginUnit{Providers: rest})
+	}
+	return units
+}
 
 // allProviders returns every registered provider (sorted by key) — used by
 // `charly __plugin serve` to expose the in-proc set over gRPC.

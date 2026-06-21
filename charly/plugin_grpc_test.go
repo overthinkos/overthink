@@ -12,6 +12,7 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 
 	pb "github.com/overthinkos/overthink/charly/plugin/proto"
+	"github.com/overthinkos/overthink/charly/plugin/sdk"
 )
 
 // testVerbProvider is an in-proc Provider used to exercise the gRPC contract.
@@ -27,14 +28,22 @@ func (p testVerbProvider) Invoke(_ context.Context, op *Operation) (*Result, err
 	return &Result{JSON: j}, nil
 }
 
-// TestPluginGRPCRoundTrip proves the uniform Provider envelope survives the gRPC
-// boundary: a served in-proc provider (providerGRPCServer + metaGRPCServer) is
-// reached by the client-side grpcProvider through Describe + buildProviders +
-// Invoke, with the pass verdict + marker round-tripping intact. This is the wire
+// TestPluginGRPCRoundTrip proves the uniform Provider envelope AND the served
+// schema survive the gRPC boundary: a served in-proc unit (providerGRPCServer +
+// metaGRPCServer) is reached by the client-side grpcProvider through Describe +
+// buildUnit + Invoke, with the structured capabilities, the schema source, the
+// pass verdict, and the marker all round-tripping intact. This is the wire
 // contract LocalTransport / ExecutorTransport ride on (the go-plugin exec/reattach
 // envelope itself is proven by the RDD spikes).
 func TestPluginGRPCRoundTrip(t *testing.T) {
-	set := newServedSet("2026.0.0", []Provider{testVerbProvider{word: "testprobe"}})
+	unit := PluginUnit{
+		Providers: []Provider{testVerbProvider{word: "testprobe"}},
+		Schema: PluginSchema{
+			CueSource: "#TestprobeInput: {marker?: string}\n",
+			InputDefs: map[string]string{"verb:testprobe": "#TestprobeInput"},
+		},
+	}
+	set := newServedSet("2026.0.0", []PluginUnit{unit})
 
 	lis := bufconn.Listen(1 << 20)
 	srv := grpc.NewServer()
@@ -51,32 +60,38 @@ func TestPluginGRPCRoundTrip(t *testing.T) {
 	}
 	defer func() { _ = conn.Close() }()
 
-	pc := &pluginConn{provider: pb.NewProviderClient(conn), meta: pb.NewPluginMetaClient(conn)}
+	pc := &sdk.Conn{Provider: pb.NewProviderClient(conn), Meta: pb.NewPluginMetaClient(conn)}
 
-	caps, err := pc.describe(context.Background())
+	caps, err := describe(context.Background(), pc)
 	if err != nil {
 		t.Fatalf("describe: %v", err)
 	}
 	if caps.GetCalver() != "2026.0.0" {
 		t.Fatalf("describe calver = %q, want 2026.0.0", caps.GetCalver())
 	}
-	wantCap := "verb:testprobe"
-	found := false
+	if caps.GetSchemaCue() == "" {
+		t.Fatal("describe schema_cue is empty — the served schema must travel over Describe")
+	}
+	foundCap := false
 	for _, c := range caps.GetProvided() {
-		if c == wantCap {
-			found = true
+		if c.GetClass() == "verb" && c.GetWord() == "testprobe" && c.GetInputDef() == "#TestprobeInput" {
+			foundCap = true
 		}
 	}
-	if !found {
-		t.Fatalf("describe provided = %v, want to contain %q", caps.GetProvided(), wantCap)
+	if !foundCap {
+		t.Fatalf("describe provided = %v, want verb:testprobe with input_def #TestprobeInput", caps.GetProvided())
 	}
 
-	provs, err := pc.buildProviders(caps.GetProvided())
+	got, err := buildUnit(pc, caps)
 	if err != nil {
-		t.Fatalf("buildProviders: %v", err)
+		t.Fatalf("buildUnit: %v", err)
 	}
+	provs := got.Providers
 	if len(provs) != 1 || provs[0].Class() != ClassVerb || provs[0].Reserved() != "testprobe" {
-		t.Fatalf("buildProviders = %+v, want one verb:testprobe", provs)
+		t.Fatalf("buildUnit providers = %+v, want one verb:testprobe", provs)
+	}
+	if got.Schema.CueSource == "" || got.Schema.InputDefs["verb:testprobe"] != "#TestprobeInput" {
+		t.Fatalf("buildUnit schema = %+v, want non-empty source + #TestprobeInput input def", got.Schema)
 	}
 
 	out, err := provs[0].Invoke(context.Background(), &Operation{

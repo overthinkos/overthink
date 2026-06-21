@@ -1,0 +1,24 @@
+plugin-example-external:
+    candy:
+        version: 2026.172.0001
+        description: |-
+            Reference OUT-OF-TREE charly plugin — a standalone Go module (go.mod +
+            main.go) serving the externalprobe check verb over go-plugin gRPC via the
+            charly plugin SDK (charly/plugin/sdk). charly's loader fetches this candy's
+            repo, go-builds the provider binary on the HOST, and serves it
+            OUT-OF-PROCESS via LocalTransport — proving an out-of-tree plugin's verb
+            dispatches through the provider registry exactly like a built-in, with no
+            charly recompile. The companion of the built-in candy/plugin-example.
+    plugin-example-external-decl:
+        plugin:
+            providers:
+                - verb:externalprobe
+            source: github.com/overthinkos/overthink/candy/plugin-example-external
+    externalprobe-out-of-proc:
+        check: the externalprobe verb served by the out-of-tree plugin binary dispatches through the registry OUT-OF-PROCESS and passes (the plugin_input marker round-trips author -> wire -> external process -> result)
+        id: externalprobe-out-of-proc
+        plugin: externalprobe
+        plugin_input:
+            marker: external-plugin-ok
+        context:
+            - runtime

@@ -21,9 +21,21 @@ service PluginMeta {
   rpc Describe(Empty) returns (Capabilities);
 }
 message Capabilities {
-  string calver = 1;               // the plugin's CalVer (CalVer is the version authority)
-  uint32 protocol_version = 2;     // thin secondary gate; never duplicates CalVer
-  repeated string provided = 3;    // ["verb:exampleprobe","kind:my-thing","deploy:my-target",...]
+  string calver = 1;                        // the plugin's CalVer (CalVer is the version authority)
+  uint32 protocol_version = 2;              // thin secondary gate; never duplicates CalVer
+  repeated ProvidedCapability provided = 3; // the unit's capabilities + the def validating each input
+  string schema_cue = 4;                    // the unit's package-less, SELF-CONTAINED .cue source text
+}
+
+// ProvidedCapability — one served capability plus the CUE def that validates its
+// plugin_input. The schema travels with the plugin over Describe (the same channel
+// for in-proc builtin and out-of-proc external — zero distinction), so the host
+// validates authored plugin_input against `base ++ served` without ever reading a
+// candy's schema/ dir. `input_def` is explicit (no Title-case naming convention).
+message ProvidedCapability {
+  string class = 1;       // "verb" / "kind" / "deploy" / "step" / "builder"
+  string word = 2;        // the reserved word, e.g. "externalprobe"
+  string input_def = 3;   // the CUE def for this word's plugin_input, e.g. "#ExternalprobeInput"
 }
 
 // Provider — the ONE uniform capability service. `reserved` is the reserved word

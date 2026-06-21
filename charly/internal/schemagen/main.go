@@ -53,6 +53,7 @@ import (
 func main() {
 	mode := flag.String("mode", "", "concat | vocab | retag")
 	schemaDir := flag.String("schema", "charly/schema", "path to the schema/*.cue directory")
+	pkg := flag.String("pkg", "spec", "Go package for the concat header (spec | params)")
 	out := flag.String("out", "", "output file path")
 	flag.Parse()
 
@@ -61,7 +62,7 @@ func main() {
 	}
 	switch *mode {
 	case "concat":
-		if err := writeConcat(*schemaDir, *out); err != nil {
+		if err := writeConcat(*schemaDir, *out, *pkg); err != nil {
 			fatal("schemagen concat: %v", err)
 		}
 	case "vocab":
@@ -102,16 +103,18 @@ func concatSchema(dir string, exclude func(name string) bool) (string, []string,
 	return schemaconcat.ConcatSchema(os.DirFS(dir), ".", exclude)
 }
 
-// specSource returns the concatenation headed with the `package spec` clause and
-// the file-level `@go(spec)` attribute — what `cue exp gengotypes` consumes to
-// emit `package spec`. The cue API (vocab mode) compiles the same string. The
-// exclude filter scopes the param-gen input (see excludeParamGen).
-func specSource(dir string, exclude func(name string) bool) (string, error) {
+// specSource returns the concatenation headed with the `package <pkg>` clause and
+// the file-level `@go(<pkg>)` attribute — what `cue exp gengotypes` consumes to
+// emit that Go package. pkg is "spec" for the core schema and "params" for a
+// plugin's self-contained schema (same one concatenation contract — R3). The cue
+// API (vocab mode) compiles the same string. The exclude filter scopes the
+// param-gen input (see excludeParamGen).
+func specSource(dir, pkg string, exclude func(name string) bool) (string, error) {
 	body, _, err := concatSchema(dir, exclude)
 	if err != nil {
 		return "", err
 	}
-	return "package spec\n\n@go(spec)\n\n" + body, nil
+	return "package " + pkg + "\n\n@go(" + pkg + ")\n\n" + body, nil
 }
 
 // ----------------------------------------------------------------------------
@@ -152,9 +155,9 @@ func retagFile(path string) error {
 }
 
 // writeConcat emits the gengotypes input — the PARAM-GEN-scoped concatenation
-// (node.cue + egress_*.cue excluded; see excludeParamGen).
-func writeConcat(dir, out string) error {
-	src, err := specSource(dir, excludeParamGen)
+// (node.cue + egress_*.cue excluded; see excludeParamGen) headed with `package pkg`.
+func writeConcat(dir, out, pkg string) error {
+	src, err := specSource(dir, pkg, excludeParamGen)
 	if err != nil {
 		return err
 	}
@@ -186,7 +189,7 @@ func writeVocab(dir, out string) error {
 	// FULL schema (nil exclude): the vocab generator needs #Node's arms
 	// (node.cue) to derive KindWords, so this concatenation matches the runtime
 	// sharedCueSchema (every schema/*.cue).
-	src, err := specSource(dir, nil)
+	src, err := specSource(dir, "spec", nil)
 	if err != nil {
 		return err
 	}

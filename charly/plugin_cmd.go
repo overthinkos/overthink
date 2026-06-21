@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	plugin "github.com/hashicorp/go-plugin"
+	"github.com/overthinkos/overthink/charly/plugin/sdk"
 )
 
 // PluginInternalCmd is the hidden `__plugin` command group — the plugin
@@ -21,13 +21,12 @@ type PluginInternalCmd struct {
 // teardown, no orphan).
 type PluginServeCmd struct{}
 
-func (c *PluginServeCmd) Run() error { //nolint:unparam // Kong Run signature requires error; plugin.Serve blocks until disconnect
-	set := newServedSet(CharlyVersion(), providerRegistry.allProviders())
-	plugin.Serve(&plugin.ServeConfig{
-		HandshakeConfig: charlyHandshake,
-		Plugins:         charlyPluginMap(set),
-		GRPCServer:      plugin.DefaultGRPCServer,
-	})
+func (c *PluginServeCmd) Run() error { //nolint:unparam // Kong Run signature requires error; sdk.Serve blocks until disconnect
+	if err := loadBuiltinPluginUnits(); err != nil {
+		return fmt.Errorf("__plugin serve: builtin schema gate: %w", err)
+	}
+	set := newServedSet(CharlyVersion(), providerRegistry.allServedUnits())
+	sdk.Serve(&providerGRPCServer{set: set}, &metaGRPCServer{set: set})
 	return nil
 }
 

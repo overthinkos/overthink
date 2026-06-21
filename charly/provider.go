@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"strings"
 )
 
 // Provider is the ONE extension abstraction. Every reserved word — every kind,
@@ -52,6 +53,21 @@ var providerClasses = map[ProviderClass]bool{
 	ClassKind: true, ClassVerb: true, ClassDeployTarget: true, ClassStep: true, ClassBuilder: true,
 }
 
+// splitCapability parses a "<class>:<word>" capability string as authored in a
+// candy's `plugin.providers:` list. The wire form (proto ProvidedCapability) is
+// already structured; this parses the YAML-authored declarations only.
+func splitCapability(s string) (ProviderClass, string, bool) {
+	i := strings.IndexByte(s, ':')
+	if i <= 0 || i == len(s)-1 {
+		return "", "", false
+	}
+	c := ProviderClass(s[:i])
+	if !providerClasses[c] {
+		return "", "", false
+	}
+	return c, s[i+1:], true
+}
+
 // Operation is the uniform invocation envelope (wire-aligned with proto
 // InvokeRequest). Params and Env are JSON so the generated `spec` structs stay
 // the single source of truth — there is no parallel proto type system (R3).
@@ -66,6 +82,26 @@ type Operation struct {
 // Frame). JSON is the class-appropriate payload, decoded by the call site.
 type Result struct {
 	JSON json.RawMessage `json:"json"`
+}
+
+// PluginSchema is a plugin unit's CUE contract, obtained THROUGH the transport
+// (gRPC Describe for an external, an in-proc handoff for a builtin) — never read
+// from a candy's schema/ dir. CueSource is the package-less, SELF-CONTAINED .cue
+// body the host splices onto its base schema (base ++ plugin) to validate authored
+// plugin_input; InputDefs maps each provider key ("verb:externalprobe") to the CUE
+// def that validates its plugin_input ("#ExternalprobeInput").
+type PluginSchema struct {
+	CueSource string
+	InputDefs map[string]string
+}
+
+// PluginUnit is one self-contained plugin as the host sees it — its providers plus
+// its schema. Built-in and external plugins both arrive as a *PluginUnit from
+// PluginTransport.Connect, so the host code that loads, gates, and validates a
+// plugin NEVER branches on which kind it is (the zero-distinction seam).
+type PluginUnit struct {
+	Providers []Provider
+	Schema    PluginSchema
 }
 
 // Operation selectors (op.Op). Each class uses the subset it needs.

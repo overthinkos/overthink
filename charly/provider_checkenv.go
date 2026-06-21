@@ -66,6 +66,26 @@ func (r *Runner) runPluginVerb(ctx context.Context, c *Op) CheckResult {
 		res.Message = fmt.Sprintf("no provider registered for plugin verb %q", word)
 		return res
 	}
+	// Validate the authored plugin_input against the plugin's SERVED CUE schema
+	// (base ++ plugin) BEFORE dispatch — a typo / missing / empty marker is a hard
+	// failure here, never a silent runtime surprise. Transport-invisible: the def
+	// comes from the process-wide schema set the load gate filled, identically for a
+	// builtin and an external plugin.
+	inputJSON := []byte("{}")
+	if c.PluginInput != nil {
+		j, err := marshalJSON(c.PluginInput)
+		if err != nil {
+			res.Status = TestFail
+			res.Message = "plugin verb: marshal plugin_input: " + err.Error()
+			return res
+		}
+		inputJSON = j
+	}
+	if err := validateAuthoredPluginInput(ClassVerb, word, inputJSON); err != nil {
+		res.Status = TestFail
+		res.Message = err.Error()
+		return res
+	}
 	params, err := marshalJSON(c)
 	if err != nil {
 		res.Status = TestFail

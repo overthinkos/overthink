@@ -74,7 +74,8 @@ type Capabilities struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Calver          string                 `protobuf:"bytes,1,opt,name=calver,proto3" json:"calver,omitempty"`                                           // the plugin's CalVer (CalVer is the version authority)
 	ProtocolVersion uint32                 `protobuf:"varint,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"` // thin secondary gate; never duplicates CalVer
-	Provided        []string               `protobuf:"bytes,3,rep,name=provided,proto3" json:"provided,omitempty"`                                       // ["verb:exampleprobe","kind:my-thing","deploy:my-target",...]
+	Provided        []*ProvidedCapability  `protobuf:"bytes,3,rep,name=provided,proto3" json:"provided,omitempty"`                                       // the unit's capabilities + the def validating each input
+	SchemaCue       string                 `protobuf:"bytes,4,opt,name=schema_cue,json=schemaCue,proto3" json:"schema_cue,omitempty"`                    // the unit's package-less, SELF-CONTAINED .cue source text
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -123,11 +124,83 @@ func (x *Capabilities) GetProtocolVersion() uint32 {
 	return 0
 }
 
-func (x *Capabilities) GetProvided() []string {
+func (x *Capabilities) GetProvided() []*ProvidedCapability {
 	if x != nil {
 		return x.Provided
 	}
 	return nil
+}
+
+func (x *Capabilities) GetSchemaCue() string {
+	if x != nil {
+		return x.SchemaCue
+	}
+	return ""
+}
+
+// ProvidedCapability — one served capability plus the CUE def that validates its
+// plugin_input. The schema travels with the plugin over Describe (the same channel
+// for in-proc builtin and out-of-proc external — zero distinction), so the host
+// validates authored plugin_input against `base ++ served` without ever reading a
+// candy's schema/ dir. `input_def` is explicit (no Title-case naming convention).
+type ProvidedCapability struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Class         string                 `protobuf:"bytes,1,opt,name=class,proto3" json:"class,omitempty"`                       // "verb" / "kind" / "deploy" / "step" / "builder"
+	Word          string                 `protobuf:"bytes,2,opt,name=word,proto3" json:"word,omitempty"`                         // the reserved word, e.g. "externalprobe"
+	InputDef      string                 `protobuf:"bytes,3,opt,name=input_def,json=inputDef,proto3" json:"input_def,omitempty"` // the CUE def for this word's plugin_input, e.g. "#ExternalprobeInput"
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProvidedCapability) Reset() {
+	*x = ProvidedCapability{}
+	mi := &file_plugin_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProvidedCapability) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProvidedCapability) ProtoMessage() {}
+
+func (x *ProvidedCapability) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProvidedCapability.ProtoReflect.Descriptor instead.
+func (*ProvidedCapability) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ProvidedCapability) GetClass() string {
+	if x != nil {
+		return x.Class
+	}
+	return ""
+}
+
+func (x *ProvidedCapability) GetWord() string {
+	if x != nil {
+		return x.Word
+	}
+	return ""
+}
+
+func (x *ProvidedCapability) GetInputDef() string {
+	if x != nil {
+		return x.InputDef
+	}
+	return ""
 }
 
 type InvokeRequest struct {
@@ -143,7 +216,7 @@ type InvokeRequest struct {
 
 func (x *InvokeRequest) Reset() {
 	*x = InvokeRequest{}
-	mi := &file_plugin_proto_msgTypes[2]
+	mi := &file_plugin_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -155,7 +228,7 @@ func (x *InvokeRequest) String() string {
 func (*InvokeRequest) ProtoMessage() {}
 
 func (x *InvokeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_proto_msgTypes[2]
+	mi := &file_plugin_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -168,7 +241,7 @@ func (x *InvokeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvokeRequest.ProtoReflect.Descriptor instead.
 func (*InvokeRequest) Descriptor() ([]byte, []int) {
-	return file_plugin_proto_rawDescGZIP(), []int{2}
+	return file_plugin_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *InvokeRequest) GetReserved() string {
@@ -215,7 +288,7 @@ type InvokeReply struct {
 
 func (x *InvokeReply) Reset() {
 	*x = InvokeReply{}
-	mi := &file_plugin_proto_msgTypes[3]
+	mi := &file_plugin_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -227,7 +300,7 @@ func (x *InvokeReply) String() string {
 func (*InvokeReply) ProtoMessage() {}
 
 func (x *InvokeReply) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_proto_msgTypes[3]
+	mi := &file_plugin_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -240,7 +313,7 @@ func (x *InvokeReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvokeReply.ProtoReflect.Descriptor instead.
 func (*InvokeReply) Descriptor() ([]byte, []int) {
-	return file_plugin_proto_rawDescGZIP(), []int{3}
+	return file_plugin_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *InvokeReply) GetResultJson() []byte {
@@ -259,7 +332,7 @@ type Frame struct {
 
 func (x *Frame) Reset() {
 	*x = Frame{}
-	mi := &file_plugin_proto_msgTypes[4]
+	mi := &file_plugin_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -271,7 +344,7 @@ func (x *Frame) String() string {
 func (*Frame) ProtoMessage() {}
 
 func (x *Frame) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_proto_msgTypes[4]
+	mi := &file_plugin_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -284,7 +357,7 @@ func (x *Frame) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Frame.ProtoReflect.Descriptor instead.
 func (*Frame) Descriptor() ([]byte, []int) {
-	return file_plugin_proto_rawDescGZIP(), []int{4}
+	return file_plugin_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Frame) GetResultJson() []byte {
@@ -299,11 +372,17 @@ var File_plugin_proto protoreflect.FileDescriptor
 const file_plugin_proto_rawDesc = "" +
 	"\n" +
 	"\fplugin.proto\x12\fcharlyplugin\"\a\n" +
-	"\x05Empty\"m\n" +
+	"\x05Empty\"\xae\x01\n" +
 	"\fCapabilities\x12\x16\n" +
 	"\x06calver\x18\x01 \x01(\tR\x06calver\x12)\n" +
-	"\x10protocol_version\x18\x02 \x01(\rR\x0fprotocolVersion\x12\x1a\n" +
-	"\bprovided\x18\x03 \x03(\tR\bprovided\"\x8d\x01\n" +
+	"\x10protocol_version\x18\x02 \x01(\rR\x0fprotocolVersion\x12<\n" +
+	"\bprovided\x18\x03 \x03(\v2 .charlyplugin.ProvidedCapabilityR\bprovided\x12\x1d\n" +
+	"\n" +
+	"schema_cue\x18\x04 \x01(\tR\tschemaCue\"[\n" +
+	"\x12ProvidedCapability\x12\x14\n" +
+	"\x05class\x18\x01 \x01(\tR\x05class\x12\x12\n" +
+	"\x04word\x18\x02 \x01(\tR\x04word\x12\x1b\n" +
+	"\tinput_def\x18\x03 \x01(\tR\binputDef\"\x8d\x01\n" +
 	"\rInvokeRequest\x12\x1a\n" +
 	"\breserved\x18\x01 \x01(\tR\breserved\x12\x0e\n" +
 	"\x02op\x18\x02 \x01(\tR\x02op\x12\x1f\n" +
@@ -336,26 +415,28 @@ func file_plugin_proto_rawDescGZIP() []byte {
 	return file_plugin_proto_rawDescData
 }
 
-var file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_plugin_proto_goTypes = []any{
-	(*Empty)(nil),         // 0: charlyplugin.Empty
-	(*Capabilities)(nil),  // 1: charlyplugin.Capabilities
-	(*InvokeRequest)(nil), // 2: charlyplugin.InvokeRequest
-	(*InvokeReply)(nil),   // 3: charlyplugin.InvokeReply
-	(*Frame)(nil),         // 4: charlyplugin.Frame
+	(*Empty)(nil),              // 0: charlyplugin.Empty
+	(*Capabilities)(nil),       // 1: charlyplugin.Capabilities
+	(*ProvidedCapability)(nil), // 2: charlyplugin.ProvidedCapability
+	(*InvokeRequest)(nil),      // 3: charlyplugin.InvokeRequest
+	(*InvokeReply)(nil),        // 4: charlyplugin.InvokeReply
+	(*Frame)(nil),              // 5: charlyplugin.Frame
 }
 var file_plugin_proto_depIdxs = []int32{
-	0, // 0: charlyplugin.PluginMeta.Describe:input_type -> charlyplugin.Empty
-	2, // 1: charlyplugin.Provider.Invoke:input_type -> charlyplugin.InvokeRequest
-	2, // 2: charlyplugin.Provider.InvokeStream:input_type -> charlyplugin.InvokeRequest
-	1, // 3: charlyplugin.PluginMeta.Describe:output_type -> charlyplugin.Capabilities
-	3, // 4: charlyplugin.Provider.Invoke:output_type -> charlyplugin.InvokeReply
-	4, // 5: charlyplugin.Provider.InvokeStream:output_type -> charlyplugin.Frame
-	3, // [3:6] is the sub-list for method output_type
-	0, // [0:3] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	2, // 0: charlyplugin.Capabilities.provided:type_name -> charlyplugin.ProvidedCapability
+	0, // 1: charlyplugin.PluginMeta.Describe:input_type -> charlyplugin.Empty
+	3, // 2: charlyplugin.Provider.Invoke:input_type -> charlyplugin.InvokeRequest
+	3, // 3: charlyplugin.Provider.InvokeStream:input_type -> charlyplugin.InvokeRequest
+	1, // 4: charlyplugin.PluginMeta.Describe:output_type -> charlyplugin.Capabilities
+	4, // 5: charlyplugin.Provider.Invoke:output_type -> charlyplugin.InvokeReply
+	5, // 6: charlyplugin.Provider.InvokeStream:output_type -> charlyplugin.Frame
+	4, // [4:7] is the sub-list for method output_type
+	1, // [1:4] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_plugin_proto_init() }
@@ -369,7 +450,7 @@ func file_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_plugin_proto_rawDesc), len(file_plugin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

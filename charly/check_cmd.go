@@ -623,21 +623,27 @@ func candySourceDirs(dir string, cfg *Config) (map[string]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("scanning candy source dirs: %w", err)
 	}
+	return candyDirsFromScan(candyMap), nil
+}
+
+// candyDirsFromScan extracts the candy-name → SourceDir map from a scanned candy
+// set. Keyed by the candy MAP KEY — the check's Origin form: a bare name for a
+// local candy ("sshd"), the bare @github ref for a fetched one
+// ("github.com/owner/repo/candy/<name>"). CollectDescriptions stamps
+// Origin = "candy:" + this same key, so resolveCheckApk's CandyDirs[origin]
+// lookup matches in BOTH cases. The SAME scanned map drives the plugin loader
+// (R3 — one scan, both consumers).
+func candyDirsFromScan(candyMap map[string]*Candy) map[string]string {
 	if len(candyMap) == 0 {
-		return nil, nil
+		return nil
 	}
-	// Key by the candy MAP KEY — which is exactly the check's Origin form:
-	// a bare name for a local candy ("sshd"), the bare @github ref for a fetched
-	// one ("github.com/owner/repo/candy/<name>"). CollectDescriptions stamps
-	// Origin = "candy:" + this same key, so resolveCheckApk's CandyDirs[origin]
-	// lookup matches in BOTH cases.
 	out := make(map[string]string, len(candyMap))
 	for key, lyr := range candyMap {
 		if lyr != nil && lyr.SourceDir != "" {
 			out[key] = lyr.SourceDir
 		}
 	}
-	return out, nil
+	return out
 }
 
 // attachCheckRunnerContext wires the identity + committed-APK anchoring every
@@ -650,7 +656,25 @@ func attachCheckRunnerContext(runner *Runner, box, instance string, distros []st
 	runner.Box = box
 	runner.Instance = instance
 	runner.Distros = distros
-	runner.CandyDirs, runner.CandyScanErr = candySourceDirs(dir, cfg)
+	// Scan the RESOLVED candy set ONCE (local + @github-fetched): it carries each
+	// candy's SourceDir (committed-APK anchoring) AND its `plugin:` block, so one
+	// scan feeds BOTH consumers (R3). A box that vendors all its candies via @github
+	// (every box/<distro>) has no project-local Candy map, so the plugin set MUST
+	// come from this scan — never from LoadUnified.
+	candyMap, scanErr := ScanAllCandyWithConfig(dir, cfg)
+	if scanErr != nil {
+		runner.CandyScanErr = fmt.Errorf("scanning candy source dirs: %w", scanErr)
+		return
+	}
+	runner.CandyDirs = candyDirsFromScan(candyMap)
+	// Connect + register every OUT-OF-TREE plugin candy so a `check: plugin: <verb>`
+	// step resolves it out-of-process (built-in plugins are already compiled in). A
+	// build/connect failure is surfaced as a warning; the bed's plugin check then
+	// fails loudly via runPluginVerb's unresolved-verb path. The shared check-runner
+	// setup is the ONE place every check path (box/live) loads plugins (R3).
+	if err := loadProjectPlugins(context.Background(), candyMap); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: plugin load: %v\n", err)
+	}
 }
 
 // isLocalTarget returns true when c.Box names a `target: local` deployment

@@ -23,7 +23,7 @@ redis:
     check: the binary exists
     file: /usr/bin/redis-server
 coder:
-  box:
+  candy:
     base: fedora
   coder-candy:
     candy: [redis]

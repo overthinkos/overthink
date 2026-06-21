@@ -33,18 +33,28 @@ func TestCueBox_Corpus(t *testing.T) {
 			t.Errorf("%s: ingest: %v", f, err)
 			continue
 		}
-		// Unified node-form: `<name>: {box: {…}}` — iterate the top-level nodes
-		// and validate each node's `box` discriminator value against #Box.
+		// Unified node-form after EDGE-INHERIT cutover D: the `box:` kind merged
+		// INTO `candy:`. A discovered box/<distro>/box/<name>/charly.yml entity is a
+		// `<name>: {candy: {base|from: …}}` IMAGE (the former box:) — iterate the
+		// top-level nodes and validate each node's `candy` discriminator value
+		// against #Box (still the image def; `box`→#Box is registered as an internal
+		// validation key). A candy carrying neither base: nor from: is a LAYER
+		// fragment, not an image, so it is not validated here.
 		it, ferr := doc.Fields()
 		if ferr != nil {
 			continue
 		}
 		for it.Next() {
-			box := it.Value().LookupPath(cue.ParsePath("box"))
-			if !box.Exists() {
+			candy := it.Value().LookupPath(cue.ParsePath("candy"))
+			if !candy.Exists() {
 				continue
 			}
-			if verr := validateEntityCUE("box", f, box); verr != nil {
+			base := candy.LookupPath(cue.ParsePath("base"))
+			from := candy.LookupPath(cue.ParsePath("from"))
+			if !base.Exists() && !from.Exists() {
+				continue // a layer fragment, not an image — validated as #Candy elsewhere
+			}
+			if verr := validateEntityCUE("box", f, candy); verr != nil {
 				t.Errorf("FAIL %s", verr)
 				continue
 			}

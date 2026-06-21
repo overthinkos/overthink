@@ -8,15 +8,16 @@ import (
 
 // TestNodeForm_KindNamedEntity is the regression test for an entity NAMED after a
 // reserved kind keyword (the real case: a box named `k8s`). The migration flattens
-// `box: {k8s: …}` to the name-first `k8s: {box: …}`, where the top-level key `k8s`
+// `box: {k8s: …}` to the name-first `k8s: {candy: …}` (EDGE-INHERIT cutover D: an
+// image is a `candy:` node carrying `base:`), where the top-level key `k8s`
 // collides with the `k8s` kind keyword. Two loader/validate sites must handle it:
 //
 //   - applyDiscoveredManifest routes every discovered manifest via classifyDoc,
 //     which inspects the VALUE shape (nodeShapedValue: a `<kind>` discriminator)
 //     and reports docShapeNode — so the box named `k8s` is parsed as a node-form
-//     box, not mis-decoded as a k8s-kind entity.
+//     image (a candy: node with base:), not mis-decoded as a k8s-kind entity.
 //   - validateVocabularyCollections (the root-shape collection validator) would
-//     read top-level `k8s:` as the k8s collection and validate the `box` child
+//     read top-level `k8s:` as the k8s collection and validate the `candy` child
 //     against #K8s; it skips node-form files (isNodeFormFile).
 //
 // Without either fix this test FAILS (load error / validation error).
@@ -34,8 +35,9 @@ func TestNodeForm_KindNamedEntity(t *testing.T) {
 discover:
   - box
 `)
-	// A box NAMED after the `k8s` kind keyword, in node-form.
-	must(filepath.Join(dir, "box", "k8s", "charly.yml"), "k8s:\n  box:\n    base: fedora\n")
+	// A box NAMED after the `k8s` kind keyword, in node-form (an image is a
+	// `candy:` node carrying `base:` — EDGE-INHERIT cutover D).
+	must(filepath.Join(dir, "box", "k8s", "charly.yml"), "k8s:\n  candy:\n    base: fedora\n")
 
 	uf, _, err := LoadUnified(dir)
 	if err != nil {

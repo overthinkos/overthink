@@ -55,29 +55,31 @@ func TestScaffoldProject_AddImageRoundtrip(t *testing.T) {
 	if !strings.Contains(string(rootData), "unified project root") {
 		t.Errorf("scaffold's leading comment was destroyed; charly.yml=\n%s", rootData)
 	}
-	// AddBox writes box/hello/charly.yml as a kind-keyed `box:` doc.
+	// AddBox writes box/hello/charly.yml as a node-form IMAGE: the box NAME is the
+	// top-level key and `candy:` is the image discriminator (EDGE-INHERIT cutover
+	// D — an image is a `candy:` node carrying `base:`).
 	data, err := os.ReadFile(filepath.Join(dir, "box", "hello", "charly.yml"))
 	if err != nil {
 		t.Fatalf("read box/hello/charly.yml: %v", err)
 	}
-	var doc struct {
-		Box struct {
-			Name    string   `yaml:"name"`
+	var doc map[string]struct {
+		Candy struct {
 			Base    string   `yaml:"base"`
 			Candies []string `yaml:"candy"`
-		} `yaml:"box"`
+		} `yaml:"candy"`
 	}
 	if err := yaml.Unmarshal(data, &doc); err != nil {
 		t.Fatalf("re-parse: %v\n%s", err, data)
 	}
-	if doc.Box.Name != "hello" {
-		t.Fatalf("box name = %q; want hello\n%s", doc.Box.Name, data)
+	img, ok := doc["hello"]
+	if !ok {
+		t.Fatalf("no top-level node named hello\n%s", data)
 	}
-	if doc.Box.Base != "quay.io/fedora/fedora:43" {
-		t.Errorf("base = %q; want quay.io/fedora/fedora:43", doc.Box.Base)
+	if img.Candy.Base != "quay.io/fedora/fedora:43" {
+		t.Errorf("base = %q; want quay.io/fedora/fedora:43", img.Candy.Base)
 	}
-	if len(doc.Box.Candies) != 1 || doc.Box.Candies[0] != "sshd" {
-		t.Errorf("candy = %v; want [sshd]", doc.Box.Candies)
+	if len(img.Candy.Candies) != 1 || img.Candy.Candies[0] != "sshd" {
+		t.Errorf("candy = %v; want [sshd]", img.Candy.Candies)
 	}
 }
 
@@ -151,20 +153,21 @@ func TestEditCandy_ImportedBoxFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	boxPath := filepath.Join(dir, "box.yml")
+	// Node-form IMAGE (EDGE-INHERIT cutover D): `<name>: {candy: {base, candy: …}}`.
 	if err := os.WriteFile(boxPath,
-		[]byte("box:\n    leafy:\n        base: fedora\n        candy:\n            - supervisord\n            - charly\n            - jupyter\n"), 0o644); err != nil {
+		[]byte("leafy:\n    candy:\n        base: fedora\n        candy:\n            - supervisord\n            - charly\n            - jupyter\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	candy := func() string {
 		data, _ := os.ReadFile(boxPath)
-		var m struct {
-			Box map[string]struct {
+		var m map[string]struct {
+			Candy struct {
 				Candy []string `yaml:"candy"`
-			} `yaml:"box"`
+			} `yaml:"candy"`
 		}
 		_ = yaml.Unmarshal(data, &m)
-		return strings.Join(m.Box["leafy"].Candy, ",")
+		return strings.Join(m["leafy"].Candy.Candy, ",")
 	}
 
 	if err := RemoveCandyFromBox(dir, "leafy", "charly"); err != nil {

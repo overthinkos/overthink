@@ -8,12 +8,13 @@ defaults:
     build:
         - rpm
 base:
-    box: {}
+    candy:
+        base: quay.io/fedora/fedora:43
     base-candy:
         candy:
             - pixi
 bazzite:
-    box:
+    candy:
         base: ghcr.io/ublue-os/bazzite:stable
         bootc: true
         platform:
@@ -22,7 +23,8 @@ bazzite:
         candy:
             - custom-packages
 cuda:
-    box:
+    candy:
+        base: quay.io/fedora/fedora:43
         platform:
             - linux/amd64
     cuda-candy:
@@ -30,13 +32,14 @@ cuda:
             - pixi
             - cuda
 disabled-image:
-    box:
+    candy:
+        base: quay.io/fedora/fedora:43
         enabled: false
     disabled-image-candy:
         candy:
             - nonexistent-layer
 inference:
-    box:
+    candy:
         base: ml-cuda
         tag: nightly
     inference-candy:
@@ -44,14 +47,14 @@ inference:
             - supervisord
             - ollama
 ml-cuda:
-    box:
+    candy:
         base: cuda
     ml-cuda-candy:
         candy:
             - python
             - ml-libs
 ubuntu-dev:
-    box:
+    candy:
         base: ubuntu:24.04
         build:
             - deb

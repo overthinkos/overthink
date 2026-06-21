@@ -39,7 +39,7 @@ func TestCrossKindNameReuse_LoaderAcceptsAllKinds(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	must(filepath.Join(dir, "charly.yml"), `version: 2026.172.0004
+	must(filepath.Join(dir, "charly.yml"), `version: 2026.172.0006
 defaults:
   registry: ghcr.io/example
 discover:
@@ -50,7 +50,7 @@ discover:
 `)
 	// A box named `redis` in its own discovered document (node-form).
 	must(filepath.Join(dir, "box", "redis", "charly.yml"), `redis:
-  box:
+  candy:
     base: fedora
 `)
 	// A candy ALSO named `redis` in a SEPARATE discovered document. Node-form:
@@ -89,9 +89,9 @@ discover:
 
 	// --- Within ONE document: duplicate top-level name rejected. ---
 	dir2 := t.TempDir()
-	dupDoc := `version: 2026.172.0004
+	dupDoc := `version: 2026.172.0006
 redis:
-  box:
+  candy:
     base: fedora
 redis:
   local:
@@ -119,7 +119,7 @@ func TestCrossKindNameReuse_RetiredKeysRejected(t *testing.T) {
 	}{
 		{
 			name: "deployment.qc",
-			cfgYAML: `version: 2026.172.0004
+			cfgYAML: `version: 2026.172.0006
 deploy:
   qc:
     target: local
@@ -130,7 +130,7 @@ deploy:
 		},
 		{
 			name: "deployment.cachyos-dx",
-			cfgYAML: `version: 2026.172.0004
+			cfgYAML: `version: 2026.172.0006
 deploy:
   cachyos-dx:
     target: local
@@ -141,7 +141,7 @@ deploy:
 		},
 		{
 			name: "local.cachyos-dx",
-			cfgYAML: `version: 2026.172.0004
+			cfgYAML: `version: 2026.172.0006
 local:
   cachyos-dx:
     candy: [example]

@@ -2018,9 +2018,12 @@ func (uf *UnifiedFile) applyDiscoveredManifest(dir, manifest, rootDir string) er
 			return fmt.Errorf("%s: %w", target, perr)
 		}
 		for _, gn := range nfNodes {
-			if gn.disc == "candy" {
-				// Candy: register a lazy directory reference (name = dir base, as
+			if gn.disc == "candy" && !candyIsImage(gn) {
+				// LAYER candy: register a lazy directory reference (name = dir base, as
 				// the legacy scanner did). scanCandy does the real parse later.
+				// EDGE-INHERIT cutover D: an IMAGE candy (base/from — the former box:)
+				// falls through to normalizeNodeInto → candyKind.DecodeNode → uf.Box
+				// (it is decoded eagerly, exactly as a box: node was before the merge).
 				name := filepath.Base(dir)
 				if uf.Candy == nil {
 					uf.Candy = map[string]*InlineCandy{}

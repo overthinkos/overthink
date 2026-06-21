@@ -826,13 +826,14 @@ type Candy struct {
 
 	Plan []Step `yaml:"plan,omitempty" json:"plan,omitempty"`
 
-	// --- maturity / engine / legacy-tolerated ---
+	// --- maturity / engine ---
 	Status string `yaml:"status,omitempty" json:"status,omitempty"`
 
 	Engine string `yaml:"engine,omitempty" json:"engine,omitempty"`
 
-	From string `yaml:"from,omitempty" json:"from,omitempty"`
-
+	// `from:` is NOT a candy field — EDGE-INHERIT cutover D: a candy: node carrying
+	// `base:` or `from:` is a full IMAGE (#Box, the former box:), routed there by the
+	// loader; a LAYER fragment has neither. So `from:` lives only on #Box.
 	Reboot bool `yaml:"reboot,omitempty" json:"reboot,omitempty"`
 
 	// --- composition ---

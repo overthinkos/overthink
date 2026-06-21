@@ -55,9 +55,9 @@ from one config and one mental model:
 
 | Reach for `charly` when you want to…                            | …and you get                                       | Stage                 |
 |-------------------------------------------------------------|----------------------------------------------------|-----------------------|
-| compose a reproducible box from a candy list                | `kind: box` / `kind: candy`, `charly box build`    | [Build](#build)       |
+| compose a reproducible box from a candy list                | a `candy:` with `base:`, `charly box build`        | [Build](#build)       |
 | run one or more containers as a managed pod                 | `kind: pod`, `charly bundle add`, `charly start`           | [Run](#run)           |
-| apply the same candies to a host, VM, k8s, or Android device | `charly bundle add` + a cross-ref scalar               | [Deploy](#deploy)     |
+| apply the same candies to a host, VM, k8s, or Android device | `charly bundle add` + a substrate kind                 | [Deploy](#deploy)     |
 | prove a config actually works, end-to-end                   | a disposable check bed, `charly check run`, baked `check:` checks  | [Evaluate](#evaluate) |
 
 The same `charly` drives two further stages — it
@@ -94,7 +94,7 @@ have to.
   `env_provide`/`env_require`/`mcp_provide`/`mcp_accept` for
   cross-container discovery, plus a `version:` CalVer.
   → `/charly-image:layer`.
-- **Box** (`box:`) — base + ordered candy list. Multi-stage
+- **Image** — a `candy:` carrying `base:` + an ordered candy list. Multi-stage
   Containerfile, content-derived `ai.opencharly.version` OCI label,
   stable cache. → `/charly-image:image`.
 
@@ -137,12 +137,12 @@ string AND a `plan:` with ≥1 deterministic `check:` step —
 The lifecycle is four verbs, and the same declarative inputs
 flow through all of them:
 
-- **Build** — a `kind: box` composes candies into a reproducible
+- **Build** — a `candy:` with `base:` composes candies into a reproducible
   multi-stage image.
 - **Run** — a `kind: pod` brings containers up as systemd-managed
   Podman quadlets.
 - **Deploy** — `charly bundle add` applies the same candies to a host, VM,
-  k8s cluster, or Android device — the bundle's cross-ref picks which.
+  k8s cluster, or Android device — the substrate kind picks which.
 - **Evaluate** — disposable check beds and baked `check:` checks prove any
   box or deployment works end-to-end.
 
@@ -153,7 +153,7 @@ authoring-with-agents and management).
 
 A `charly.yml` is a recursive **name → kind** map: every key is an
 entity NAME, and its value opens with exactly one **kind** — a reserved
-discriminator word (`box`, `candy`, `pod`, `vm`, `k8s`, `local`,
+discriminator word (`candy`, `pod`, `vm`, `k8s`, `local`,
 `android`, `bundle`, plus the build vocabulary `distro` / `builder` /
 `init` / `resource` / `sidecar` / `agent` / …). A kind's value is
 **exactly one of** three shapes:
@@ -182,7 +182,7 @@ every handler to a schema word. Changing the schema is a **CUE-only
 edit → `task cue:gen`**; the Go side follows
 (recipe: `/charly-internals:go`).
 
-Beyond `candy` and `box`, the deployable kinds are:
+Beyond `candy`, the deployable kinds are:
 
 - **Pod** (`pod:`) — multi-container deploy shape: containers,
   sidecars, tunnels. Deployed as a Podman pod with a quadlet per
@@ -196,11 +196,12 @@ Beyond `candy` and `box`, the deployable kinds are:
   operator's machine (or any ssh-reachable host) via the native
   package manager + systemd + shell profile. → `/charly-local:local-spec`.
 - **Android** (`android:`) — Android device: in-pod emulator
-  (via `box:`) or remote/physical adb endpoint. `apk:` is a candy
+  (via `image:`) or remote/physical adb endpoint. `apk:` is a candy
   package format scoped to Android targets. → `/charly-check:android`.
-- **Bundle** (`bundle:`) — a named deployment; the bundle's cross-ref
-  scalar (a `box:`, `vm:`, `k8s:`, `local:`, or `android:`) picks where
-  it lands (a `box:` deploys as a Podman pod by default). Carries env
+- **Bundle** (`bundle:`) — a named deployment; the substrate kind
+  (`pod:`/`vm:`/`k8s:`/`local:`/`android:`) picks where it lands (a
+  `pod:` is a Podman pod by default), and the image it runs is the
+  `image:` cross-ref. Carries env
   overlays, port remaps, volume backings, sidecars, tunnels, secrets,
   and the `disposable: true` opt-in. A `disposable: true` bundle is a
   *check bed* — the R10 test bed: `charly check run <bed>` runs build →
@@ -360,7 +361,7 @@ charly start jupyter
 charly config jupyter
 
 # Build a bootable VM disk image from a bootc box
-charly box build <my-bootc-box>             # a kind:box with bootc: true
+charly box build <my-bootc-box>             # a candy: with base: + bootc: true
 charly vm build  <my-bootc-vm> --type qcow2 # a kind:vm with source.kind: bootc
 charly vm create <my-bootc-vm>
 
@@ -481,11 +482,11 @@ input.
 > The same `charly.yml` applied to a host, a remote ssh box, a VM, a
 > k3s cluster, or an Android device.
 
-`charly bundle add <name> <ref>` is the unified verb; the bundle's
-cross-ref scalar (`box:`/`vm:`/`k8s:`/`local:`/`android:`) discriminates
-where it lands:
+`charly bundle add <name> <ref>` is the unified verb; the substrate
+kind (`pod:`/`vm:`/`k8s:`/`local:`/`android:`) discriminates
+where it lands, and the image it runs is the `image:` cross-ref:
 
-- **`box:` → pod** (default) — Podman + quadlet, as in [Run](#run).
+- **`pod:`** (default) — Podman + quadlet, as in [Run](#run).
 - **`vm:`** — libvirt + QEMU. Candies are applied *inside* the
   booted VM over SSH via the same InstallPlan IR. `charly vm build`
   (bootc → QCOW2/RAW), `charly vm create/destroy/start/stop`, `charly vm
@@ -508,7 +509,7 @@ where it lands:
   `charly bundle del host` reverses precisely what was applied.
   → `/charly-local:local-deploy`, `/charly-local:local-spec`.
 - **`android:`** — `kind: android` device (in-pod emulator
-  via `box:` or remote adb endpoint via `adb: {host: …}`);
+  via `image:` or remote adb endpoint via `adb: {host: …}`);
   `apk:` packages installed by `apkeep` (Google Play) or pushed
   from committed `.apk` files via goadb. Nested `pod → android`
   mirrors `vm → k8s`. → `/charly-check:android`, `/charly-check:adb`.

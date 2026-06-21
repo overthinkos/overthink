@@ -33,7 +33,7 @@ discover:
     file: /usr/bin/redis-server
 `)
 	must(filepath.Join(dir, "box", "coder", "charly.yml"), `coder:
-  box:
+  candy:
     base: fedora
   coder-candy:
     candy: [redis]

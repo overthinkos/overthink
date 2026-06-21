@@ -1,4 +1,4 @@
-version: 2026.172.0004
+version: 2026.172.0006
 dev-workstation:
     local:
         description: Dev workstation

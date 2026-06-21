@@ -19,7 +19,7 @@
 
 // Reserved discriminators = the kind keywords. Negated regex so a child's NAME
 // cannot shadow a kind keyword.
-_reservedNode: "^(box|candy|pod|vm|k8s|local|android|distro|builder|init|resource|sidecar|agent|group|package-group|module|target)$"
+_reservedNode: "^(candy|pod|vm|k8s|local|android|distro|builder|init|resource|sidecar|agent|group|package-group|module|target)$"
 
 // #ResourceKind — the DEPLOYABLE subset of the kind keywords: the kinds whose
 // #Node arm admits a sub-ENTITY (resource) child (a deploy-into / alongside
@@ -40,8 +40,18 @@ _reservedNode: "^(box|candy|pod|vm|k8s|local|android|distro|builder|init|resourc
 // "everything is a node" gate — while CUE owns the closed-typo / unknown-field /
 // wrong-kind-child strictness via the closed def + the child-narrowed arms.
 // ---------------------------------------------------------------------------
-#BoxValue:   #Box
-#CandyValue: #Candy
+// EDGE-INHERIT cutover D: `box:` merges INTO `candy:`. A `candy:` node is EITHER a
+// LAYER fragment (#Candy, no base/from) OR a full IMAGE (#Image — a #Box that REQUIRES
+// `base:` or `from:`, the former box:), routed by that marker in the loader
+// (candyKind.DecodeNode → uf.Box vs uf.Candy). The image arm REQUIRES base⊻from, and
+// #Candy is the DEFAULT (`*`): an IMAGE carries base/from → bottoms #Candy (closed, no
+// base) → resolves to #Image; a LAYER carries neither → #Image is incomplete (its base/
+// from required-but-absent) while #Candy matches → the default resolves it to #Candy.
+// That keeps the disjunction CONCRETELY validatable (a raw `#Candy | #Box` is NOT: a
+// required-but-absent field is INCOMPLETE, not bottom, so a layer never eliminates the
+// image arm). @go(-): the Go types are spec.Candy + spec.Box (decode picks by shape).
+#Image:      #Box & ({base: string & !=""} | {from: string & !=""})
+#CandyValue: (*#Candy | #Image) @go(-)
 // EDGE-INHERIT cutover B: a substrate kind is BOTH the template entity AND the deploy
 // (the eliminated `bundle:` role folds in). One arm accepts the disjunction
 // `#Template | #Deploy`, routed by SHAPE in the loader (a template carries its own
@@ -89,7 +99,6 @@ _reservedNode: "^(box|candy|pod|vm|k8s|local|android|distro|builder|init|resourc
 // `env` also exists on #Step, so #DataChild|#StepChild never resolves) — the layered
 // loader checks are exact and fast.
 // ---------------------------------------------------------------------------
-#BoxArm: close({box: #BoxValue, {[!~_reservedNode]: _}})
 #CandyArm: close({candy: #CandyValue, {[!~_reservedNode]: _}})
 #PodArm: close({pod: #PodValue, {[!~_reservedNode]: _}})
 #VmArm: close({vm: #VmValue, {[!~_reservedNode]: _}})
@@ -108,7 +117,7 @@ _reservedNode: "^(box|candy|pod|vm|k8s|local|android|distro|builder|init|resourc
 #TargetArm: close({target: #TargetValue, {[!~_reservedNode]: _}})
 
 // The unified node — a disjunction of the closed per-kind arms.
-#Node: #BoxArm | #CandyArm | #PodArm | #VmArm | #K8sArm | #LocalArm |
+#Node: #CandyArm | #PodArm | #VmArm | #K8sArm | #LocalArm |
 	#AndroidArm | #DistroArm | #BuilderArm | #InitArm | #ResourceArm |
 	#SidecarArm | #AgentArm | #GroupArm | #PackageGroupArm | #ModuleArm | #TargetArm
 

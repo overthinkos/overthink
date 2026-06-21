@@ -47,7 +47,7 @@ redis:
     check: the binary exists
     file: /usr/bin/redis-server
 coder:
-  box:
+  candy:
     base: fedora
   coder-candy:
     candy: [redis]
@@ -92,29 +92,35 @@ redis:
     description: x
     statuz: working
 `,
-		"child-under-childless-kind": `
+		// A sub-ENTITY (resource-kind) child under a non-deployable kind is
+		// rejected (node_parse.go wrong-kind-child gate). EDGE-INHERIT cutover D
+		// merged box: into candy:, and a `candy:` CHILD is the composition DATA key
+		// (an image/layer can never be a deploy member), so the gate is exercised
+		// with a genuine resource-kind sub-entity (pod/vm), not a candy: mapping.
+		"resource-entity-under-childless-candy": `
 redis:
   candy:
     version: "2026.150.0000"
     description: x
   inner:
-    box:
-      base: fedora
+    pod:
+      image: x
 `,
-		"wrong-kind-member-under-group": `
-shop:
-  group:
-    disposable: true
+		"resource-entity-under-childless-distro": `
+fedora:
+  distro:
+    bootstrap:
+      install_cmd: "true"
   inner:
-    box:
-      base: fedora
+    vm:
+      source: {kind: cloud_image, url: "http://x"}
 `,
 		"two-discriminators": `
 db:
   vm:
     source: {kind: cloud_image, url: "http://x"}
   pod:
-    box: y
+    image: y
 `,
 	}
 	for name, doc := range bad {

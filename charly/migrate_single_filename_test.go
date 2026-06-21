@@ -71,13 +71,20 @@ vm:
 	if _, err := MigrateUnifiedNode(dir, false); err != nil {
 		t.Fatalf("unified-node: %v", err)
 	}
+	// box-to-candy (EDGE-INHERIT cutover D): the `box:` KIND merged INTO `candy:`,
+	// so every node-form `<name>: {box: …}` IMAGE becomes `<name>: {candy: …}` (the
+	// base:/from: marker keeps it an image). Without this step the migrated boxes
+	// carry the removed `box:` discriminator and the loader rejects them.
+	if _, err := MigrateBoxToCandy(&MigrateContext{Dir: dir}); err != nil {
+		t.Fatalf("box-to-candy: %v", err)
+	}
 	// calver-schema is the chain's final step; it re-stamps the root to HEAD so the
 	// migrated tree loads (single-filename itself does no version bump).
 	if _, err := MigrateCalverSchema(dir, "", LatestSchemaVersion(), false); err != nil {
 		t.Fatalf("calver-schema: %v", err)
 	}
 
-	// Boxes split into per-box dirs (kind-keyed box: docs).
+	// Boxes split into per-box dirs (node-form `<name>: {candy: …}` image docs).
 	for _, name := range []string{"alpha", "beta", "arch"} {
 		p := filepath.Join(dir, "box", name, "charly.yml")
 		data, err := os.ReadFile(p)
@@ -85,8 +92,8 @@ vm:
 			t.Errorf("box/%s/charly.yml missing: %v", name, err)
 			continue
 		}
-		if !strings.Contains(string(data), "box:") || !strings.Contains(string(data), name+":") {
-			t.Errorf("box/%s/charly.yml not a name-first node-form box: doc:\n%s", name, data)
+		if !strings.Contains(string(data), "candy:") || !strings.Contains(string(data), name+":") {
+			t.Errorf("box/%s/charly.yml not a name-first node-form candy: image doc:\n%s", name, data)
 		}
 	}
 	// Box files deleted.

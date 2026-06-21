@@ -9,7 +9,7 @@ import (
 // (flat root imports) and single-key maps (namespaced child imports).
 func TestImportList_Unmarshal(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.172.0004
+	writeFixture(t, root, "charly.yml", `version: 2026.172.0006
 import:
   - build.yml
   - sub: ./sub.yml
@@ -17,9 +17,9 @@ import:
 	writeFixture(t, root, "build.yml", `defaults:
   build: [rpm]
 `)
-	writeFixture(t, root, "sub.yml", `version: 2026.172.0004
+	writeFixture(t, root, "sub.yml", `version: 2026.172.0006
 widget:
-  box:
+  candy:
     base: quay.io/fedora/fedora:43
   widget-distro:
     distro: [fedora]
@@ -48,11 +48,11 @@ widget:
 // qualified image ref through the projected Config.
 func TestResolveImageRef_Qualified(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.172.0004
+	writeFixture(t, root, "charly.yml", `version: 2026.172.0006
 import:
   - sub: ./sub.yml
 app:
-  box:
+  candy:
     base: sub.widget
     build: [rpm]
   app-distro:
@@ -60,9 +60,9 @@ app:
   app-candy:
     candy: []
 `)
-	writeFixture(t, root, "sub.yml", `version: 2026.172.0004
+	writeFixture(t, root, "sub.yml", `version: 2026.172.0006
 widget:
-  box:
+  candy:
     base: quay.io/fedora/fedora:43
     build: [rpm]
   widget-distro:
@@ -103,7 +103,7 @@ widget:
 // load-time error pointing at charly migrate.
 func TestLoadUnified_RejectInclude(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.172.0004
+	writeFixture(t, root, "charly.yml", `version: 2026.172.0006
 include:
   - build.yml
 `)
@@ -147,21 +147,21 @@ include:
 // cycle-broken at load (the shared resolved-ref cache).
 func TestImportNamespace_MutualCycle(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.172.0004
+	writeFixture(t, root, "charly.yml", `version: 2026.172.0006
 import:
   - sub: ./sub
 app:
-  box:
+  candy:
     base: sub.widget
     build: [rpm]
   app-distro:
     distro: [fedora]
 `)
-	writeFixture(t, root, "sub/charly.yml", `version: 2026.172.0004
+	writeFixture(t, root, "sub/charly.yml", `version: 2026.172.0006
 import:
   - up: ../
 widget:
-  box:
+  candy:
     base: quay.io/fedora/fedora:43
     build: [rpm]
   widget-distro:
@@ -195,24 +195,24 @@ widget:
 // combination the prior tests never exercised.
 func TestResolveNamespacedBase_BuilderRefRequalified(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.172.0004
+	writeFixture(t, root, "charly.yml", `version: 2026.172.0006
 import:
   - sub: ./sub
 app:
-  box:
+  candy:
     base: sub.widget
     build: [rpm]
   app-distro:
     distro: [fedora]
 archlike-builder:
-  box:
+  candy:
     base: quay.io/fedora/fedora:43
     build: [rpm]
     produce: [pixi]
   archlike-builder-distro:
     distro: [fedora]
 `)
-	writeFixture(t, root, "sub/charly.yml", `version: 2026.172.0004
+	writeFixture(t, root, "sub/charly.yml", `version: 2026.172.0006
 import:
   - up: ../
 buildable:
@@ -221,7 +221,7 @@ buildable:
     run: install
     command: "true"
 widget:
-  box:
+  candy:
     base: quay.io/fedora/fedora:43
     build: [pac, aur]
     builder:
@@ -261,7 +261,7 @@ widget:
 // — the exact bug that silently built a Fedora builder for cachyos images.
 func TestResolveBuilder_DistroKeyed_NoExplicitMap(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.172.0004
+	writeFixture(t, root, "charly.yml", `version: 2026.172.0006
 import:
   - sub: ./sub
 defaults:
@@ -269,7 +269,7 @@ defaults:
     pixi: fedora-builder
     npm: fedora-builder
 arch:
-  box:
+  candy:
     base: quay.io/cachyos/cachyos:latest
     build: [pac]
     builder:
@@ -278,37 +278,37 @@ arch:
   arch-distro:
     distro: [arch]
 arch-builder:
-  box:
+  candy:
     base: quay.io/cachyos/cachyos:latest
     build: [pac]
     produce: [pixi, npm]
   arch-builder-distro:
     distro: [arch]
 fedora-builder:
-  box:
+  candy:
     base: quay.io/fedora/fedora:43
     build: [rpm]
     produce: [pixi, npm]
   fedora-builder-distro:
     distro: [fedora]
 cachyos-app:
-  box:
+  candy:
     base: sub.cachyos
 fedora-app:
-  box:
+  candy:
     base: sub.fedora
 `)
-	writeFixture(t, root, "sub/charly.yml", `version: 2026.172.0004
+	writeFixture(t, root, "sub/charly.yml", `version: 2026.172.0006
 import:
   - up: ../
 cachyos:
-  box:
+  candy:
     base: quay.io/cachyos/cachyos:latest
     build: [pac, aur]
   cachyos-distro:
     distro: [cachyos, arch]
 fedora:
-  box:
+  candy:
     base: quay.io/fedora/fedora:43
     build: [rpm]
   fedora-distro:

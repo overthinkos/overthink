@@ -109,7 +109,7 @@ func writeMinProject(t *testing.T, dir string) {
 	// every entity flattens to a top-level `<name>: {<kind>: <scalars>}`
 	// node, with non-scalar fields (here `distro:`) moved to a
 	// `<name>-<datakey>` child node. LoadConfig reads charly.yml exclusively.
-	charlyYAML := `version: 2026.172.0004
+	charlyYAML := `version: 2026.172.0006
 defaults:
   registry: ghcr.io/test
   tag: latest
@@ -118,7 +118,7 @@ defaults:
   build: [rpm]
 
 testimage:
-  box:
+  candy:
     base: "quay.io/fedora/fedora:43"
   testimage-distro:
     distro: ["fedora:43", fedora]

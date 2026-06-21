@@ -15,10 +15,12 @@
 	description: string & !=""
 	plan?: [...#Step]
 
-	// --- maturity / engine / legacy-tolerated ---
+	// --- maturity / engine ---
 	status?: *"testing" | "working" | "broken"
 	engine?: "docker" | "podman"
-	from?:   string // tolerated known key (layers.go); decoded into nothing, no meaning
+	// `from:` is NOT a candy field — EDGE-INHERIT cutover D: a candy: node carrying
+	// `base:` or `from:` is a full IMAGE (#Box, the former box:), routed there by the
+	// loader; a LAYER fragment has neither. So `from:` lives only on #Box.
 	reboot?: bool
 
 	// --- composition ---

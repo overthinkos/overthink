@@ -101,10 +101,13 @@ func ScaffoldProject(dir string) error {
 	return nil
 }
 
-// AddBox writes a new box to its discovered per-box file box/<name>/charly.yml
-// (a kind-keyed `box:` doc). The base argument is the value of the box's `base:`
-// field (an external URL or the name of another box). If layers is non-nil it
-// populates the box's `candy:` list. Errors if box/<name>/charly.yml exists.
+// AddBox writes a new box to its discovered per-box file box/<name>/charly.yml as
+// a node-form IMAGE — `<name>: {candy: {base: …}}`. EDGE-INHERIT cutover D merged
+// the `box:` KIND into `candy:`: an image is a `candy:` node carrying `base:` (its
+// presence is what makes it an image, not a layer). The base argument is the value
+// of the image's `base:` field (an external URL or the name of another box). If
+// layers is non-nil it populates the image's `candy:` composition list. Errors if
+// box/<name>/charly.yml exists.
 func AddBox(dir, name, base string, layers []string) error {
 	if name == "" {
 		return fmt.Errorf("box name must be specified")
@@ -113,10 +116,9 @@ func AddBox(dir, name, base string, layers []string) error {
 	if fileExists(dest) {
 		return fmt.Errorf("box %q already exists at %s", name, dest)
 	}
+	// The candy: value (the image body) — name is the NODE KEY, not a field.
 	inner := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 	inner.Content = append(inner.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "name"},
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: name},
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "base"},
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: base},
 	)
@@ -132,10 +134,16 @@ func AddBox(dir, name, base string, layers []string) error {
 			candiesNode,
 		)
 	}
+	// node-form: <name>: {candy: <inner>}
+	candyDisc := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	candyDisc.Content = append(candyDisc.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "candy"},
+		inner,
+	)
 	wrapper := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 	wrapper.Content = append(wrapper.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "box"},
-		inner,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: name},
+		candyDisc,
 	)
 	doc := &yaml.Node{Kind: yaml.DocumentNode, Content: []*yaml.Node{wrapper}}
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
@@ -241,30 +249,22 @@ func mappingChild(m *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
-// boxesMapNode returns the box mapping node from a document and the
-// key that addressed it ("box" or "images"). Schema v4 canonical key
-// is the singular "box:"; the plural "images:" is accepted for
-// legacy projects (it's an alias normalized by LoadUnified). When the
-// node is missing, returns ("", nil) so callers can append the
-// canonical singular form.
-func boxesMapNode(doc *yaml.Node) (string, *yaml.Node) {
-	if n := mappingChild(doc, "box"); n != nil {
-		return "box", n
-	}
-	if n := mappingChild(doc, "images"); n != nil {
-		return "images", n
-	}
-	return "", nil
-}
-
-// boxNode returns the mapping node for the named box, or nil.
-func boxNode(root *yaml.Node, name string) *yaml.Node {
-	doc := docContent(root)
-	_, imagesNode := boxesMapNode(doc)
-	if imagesNode == nil {
+// imageBodyNode returns the IMAGE BODY node for box `name` in a parsed
+// node-form document — the value of the named entity's `candy:` discriminator.
+// EDGE-INHERIT cutover D merged the `box:` KIND into `candy:`: an image is a
+// `candy:` node carrying `base:`/`from:`, so the scaffold reads the `candy:`
+// disc (its value is the image body: base/from + the `candy:` composition list).
+// Returns nil if the named node is absent or carries no `candy:` mapping.
+func imageBodyNode(root *yaml.Node, name string) *yaml.Node {
+	entity := mappingChild(docContent(root), name)
+	if entity == nil {
 		return nil
 	}
-	return mappingChild(imagesNode, name)
+	body := mappingChild(entity, "candy")
+	if body == nil || body.Kind != yaml.MappingNode {
+		return nil
+	}
+	return body
 }
 
 // flatLocalImports returns the bare-string `import:` items that are LOCAL file
@@ -297,15 +297,14 @@ func flatLocalImports(root *yaml.Node) []string {
 // on boxes wherever they live, not only those inlined in charly.yml.
 func resolveBoxNodeFile(dir, name string) (*yaml.Node, *yaml.Node, string, error) {
 	// Discovered per-box file box/<name>/charly.yml (the canonical location) — a
-	// kind-keyed `box:` doc whose value node is the box's inner mapping.
+	// node-form `<name>: {candy: {base|from: …}}` IMAGE whose `candy:` value is
+	// the image body (base/from + the candy composition list).
 	boxFile := filepath.Join(dir, DefaultBoxDir, name, UnifiedFileName)
 	if data, rerr := os.ReadFile(boxFile); rerr == nil {
 		var froot yaml.Node
 		if yaml.Unmarshal(data, &froot) == nil {
-			if rm := docRootMapping(&froot); rm != nil {
-				if inner := nodeMapValue(rm, "box"); inner != nil && inner.Kind == yaml.MappingNode {
-					return &froot, inner, boxFile, nil
-				}
+			if inner := imageBodyNode(&froot, name); inner != nil {
+				return &froot, inner, boxFile, nil
 			}
 		}
 	}
@@ -313,7 +312,7 @@ func resolveBoxNodeFile(dir, name string) (*yaml.Node, *yaml.Node, string, error
 	if err != nil {
 		return nil, nil, "", err
 	}
-	if n := boxNode(charlyRoot, name); n != nil {
+	if n := imageBodyNode(charlyRoot, name); n != nil {
 		return charlyRoot, n, filepath.Join(dir, UnifiedFileName), nil
 	}
 	for _, ref := range flatLocalImports(charlyRoot) {
@@ -326,7 +325,7 @@ func resolveBoxNodeFile(dir, name string) (*yaml.Node, *yaml.Node, string, error
 		if yaml.Unmarshal(data, &froot) != nil {
 			continue
 		}
-		if n := boxNode(&froot, name); n != nil {
+		if n := imageBodyNode(&froot, name); n != nil {
 			return &froot, n, p, nil
 		}
 	}

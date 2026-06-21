@@ -17,7 +17,20 @@ type candyKind struct{ builtinKindBase }
 
 func (candyKind) Reserved() string   { return "candy" }
 func (candyKind) CueDefPath() string { return "#Candy" }
+
+// DecodeNode — EDGE-INHERIT cutover D: `box:` merged INTO `candy:`. A `candy:` node
+// that carries the box base⊻from MARKER (base: or from:) is a full IMAGE (the former
+// box:) → decode as BoxConfig into uf.Box; otherwise it is a LAYER fragment → uf.Candy.
 func (candyKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
+	if candyIsImage(gn) {
+		var b BoxConfig
+		if err := decodeNodeValue(gn, &b); err != nil {
+			return err
+		}
+		ensureMap(&uf.Box)
+		uf.Box[gn.name] = b
+		return nil
+	}
 	name, ic, err := buildCandy(gn)
 	if err != nil {
 		return err
@@ -27,19 +40,21 @@ func (candyKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
 	return nil
 }
 
-// box / sidecar — decode a struct value into a name-keyed map.
-type boxKind struct{ builtinKindBase }
-
-func (boxKind) Reserved() string   { return "box" }
-func (boxKind) CueDefPath() string { return "#Box" }
-func (boxKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
-	var b BoxConfig
-	if err := decodeNodeValue(gn, &b); err != nil {
-		return err
+// candyIsImage reports whether a candy: node is a full IMAGE (the former box:): it
+// carries the box base⊻from marker — `base:` (an external base) or `from:` (a builder
+// ref). A LAYER fragment has neither (no layer-candy uses `from:` in the corpus).
+func candyIsImage(gn *genericNode) bool {
+	dv := gn.discValue
+	if dv == nil || dv.Kind != yaml.MappingNode {
+		return false
 	}
-	ensureMap(&uf.Box)
-	uf.Box[gn.name] = b
-	return nil
+	for i := 0; i+1 < len(dv.Content); i += 2 {
+		switch dv.Content[i].Value {
+		case "base", "from":
+			return true
+		}
+	}
+	return false
 }
 
 type sidecarKind struct{ builtinKindBase }
@@ -182,7 +197,7 @@ func isDeployShape(gn *genericNode) bool {
 
 func init() {
 	for _, p := range []KindProvider{
-		candyKind{}, boxKind{}, sidecarKind{},
+		candyKind{}, sidecarKind{},
 		distroKind{}, builderKind{}, initKind{}, resourceKind{}, agentKind{}, groupKind{}, packageGroupKind{}, targetKind{}, moduleKind{},
 		standaloneKind{word: "pod", def: "#Pod"},
 		standaloneKind{word: "vm", def: "#Vm"},

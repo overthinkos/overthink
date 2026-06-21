@@ -56,7 +56,7 @@ func buildBundleNode(gn *genericNode) (*BundleNode, error) {
 			continue
 		}
 		if !isResourceDisc(rk.disc) {
-			return nil, fmt.Errorf("node %q: a %q child %q is not a resource member (deploy/resource children must be pod/vm/k8s/local/android/host)", gn.name, rk.disc, rk.name)
+			return nil, fmt.Errorf("node %q: a %q child %q is not a resource member (deploy/resource children must be pod/vm/k8s/local/android)", gn.name, rk.disc, rk.name)
 		}
 		member, err := buildBundleNode(rk)
 		if err != nil {

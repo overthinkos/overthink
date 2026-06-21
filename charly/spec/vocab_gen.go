@@ -12,7 +12,6 @@ var KindWords = []string{
 	"android",
 	"box",
 	"builder",
-	"bundle",
 	"candy",
 	"distro",
 	"group",
@@ -36,7 +35,7 @@ var ResourceKinds = []string{
 	"local",
 	"android",
 	"host",
-	"bundle",
+	"group",
 }
 
 // DocDirectives is the reserved document directives (#NodeDoc top-level keys).

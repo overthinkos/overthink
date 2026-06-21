@@ -119,7 +119,7 @@ func validateResourceDefs(uf *UnifiedFile, errs *ValidationError) {
 		if _, _, ok := requiredGPUResource(&node, uf.Resource); !ok {
 			continue
 		}
-		vmName := node.Vm
+		vmName := node.From
 		if vmName == "" {
 			base, _ := parseDeployKey(name)
 			vmName = base

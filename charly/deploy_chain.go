@@ -165,11 +165,11 @@ func appendHopForFlatPath(chain DeployExecutor, node *BundleNode, flatPath, leaf
 		}, nil
 
 	case "vm":
-		// VM SSH alias keys off node.Vm (the kind:vm entity name) which
+		// VM SSH alias keys off node.From (the kind:vm entity name) which
 		// matches the stanza written by `charly vm create`. Falling back to
 		// flatPath (the deploy bed name) would produce an charly-<bed> alias
 		// for which no stanza exists.
-		vmName := node.Vm
+		vmName := node.From
 		if vmName == "" {
 			vmName = flatPath
 		}

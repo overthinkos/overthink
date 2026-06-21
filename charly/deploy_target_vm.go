@@ -128,6 +128,13 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 			if err := sshExec.WaitForCloudInit(ctx); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: cloud-init wait returned %v (continuing)\n", err)
 			}
+			// Then wait for the boot-time seed-package install (cloud-init's injected
+			// openssh/curl/tar set) to RELEASE the distro package lock before any deploy
+			// plan runs its own pacman/apt/dnf — otherwise a plan's first `pacman -Sy`
+			// races the still-running boot transaction ("unable to lock database").
+			if err := sshExec.WaitForPackageLock(ctx); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: package-lock wait returned %v (continuing)\n", err)
+			}
 		}
 	}
 

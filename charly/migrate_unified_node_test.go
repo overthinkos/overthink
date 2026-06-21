@@ -78,6 +78,20 @@ func TestMigrateUnifiedNode_CandyRoundTrip(t *testing.T) {
 	}
 }
 
+// migrateEdgeInheritDir applies the edge-inherit step to a migrated project dir, so
+// the intermediate bundle:-form (the unified-node step's output, which the edge-inherit
+// step later converts in the real chain) becomes loadable substrate-kind nodes.
+func migrateEdgeInheritDir(t *testing.T, dir string) {
+	t.Helper()
+	ctx, err := NewMigrateContext(dir, false)
+	if err != nil {
+		t.Fatalf("NewMigrateContext: %v", err)
+	}
+	if _, err := MigrateEdgeInherit(ctx); err != nil {
+		t.Fatalf("MigrateEdgeInherit: %v", err)
+	}
+}
+
 // TestMigrateUnifiedNode_ProjectLoads migrates a legacy project (a pod deploy
 // workload + a disposable pod bed carrying a sub-entity member + a standalone
 // vm:) and proves the migrated node-form LOADS into the right structures: a pod
@@ -112,12 +126,13 @@ vm:
 	if _, err := MigrateUnifiedNode(dir, false); err != nil {
 		t.Fatalf("MigrateUnifiedNode: %v", err)
 	}
+	migrateEdgeInheritDir(t, dir)
 	uf, _, err := LoadUnified(dir)
 	if err != nil {
 		t.Fatalf("LoadUnified migrated project: %v", err)
 	}
 	web, ok := uf.Bundle["web"]
-	if !ok || web.Target != "pod" || web.Box != "coder" {
+	if !ok || web.Target != "pod" || web.Image != "coder" {
 		t.Errorf("web deployment wrong: ok=%v %+v", ok, web)
 	}
 	shop, ok := uf.Bundle["shop"]
@@ -169,6 +184,7 @@ vm:
 	if _, err := MigrateUnifiedNode(dir, false); err != nil {
 		t.Fatalf("MigrateUnifiedNode: %v", err)
 	}
+	migrateEdgeInheritDir(t, dir)
 
 	// 1) The migrated document must carry NO duplicate top-level node names.
 	migrated, err := os.ReadFile(path)
@@ -210,8 +226,8 @@ vm:
 	if !ok {
 		t.Fatalf("deploy bundle charly-cachyos missing; deploys=%v", collisionKeys(uf.Bundle))
 	}
-	if bundle.Local != "charly-cachyos-local" {
-		t.Errorf("bundle cross-ref not rewritten: got local=%q want %q", bundle.Local, "charly-cachyos-local")
+	if bundle.From != "charly-cachyos-local" {
+		t.Errorf("bundle cross-ref not rewritten: got local=%q want %q", bundle.From, "charly-cachyos-local")
 	}
 	if !reflect.DeepEqual(bundle.Env, []string{"EDITOR=nvim"}) {
 		t.Errorf("bundle env clobbered by unification: got %v want [EDITOR=nvim]", bundle.Env)
@@ -224,8 +240,8 @@ vm:
 		t.Errorf("template env clobbered by unification: got %v want [EDITOR=nvim PAGER=less]", tmpl.Env)
 	}
 	gpu, ok := uf.Bundle["cachyos-gpu"]
-	if !ok || gpu.Vm != "cachyos-gpu-vm" {
-		t.Errorf("cachyos-gpu bundle cross-ref not rewritten: ok=%v vm=%q want cachyos-gpu-vm", ok, gpu.Vm)
+	if !ok || gpu.From != "cachyos-gpu-vm" {
+		t.Errorf("cachyos-gpu bundle cross-ref not rewritten: ok=%v vm=%q want cachyos-gpu-vm", ok, gpu.From)
 	}
 	if uf.VM["cachyos-gpu-vm"] == nil {
 		t.Errorf("renamed vm template cachyos-gpu-vm missing; vms=%v", collisionKeys(uf.VM))
@@ -321,7 +337,7 @@ check:
 // `would apply unified-node`. The fix skips a top-level legacy-kind key whose
 // value is already node-shaped (nodeShapedValue && no `name:`).
 func TestMigrateUnifiedNode_NodeNamedAfterKindWordIsIdempotent(t *testing.T) {
-	const doc = `version: "` + "2026.172.0002" + `"
+	const doc = `version: "` + "2026.172.0004" + `"
 vm:
     vm:
         source:
@@ -368,7 +384,7 @@ vm-libvirt:
 // whose children are ENTITY NAMES, not kind discriminators) is NOT node-shaped, so
 // the idempotency guard must NOT skip it — it still migrates to node-form.
 func TestMigrateUnifiedNode_LegacyVmCollectionStillConverts(t *testing.T) {
-	const legacy = `version: "` + "2026.172.0002" + `"
+	const legacy = `version: "` + "2026.172.0004" + `"
 vm:
     arch:
         source:

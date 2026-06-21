@@ -15,15 +15,15 @@ import (
 // name and failed with `no deploy named "<base>"`.
 func TestResolveUpdateDeployNode(t *testing.T) {
 	tree := map[string]BundleNode{
-		"foo/bar": {Target: "pod", Box: "foo"},
-		"baz":     {Target: "pod", Box: "baz"},
+		"foo/bar": {Target: "pod", Image: "foo"},
+		"baz":     {Target: "pod", Image: "baz"},
 		// Nested topology — exercises the dotted-path walk, which must keep
 		// working because deployKey returns a dotted name unchanged when
 		// instance is empty.
 		"stack": {
 			Target: "vm",
 			Children: map[string]*BundleNode{
-				"web": {Target: "pod", Box: "web"},
+				"web": {Target: "pod", Image: "web"},
 			},
 		},
 	}
@@ -33,8 +33,8 @@ func TestResolveUpdateDeployNode(t *testing.T) {
 		if err != nil {
 			t.Fatalf("instance lookup failed: %v", err)
 		}
-		if node.Box != "foo" {
-			t.Errorf("got Image %q, want foo", node.Box)
+		if node.Image != "foo" {
+			t.Errorf("got Image %q, want foo", node.Image)
 		}
 	})
 
@@ -43,8 +43,8 @@ func TestResolveUpdateDeployNode(t *testing.T) {
 		if err != nil {
 			t.Fatalf("bare lookup failed: %v", err)
 		}
-		if node.Box != "baz" {
-			t.Errorf("got Image %q, want baz", node.Box)
+		if node.Image != "baz" {
+			t.Errorf("got Image %q, want baz", node.Image)
 		}
 	})
 
@@ -53,8 +53,8 @@ func TestResolveUpdateDeployNode(t *testing.T) {
 		if err != nil {
 			t.Fatalf("nested lookup failed: %v", err)
 		}
-		if node.Box != "web" {
-			t.Errorf("got Image %q, want web", node.Box)
+		if node.Image != "web" {
+			t.Errorf("got Image %q, want web", node.Image)
 		}
 	})
 

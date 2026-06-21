@@ -14,13 +14,13 @@ func nestedUnified() *UnifiedFile {
 		Bundle: map[string]BundleNode{
 			"check-android-emulator-pod": {
 				Target: "pod",
-				Box:    "android-emulator",
+				Image:  "android-emulator",
 				Children: map[string]*BundleNode{
-					"device":     {Target: "android", Android: "pixel9a-36", AddCandy: []string{"android-test-apps"}},
-					"device-net": {Target: "android", Android: "pixel9a-endpoint", AddCandy: []string{"android-apidemos"}},
+					"device":     {Target: "android", From: "pixel9a-36", AddCandy: []string{"android-test-apps"}},
+					"device-net": {Target: "android", From: "pixel9a-endpoint", AddCandy: []string{"android-apidemos"}},
 				},
 			},
-			"some-flat-pod": {Target: "pod", Box: "redis"},
+			"some-flat-pod": {Target: "pod", Image: "redis"},
 		},
 	}
 }
@@ -120,9 +120,9 @@ func TestNestedOverlay_MovesFlatPodRow(t *testing.T) {
 		Bundle: map[string]BundleNode{
 			parent: {
 				Target: "vm",
-				Vm:     "stack-vm",
+				From:   "stack-vm",
 				Children: map[string]*BundleNode{
-					"web": {Target: "pod", Box: "nginx"},
+					"web": {Target: "pod", Image: "nginx"},
 				},
 			},
 		},

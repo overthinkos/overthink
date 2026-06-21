@@ -101,9 +101,9 @@ redis:
     box:
       base: fedora
 `,
-		"wrong-kind-member-under-bundle": `
+		"wrong-kind-member-under-group": `
 shop:
-  bundle:
+  group:
     disposable: true
   inner:
     box:

@@ -1,12 +1,16 @@
 package main
 
-import "github.com/overthinkos/overthink/charly/spec"
+import (
+	"github.com/overthinkos/overthink/charly/spec"
+
+	"gopkg.in/yaml.v3"
+)
 
 // The built-in kinds as KindProviders. Each wraps its existing decode logic
 // unchanged — the migration is behavior-preserving; only the normalizeNodeInto
 // dispatch switch is replaced by providerRegistry.ResolveKind. CueDefPath carries
 // the former reservedKindHandlers value (the CUE def the node value validates
-// against; the documented aliases bundle→#Deploy and host→#HostValue are kept).
+// against; the documented alias host→#HostValue is kept).
 
 // candy — the special factory arm (buildCandy returns name + InlineCandy).
 type candyKind struct{ builtinKindBase }
@@ -97,7 +101,16 @@ type groupKind struct{ builtinKindBase }
 
 func (groupKind) Reserved() string   { return "group" }
 func (groupKind) CueDefPath() string { return "#Group" }
+
+// DecodeNode — EDGE-INHERIT cutover B: group: is BOTH the Calamares package-group
+// (#Group, package/subgroup children) AND a TARGETLESS deploy group (resource
+// members, no own workload — the former targetless `bundle:`). Routed by shape: a
+// node carrying pod/vm/k8s/local/android resource MEMBERS is a deploy group; otherwise
+// it is the Calamares package group. (The Calamares group has zero on-disk corpus.)
 func (groupKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
+	if len(resourceChildren(gn)) > 0 {
+		return buildBundleNodeInto(gn, uf)
+	}
 	return decodePtrInto(gn, &uf.Group)
 }
 
@@ -129,10 +142,36 @@ type standaloneKind struct {
 func (k standaloneKind) Reserved() string   { return k.word }
 func (k standaloneKind) CueDefPath() string { return k.def }
 func (k standaloneKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
-	if len(resourceChildren(gn)) > 0 {
+	// EDGE-INHERIT cutover B: a substrate kind is BOTH the template entity AND the
+	// deploy. A node is a DEPLOY when it carries a cross-ref (`from:`/`image:`, or a
+	// scalar disc value like `vm: pg-vm`) or resource members; otherwise it is a
+	// standalone TEMPLATE (e.g. `vm: {source: …}`). The per-substrate from⊻image /
+	// source⊻from validity is Go-enforced downstream.
+	if isDeployShape(gn) || len(resourceChildren(gn)) > 0 {
 		return buildBundleNodeInto(gn, uf)
 	}
 	return buildStandaloneResource(gn, uf)
+}
+
+// isDeployShape reports whether a substrate node is a DEPLOY (vs a standalone
+// template): a scalar discriminator value (`vm: pg-vm` / `pod: img`) is a cross-ref
+// deploy, and a mapping value carrying `from:` or `image:` is a deploy.
+func isDeployShape(gn *genericNode) bool {
+	dv := gn.discValue
+	if dv == nil {
+		return false
+	}
+	if dv.Kind == yaml.ScalarNode {
+		return dv.Value != ""
+	}
+	if dv.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(dv.Content); i += 2 {
+			if k := dv.Content[i].Value; k == "from" || k == "image" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // bundleKind — bundle / host, the explicit bundle-shaped nodes.
@@ -157,7 +196,6 @@ func init() {
 		standaloneKind{word: "k8s", def: "#K8s"},
 		standaloneKind{word: "local", def: "#Local"},
 		standaloneKind{word: "android", def: "#Android"},
-		bundleKind{word: "bundle", def: "#Deploy"}, // documented alias: a bundle's value validates via #Deploy
 		bundleKind{word: "host", def: "#HostValue"},
 	} {
 		RegisterBuiltinProvider(p)

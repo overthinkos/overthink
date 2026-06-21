@@ -908,7 +908,7 @@ func gatherPreemptibleHolders() map[string]BundleNode {
 // when no such node exists (then VM lifecycle does not touch the arbiter).
 func lookupVMClaimant(vmEntity string) (string, BundleNode, bool) {
 	for name, node := range gatherDeployNodes() {
-		if node.Target == "vm" && node.Vm == vmEntity && len(node.RequiredExclusive()) > 0 {
+		if node.Target == "vm" && node.From == vmEntity && len(node.RequiredExclusive()) > 0 {
 			return name, node, true
 		}
 	}
@@ -923,7 +923,7 @@ func holderAddrFor(name string, node BundleNode) holderAddr {
 	}
 	addr := holderAddr{Name: name, Target: target, Base: base, Instance: instance}
 	if target == "vm" {
-		addr.Vm = node.Vm
+		addr.Vm = node.From
 		if addr.Vm == "" {
 			addr.Vm = base
 		}

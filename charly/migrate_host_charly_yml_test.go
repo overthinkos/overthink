@@ -128,7 +128,7 @@ func TestMigrate_HostOverlayConvertsToNodeForm(t *testing.T) {
 	ctx := &MigrateContext{Dir: t.TempDir(), HostDeployPath: deployPath}
 
 	// Apply exactly the host-affecting node-form slice of the chain, in order.
-	hostChainNames := []string{"host-charly-yml", "unified-node", "step-venue", "calver-schema"}
+	hostChainNames := []string{"host-charly-yml", "unified-node", "step-venue", "edge-inherit", "calver-schema"}
 	for _, name := range hostChainNames {
 		step := migrateStepByName(t, name)
 		if _, err := step.Apply(ctx); err != nil {
@@ -172,8 +172,8 @@ func TestMigrate_HostOverlayConvertsToNodeForm(t *testing.T) {
 	if !ok {
 		t.Fatalf("web deploy entry lost in node-form conversion; got keys %v", bundleKeys(dc))
 	}
-	if web.Box != "web" {
-		t.Errorf("web.Box = %q, want %q", web.Box, "web")
+	if web.Image != "web" {
+		t.Errorf("web.Image = %q, want %q", web.Image, "web")
 	}
 	if len(web.Volume) == 0 || web.Volume[0].Name != "data" {
 		t.Errorf("web volume child not preserved: %+v", web.Volume)

@@ -13,8 +13,8 @@ import (
 func k8sUnified(name, image, tmpl, ctx string) *UnifiedFile {
 	return &UnifiedFile{
 		Bundle: map[string]BundleNode{
-			name:       {Target: "k8s", Box: image, K8s: tmpl},
-			"some-pod": {Target: "pod", Box: "redis"},
+			name:       {Target: "k8s", Image: image, From: tmpl},
+			"some-pod": {Target: "pod", Image: "redis"},
 		},
 		K8s: map[string]*K8sSpec{
 			tmpl: {Box: image, KubeconfigContext: ctx, DefaultNamespace: "apps"},
@@ -127,7 +127,7 @@ func TestK8sCollector_AvailableFalse(t *testing.T) {
 	}
 
 	// Only a pod deploy declared — still nothing for the k8s substrate.
-	uf := &UnifiedFile{Bundle: map[string]BundleNode{"web": {Target: "pod", Box: "web"}}}
+	uf := &UnifiedFile{Bundle: map[string]BundleNode{"web": {Target: "pod", Image: "web"}}}
 	if col.Available(CollectOpts{Unified: uf}) {
 		t.Errorf("Available = true with only a pod deploy, want false")
 	}

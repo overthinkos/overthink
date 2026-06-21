@@ -29,12 +29,15 @@
 	// top-level entry, exempt from the box-required validators. See deploy.go.
 	agent_provisioned?: bool @go(AgentProvisioned)
 
-	box?:     string & !=""
-	pod?:     #EntityRef
-	vm?:      #EntityRef
-	k8s?:     #EntityRef
-	local?:   #EntityRef
-	android?: #EntityRef
+	// EDGE-INHERIT cutover B: the substrate kind is the EDGE discriminator (pod:/vm:/
+	// k8s:/local:/android:/group:), so the deploy carries only NON-kind cross-refs:
+	//   from  — inherit a SAME-kind template by name (vm/k8s/local/android deploys).
+	//   image — the box/OCI artifact a pod/k8s/android RUNS (the former `box:`).
+	// Per-substrate validity (image⊻from, source⊻from) is enforced in Go
+	// (classifyTarget / validateDeploy), not CUE, so a `vm:` node is a VmSpec template
+	// (source:) OR a deploy (from:) under ONE arm — the disjunction #Vm|#Deploy.
+	from?:  #EntityRef
+	image?: string & !=""
 
 	kind?:     "service" | "daemon" | "batch" | "scheduled" | "oneshot"
 	replica?:  int & >=0 @go(,type=int)

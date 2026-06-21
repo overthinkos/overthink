@@ -36,7 +36,7 @@ type DeployContext struct {
 	Node *BundleNode
 
 	// Name is the deploy key (the bed key / charly.yml map key, e.g.
-	// "check-k3s-vm"). Distinct from the kind:vm entity name (node.Vm).
+	// "check-k3s-vm"). Distinct from the kind:vm entity name (node.From).
 	Name string
 
 	// Dir is the project directory.

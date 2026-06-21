@@ -42,7 +42,7 @@ func (t *K8sUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans [
 	if !ufOk {
 		return fmt.Errorf("deploy %q: no charly.yml in project (k8s deploys need cluster spec)", t.NodeName)
 	}
-	clusterName := node.K8s
+	clusterName := node.From
 	if clusterName == "" {
 		return fmt.Errorf("deploy %q: target=k8s requires `k8s:` (cluster reference) on the deployment entry", t.NodeName)
 	}
@@ -52,7 +52,7 @@ func (t *K8sUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans [
 	}
 
 	// Resolve image + capabilities.
-	imageRef := node.Box
+	imageRef := node.Image
 	if imageRef == "" {
 		imageRef = t.NodeName
 	}

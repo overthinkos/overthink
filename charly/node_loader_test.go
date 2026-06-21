@@ -28,16 +28,16 @@ coder:
   coder-candy:
     candy: [redis]
 shop:
-  bundle: {}
+  group: {}
   web:
-    bundle:
-      box: coder
+    pod:
+      image: coder
     web-step-0:
       check: web reaches the cache
       command: "redis-cli -h ${HOST:cache} ping"
   cache:
-    bundle:
-      box: coder
+    pod:
+      image: coder
 `
 	if err := os.WriteFile(filepath.Join(dir, UnifiedFileName), []byte(doc), 0o644); err != nil {
 		t.Fatal(err)
@@ -63,8 +63,8 @@ shop:
 	if len(shop.Members) != 2 || shop.Members["web"] == nil || shop.Members["cache"] == nil {
 		t.Fatalf("shop members wrong: %v", deployKeys2(shop.Members))
 	}
-	if shop.Members["web"].Box != "coder" {
-		t.Errorf("web member box=%q, want coder", shop.Members["web"].Box)
+	if shop.Members["web"].Image != "coder" {
+		t.Errorf("web member box=%q, want coder", shop.Members["web"].Image)
 	}
 	// Post-cutover: flattenBundleVenues HOISTS the member's step into the root
 	// bundle Plan, stamping venue from tree position, and CLEARS the member's own

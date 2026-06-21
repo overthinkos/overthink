@@ -422,9 +422,9 @@ func validateLocalDeployments(dir string, errs *ValidationError) {
 			// Default target is "pod"; only validate when explicit.
 			continue
 		}
-		if node.Local != "" {
-			if uf.Local == nil || uf.Local[node.Local] == nil {
-				errs.Add("deployment %q: kind:local template %q not found", name, node.Local)
+		if node.From != "" {
+			if uf.Local == nil || uf.Local[node.From] == nil {
+				errs.Add("deployment %q: kind:local template %q not found", name, node.From)
 			}
 		}
 		hostField := strings.TrimSpace(node.Host)

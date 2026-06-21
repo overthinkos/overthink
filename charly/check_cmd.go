@@ -483,13 +483,13 @@ func (c *CheckLiveCmd) resolveVmTarget(uf *UnifiedFile) (vmName string, nestedLe
 	//       the parent's SSH substrate.
 	vmName = c.Box
 	if uf.Bundle != nil {
-		if entry, ok := uf.Bundle[c.Box]; ok && entry.Target == "vm" && entry.Vm != "" {
-			vmName = entry.Vm
+		if entry, ok := uf.Bundle[c.Box]; ok && entry.Target == "vm" && entry.From != "" {
+			vmName = entry.From
 		} else if idx := strings.Index(c.Box, "."); idx > 0 {
 			root := c.Box[:idx]
 			if parent, present := uf.Bundle[root]; present && parent.Target == "vm" {
-				if parent.Vm != "" {
-					vmName = parent.Vm
+				if parent.From != "" {
+					vmName = parent.From
 				}
 				nestedLeaf = resolveNestedNode(uf.Bundle, c.Box)
 			}
@@ -776,8 +776,8 @@ func (c *CheckLiveCmd) runLocalCheck() error {
 // HOST_PORT:<N> / CONTAINER_IP). Returns the failure count.
 func checkLocalDeployScope(dir string, node *BundleNode, image, instance, _ string, _ []string, exec DeployExecutor, format string) (int, error) { //nolint:unparam // error return kept for symmetry with sibling deploy-scope checks
 	var plan []Step
-	if node != nil && strings.TrimSpace(node.Local) != "" {
-		if spec := findLocalSpec(dir, strings.TrimSpace(node.Local)); spec != nil {
+	if node != nil && strings.TrimSpace(node.From) != "" {
+		if spec := findLocalSpec(dir, strings.TrimSpace(node.From)); spec != nil {
 			plan = append(plan, spec.Plan...)
 		}
 	}

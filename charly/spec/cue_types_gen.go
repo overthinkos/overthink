@@ -1169,17 +1169,18 @@ type Deploy struct {
 	// top-level entry, exempt from the box-required validators. See deploy.go.
 	AgentProvisioned bool `yaml:"agent_provisioned,omitempty" json:"agent_provisioned,omitempty"`
 
-	Box string `yaml:"box,omitempty" json:"box,omitempty"`
+	// EDGE-INHERIT cutover B: the substrate kind is the EDGE discriminator (pod:/vm:/
+	// k8s:/local:/android:/group:), so the deploy carries only NON-kind cross-refs:
+	//
+	//	from  — inherit a SAME-kind template by name (vm/k8s/local/android deploys).
+	//	image — the box/OCI artifact a pod/k8s/android RUNS (the former `box:`).
+	//
+	// Per-substrate validity (image⊻from, source⊻from) is enforced in Go
+	// (classifyTarget / validateDeploy), not CUE, so a `vm:` node is a VmSpec template
+	// (source:) OR a deploy (from:) under ONE arm — the disjunction #Vm|#Deploy.
+	From EntityRef `yaml:"from,omitempty" json:"from,omitempty"`
 
-	Pod EntityRef `yaml:"pod,omitempty" json:"pod,omitempty"`
-
-	Vm EntityRef `yaml:"vm,omitempty" json:"vm,omitempty"`
-
-	K8s EntityRef `yaml:"k8s,omitempty" json:"k8s,omitempty"`
-
-	Local EntityRef `yaml:"local,omitempty" json:"local,omitempty"`
-
-	Android EntityRef `yaml:"android,omitempty" json:"android,omitempty"`
+	Image string `yaml:"image,omitempty" json:"image,omitempty"`
 
 	Kind string `yaml:"kind,omitempty" json:"kind,omitempty"`
 

@@ -48,10 +48,10 @@ type bedRunOpts struct {
 // authored check_level (none → DefaultCheckLevel). VM / local beds carry no box
 // image, so they always run at the default rung.
 func bedCheckLevel(uf *UnifiedFile, node BundleNode) string {
-	if node.Box == "" {
+	if node.Image == "" {
 		return DefaultCheckLevel
 	}
-	if bc, _, ok := uf.ProjectConfig().resolveBoxRef(node.Box); ok {
+	if bc, _, ok := uf.ProjectConfig().resolveBoxRef(node.Image); ok {
 		return ResolveCheckLevel(bc.CheckLevel)
 	}
 	return DefaultCheckLevel
@@ -108,7 +108,7 @@ func printDebugRetentionNotice(w io.Writer, name string, node BundleNode) {
 	case "vm":
 		fmt.Fprintf(w, "\n[charly check run] bed %q FAILED — VM %q left running for debugging.\n"+
 			"  inspect: charly check live %s | charly vm ssh %s\n"+
-			"  destroy: charly vm destroy %s\n", name, node.Vm, name, node.Vm, node.Vm)
+			"  destroy: charly vm destroy %s\n", name, node.From, name, node.From, node.From)
 	case "local":
 		fmt.Fprintf(w, "\n[charly check run] bed %q FAILED — local apply left in place for debugging.\n"+
 			"  destroy: charly remove %s\n", name, name)
@@ -165,7 +165,7 @@ func persistBedDeployOverrides(name string, node BundleNode) {
 		Tunnel:        node.Tunnel,
 		Security:      node.Security,
 		Network:       node.Network,
-		Box:           node.Box,
+		Box:           node.Image,
 		Target:        node.Target,
 		SetDisposable: true,
 		Disposable:    node.IsDisposable(),
@@ -188,9 +188,9 @@ func runCheckBed(exe, name string, node BundleNode, opts bedRunOpts) (*bedRunRes
 	// (via bringUpMembers) and check-lives the flattened venue-stamped plan
 	// (runGroupCheck), instead of the workload-root build→deploy→update path.
 	isGroup := node.IsGroup()
-	image := node.Box
-	vmTemplate := node.Vm
-	localRef := node.Local
+	image := node.Image
+	vmTemplate := node.From
+	localRef := node.From
 
 	// Acceptance-depth gating by the box's check_level rung (see check_level.go):
 	//   none    → neither build- nor runtime-acceptance (build+deploy smoke only)
@@ -468,20 +468,20 @@ func runCheckBed(exe, name string, node BundleNode, opts bedRunOpts) (*bedRunRes
 			if isVmMember(m) {
 				// VM member: build its disk here; bringUpMembers does vm create + ssh-wait.
 				startLibvirtUserSession()
-				if err := step("vm-build-"+memberKey, []string{"vm", "build", m.Vm}); err != nil {
-					return fail("vm build member %s (%s): %w", memberKey, m.Vm, err)
+				if err := step("vm-build-"+memberKey, []string{"vm", "build", m.From}); err != nil {
+					return fail("vm build member %s (%s): %w", memberKey, m.From, err)
 				}
 				continue
 			}
-			if m.Box == "" {
+			if m.Image == "" {
 				continue // kind:local member — applies candies in place, no image
 			}
-			if err := step("image-build-"+memberKey, []string{"box", "build", m.Box, "--dev-local-pkg"}); err != nil {
-				return fail("image build member %s (%s): %w", memberKey, m.Box, err)
+			if err := step("image-build-"+memberKey, []string{"box", "build", m.Image, "--dev-local-pkg"}); err != nil {
+				return fail("image build member %s (%s): %w", memberKey, m.Image, err)
 			}
 			if runBuildCheck {
-				if err := step("check-image-"+memberKey, []string{"check", "box", m.Box}); err != nil {
-					return fail("check box member %s (%s): %w", memberKey, m.Box, err)
+				if err := step("check-image-"+memberKey, []string{"check", "box", m.Image}); err != nil {
+					return fail("check box member %s (%s): %w", memberKey, m.Image, err)
 				}
 			}
 		}
@@ -682,11 +682,11 @@ func runCheckBed(exe, name string, node BundleNode, opts bedRunOpts) (*bedRunRes
 		// re-check-lives — mirroring the initial group deploy.
 		for _, memberKey := range sortedMemberKeys(node.Members) {
 			m := node.Members[memberKey]
-			if m == nil || m.Box == "" {
+			if m == nil || m.Image == "" {
 				continue
 			}
-			if err := step("update-image-"+memberKey, []string{"box", "build", m.Box, "--dev-local-pkg"}); err != nil {
-				return fail("rebuild member image %s (%s): %w", memberKey, m.Box, err)
+			if err := step("update-image-"+memberKey, []string{"box", "build", m.Image, "--dev-local-pkg"}); err != nil {
+				return fail("rebuild member image %s (%s): %w", memberKey, m.Image, err)
 			}
 		}
 		tearDownMembers(&node)

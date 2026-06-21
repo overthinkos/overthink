@@ -22,22 +22,22 @@ func androidBedUnified() *UnifiedFile {
 		Bundle: map[string]BundleNode{
 			"check-android-emulator-pod": {
 				Target: "pod",
-				Box:    "android-emulator",
+				Image:  "android-emulator",
 				Children: map[string]*BundleNode{
 					"device": {
 						Target:   "android",
-						Android:  "pixel9a-36",
+						From:     "pixel9a-36",
 						AddCandy: []string{"android-test-apps"},
 					},
 					"device-net": {
 						Target:   "android",
-						Android:  "pixel9a-endpoint",
+						From:     "pixel9a-endpoint",
 						AddCandy: []string{"android-apidemos"},
 					},
 				},
 			},
 			// A plain pod deploy with no android children — must not contribute.
-			"some-pod": {Target: "pod", Box: "whatever"},
+			"some-pod": {Target: "pod", Image: "whatever"},
 		},
 	}
 }
@@ -56,7 +56,7 @@ func TestAndroidCollector_AvailableFalseWhenNoAndroidDeploy(t *testing.T) {
 		t.Error("Available() = true, want false with no declared android deploy")
 	}
 	// A unified with only a plain pod deploy is still unavailable.
-	uf := &UnifiedFile{Bundle: map[string]BundleNode{"x": {Target: "pod", Box: "y"}}}
+	uf := &UnifiedFile{Bundle: map[string]BundleNode{"x": {Target: "pod", Image: "y"}}}
 	if a.Available(CollectOpts{Unified: uf}) {
 		t.Error("Available() = true, want false when no target:android node exists")
 	}
@@ -92,7 +92,7 @@ func TestCollectAndroidDeployNodes_TopLevel(t *testing.T) {
 	uf := &UnifiedFile{
 		Android: map[string]*AndroidSpec{"dev": {Adb: &AndroidAdbEndpoint{Host: "h:1"}}},
 		Bundle: map[string]BundleNode{
-			"phone": {Target: "android", Android: "dev"},
+			"phone": {Target: "android", From: "dev"},
 		},
 	}
 	nodes := collectAndroidDeployNodes(CollectOpts{Unified: uf})
@@ -106,11 +106,11 @@ func TestCollectAndroidDeployNodes_TopLevel(t *testing.T) {
 func TestCollectAndroidDeployNodes_DeployYamlWinsPerKey(t *testing.T) {
 	uf := &UnifiedFile{
 		Android: map[string]*AndroidSpec{"dev": {Adb: &AndroidAdbEndpoint{Host: "h:1"}}},
-		Bundle:  map[string]BundleNode{"phone": {Target: "android", Android: "dev"}},
+		Bundle:  map[string]BundleNode{"phone": {Target: "android", From: "dev"}},
 	}
 	// deploy.yml flips "phone" to a pod target — the android node must disappear.
 	local := &BundleConfig{Bundle: map[string]BundleNode{
-		"phone": {Target: "pod", Box: "x"},
+		"phone": {Target: "pod", Image: "x"},
 	}}
 	nodes := collectAndroidDeployNodes(CollectOpts{Unified: uf, Deploy: local})
 	if len(nodes) != 0 {
@@ -143,7 +143,7 @@ func TestAndroidCollector_CollectOneAbsentWhenEndpointUnreachable(t *testing.T) 
 	a := &AndroidCollector{}
 	dn := androidDeployNode{
 		path: "phone",
-		node: BundleNode{Target: "android", Android: "dev"},
+		node: BundleNode{Target: "android", From: "dev"},
 	}
 	opts := CollectOpts{
 		RunMode: "quadlet",
@@ -181,7 +181,7 @@ func TestAndroidCollector_CollectOneAbsentWhenEndpointUnreachable(t *testing.T) 
 // naming the missing reference, not a panic.
 func TestAndroidCollector_CollectOneUndeclaredDevice(t *testing.T) {
 	a := &AndroidCollector{}
-	dn := androidDeployNode{path: "phone", node: BundleNode{Target: "android", Android: "ghost"}}
+	dn := androidDeployNode{path: "phone", node: BundleNode{Target: "android", From: "ghost"}}
 	row := a.collectOne(CollectOpts{Unified: &UnifiedFile{}}, dn)
 	if row.Status != "absent" {
 		t.Errorf("Status = %q, want absent for undeclared device", row.Status)

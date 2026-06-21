@@ -75,7 +75,7 @@ func DeployFromBox(opts DeployFromBoxOpts) (string, error) {
 	if dc.Kubernetes == nil {
 		dc.Kubernetes = &K8sDeployConfig{}
 	}
-	dc.K8s = opts.ClusterName
+	dc.From = opts.ClusterName
 	if opts.Namespace != "" {
 		dc.Kubernetes.Namespace = opts.Namespace
 	}

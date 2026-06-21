@@ -11,7 +11,7 @@ func newVenueTestUF() *UnifiedFile {
 		},
 		Bundle: map[string]BundleNode{
 			"web-pod":     {Target: "pod"},
-			"k3s-vm":      {Target: "vm", Vm: "k3s-vm-entity"},
+			"k3s-vm":      {Target: "vm", From: "k3s-vm-entity"},
 			"bare-vm-dep": {Target: "vm"}, // target:vm with no explicit Vm → falls back to key
 			"my-local":    {Target: "local"},
 			"remote-host": {Target: "local", Host: "user@box"},

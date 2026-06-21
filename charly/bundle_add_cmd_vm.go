@@ -45,7 +45,7 @@ func deployNestedPodsInGuest(vmName string, node *BundleNode, exec DeployExecuto
 	}
 	for _, childKey := range sortedNestedKeys(node.Children) {
 		child := node.Children[childKey]
-		if child == nil || child.Box == "" {
+		if child == nil || child.Image == "" {
 			continue
 		}
 		switch child.Target {
@@ -55,14 +55,14 @@ func deployNestedPodsInGuest(vmName string, node *BundleNode, exec DeployExecuto
 			continue // android / k8s / vm children are not in-guest pods
 		}
 		asRef := "localhost/charly-" + childKey + ":latest"
-		fmt.Fprintf(os.Stderr, "Deploying nested pod %s.%s (%s) as a persistent in-guest quadlet...\n", vmName, childKey, child.Box)
-		if err := runCharlySubcommand("box", "build", child.Box); err != nil {
-			return fmt.Errorf("build nested image %s (%s): %w", childKey, child.Box, err)
+		fmt.Fprintf(os.Stderr, "Deploying nested pod %s.%s (%s) as a persistent in-guest quadlet...\n", vmName, childKey, child.Image)
+		if err := runCharlySubcommand("box", "build", child.Image); err != nil {
+			return fmt.Errorf("build nested image %s (%s): %w", childKey, child.Image, err)
 		}
 		// --rootless: load into the guest USER's podman storage, because the
 		// from-box deploy below runs as the guest user (a --user quadlet) and
 		// reads the user's storage — a root-loaded image would be invisible to it.
-		if err := runCharlySubcommand("vm", "cp-box", vmName, child.Box, "--as", asRef, "--rootless"); err != nil {
+		if err := runCharlySubcommand("vm", "cp-box", vmName, child.Image, "--as", asRef, "--rootless"); err != nil {
 			return fmt.Errorf("cp-box nested %s -> guest: %w", childKey, err)
 		}
 		// Run as the guest user (--user quadlet). `sudo` escalates only the
@@ -264,13 +264,13 @@ func saveVmDeployState(deployName, vmEntity string, state *VmDeployState) error 
 	// node AND so teardown can resolve a bundle-keyed entry back to its VM entity.
 	// Precedence: the explicit vmEntity (the canonical mapping the caller resolved,
 	// e.g. check-k3s-vm → k3s-vm) → a legacy "vm:<entity>" deployName prefix →
-	// PRESERVE the existing entry.Vm (never clobber a known cross-ref with "").
+	// PRESERVE the existing entry.From (never clobber a known cross-ref with "").
 	switch {
 	case vmEntity != "":
-		entry.Vm = vmEntity
+		entry.From = vmEntity
 	default:
 		if vmName, perr := vmNameFromDeployName(deployName); perr == nil {
-			entry.Vm = vmName
+			entry.From = vmName
 		}
 	}
 	entry.VmState = state
@@ -339,7 +339,7 @@ func removeVmDeployEntry(deployName string) error {
 //     by the prefixed entity form `vm:<entity>`.)
 //   - REMOVE: every teardown caller passes the prefixed VM-ENTITY form
 //     `vm:<entity>` — VmUnifiedTarget.Del's dispatch rewrites t.NodeName to
-//     "vm:"+node.Vm, and `charly vm destroy` builds "vm:"+box.
+//     "vm:"+node.From, and `charly vm destroy` builds "vm:"+box.
 //
 // An exact-key delete on "vm:k3s-vm" therefore MISSES the `check-k3s-vm` bundle
 // entry, which leaks (the domain is destroyed; only the config entry lingers).
@@ -364,7 +364,7 @@ func vmDeployEntryKeys(dc *BundleConfig, deployName string) []string {
 	// so a non-prefixed name can never over-match unrelated bundles).
 	if entity, perr := vmNameFromDeployName(deployName); perr == nil {
 		for key, entry := range dc.Bundle {
-			if entry.Vm == entity {
+			if entry.From == entity {
 				add(key)
 			}
 		}

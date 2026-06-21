@@ -71,7 +71,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.172.0002")
+var latestSchemaVersion = mustCalVer("2026.172.0004")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -444,13 +444,19 @@ func migrationSteps() []MigrationStep {
 		// and the Calamares `group` kind are untouched. Raises HEAD (a closed #Op
 		// rejects the legacy keys). See migrate_probe_verb_rename.go.
 		{mustCalVer("2026.172.0001"), "probe-verb-rename", false, MigrateProbeVerbRename},
+		// EDGE-INHERIT cutover B: eliminate the `bundle:` kind — the substrate kind is
+		// the EDGE discriminator (pod/vm/k8s/local/android/group) and the cross-ref
+		// becomes from:/image:. bundle:{box:I}→pod:{image:I}, bundle:{vm:V}→vm:{from:V},
+		// targetless→group:. Raises HEAD (bundle + the box/vm/… cross-ref fields are
+		// gone from the schema). See migrate_edge_inherit.go.
+		{mustCalVer("2026.172.0003"), "edge-inherit", false, MigrateEdgeInherit},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up
 		// and every versioned file lands on this CalVer. This is the integer→CalVer
 		// transition step (version: 4 → version: <HEAD>) and the universal stamper.
 		// TouchesHost is false so it ALSO runs in project-only mode (remote-cache
 		// auto-migration); its host-file stamping is gated on ctx.HostDeployPath,
 		// which the project-only runner leaves empty.
-		{mustCalVer("2026.172.0002"), "calver-schema", false, func(c *MigrateContext) (bool, error) {
+		{mustCalVer("2026.172.0004"), "calver-schema", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateCalverSchema(c.Dir, c.HostDeployPath, latestSchemaVersion, c.DryRun)
 			return len(w) > 0, err
 		}},

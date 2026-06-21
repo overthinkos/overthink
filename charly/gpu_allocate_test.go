@@ -88,7 +88,7 @@ func TestVfioGpuToHostdevs(t *testing.T) {
 
 func TestRequiredGPUResource(t *testing.T) {
 	resources := map[string]*ResourceDef{"nvidia-gpu": {Gpu: &GpuSelector{Vendor: "0x10de"}}}
-	node := BundleNode{Target: "vm", Vm: "gpu-vm", RequiresExclusive: []string{"nvidia-gpu"}}
+	node := BundleNode{Target: "vm", From: "gpu-vm", RequiresExclusive: []string{"nvidia-gpu"}}
 	tok, sel, ok := requiredGPUResource(&node, resources)
 	if !ok || tok != "nvidia-gpu" || sel.Vendor != "0x10de" {
 		t.Fatalf("requiredGPUResource = (%q,%v,%v), want nvidia-gpu/0x10de/true", tok, sel, ok)
@@ -118,7 +118,7 @@ func TestAutoAllocate_HitPersistsAndInjects(t *testing.T) {
 	defer func() { DetectVFIO = orig }()
 
 	spec := &VmSpec{}
-	node := &BundleNode{Target: "vm", Vm: "gpu-vm", RequiresExclusive: []string{"nvidia-gpu"}}
+	node := &BundleNode{Target: "vm", From: "gpu-vm", RequiresExclusive: []string{"nvidia-gpu"}}
 	resources := map[string]*ResourceDef{"nvidia-gpu": {Gpu: &GpuSelector{Vendor: "0x10de"}}}
 
 	ovr, err := autoAllocateExclusiveGPUs(spec, nil, node, resources, "charly-gpu-vm", "libvirt")
@@ -149,7 +149,7 @@ func TestAutoAllocate_MissFailsHard(t *testing.T) {
 	DetectVFIO = func() VFIOReport { return VFIOReport{IOMMUEnabled: true} } // no GPUs
 	defer func() { DetectVFIO = orig }()
 
-	node := &BundleNode{Target: "vm", Vm: "gpu-vm", RequiresExclusive: []string{"nvidia-gpu"}}
+	node := &BundleNode{Target: "vm", From: "gpu-vm", RequiresExclusive: []string{"nvidia-gpu"}}
 	resources := map[string]*ResourceDef{"nvidia-gpu": {Gpu: &GpuSelector{Vendor: "0x10de"}}}
 	_, err := autoAllocateExclusiveGPUs(&VmSpec{}, nil, node, resources, "charly-gpu-vm", "libvirt")
 	if err == nil {
@@ -171,7 +171,7 @@ func TestAutoAllocate_OperatorHostdevWins(t *testing.T) {
 
 	// vm.yml already committed a hostdev → auto-allocation defers, no detect.
 	spec := &VmSpec{Libvirt: &LibvirtDomain{Devices: &LibvirtDevices{Hostdevs: []LibvirtHostdev{{Type: "pci"}}}}}
-	node := &BundleNode{Target: "vm", Vm: "gpu-vm", RequiresExclusive: []string{"nvidia-gpu"}}
+	node := &BundleNode{Target: "vm", From: "gpu-vm", RequiresExclusive: []string{"nvidia-gpu"}}
 	resources := map[string]*ResourceDef{"nvidia-gpu": {Gpu: &GpuSelector{Vendor: "0x10de"}}}
 	if _, err := autoAllocateExclusiveGPUs(spec, nil, node, resources, "charly-gpu-vm", "libvirt"); err != nil {
 		t.Fatalf("operator-hostdev path must be a no-op, got %v", err)
@@ -179,7 +179,7 @@ func TestAutoAllocate_OperatorHostdevWins(t *testing.T) {
 }
 
 func TestAutoAllocate_QemuBackendRejected(t *testing.T) {
-	node := &BundleNode{Target: "vm", Vm: "gpu-vm", RequiresExclusive: []string{"nvidia-gpu"}}
+	node := &BundleNode{Target: "vm", From: "gpu-vm", RequiresExclusive: []string{"nvidia-gpu"}}
 	resources := map[string]*ResourceDef{"nvidia-gpu": {Gpu: &GpuSelector{Vendor: "0x10de"}}}
 	_, err := autoAllocateExclusiveGPUs(&VmSpec{}, nil, node, resources, "charly-gpu-vm", "qemu")
 	if err == nil || !strings.Contains(err.Error(), "libvirt") {

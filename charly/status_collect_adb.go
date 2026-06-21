@@ -121,11 +121,11 @@ func (a *AndroidCollector) collectOne(opts CollectOpts, dn androidDeployNode) De
 		RunMode: opts.RunMode,
 	}
 
-	spec := lookupAndroidSpec(opts.Unified, dn.node.Android)
+	spec := lookupAndroidSpec(opts.Unified, dn.node.From)
 	if spec == nil {
 		// Device reference not declared — surface the deploy path with an
 		// absent status so the misconfiguration is visible, not swallowed.
-		row.Container = dn.node.Android
+		row.Container = dn.node.From
 		return row
 	}
 	row.Container = spec.EffectiveSerial()

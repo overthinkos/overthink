@@ -77,11 +77,11 @@ func TestCueTightening_RejectsAndAccepts(t *testing.T) {
 
 		// --- deploy: the sidecar/probes blankets are modeled; unknown key rejected ---
 		{"deploy unknown key rejected", "deploy",
-			"target: pod\nbox: x\nbogus_key: 1\n", true},
+			"target: pod\nimage: x\nbogus_key: 1\n", true},
 		{"deploy modeled fields accepted", "deploy",
-			"target: pod\nbox: x\nrestart: always\nport: [\"8080:8080\"]\n", false},
+			"target: pod\nimage: x\nrestart: always\nport: [\"8080:8080\"]\n", false},
 		{"deploy bad restart enum rejected", "deploy",
-			"target: pod\nbox: x\nrestart: sometimes\n", true},
+			"target: pod\nimage: x\nrestart: sometimes\n", true},
 
 		// --- box: closed; the retired port: field is forbidden ---
 		{"box unknown key rejected", "box",

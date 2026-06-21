@@ -318,19 +318,19 @@ func resolveDeployKeyToBox(key, instance string) string {
 	}
 	// User-side first.
 	if dc := loadDeployConfigForRead("resolveDeployKeyToBox"); dc != nil {
-		if entry, ok := dc.Bundle[deployKey(key, instance)]; ok && entry.Box != "" {
-			return entry.Box
+		if entry, ok := dc.Bundle[deployKey(key, instance)]; ok && entry.Image != "" {
+			return entry.Image
 		}
-		if entry, ok := dc.Bundle[key]; ok && entry.Box != "" {
-			return entry.Box
+		if entry, ok := dc.Bundle[key]; ok && entry.Image != "" {
+			return entry.Image
 		}
 	}
 	// Project-level fallback.
 	if dir, err := os.Getwd(); err == nil {
 		if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
 			if pc := uf.ProjectBundleConfig(); pc != nil {
-				if entry, ok := pc.Bundle[key]; ok && entry.Box != "" {
-					return entry.Box
+				if entry, ok := pc.Bundle[key]; ok && entry.Image != "" {
+					return entry.Image
 				}
 			}
 		}
@@ -355,7 +355,7 @@ func findVmDeployNode(deploys map[string]BundleNode, name, vmName string) (Bundl
 		return BundleNode{}, false
 	}
 	if name != "" {
-		if e, ok := deploys[name]; ok && (e.Target == "vm" || e.Vm != "") {
+		if e, ok := deploys[name]; ok && (e.Target == "vm" || e.From != "") {
 			return e, true
 		}
 		if e, ok := deploys["vm:"+name]; ok {
@@ -363,7 +363,7 @@ func findVmDeployNode(deploys map[string]BundleNode, name, vmName string) (Bundl
 		}
 	}
 	for _, e := range deploys {
-		if e.Target == "vm" && e.Vm != "" && (e.Vm == vmName || e.Vm == name) {
+		if e.Target == "vm" && e.From != "" && (e.From == vmName || e.From == name) {
 			return e, true
 		}
 	}
@@ -382,15 +382,15 @@ func vmEntityForDeploy(deployName string) string {
 		return ""
 	}
 	if dc := loadDeployConfigForRead("vmEntityForDeploy"); dc != nil {
-		if node, ok := findVmDeployNode(dc.Bundle, deployName, ""); ok && node.Vm != "" {
-			return node.Vm
+		if node, ok := findVmDeployNode(dc.Bundle, deployName, ""); ok && node.From != "" {
+			return node.From
 		}
 	}
 	if dir, err := os.Getwd(); err == nil {
 		if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
 			if pc := uf.ProjectBundleConfig(); pc != nil {
-				if node, ok := findVmDeployNode(pc.Bundle, deployName, ""); ok && node.Vm != "" {
-					return node.Vm
+				if node, ok := findVmDeployNode(pc.Bundle, deployName, ""); ok && node.From != "" {
+					return node.From
 				}
 			}
 		}
@@ -1195,7 +1195,7 @@ func isAutoVmDeployEntry(entry BundleNode) bool {
 	probe := entry
 	probe.VmState = nil
 	probe.Target = ""
-	probe.Vm = ""
+	probe.From = ""
 	return reflect.DeepEqual(probe, BundleNode{})
 }
 
@@ -1402,8 +1402,8 @@ func saveDeployState(boxName, instance string, input SaveDeployStateInput) {
 	}
 	key := deployKey(boxName, instance)
 	entry := dc.Bundle[key] // preserve existing fields (tunnel, volumes, etc.)
-	if input.Box != "" && entry.Box == "" {
-		entry.Box = input.Box
+	if input.Box != "" && entry.Image == "" {
+		entry.Image = input.Box
 	}
 	if input.Target != "" && entry.Target == "" {
 		entry.Target = input.Target

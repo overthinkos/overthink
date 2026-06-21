@@ -70,10 +70,10 @@ func ResolveVmTarget(vmName, uri string) (*VmTarget, error) {
 	// "arch-vm") whose Vm field points at the actual entity.
 	spec, present := uf.VM[vmName]
 	if !present && uf.Bundle != nil {
-		if entry, ok := uf.Bundle[vmName]; ok && entry.Target == "vm" && entry.Vm != "" {
-			if s, okSpec := uf.VM[entry.Vm]; okSpec {
+		if entry, ok := uf.Bundle[vmName]; ok && entry.Target == "vm" && entry.From != "" {
+			if s, okSpec := uf.VM[entry.From]; okSpec {
 				spec = s
-				vmName = entry.Vm
+				vmName = entry.From
 				present = true
 			}
 		}

@@ -68,10 +68,10 @@ func TestDeployNestedPodsInGuest_DeploysOnlyPodChildren(t *testing.T) {
 	exec := &nestedRecordingExec{}
 	node := &BundleNode{
 		Children: map[string]*BundleNode{
-			"selkies-kde": {Target: "pod", Box: "selkies-kde-nvidia"},
-			"alpha-pod":   {Target: "", Box: "alpha-img"},               // default target == pod
-			"droid":       {Target: "android", Box: "android-emulator"}, // skipped (not in-guest)
-			"empty":       {Target: "pod"},                              // skipped (no image)
+			"selkies-kde": {Target: "pod", Image: "selkies-kde-nvidia"},
+			"alpha-pod":   {Target: "", Image: "alpha-img"},               // default target == pod
+			"droid":       {Target: "android", Image: "android-emulator"}, // skipped (not in-guest)
+			"empty":       {Target: "pod"},                                // skipped (no image)
 		},
 	}
 
@@ -204,9 +204,9 @@ func TestMergeDeployConfigs_VMNestedSurvivesNestedlessOverlay(t *testing.T) {
 	project := &BundleConfig{Bundle: map[string]BundleNode{
 		"cachyos-gpu": {
 			Target: "vm",
-			Vm:     "cachyos-gpu",
+			From:   "cachyos-gpu",
 			Children: map[string]*BundleNode{
-				"selkies-kde": {Target: "pod", Box: "selkies-kde-nvidia"},
+				"selkies-kde": {Target: "pod", Image: "selkies-kde-nvidia"},
 			},
 		},
 	}}
@@ -214,7 +214,7 @@ func TestMergeDeployConfigs_VMNestedSurvivesNestedlessOverlay(t *testing.T) {
 	operator := &BundleConfig{Bundle: map[string]BundleNode{
 		"cachyos-gpu": {
 			Target:    "vm",
-			Vm:        "cachyos-gpu",
+			From:      "cachyos-gpu",
 			Lifecycle: "prod",
 		},
 	}}
@@ -232,7 +232,7 @@ func TestMergeDeployConfigs_VMNestedSurvivesNestedlessOverlay(t *testing.T) {
 	if len(node.Children) != 1 || node.Children["selkies-kde"] == nil {
 		t.Fatalf("project nested: dropped by nestedless operator overlay: %#v", node.Children)
 	}
-	if got := node.Children["selkies-kde"].Box; got != "selkies-kde-nvidia" {
+	if got := node.Children["selkies-kde"].Image; got != "selkies-kde-nvidia" {
 		t.Errorf("nested child box: got %q, want selkies-kde-nvidia", got)
 	}
 }

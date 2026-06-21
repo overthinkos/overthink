@@ -104,6 +104,11 @@ func TestMigrateStepVenue_FlatToTree(t *testing.T) {
 		t.Errorf("existing chrome peer lost its box:\n%s", out)
 	}
 
+	// step-venue runs BEFORE edge-inherit in the chain; apply edge-inherit in-memory
+	// so the intermediate bundle:-form deploys become loadable substrate-kind nodes
+	// (EDGE-INHERIT cutover B).
+	edgeInheritDoc(doc)
+
 	// Structural: the migrated tree parses node-form AND passes flattenBundleVenues
 	// (no "group has direct steps"), with venues stamped from position.
 	root := rootMappingNode(doc)

@@ -1,4 +1,4 @@
-version: 2026.172.0002
+version: 2026.172.0004
 # Canonical repo identity. After the 2026-06 box inversion main imports the three
 # active distro submodules (arch / cachyos / fedora) ONE-DIRECTIONALLY to reference
 # their relocated boxes; the submodules no longer import main as a namespace (they
@@ -250,8 +250,8 @@ gemini:
 # cpuset-delegation blocker that makes a pod-hosted k3s impossible.
 # References the vm: entity `k3s-vm` (defined below).
 check-k3s-vm:
-    bundle:
-        vm: k3s-vm
+    vm:
+        from: k3s-vm
         disposable: true
         lifecycle: dev
         description: >-
@@ -391,8 +391,8 @@ check-k3s-vm:
         context:
             - runtime
 check-local:
-    bundle:
-        local: check-local-app
+    local:
+        from: check-local-app
         host: local
         disposable: true
         lifecycle: dev
@@ -417,8 +417,8 @@ check-local:
 # deps. This is main's own live proof of the localpkg DEPLOY path (the rpm/deb
 # legs are proven by the fedora/debian/ubuntu submodule VM beds).
 check-charly-vm:
-    bundle:
-        vm: charly-vm
+    vm:
+        from: charly-vm
         disposable: true
         lifecycle: dev
         description: >-
@@ -457,7 +457,7 @@ check-charly-vm:
         context:
             - runtime
 charly-cli:
-    bundle:
+    group:
         description: AI check — an agent operates the charly management command surface (build → deploy → status) end-to-end.
     charly-cli-iterate:
         iterate:
@@ -495,7 +495,7 @@ charly-cli:
             file: /etc/charly-os-marker
             contains: ["charly-os-content-marker"]
 default:
-    bundle:
+    group:
         description: Default benchmark — progressive verb-coverage curriculum across the full `charly check` surface (system state → network → cross-pod → MCP → Kubernetes → desktop → VM → nested).
     default-iterate:
         iterate:
@@ -1084,7 +1084,7 @@ default:
             command: "redis-cli -h charly-redis ping"
             stdout: {contains: [PONG]}
 scaffolding-selftest:
-    bundle:
+    group:
         description: End-to-end self-test of the harness benchmark scaffolding chain — loader + composition + cross-namespace deps + live scoring against AI-deployed pods.
     scaffolding-selftest-iterate:
         iterate:

@@ -24,7 +24,7 @@ func makeTree() map[string]BundleNode {
 		},
 		"arch": {
 			Target: "vm",
-			Vm:     "arch",
+			From:   "arch",
 		},
 	}
 }
@@ -151,7 +151,7 @@ func TestMergeDeployConfigsLocalCutoverFields(t *testing.T) {
 	project := &BundleConfig{Bundle: map[string]BundleNode{
 		"charly-cachyos": {
 			Target:  "local",
-			Local:   "charly-cachyos",
+			From:    "charly-cachyos",
 			Host:    "local",
 			User:    "alice",
 			SSHArgs: []string{"-o", "ServerAliveInterval=30"},
@@ -162,8 +162,8 @@ func TestMergeDeployConfigsLocalCutoverFields(t *testing.T) {
 	if !ok {
 		t.Fatal("charly-cachyos dropped by MergeDeployConfigs")
 	}
-	if got.Local != "charly-cachyos" {
-		t.Errorf("Local field lost: got %q want %q", got.Local, "charly-cachyos")
+	if got.From != "charly-cachyos" {
+		t.Errorf("Local field lost: got %q want %q", got.From, "charly-cachyos")
 	}
 	if got.User != "alice" {
 		t.Errorf("User field lost: got %q", got.User)
@@ -173,12 +173,12 @@ func TestMergeDeployConfigsLocalCutoverFields(t *testing.T) {
 	}
 	// Per-machine overlay wins on collision (mirrors Host's behavior).
 	overlay := &BundleConfig{Bundle: map[string]BundleNode{
-		"charly-cachyos": {Local: "ci-runner", User: "bob", SSHArgs: []string{"-o", "ProxyJump=bastion"}},
+		"charly-cachyos": {From: "ci-runner", User: "bob", SSHArgs: []string{"-o", "ProxyJump=bastion"}},
 	}}
 	merged = MergeDeployConfigs(project, overlay)
 	got = merged.Bundle["charly-cachyos"]
-	if got.Local != "ci-runner" {
-		t.Errorf("overlay Local should win: got %q", got.Local)
+	if got.From != "ci-runner" {
+		t.Errorf("overlay Local should win: got %q", got.From)
 	}
 	if got.User != "bob" {
 		t.Errorf("overlay User should win: got %q", got.User)

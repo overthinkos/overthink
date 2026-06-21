@@ -162,12 +162,12 @@ func bringUpMembers(node *BundleNode) error {
 			// ref, like the isVM root's deploy-add), not the bare pod/local form.
 			// Best-effort pre-destroy clears a stale domain from an interrupted run.
 			startLibvirtUserSession()
-			_ = runCharlySubcommand("vm", "destroy", memberNode.Vm)
-			if err := runCharlySubcommand("vm", "create", memberNode.Vm); err != nil {
-				return fmt.Errorf("peer %q (vm create %s): %w", memberKey, memberNode.Vm, err)
+			_ = runCharlySubcommand("vm", "destroy", memberNode.From)
+			if err := runCharlySubcommand("vm", "create", memberNode.From); err != nil {
+				return fmt.Errorf("peer %q (vm create %s): %w", memberKey, memberNode.From, err)
 			}
-			waitForVmSshReady(memberNode.Vm)
-			if err := runCharlySubcommand("bundle", "add", memberKey, memberNode.Vm); err != nil {
+			waitForVmSshReady(memberNode.From)
+			if err := runCharlySubcommand("bundle", "add", memberKey, memberNode.From); err != nil {
 				return fmt.Errorf("peer %q (vm bundle add): %w", memberKey, err)
 			}
 		case isPodMember(memberNode):
@@ -200,7 +200,7 @@ func tearDownMembers(node *BundleNode) {
 		var err error
 		switch {
 		case isVmMember(memberNode):
-			err = runCharlySubcommand("vm", "destroy", memberNode.Vm)
+			err = runCharlySubcommand("vm", "destroy", memberNode.From)
 		case isPodMember(memberNode):
 			err = runCharlySubcommand("remove", memberKey, "--purge")
 		default:

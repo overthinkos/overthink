@@ -85,7 +85,7 @@ func TestVMCollector_Collect(t *testing.T) {
 				Bundle: map[string]BundleNode{
 					"vm:cachyos-gpu": {
 						Target:  "vm",
-						Vm:      "cachyos-gpu",
+						From:    "cachyos-gpu",
 						VmState: &VmDeployState{SshPort: 12228, SshUser: "cachy", Backend: "libvirt"},
 					},
 				},
@@ -111,7 +111,7 @@ func TestVMCollector_Collect(t *testing.T) {
 					// deploy KEY (check-k3s-vm) != vm entity (k3s-vm).
 					"check-k3s-vm": {
 						Target:  "vm",
-						Vm:      "k3s-vm",
+						From:    "k3s-vm",
 						VmState: &VmDeployState{SshPort: 2225, SshUser: "arch"},
 					},
 				},

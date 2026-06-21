@@ -191,14 +191,14 @@ func containerChildExecutor(node *BundleNode, parentExec DeployExecutor) (Deploy
 // ShellExecutor), the child gets a plain SSHExecutor — no
 // nesting overhead for the common case of a VM on localhost.
 //
-// The SSH alias keys off node.Vm (the kind:vm entity name), NOT
+// The SSH alias keys off node.From (the kind:vm entity name), NOT
 // deployName (the bed name) — `charly vm create <vm>` writes the managed
 // stanza for `charly-<vm>`. Falling back to deployName here would produce
 // a `charly-<bed>` alias with no matching stanza (e.g., bed `arch-vm` →
 // `charly-arch-vm`, but the stanza is `charly-arch`). deployName is kept for
 // log messages where the deployment identity matters.
 func vmChildExecutor(node *BundleNode, parentExec DeployExecutor, deployName string) (DeployExecutor, error) {
-	vmName := node.Vm
+	vmName := node.From
 	if vmName == "" {
 		vmName = deployName // fallback for legacy nodes without `vm:` set
 	}

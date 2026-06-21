@@ -268,6 +268,9 @@ func migrateDeployEntity(name string, body *yaml.Node) *yaml.Node {
 // `podman exec` (the check-arch-vm nested-local regression). Such an entity must
 // carry its kind discriminator (`local:`) directly so the classification survives.
 func bundleDiscForEntity(body *yaml.Node) string {
+	// Legacy box/vm/k8s/local/android cross-ref (the unified-node migration of a
+	// VERY old config): emit `bundle:` and let the later edge-inherit migration step
+	// convert it to the substrate kind. Current saves never carry these keys.
 	if body != nil {
 		for i := 0; i+1 < len(body.Content); i += 2 {
 			if bundleCrossRefKeys[body.Content[i].Value] {
@@ -275,15 +278,18 @@ func bundleDiscForEntity(body *yaml.Node) string {
 			}
 		}
 	}
-	// No cross-ref to infer from: a template-less local/host overlay must name its
-	// kind so the loader classifies it as a local deploy, not a group→pod. (`host`
-	// is the pre-rename spelling of `local`; migrate_target_local normally folds it
-	// first, mapped here too for order-independence.)
-	switch scalarFieldValue(body, "target") {
-	case "local", "host":
+	// EDGE-INHERIT cutover B: the substrate kind IS the discriminator at the edge.
+	// The SAVE path marshals BundleNode.Target (loader-derived), so the disc is that
+	// target; an empty target is a targetless deploy GROUP. (`host` is the pre-rename
+	// spelling of `local`.)
+	switch t := scalarFieldValue(body, "target"); t {
+	case "host":
 		return "local"
+	case "":
+		return "group"
+	default:
+		return t // pod | vm | k8s | local | android
 	}
-	return "bundle"
 }
 
 // explodeFields splits a legacy entity body: SCALAR fields append to value; every

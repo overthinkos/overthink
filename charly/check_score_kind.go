@@ -4,10 +4,10 @@ package main
 //
 // The AI-loop orchestration — the agent list, plateau policy, prompt,
 // sandbox, MCP endpoint, notes toggle, env — lives in an `IterateConfig`
-// carried on a `bundle:` entry (a `disposable: true` bundle is a check bed) (BundleNode.Iterate).
+// carried on a deploy node (a `disposable: true` deploy is a check bed) (BundleNode.Iterate).
 // `charly check run <entity>`: when the entity carries an `iterate:` block the
 // AI loop drives it (scoring the entity's own `plan:` check:/agent-check:
-// steps); otherwise the entity is a plain check bed (a `disposable: true` bundle) and runs the
+// steps); otherwise the entity is a plain check bed (a `disposable: true` deploy) and runs the
 // deterministic R10 sequence.
 //
 // The scored content is the entity's OWN `plan:` (baked + include:'d + inline)

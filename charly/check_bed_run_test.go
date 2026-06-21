@@ -22,7 +22,7 @@ func TestPrintDebugRetentionNotice(t *testing.T) {
 		wantSubs []string
 	}{
 		{"pod", BundleNode{Target: "pod"}, []string{"left running for debugging", "podman exec charly-bed1", "charly remove bed1"}},
-		{"vm", BundleNode{Target: "vm", Vm: "k3s-vm"}, []string{"VM \"k3s-vm\" left running", "charly vm destroy k3s-vm"}},
+		{"vm", BundleNode{Target: "vm", From: "k3s-vm"}, []string{"VM \"k3s-vm\" left running", "charly vm destroy k3s-vm"}},
 		{"local", BundleNode{Target: "local"}, []string{"local apply left in place", "charly remove bed1"}},
 	}
 	for _, tc := range cases {
@@ -83,10 +83,10 @@ func TestCheckFailedError(t *testing.T) {
 func TestCheckBeds_DerivesFromDisposableBundles(t *testing.T) {
 	uf := &UnifiedFile{
 		Bundle: map[string]BundleNode{
-			"sample-pod-bed":   {Target: "pod", Box: "sample-image", Disposable: new(true)},
-			"sample-vm-bed":    {Target: "vm", Vm: "sample-vm", Disposable: new(true)},
-			"sample-local-bed": {Target: "local", Local: "sample-local", Disposable: new(true)},
-			"plain-deploy":     {Target: "pod", Box: "prod"}, // not disposable → not a bed
+			"sample-pod-bed":   {Target: "pod", Image: "sample-image", Disposable: new(true)},
+			"sample-vm-bed":    {Target: "vm", From: "sample-vm", Disposable: new(true)},
+			"sample-local-bed": {Target: "local", From: "sample-local", Disposable: new(true)},
+			"plain-deploy":     {Target: "pod", Image: "prod"}, // not disposable → not a bed
 		},
 	}
 	beds := uf.CheckBeds()
@@ -116,7 +116,7 @@ func TestValidateCheckBeds_TargetEnum(t *testing.T) {
 func TestValidateCheckBeds_VmRefMustResolve(t *testing.T) {
 	missing := &UnifiedFile{
 		Bundle: map[string]BundleNode{
-			"check-k3s-vm": {Target: "vm", Vm: "k3s-vm", Disposable: new(true)},
+			"check-k3s-vm": {Target: "vm", From: "k3s-vm", Disposable: new(true)},
 		},
 	}
 	if err := validateCheckBeds(missing); err == nil || !strings.Contains(err.Error(), "not defined") {
@@ -125,7 +125,7 @@ func TestValidateCheckBeds_VmRefMustResolve(t *testing.T) {
 	ok := &UnifiedFile{
 		VM: map[string]*VmSpec{"k3s-vm": {}},
 		Bundle: map[string]BundleNode{
-			"check-k3s-vm": {Target: "vm", Vm: "k3s-vm", Disposable: new(true)},
+			"check-k3s-vm": {Target: "vm", From: "k3s-vm", Disposable: new(true)},
 		},
 	}
 	if err := validateCheckBeds(ok); err != nil {
@@ -138,7 +138,7 @@ func TestValidateCheckBeds_VmRefMustResolve(t *testing.T) {
 func TestValidateCheckBeds_LocalRefMustResolve(t *testing.T) {
 	missing := &UnifiedFile{
 		Bundle: map[string]BundleNode{
-			"check-local": {Target: "local", Local: "check-local", Disposable: new(true)},
+			"check-local": {Target: "local", From: "check-local", Disposable: new(true)},
 		},
 	}
 	if err := validateCheckBeds(missing); err == nil || !strings.Contains(err.Error(), "not defined") {
@@ -147,7 +147,7 @@ func TestValidateCheckBeds_LocalRefMustResolve(t *testing.T) {
 	ok := &UnifiedFile{
 		Local: map[string]*LocalSpec{"check-local": {}},
 		Bundle: map[string]BundleNode{
-			"check-local": {Target: "local", Local: "check-local", Disposable: new(true)},
+			"check-local": {Target: "local", From: "check-local", Disposable: new(true)},
 		},
 	}
 	if err := validateCheckBeds(ok); err != nil {
@@ -172,10 +172,10 @@ func TestPersistBedDeployOverrides_SeedsPortBeforeConfig(t *testing.T) {
 	}
 	// A pre-existing unrelated deploy must survive the seed (merge, not clobber).
 	// Node-form: the bundle target is inferred from box (→ pod); port is a child node.
-	initialYAML := `version: 2026.172.0002
+	initialYAML := `version: 2026.172.0004
 ollama:
-    bundle:
-        box: ollama
+    pod:
+        image: ollama
     ollama-port:
         port:
             - 11434:11434
@@ -189,7 +189,7 @@ ollama:
 	// image default — exactly the check-cachyos-ollama-pod shape.
 	bed := BundleNode{
 		Target:     "pod",
-		Box:        "ollama",
+		Image:      "ollama",
 		Port:       []string{"45434:11434"},
 		Disposable: new(true),
 		Lifecycle:  "dev",
@@ -207,8 +207,8 @@ ollama:
 	if len(entry.Port) != 1 || entry.Port[0] != "45434:11434" {
 		t.Errorf("bed port not seeded: got %v, want [45434:11434]", entry.Port)
 	}
-	if entry.Box != "ollama" || entry.Target != "pod" {
-		t.Errorf("bed image/target not seeded: got image=%q target=%q", entry.Box, entry.Target)
+	if entry.Image != "ollama" || entry.Target != "pod" {
+		t.Errorf("bed image/target not seeded: got image=%q target=%q", entry.Image, entry.Target)
 	}
 	if entry.Disposable == nil || !*entry.Disposable {
 		t.Error("bed disposable not seeded (the check-runner requires it to authorize the unattended fresh-rebuild)")

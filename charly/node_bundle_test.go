@@ -13,20 +13,20 @@ import (
 // sub-ENTITY child. `box: coder` is a scalar cross-ref and stays in the value.
 const bundleNodeForm = `
 shop:
-  bundle:
+  group:
     disposable: true
   web:
-    bundle:
-      box: coder
+    pod:
+      image: coder
     web-step-0:
       check: web reaches the cache
       command: "redis-cli -h ${HOST:cache} ping"
   cache:
-    bundle:
-      box: coder
+    pod:
+      image: coder
     migrate:
-      bundle:
-        box: migrator
+      pod:
+        image: migrator
       migrate-step-0:
         check: migration ran
         command: "test -f /done"
@@ -62,7 +62,7 @@ func TestBuildBundleNode_Structure(t *testing.T) {
 		t.Fatalf("want 2 alongside members, got %d", len(dn.Members))
 	}
 	web := dn.Members["web"]
-	if web == nil || web.Target != "pod" || web.Box != "coder" {
+	if web == nil || web.Target != "pod" || web.Image != "coder" {
 		t.Fatalf("web member wrong: %+v", web)
 	}
 	if len(web.Plan) != 1 || web.Plan[0].Check == "" {
@@ -73,8 +73,8 @@ func TestBuildBundleNode_Structure(t *testing.T) {
 		t.Fatalf("cache.migrate nested member missing: %+v", cache)
 	}
 	migrate := cache.Children["migrate"]
-	if migrate.Target != "pod" || migrate.Box != "migrator" {
-		t.Errorf("migrate member wrong: target=%q box=%q", migrate.Target, migrate.Box)
+	if migrate.Target != "pod" || migrate.Image != "migrator" {
+		t.Errorf("migrate member wrong: target=%q box=%q", migrate.Target, migrate.Image)
 	}
 	if len(migrate.Plan) != 1 || migrate.Plan[0].Check == "" {
 		t.Errorf("migrate inline check missing: %+v", migrate.Plan)

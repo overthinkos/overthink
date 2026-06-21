@@ -25,24 +25,24 @@ import (
 // device. node fields come from dctx.Node (the dispatch-merged node).
 func (t *AndroidUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans []*InstallPlan, opts EmitOpts) error {
 	node := dctx.Node
-	if node == nil || node.Android == "" {
+	if node == nil || node.From == "" {
 		return fmt.Errorf("deploy %q: target=android requires `android:` (kind:android device reference)", t.NodeName)
 	}
-	spec := findAndroidSpec(dctx.Dir, node.Android)
+	spec := findAndroidSpec(dctx.Dir, node.From)
 	if spec == nil {
-		return fmt.Errorf("deploy %q: kind:android device %q not declared in the android: section", t.NodeName, node.Android)
+		return fmt.Errorf("deploy %q: kind:android device %q not declared in the android: section", t.NodeName, node.From)
 	}
 
 	// Dry-run prints the planned installs WITHOUT resolving (or requiring)
 	// a live device — the emulator pod may not be running yet.
 	if opts.DryRun {
-		fmt.Printf("[dry-run] android device %q (apk packages from add_layer: %v)\n", node.Android, node.AddCandy)
+		fmt.Printf("[dry-run] android device %q (apk packages from add_layer: %v)\n", node.From, node.AddCandy)
 		return (&AndroidDeployTarget{}).Emit(plans, opts)
 	}
 
 	dev, err := resolveAndroidDevice(spec, node, opts.Path)
 	if err != nil {
-		return fmt.Errorf("deploy %q: resolving android device %q: %w", t.NodeName, node.Android, err)
+		return fmt.Errorf("deploy %q: resolving android device %q: %w", t.NodeName, node.From, err)
 	}
 
 	// Readiness gate — poll sys.boot_completed (a real synchronization
@@ -70,9 +70,9 @@ func (t *AndroidUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 		fmt.Fprintf(os.Stderr, "charly bundle del %s: no android deploy entry; nothing to uninstall\n", t.NodeName)
 		return nil
 	}
-	spec := findAndroidSpec(dir, node.Android)
+	spec := findAndroidSpec(dir, node.From)
 	if spec == nil {
-		return fmt.Errorf("deploy %q: kind:android device %q not declared", t.NodeName, node.Android)
+		return fmt.Errorf("deploy %q: kind:android device %q not declared", t.NodeName, node.From)
 	}
 	dev, err := resolveAndroidDevice(spec, &node, t.NodeName)
 	if err != nil {

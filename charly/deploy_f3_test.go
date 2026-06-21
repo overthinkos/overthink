@@ -34,7 +34,7 @@ func TestPersistBedDeployOverrides_SkipsLocalBed(t *testing.T) {
 	disp := true
 	persistBedDeployOverrides("check-local", BundleNode{
 		Target:     "local",
-		Local:      "check-local-app",
+		From:       "check-local-app",
 		Disposable: &disp,
 		Lifecycle:  "dev",
 	})
@@ -53,7 +53,7 @@ func TestPersistBedDeployOverrides_SkipsLocalBed(t *testing.T) {
 	// is a plain deploy entry, not a check bed subject to validateCheckBeds.
 	persistBedDeployOverrides("pod-deploy-x", BundleNode{
 		Target: "pod",
-		Box:    "pod-deploy-x",
+		Image:  "pod-deploy-x",
 	})
 	dc2, err := LoadBundleConfig()
 	if err != nil {

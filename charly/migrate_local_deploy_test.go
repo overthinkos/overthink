@@ -260,6 +260,7 @@ func TestMigrateLocalDeploy_FullExample(t *testing.T) {
 	if _, err := MigrateUnifiedNode(hostDir, false); err != nil {
 		t.Fatalf("unified-node: %v", err)
 	}
+	migrateEdgeInheritDir(t, hostDir)
 	dc, err := LoadBundleConfig()
 	if err != nil {
 		t.Fatalf("LoadBundleConfig on migrated file: %v", err)

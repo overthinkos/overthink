@@ -109,10 +109,10 @@ func TestResolveVmEntity(t *testing.T) {
 		node       *BundleNode
 		want       string
 	}{
-		{"bed via node.vm (the bug)", "check-fedora-vm", &BundleNode{Vm: "fedora-vm"}, "fedora-vm"},
-		{"deploy.yml target:vm via node.vm", "my-guest", &BundleNode{Target: "vm", Vm: "arch"}, "arch"},
+		{"bed via node.vm (the bug)", "check-fedora-vm", &BundleNode{From: "fedora-vm"}, "fedora-vm"},
+		{"deploy.yml target:vm via node.vm", "my-guest", &BundleNode{Target: "vm", From: "arch"}, "arch"},
 		{"cli vm: prefix, no node", "vm:arch", nil, "arch"},
-		{"node.vm wins over prefix", "vm:ignored", &BundleNode{Vm: "real-vm"}, "real-vm"},
+		{"node.vm wins over prefix", "vm:ignored", &BundleNode{From: "real-vm"}, "real-vm"},
 		{"non-vm deploy -> empty", "my-pod", &BundleNode{}, ""},
 		{"nil node, non-prefixed -> empty", "some-pod", nil, ""},
 	}

@@ -25,7 +25,7 @@ func TestFlattenBundleVenues_StampsAndHoists(t *testing.T) {
 		// A WORKLOAD bed (own container) with a direct step AND a nested child.
 		"cross": {
 			Target: "pod",
-			Box:    "web",
+			Image:  "web",
 			Plan: []Step{
 				{Check: "web serves marker", Op: Op{HTTP: "http://127.0.0.1:8080/"}},
 			},
@@ -100,7 +100,7 @@ func TestResolveDottedAgentProvisionedVenue(t *testing.T) {
 	roots := map[string]BundleNode{
 		"nested-check-vm": {
 			Target:           "vm",
-			Vm:               "nested-check-vm",
+			From:             "nested-check-vm",
 			AgentProvisioned: true,
 			Children: map[string]*BundleNode{
 				"inner-app-pod": {
@@ -171,12 +171,12 @@ func TestOverlayRoundTrip_NestedChildSurvives(t *testing.T) {
 	dc := &BundleConfig{Bundle: map[string]BundleNode{
 		"myapp": {
 			Target:     "pod",
-			Box:        "web",
+			Image:      "web",
 			Disposable: &disposable,
 			Children: map[string]*BundleNode{
 				"inner": {
 					Target: "pod",
-					Box:    "db",
+					Image:  "db",
 				},
 			},
 		},
@@ -196,8 +196,8 @@ func TestOverlayRoundTrip_NestedChildSurvives(t *testing.T) {
 	if classifyTarget(&got) != "pod" {
 		t.Errorf("round-trip target = %q, want pod (re-derived)", classifyTarget(&got))
 	}
-	if got.Box != "web" {
-		t.Errorf("round-trip box = %q, want web", got.Box)
+	if got.Image != "web" {
+		t.Errorf("round-trip box = %q, want web", got.Image)
 	}
 	inner, ok := got.Children["inner"]
 	if !ok {
@@ -206,8 +206,8 @@ func TestOverlayRoundTrip_NestedChildSurvives(t *testing.T) {
 	if classifyTarget(inner) != "pod" {
 		t.Errorf("nested child target = %q, want pod", classifyTarget(inner))
 	}
-	if inner.Box != "db" {
-		t.Errorf("nested child box = %q, want db", inner.Box)
+	if inner.Image != "db" {
+		t.Errorf("nested child box = %q, want db", inner.Image)
 	}
 }
 
@@ -228,8 +228,8 @@ func TestOverlayRoundTrip_GroupMembersSurvive(t *testing.T) {
 			Target:     "", // GROUP — no workload cross-ref
 			Disposable: &disposable,
 			Members: map[string]*BundleNode{
-				"web":    {Target: "pod", Box: "web"},
-				"chrome": {Target: "pod", Box: "chrome-headless"},
+				"web":    {Target: "pod", Image: "web"},
+				"chrome": {Target: "pod", Image: "chrome-headless"},
 			},
 		},
 	}}
@@ -262,7 +262,7 @@ func TestPersistBedDeployOverrides_GroupBedNotPersisted(t *testing.T) {
 	groupBed := BundleNode{
 		Target:     "", // GROUP — no workload cross-ref
 		Disposable: &disposable,
-		Members:    map[string]*BundleNode{"web": {Target: "pod", Box: "web"}},
+		Members:    map[string]*BundleNode{"web": {Target: "pod", Image: "web"}},
 	}
 	persistBedDeployOverrides("check-cross-pod-cdp", groupBed)
 

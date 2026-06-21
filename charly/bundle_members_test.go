@@ -17,10 +17,10 @@ func TestFoldMembers_FoldsTopLevelAndInheritsDisposability(t *testing.T) {
 	uf := &UnifiedFile{Bundle: map[string]BundleNode{
 		"check-cross-pod-cdp": {
 			Target:     "pod",
-			Box:        "web",
+			Image:      "web",
 			Disposable: new(true),
 			Members: map[string]*BundleNode{
-				"chrome": {Target: "pod", Box: "chrome-headless"},
+				"chrome": {Target: "pod", Image: "chrome-headless"},
 			},
 		},
 	}}
@@ -34,8 +34,8 @@ func TestFoldMembers_FoldsTopLevelAndInheritsDisposability(t *testing.T) {
 	if member.MemberOf != "check-cross-pod-cdp" {
 		t.Errorf("member.MemberOf = %q, want check-cross-pod-cdp", member.MemberOf)
 	}
-	if member.Box != "chrome-headless" {
-		t.Errorf("member.Box = %q, want chrome-headless", member.Box)
+	if member.Image != "chrome-headless" {
+		t.Errorf("member.Image = %q, want chrome-headless", member.Image)
 	}
 	if !member.IsDisposable() {
 		t.Errorf("folded member should inherit the disposable owner's disposability")
@@ -48,8 +48,8 @@ func TestFoldMembers_NonDisposableOwnerDoesNotForceDisposable(t *testing.T) {
 	uf := &UnifiedFile{Bundle: map[string]BundleNode{
 		"prod": {
 			Target:  "pod",
-			Box:     "web",
-			Members: map[string]*BundleNode{"sidecar": {Target: "pod", Box: "chrome-headless"}},
+			Image:   "web",
+			Members: map[string]*BundleNode{"sidecar": {Target: "pod", Image: "chrome-headless"}},
 		},
 	}}
 	if err := foldMembers(uf); err != nil {
@@ -64,8 +64,8 @@ func TestFoldMembers_NonDisposableOwnerDoesNotForceDisposable(t *testing.T) {
 // deploy/bed/member entry is a hard error (globally-unique member names).
 func TestFoldMembers_CollisionIsError(t *testing.T) {
 	uf := &UnifiedFile{Bundle: map[string]BundleNode{
-		"web": {Target: "pod", Box: "web"},
-		"bed": {Target: "pod", Box: "web", Members: map[string]*BundleNode{"web": {Target: "pod", Box: "chrome-headless"}}},
+		"web": {Target: "pod", Image: "web"},
+		"bed": {Target: "pod", Image: "web", Members: map[string]*BundleNode{"web": {Target: "pod", Image: "chrome-headless"}}},
 	}}
 	err := foldMembers(uf)
 	if err == nil || !strings.Contains(err.Error(), "collides") {
@@ -76,7 +76,7 @@ func TestFoldMembers_CollisionIsError(t *testing.T) {
 // TestFoldMembers_EmptyMemberIsError: a nil member node is rejected.
 func TestFoldMembers_EmptyMemberIsError(t *testing.T) {
 	uf := &UnifiedFile{Bundle: map[string]BundleNode{
-		"bed": {Target: "pod", Box: "web", Members: map[string]*BundleNode{"chrome": nil}},
+		"bed": {Target: "pod", Image: "web", Members: map[string]*BundleNode{"chrome": nil}},
 	}}
 	if err := foldMembers(uf); err == nil {
 		t.Fatalf("expected an error for a nil member node")
@@ -86,8 +86,8 @@ func TestFoldMembers_EmptyMemberIsError(t *testing.T) {
 // TestValidateMembers_BadTarget rejects an unsupported member target kind.
 func TestValidateMembers_BadTarget(t *testing.T) {
 	uf := &UnifiedFile{Bundle: map[string]BundleNode{
-		"bed": {Target: "pod", Box: "web", Members: map[string]*BundleNode{
-			"chrome": {Target: "bogus", Box: "chrome-headless"},
+		"bed": {Target: "pod", Image: "web", Members: map[string]*BundleNode{
+			"chrome": {Target: "bogus", Image: "chrome-headless"},
 		}},
 	}}
 	if err := validateMembers(uf); err == nil || !strings.Contains(err.Error(), "unsupported target") {
@@ -99,8 +99,8 @@ func TestValidateMembers_BadTarget(t *testing.T) {
 // nested dotted-path addressing grammar.
 func TestValidateMembers_DottedKeyRejected(t *testing.T) {
 	uf := &UnifiedFile{Bundle: map[string]BundleNode{
-		"bed": {Target: "pod", Box: "web", Members: map[string]*BundleNode{
-			"a.b": {Target: "pod", Box: "chrome-headless"},
+		"bed": {Target: "pod", Image: "web", Members: map[string]*BundleNode{
+			"a.b": {Target: "pod", Image: "chrome-headless"},
 		}},
 	}}
 	if err := validateMembers(uf); err == nil {

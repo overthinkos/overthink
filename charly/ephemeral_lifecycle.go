@@ -132,11 +132,11 @@ func RegisterEphemeralLifecycle(node *BundleNode, deployName string) (*Ephemeral
 	}
 
 	// Step 5: vm-target snapshot refcount.
-	if node.Target == "vm" && node.Vm != "" && node.FromSnapshot != "" {
-		if err := IncrementSnapshotRefcount(node.Vm, node.FromSnapshot); err != nil {
+	if node.Target == "vm" && node.From != "" && node.FromSnapshot != "" {
+		if err := IncrementSnapshotRefcount(node.From, node.FromSnapshot); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: incrementing snapshot refcount: %v\n", err)
 		}
-		handle.ParentVm = node.Vm
+		handle.ParentVm = node.From
 		handle.ParentSnapshot = node.FromSnapshot
 	}
 
@@ -176,8 +176,8 @@ func TeardownEphemeralLifecycle(node *BundleNode, deployName string) error {
 	}
 
 	// Step 3: snapshot refcount decrement (vm-target).
-	if node.Target == "vm" && node.Vm != "" && node.FromSnapshot != "" {
-		if err := DecrementSnapshotRefcount(node.Vm, node.FromSnapshot); err != nil {
+	if node.Target == "vm" && node.From != "" && node.FromSnapshot != "" {
+		if err := DecrementSnapshotRefcount(node.From, node.FromSnapshot); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: decrementing snapshot refcount: %v\n", err)
 		}
 	}

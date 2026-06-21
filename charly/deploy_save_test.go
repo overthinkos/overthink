@@ -36,16 +36,16 @@ func TestDeployConfigLookup_NilSafe(t *testing.T) {
 // deployKey (image/instance); LookupKey takes the raw deploy.yml key.
 func TestDeployConfigLookup_PresentAndAbsent(t *testing.T) {
 	dc := &BundleConfig{Bundle: map[string]BundleNode{
-		"foo":       {Target: "pod", Box: "foo"},
-		"foo/inst1": {Target: "pod", Box: "foo"},
+		"foo":       {Target: "pod", Image: "foo"},
+		"foo/inst1": {Target: "pod", Image: "foo"},
 		"vm:arch":   {Target: "vm"},
 	}}
 
 	// Lookup (image, instance) form.
-	if entry, ok := dc.Lookup("foo", ""); !ok || entry.Box != "foo" {
+	if entry, ok := dc.Lookup("foo", ""); !ok || entry.Image != "foo" {
 		t.Errorf("Lookup(foo, \"\") = (%+v, %v); want present", entry, ok)
 	}
-	if entry, ok := dc.Lookup("foo", "inst1"); !ok || entry.Box != "foo" {
+	if entry, ok := dc.Lookup("foo", "inst1"); !ok || entry.Image != "foo" {
 		t.Errorf("Lookup(foo, inst1) = (%+v, %v); want present", entry, ok)
 	}
 	if entry, ok := dc.Lookup("missing", ""); ok {
@@ -53,7 +53,7 @@ func TestDeployConfigLookup_PresentAndAbsent(t *testing.T) {
 	}
 
 	// LookupKey (raw deploy.yml key) form.
-	if entry, ok := dc.LookupKey("foo/inst1"); !ok || entry.Box != "foo" {
+	if entry, ok := dc.LookupKey("foo/inst1"); !ok || entry.Image != "foo" {
 		t.Errorf("LookupKey(foo/inst1) = (%+v, %v); want present", entry, ok)
 	}
 	if entry, ok := dc.LookupKey("vm:arch"); !ok || entry.Target != "vm" {
@@ -88,7 +88,7 @@ func TestSaveDeployState_AbortOnInvalidExistingFile(t *testing.T) {
 	}
 	// Pre-existing deploy.yml that fails validateDeployRequiresBox —
 	// `legacy-entry` is target:pod but lacks the required `box:`.
-	initialYAML := `version: 2026.172.0002
+	initialYAML := `version: 2026.172.0004
 provides:
     env:
         - name: SOME_URL
@@ -137,10 +137,10 @@ func TestSaveDeployState_PersistsImageAndTargetForNewEntry(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "charly"), 0700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	initialYAML := `version: 2026.172.0002
+	initialYAML := `version: 2026.172.0004
 existing-deploy:
-    bundle:
-        box: existing-image
+    pod:
+        image: existing-image
 `
 	path := filepath.Join(dir, "charly", "charly.yml")
 	if err := os.WriteFile(path, []byte(initialYAML), 0600); err != nil {
@@ -170,8 +170,8 @@ existing-deploy:
 	if !ok {
 		t.Fatal("newimage entry not added")
 	}
-	if newEntry.Box != "newimage" {
-		t.Errorf("Image not persisted on new entry: got %q want %q", newEntry.Box, "newimage")
+	if newEntry.Image != "newimage" {
+		t.Errorf("Image not persisted on new entry: got %q want %q", newEntry.Image, "newimage")
 	}
 	if newEntry.Target != "pod" {
 		t.Errorf("Target not persisted on new entry: got %q want %q", newEntry.Target, "pod")
@@ -192,10 +192,10 @@ func TestSaveDeployState_DoesNotClobberExistingImageTarget(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "charly"), 0700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	initialYAML := `version: 2026.172.0002
+	initialYAML := `version: 2026.172.0004
 existing:
-    bundle:
-        box: pinned-image-ref:1.2.3
+    pod:
+        image: pinned-image-ref:1.2.3
 `
 	path := filepath.Join(dir, "charly", "charly.yml")
 	if err := os.WriteFile(path, []byte(initialYAML), 0600); err != nil {
@@ -214,8 +214,8 @@ existing:
 		t.Fatalf("reload after save: %v", err)
 	}
 	entry := dc.Bundle["existing"]
-	if entry.Box != "pinned-image-ref:1.2.3" {
-		t.Errorf("Image clobbered: got %q want %q", entry.Box, "pinned-image-ref:1.2.3")
+	if entry.Image != "pinned-image-ref:1.2.3" {
+		t.Errorf("Image clobbered: got %q want %q", entry.Image, "pinned-image-ref:1.2.3")
 	}
 	if entry.Target != "pod" {
 		t.Errorf("Target clobbered: got %q want %q", entry.Target, "pod")
@@ -240,7 +240,7 @@ func TestSaveBundleConfig_AtomicWriteLeavesNoTempLeftover(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 	dc := &BundleConfig{Bundle: map[string]BundleNode{
-		"foo": {Target: "pod", Box: "foo"},
+		"foo": {Target: "pod", Image: "foo"},
 	}}
 	if err := SaveBundleConfig(dc); err != nil {
 		t.Fatalf("SaveBundleConfig: %v", err)
@@ -313,7 +313,7 @@ func TestSaveBundleConfig_RefusesToClobberUnloadableConfig(t *testing.T) {
 
 	// A write that would otherwise truncate must be REFUSED.
 	err := SaveBundleConfig(&BundleConfig{Bundle: map[string]BundleNode{
-		"new-entry": {Target: "pod", Box: "new-entry"},
+		"new-entry": {Target: "pod", Image: "new-entry"},
 	}})
 	if err == nil {
 		t.Fatal("SaveBundleConfig overwrote an unloadable config; expected a refuse-to-clobber error")
@@ -338,7 +338,7 @@ func TestSaveBundleConfig_RefusesToClobberUnloadableConfig(t *testing.T) {
 		t.Fatalf("remove: %v", err)
 	}
 	if err := SaveBundleConfig(&BundleConfig{Bundle: map[string]BundleNode{
-		"new-entry": {Target: "pod", Box: "new-entry"},
+		"new-entry": {Target: "pod", Image: "new-entry"},
 	}}); err != nil {
 		t.Fatalf("SaveBundleConfig on an absent file should succeed: %v", err)
 	}
@@ -364,18 +364,18 @@ func TestBundleNode_DisposableFalseRoundTrip(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "charly"), 0o700); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	src := `version: 2026.172.0002
+	src := `version: 2026.172.0004
 locked-pod:
-    bundle:
-        box: foo
+    pod:
+        image: foo
         disposable: false
 open-pod:
-    bundle:
-        box: bar
+    pod:
+        image: bar
         disposable: true
 bare-pod:
-    bundle:
-        box: baz
+    pod:
+        image: baz
 `
 	path := filepath.Join(dir, "charly", "charly.yml")
 	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
@@ -458,23 +458,23 @@ func TestRemoveVmDeployEntry_SelectiveAndIdempotent(t *testing.T) {
 	}
 	// Seed: the disposable bed VM to remove, plus a running preemptible
 	// operator workstation and an unrelated pod deploy that must both survive.
-	initialYAML := `version: 2026.172.0002
+	initialYAML := `version: 2026.172.0004
 vm:k3s-vm:
-    bundle:
-        vm: k3s-vm
+    vm:
+        from: k3s-vm
         vm_state:
             ssh_port: 38067
             ssh_user: arch
 vm:cachyos-gpu:
-    bundle:
-        vm: cachyos-gpu
+    vm:
+        from: cachyos-gpu
     vm:cachyos-gpu-preemptible:
         preemptible:
             holds:
                 - nvidia-gpu
 web-app:
-    bundle:
-        box: web-app
+    pod:
+        image: web-app
 `
 	path := filepath.Join(dir, "charly", "charly.yml")
 	if err := os.WriteFile(path, []byte(initialYAML), 0600); err != nil {

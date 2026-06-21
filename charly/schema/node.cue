@@ -19,7 +19,7 @@
 
 // Reserved discriminators = the kind keywords. Negated regex so a child's NAME
 // cannot shadow a kind keyword.
-_reservedNode: "^(box|candy|bundle|pod|vm|k8s|local|android|host|distro|builder|init|resource|sidecar|agent|group|module|target)$"
+_reservedNode: "^(box|candy|pod|vm|k8s|local|android|host|distro|builder|init|resource|sidecar|agent|group|module|target)$"
 
 // #ResourceKind — the DEPLOYABLE subset of the kind keywords: the kinds whose
 // #Node arm admits a sub-ENTITY (resource) child (a deploy-into / alongside
@@ -30,7 +30,7 @@ _reservedNode: "^(box|candy|bundle|pod|vm|k8s|local|android|host|distro|builder|
 // from this ONE CUE source instead of a hand list. (node.cue's per-arm child gate
 // stays structural `_` — the deployable-vs-not check is the layered loader check;
 // this enum is its single vocabulary source.)
-#ResourceKind: ("pod" | "vm" | "k8s" | "local" | "android" | "host" | "bundle") @go(-)
+#ResourceKind: ("pod" | "vm" | "k8s" | "local" | "android" | "host" | "group") @go(-)
 
 // ---------------------------------------------------------------------------
 // Per-kind node VALUES — the COMPLETE per-kind def. A node's collections /
@@ -40,28 +40,40 @@ _reservedNode: "^(box|candy|bundle|pod|vm|k8s|local|android|host|distro|builder|
 // "everything is a node" gate — while CUE owns the closed-typo / unknown-field /
 // wrong-kind-child strictness via the closed def + the child-narrowed arms.
 // ---------------------------------------------------------------------------
-#BoxValue:      #Box
-#CandyValue:    #Candy
-#LocalValue:    #Local
-#PodValue:      #Pod
-#VmValue:       #Vm
-#K8sValue:      #K8s
-#AndroidValue:  #Android
-#DistroValue:   #Distro
+#BoxValue:   #Box
+#CandyValue: #Candy
+// EDGE-INHERIT cutover B: a substrate kind is BOTH the template entity AND the deploy
+// (the eliminated `bundle:` role folds in). One arm accepts the disjunction
+// `#Template | #Deploy`, routed by SHAPE in the loader (a template carries its own
+// config — source:/composition; a deploy carries from:/image: + the deploy config).
+// The RDD spike proved `cue vet` resolves this disjunction unambiguously even with
+// overlapping fields. @go(-): the Go types come from #Local/#Pod/#Vm/#K8s/#Android +
+// #Deploy directly; this value def is validation-only (the arm is the load gate).
+#LocalValue:   (#Local | #DeployValue) @go(-)
+#PodValue:     (#Pod | #DeployValue) @go(-)
+#VmValue:      (#Vm | #DeployValue) @go(-)
+#K8sValue:     (#K8s | #DeployValue) @go(-)
+#AndroidValue: (#Android | #DeployValue) @go(-)
+#DistroValue:  #Distro
 #BuilderValue:  #Builder
 #InitValue:     #Init
 #ResourceValue: #Resource
 #SidecarValue:  #Sidecar
 #AgentValue:    #Agent
-#GroupValue:    #Group
+// group: is BOTH the Calamares package-group (#Group) AND a TARGETLESS deploy group
+// (#Deploy with members, no own workload — the former targetless `bundle:`). Same
+// disjunction + shape routing; the Calamares group has zero on-disk corpus so no
+// rename is needed to free the word. @go(-): Go types from #Group + #Deploy directly.
+#GroupValue:    (#Group | #DeployValue) @go(-)
 #ModuleValue:   #Module
 #TargetValue:   #Target
 
-// A bundle: the deploy config as the value (the COMPLETE #Deploy minus the
-// structural nested/peer maps + the derived target — all loader-derived from
-// tree position, so authoring any of them is a closed-schema rejection
-// (`run: charly migrate`)).
-#BundleValue: #Deploy & {nested?: _|_, peer?: _|_, target?: _|_, member_of?: _|_, inside?: _|_}
+// #DeployValue — the AUTHORED deploy shape (the disjunct under each substrate arm):
+// the COMPLETE #Deploy minus the structural nested/peer maps + the derived target —
+// all loader-derived from tree position, so authoring any of them is a closed-schema
+// rejection (`run: charly migrate`). The substrate kind at the EDGE supplies the
+// target; from:/image: supply the cross-ref (EDGE-INHERIT cutover B; was #BundleValue).
+#DeployValue: #Deploy & {nested?: _|_, peer?: _|_, target?: _|_, member_of?: _|_, inside?: _|_}
 
 // `host:` venue node — names a host (local default implicit); children deploy onto it.
 #HostValue: close({
@@ -89,7 +101,6 @@ _reservedNode: "^(box|candy|bundle|pod|vm|k8s|local|android|host|distro|builder|
 #K8sArm: close({k8s: #K8sValue, {[!~_reservedNode]: _}})
 #LocalArm: close({local: #LocalValue, {[!~_reservedNode]: _}})
 #AndroidArm: close({android: #AndroidValue, {[!~_reservedNode]: _}})
-#BundleArm: close({bundle: #BundleValue, {[!~_reservedNode]: _}})
 #HostArm: close({host: #HostValue, {[!~_reservedNode]: _}})
 #DistroArm: close({distro: #DistroValue, {[!~_reservedNode]: _}})
 #BuilderArm: close({builder: #BuilderValue, {[!~_reservedNode]: _}})
@@ -102,7 +113,7 @@ _reservedNode: "^(box|candy|bundle|pod|vm|k8s|local|android|host|distro|builder|
 #TargetArm: close({target: #TargetValue, {[!~_reservedNode]: _}})
 
 // The unified node — a disjunction of the closed per-kind arms.
-#Node: #BoxArm | #CandyArm | #BundleArm | #PodArm | #VmArm | #K8sArm | #LocalArm |
+#Node: #BoxArm | #CandyArm | #PodArm | #VmArm | #K8sArm | #LocalArm |
 	#AndroidArm | #HostArm | #DistroArm | #BuilderArm | #InitArm | #ResourceArm |
 	#SidecarArm | #AgentArm | #GroupArm | #ModuleArm | #TargetArm
 

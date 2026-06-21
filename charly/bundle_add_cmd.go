@@ -363,8 +363,8 @@ func (c *BundleAddCmd) resolveNodeOverlays(path string, node *BundleNode, parent
 		// so deployment names like "sway-pod" don't need to match a
 		// box name. Falls back to the deploy key for legacy entries.
 		switch {
-		case node.Box != "":
-			refStr = node.Box
+		case node.Image != "":
+			refStr = node.Image
 		default:
 			refStr = pathLeaf(path)
 		}
@@ -378,10 +378,10 @@ func (c *BundleAddCmd) resolveNodeOverlays(path string, node *BundleNode, parent
 // is fill-empty, so applying the template's opts after the deployment's leaves
 // the deployment's values intact and only fills the gaps.
 func resolveNodeTemplate(target, path, dir string, node *BundleNode, addCandies []string, opts EmitOpts) ([]string, EmitOpts, error) {
-	if target == "local" && node != nil && node.Local != "" {
-		tmpl := findLocalSpec(dir, node.Local)
+	if target == "local" && node != nil && node.From != "" {
+		tmpl := findLocalSpec(dir, node.From)
 		if tmpl == nil {
-			return addCandies, opts, fmt.Errorf("deployment %q: unknown kind:local template %q", path, node.Local)
+			return addCandies, opts, fmt.Errorf("deployment %q: unknown kind:local template %q", path, node.From)
 		}
 		// Prepend template candies; deployment add_candy are appended.
 		merged := append([]string(nil), tmpl.Candy...)
@@ -590,8 +590,8 @@ func (c *BundleDelCmd) Run() error {
 		// rewrite the adapter's NodeName to the prefixed entity form so
 		// findVmDeployRecord / buildVmReverseRunner / removeVmDeployEntry
 		// resolve correctly. A legacy "vm:<name>" key passes through.
-		if !strings.HasPrefix(c.Name, "vm:") && node != nil && node.Vm != "" {
-			tt.NodeName = "vm:" + node.Vm
+		if !strings.HasPrefix(c.Name, "vm:") && node != nil && node.From != "" {
+			tt.NodeName = "vm:" + node.From
 		}
 	case *PodUnifiedTarget:
 		tt.KeepImage = c.KeepImage
@@ -855,7 +855,7 @@ func (c *BundleAddCmd) compileCandyPlans(ref *DeployRef, cfg *Config, distroCfg 
 	// Pick the synthetic image template that matches the deploy target so
 	// `${USER}` AND the package format resolve correctly: the guest user +
 	// guest distro/format for any VM target (c.vmEntity, set by dispatchNode
-	// from node.Vm or the "vm:" prefix), the operator host's for everything
+	// from node.From or the "vm:" prefix), the operator host's for everything
 	// else.
 	var img *ResolvedBox
 	if c.vmEntity != "" {
@@ -964,8 +964,8 @@ func syntheticHostBox() *ResolvedBox {
 // This is the single signal the candy compiler uses to pick syntheticVmBox
 // over syntheticHostBox — the prefix alone missed bed/target:vm deploys.
 func resolveVmEntity(deployName string, node *BundleNode) string {
-	if node != nil && node.Vm != "" {
-		return node.Vm
+	if node != nil && node.From != "" {
+		return node.From
 	}
 	if strings.HasPrefix(deployName, "vm:") {
 		if vmName, perr := vmNameFromDeployName(deployName); perr == nil {

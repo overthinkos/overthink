@@ -23,9 +23,9 @@ type podTarget struct{ builtinDeployBase }
 
 func (podTarget) Reserved() string { return "pod" }
 func (podTarget) ResolveTarget(node *BundleNode, name string) (UnifiedDeployTarget, error) {
-	// BaseImageRef is the image the rebuild's build/check steps target; node.Box is
+	// BaseImageRef is the image the rebuild's build/check steps target; node.Image is
 	// the charly.yml `box:` field (Rebuild falls back to NodeName when empty).
-	return &PodUnifiedTarget{NodeName: name, BaseImageRef: node.Box}, nil
+	return &PodUnifiedTarget{NodeName: name, BaseImageRef: node.Image}, nil
 }
 
 type k8sTarget struct{ builtinDeployBase }

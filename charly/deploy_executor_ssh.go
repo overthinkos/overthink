@@ -331,13 +331,70 @@ func (e *SSHExecutor) WaitForCloudInit(ctx context.Context) error {
 		if cmd.Run() != nil {
 			return false, 0, nil // ssh dropped (key regen in progress) — keep polling
 		}
-		if strings.Contains(buf.String(), "status: running") {
+		out := buf.String()
+		if strings.Contains(out, "status: running") {
 			return false, 0, nil // cloud-init still working
 		}
-		return true, 0, nil // ssh stable + cloud-init settled (done/error/disabled)
+		// Ready ONLY on an EXPLICIT terminal status. A blank / "not started" /
+		// transient read (e.g. `cloud-init status` momentarily errors under load)
+		// also lacks "running", so the former bare `return true` cleared the gate
+		// WHILE cloud-final.service was still installing the seed packages — holding
+		// the distro package lock — and the deploy's first `pacman -Sy` then raced
+		// it ("unable to lock database"). Gate on a real terminal state so the wait
+		// spans the whole package phase.
+		if strings.Contains(out, "status: done") || strings.Contains(out, "status: error") ||
+			strings.Contains(out, "status: disabled") {
+			return true, 0, nil // cloud-init settled (sshd stable, package phase complete)
+		}
+		return false, 0, nil // blank / not-started / transient — keep polling
 	}); err != nil {
 		return fmt.Errorf("cloud-init wait on %s:%d: %w", e.Host, e.Port, err)
 	}
+	return nil
+}
+
+// WaitForPackageLock makes the guest package manager READY for a deploy plan's own
+// `pacman -Sy` / `apt` / `dnf`: (1) it blocks until no boot-time package PROCESS is
+// running (cloud-init's first-boot seed-package install holds the lock through
+// cloud-final.service — the direct R4 sync primitive on the contended resource), then
+// (2) it clears a STALE lock FILE left with no holding process. A boot-time pacman is
+// reaped by systemd when cloud-final.service's cgroup is torn down, leaving an empty
+// `/var/lib/pacman/db.lck` that no process owns; pacman then refuses ("unable to lock
+// database") even though nothing is running. Removing a lock NO process holds is the
+// standard, safe stale-lock recovery — gated on a re-check of no-process inside the
+// command so it never races a live transaction. Process-based (not lock-file-based)
+// for the WAIT so a stale lock can't hang the gate forever.
+func (e *SSHExecutor) WaitForPackageLock(ctx context.Context) error {
+	noProc := `! pgrep -x pacman >/dev/null 2>&1 && ! pgrep -x pacman-key >/dev/null 2>&1 && ` +
+		`! pgrep -x apt >/dev/null 2>&1 && ! pgrep -x apt-get >/dev/null 2>&1 && ` +
+		`! pgrep -x dpkg >/dev/null 2>&1 && ! pgrep -x dnf >/dev/null 2>&1`
+	cfg := loadedReadiness().WaitCapped(fmt.Sprintf("pkg-lock %s:%d", e.Host, e.Port), PollRemote, 0)
+	if err := pollUntil(ctx, cfg, func(actx context.Context) (bool, float64, error) {
+		var buf bytes.Buffer
+		args := e.sshBaseArgs()
+		args = append(args, "bash", "-s")
+		cmd := exec.CommandContext(actx, "ssh", args...)
+		cmd.Stdin = strings.NewReader(`if ` + noProc + `; then echo FREE; else echo BUSY; fi`)
+		cmd.Stdout = &buf
+		cmd.Stderr = &buf
+		if cmd.Run() != nil {
+			return false, 0, nil // ssh hiccup — keep polling
+		}
+		return strings.Contains(buf.String(), "FREE"), 0, nil
+	}); err != nil {
+		return fmt.Errorf("package-lock wait on %s:%d: %w", e.Host, e.Port, err)
+	}
+	// No package process is running now — clear any STALE lock file the reaped
+	// boot-time install left behind (re-checking no-process inside the command keeps
+	// the removal safe). Best-effort: the deploy's own pacman/apt/dnf surfaces any
+	// genuine package failure.
+	clear := `if ` + noProc + `; then sudo -n rm -f /var/lib/pacman/db.lck ` +
+		`/var/lib/dpkg/lock-frontend /var/lib/dpkg/lock 2>/dev/null; fi; true`
+	cargs := e.sshBaseArgs()
+	cargs = append(cargs, "bash", "-s")
+	ccmd := exec.CommandContext(ctx, "ssh", cargs...)
+	ccmd.Stdin = strings.NewReader(clear)
+	_ = ccmd.Run() // best-effort stale-lock clear
 	return nil
 }
 

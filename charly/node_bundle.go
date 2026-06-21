@@ -39,15 +39,14 @@ func buildBundleNode(gn *genericNode) (*BundleNode, error) {
 	if err := decodeNodeValue(gn, &dn); err != nil {
 		return nil, err
 	}
+	// EDGE-INHERIT cutover B: the substrate kind at the EDGE is the target directly
+	// (no inference from a cross-ref). group:/host: are targetless venues.
 	dn.Target = bundleTargetForDisc(gn.disc)
-	// A scalar discriminator value (`vm: pg-vm`) is a same-kind entity cross-ref.
+	// A scalar discriminator value (`vm: pg-vm` / `pod: img`) is the deploy's
+	// cross-ref: pod → the image it runs; vm/k8s/local/android → the same-kind
+	// template it inherits (`from:`).
 	if gn.discValue != nil && gn.discValue.Kind == yaml.ScalarNode {
 		setBundleCrossRef(&dn, gn.disc, gn.discValue.Value)
-	}
-	if gn.disc == "bundle" {
-		// A `bundle` deployment infers its workload target from the cross-ref it
-		// carries (box→pod, vm→vm, …); none → a pure group (empty target).
-		dn.Target = inferBundleTarget(&dn)
 	}
 
 	for _, rk := range gn.children {
@@ -57,7 +56,7 @@ func buildBundleNode(gn *genericNode) (*BundleNode, error) {
 			continue
 		}
 		if !isResourceDisc(rk.disc) {
-			return nil, fmt.Errorf("node %q: a %q child %q is not a resource member (bundle/resource children must be pod/vm/k8s/local/android/host/bundle)", gn.name, rk.disc, rk.name)
+			return nil, fmt.Errorf("node %q: a %q child %q is not a resource member (deploy/resource children must be pod/vm/k8s/local/android/host)", gn.name, rk.disc, rk.name)
 		}
 		member, err := buildBundleNode(rk)
 		if err != nil {
@@ -89,52 +88,24 @@ func isResourceDisc(d string) bool {
 }
 
 // bundleTargetForDisc maps a node discriminator to the BundleNode Target.
-// `bundle`/`host` are groups/venues (no own workload target).
+// `group`/`host` are groups/venues (no own workload target).
 func bundleTargetForDisc(d string) string {
 	switch d {
-	case "bundle", "host":
+	case "group", "host":
 		return ""
 	default:
 		return d // pod | vm | k8s | local | android
 	}
 }
 
-// inferBundleTarget derives a bundle deployment's workload target from the
-// cross-ref it carries; no cross-ref → a pure group (empty target). A per-host
-// OVERLAY entry carries only runtime state (no authored cross-ref) — `vm_state`
-// evidences a vm target so the overlay validates standalone (the project deploy
-// supplies the `vm:` ref on merge).
-func inferBundleTarget(dn *BundleNode) string {
-	switch {
-	case dn.Box != "":
-		return "pod"
-	case dn.Vm != "":
-		return "vm"
-	case dn.K8s != "":
-		return "k8s"
-	case dn.Local != "":
-		return "local"
-	case dn.Android != "":
-		return "android"
-	case dn.VmState != nil:
-		return "vm" // overlay-only vm entry (runtime state, no authored cross-ref)
-	default:
-		return "" // pure group / venue
-	}
-}
-
-// setBundleCrossRef sets the same-kind entity reference from a scalar value.
+// setBundleCrossRef sets the deploy's cross-ref from a scalar discriminator value
+// (EDGE-INHERIT cutover B): a `pod:` scalar is the IMAGE the pod runs; a vm/k8s/
+// local/android scalar is the same-kind template the deploy inherits (`from:`).
 func setBundleCrossRef(dn *BundleNode, disc, ref string) {
 	switch disc {
 	case "pod":
-		dn.Box = ref
-	case "vm":
-		dn.Vm = ref
-	case "k8s":
-		dn.K8s = ref
-	case "local":
-		dn.Local = ref
-	case "android":
-		dn.Android = ref
+		dn.Image = ref
+	case "vm", "k8s", "local", "android":
+		dn.From = ref
 	}
 }

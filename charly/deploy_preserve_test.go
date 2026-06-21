@@ -22,10 +22,10 @@ func TestCharlyUpdatePreservesPerHostDeployFields(t *testing.T) {
 	}
 	// Per-host overlay keyed as `charly vm destroy`/`charly vm create` key it (vm:<name>):
 	// preemptible + env + tunnel — operator-authored local state.
-	yml := `version: 2026.172.0002
+	yml := `version: 2026.172.0004
 vm:cachyos-gpu:
-    bundle:
-        vm: cachyos-gpu
+    vm:
+        from: cachyos-gpu
         vm_state:
             instance_id: original-uuid
             ssh_port: 2222
@@ -88,10 +88,10 @@ func TestVmDestroyRemovesPureAutoEntry(t *testing.T) {
 	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	yml := `version: 2026.172.0002
+	yml := `version: 2026.172.0004
 vm:check-cachyos-gpu-vm:
-    bundle:
-        vm: check-cachyos-gpu-vm
+    vm:
+        from: check-cachyos-gpu-vm
         vm_state:
             instance_id: bed-uuid
             ssh_port: 12227
@@ -119,10 +119,10 @@ vm:check-cachyos-gpu-vm:
 func TestGatherDeployNodesPerHostWins(t *testing.T) {
 	proj := t.TempDir()
 	// Committed project: cachyos-gpu, NO preemptible.
-	projYml := `version: 2026.172.0002
+	projYml := `version: 2026.172.0004
 cachyos-gpu:
-    bundle:
-        vm: cachyos-gpu
+    vm:
+        from: cachyos-gpu
 `
 	if err := os.WriteFile(filepath.Join(proj, "charly.yml"), []byte(projYml), 0o644); err != nil {
 		t.Fatal(err)
@@ -133,10 +133,10 @@ cachyos-gpu:
 	if err := os.MkdirAll(filepath.Join(cfg, "charly"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	hostYml := `version: 2026.172.0002
+	hostYml := `version: 2026.172.0004
 cachyos-gpu:
-    bundle:
-        vm: cachyos-gpu
+    vm:
+        from: cachyos-gpu
     cachyos-gpu-preemptible:
         preemptible:
             holds: [nvidia-gpu]
@@ -154,8 +154,8 @@ cachyos-gpu:
 	if node.Preemptible == nil || len(node.Preemptible.Holds) != 1 || node.Preemptible.Holds[0] != "nvidia-gpu" {
 		t.Errorf("per-host preemptible did not win over committed project node: got %+v", node.Preemptible)
 	}
-	if node.Vm != "cachyos-gpu" { // committed field still present after the merge
-		t.Errorf("committed vm field lost in merge: got %q", node.Vm)
+	if node.From != "cachyos-gpu" { // committed field still present after the merge
+		t.Errorf("committed vm field lost in merge: got %q", node.From)
 	}
 }
 
@@ -165,7 +165,7 @@ cachyos-gpu:
 // (preemptible) must keep the per-host flag, regardless of merge order.
 func TestMergeDeployConfigsPreservesPreemptible(t *testing.T) {
 	project := &BundleConfig{Bundle: map[string]BundleNode{
-		"cachyos-gpu": {Target: "vm", Vm: "cachyos-gpu"}, // committed: NO preemptible
+		"cachyos-gpu": {Target: "vm", From: "cachyos-gpu"}, // committed: NO preemptible
 	}}
 	perHost := &BundleConfig{Bundle: map[string]BundleNode{
 		"cachyos-gpu": {Preemptible: &PreemptibleConfig{Holds: []string{"nvidia-gpu"}}}, // local opt-in
@@ -183,8 +183,8 @@ func TestMergeDeployConfigsPreservesPreemptible(t *testing.T) {
 			if node.Preemptible == nil || len(node.Preemptible.Holds) != 1 {
 				t.Errorf("merge DROPPED per-host preemptible: got %+v", node.Preemptible)
 			}
-			if node.Vm != "cachyos-gpu" {
-				t.Errorf("merge lost committed vm field: got %q", node.Vm)
+			if node.From != "cachyos-gpu" {
+				t.Errorf("merge lost committed vm field: got %q", node.From)
 			}
 		})
 	}

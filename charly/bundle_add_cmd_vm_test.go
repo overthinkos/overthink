@@ -123,8 +123,8 @@ func TestRemoveVmDeployEntry_RemovesBundleKeyedBedEntry(t *testing.T) {
 	if !ok {
 		t.Fatal("seed did not write the check-k3s-vm bundle entry")
 	}
-	if seeded.Vm != "k3s-vm" {
-		t.Fatalf("seed entry missing vm: cross-ref (teardown linkage): got %q", seeded.Vm)
+	if seeded.From != "k3s-vm" {
+		t.Fatalf("seed entry missing vm: cross-ref (teardown linkage): got %q", seeded.From)
 	}
 
 	// Teardown reaches removeVmDeployEntry with the prefixed ENTITY form — NOT the

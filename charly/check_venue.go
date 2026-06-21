@@ -338,7 +338,7 @@ func checkVmTarget(uf *UnifiedFile, name string) (vmName string, ok bool) {
 	if idx := strings.Index(name, "."); idx > 0 {
 		root := name[:idx]
 		if entry, present := uf.Bundle[root]; present && entry.Target == "vm" {
-			vm := entry.Vm
+			vm := entry.From
 			if vm == "" {
 				vm = root
 			}
@@ -353,7 +353,7 @@ func checkVmTarget(uf *UnifiedFile, name string) (vmName string, ok bool) {
 	}
 	if uf.Bundle != nil {
 		if entry, present := uf.Bundle[name]; present && entry.Target == "vm" {
-			vm := entry.Vm
+			vm := entry.From
 			if vm == "" {
 				vm = name
 			}

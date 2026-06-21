@@ -570,7 +570,7 @@ func rejectLegacyMarimoMl(root string, merged *UnifiedFile) error {
 				"%s: deployment %q is retired (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa` (cross-kind name reuse). Run: charly migrate",
 				root, name)
 		}
-		if node.Box == "marimo-ml" {
+		if node.Image == "marimo-ml" {
 			return fmt.Errorf(
 				"%s: deployment %q references retired box %q (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa`. Run: charly migrate",
 				root, name, "marimo-ml")
@@ -861,7 +861,7 @@ func validateDeployRequiresBox(deploy map[string]BundleNode) error {
 		if target != "pod" {
 			continue
 		}
-		if node.Box == "" {
+		if node.Image == "" {
 			// A bundle GROUP / venue (no own workload) carries members but no
 			// box of its own — its member nodes each declare their box and are
 			// validated as folded top-level entries. Only a LEAF pod-workload
@@ -1728,25 +1728,25 @@ func validateCheckBeds(uf *UnifiedFile) error {
 			// box: presence enforced by validateDeployRequiresBox on the
 			// folded Deploy entry — no duplicate check here.
 		case "vm":
-			if node.Vm == "" {
+			if node.From == "" {
 				return fmt.Errorf("kind:check bed %q (target: vm) must set `vm: <entity>`", name)
 			}
-			if _, ok := uf.VM[node.Vm]; !ok {
-				return fmt.Errorf("kind:check bed %q references vm entity %q which is not defined", name, node.Vm)
+			if _, ok := uf.VM[node.From]; !ok {
+				return fmt.Errorf("kind:check bed %q references vm entity %q which is not defined", name, node.From)
 			}
 		case "local":
-			if node.Local == "" {
+			if node.From == "" {
 				return fmt.Errorf("kind:check bed %q (target: local) must set `local: <template>`", name)
 			}
-			if _, ok := uf.Local[node.Local]; !ok {
-				return fmt.Errorf("kind:check bed %q references local template %q which is not defined", name, node.Local)
+			if _, ok := uf.Local[node.From]; !ok {
+				return fmt.Errorf("kind:check bed %q references local template %q which is not defined", name, node.From)
 			}
 		case "android":
-			if node.Android == "" {
+			if node.From == "" {
 				return fmt.Errorf("kind:check bed %q (target: android) must set `android: <device>`", name)
 			}
-			if _, ok := uf.Android[node.Android]; !ok {
-				return fmt.Errorf("kind:check bed %q references android device %q which is not defined", name, node.Android)
+			if _, ok := uf.Android[node.From]; !ok {
+				return fmt.Errorf("kind:check bed %q references android device %q which is not defined", name, node.From)
 			}
 		default:
 			return fmt.Errorf("kind:check bed %q has unsupported target %q (must be pod, vm, local, or android)", name, node.Target)

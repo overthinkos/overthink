@@ -87,8 +87,8 @@ func (k *K8sCollector) Collect(ctx context.Context, opts CollectOpts) ([]Deploym
 		spec := k8sSpecFor(opts.Unified, node)
 		if spec != nil && spec.KubeconfigContext != "" {
 			row.Network = spec.KubeconfigContext
-		} else if node.K8s != "" {
-			row.Network = node.K8s
+		} else if node.From != "" {
+			row.Network = node.From
 		}
 
 		// Live readiness — only under --nested, only when a tree exists and a
@@ -136,19 +136,19 @@ func k8sDeployEntries(uf *UnifiedFile) []string {
 // K8sUnifiedTarget.Add: the node's explicit Box, falling back to the
 // deploy name.
 func k8sImageRef(name string, node BundleNode) string {
-	if node.Box != "" {
-		return node.Box
+	if node.Image != "" {
+		return node.Image
 	}
 	return name
 }
 
-// k8sSpecFor resolves the kind:k8s template referenced by node.K8s from the
+// k8sSpecFor resolves the kind:k8s template referenced by node.From from the
 // unified projection. Nil when unreferenced or absent.
 func k8sSpecFor(uf *UnifiedFile, node BundleNode) *K8sSpec {
-	if uf == nil || uf.K8s == nil || node.K8s == "" {
+	if uf == nil || uf.K8s == nil || node.From == "" {
 		return nil
 	}
-	return uf.K8s[node.K8s]
+	return uf.K8s[node.From]
 }
 
 // k8sLiveStatus probes the live cluster for the deploy's workload readiness,

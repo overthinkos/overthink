@@ -29,10 +29,10 @@ func TestInstallStrategyKey_MatchesStructTag(t *testing.T) {
 func TestMigrateInstallStrategyKey_HostOverlay(t *testing.T) {
 	dir := t.TempDir()
 	overlay := filepath.Join(t.TempDir(), "charly.yml")
-	src := `version: "2026.172.0002"
+	src := `version: "2026.172.0004"
 vm:arch:
-    bundle:
-        vm: arch
+    vm:
+        from: arch
     vm_state:
         ssh_port: 2224
         ov_install_strategy: auto
@@ -74,7 +74,7 @@ func TestMigrateInstallStrategyKey_HostSelfGate(t *testing.T) {
 	dir := t.TempDir()
 	// A project file carrying the key IS rewritten (project portion always runs).
 	if err := os.WriteFile(filepath.Join(dir, "charly.yml"),
-		[]byte("version: \"2026.172.0002\"\nx:\n    vm_state:\n        ov_install_strategy: scp\n"), 0o644); err != nil {
+		[]byte("version: \"2026.172.0004\"\nx:\n    vm_state:\n        ov_install_strategy: scp\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	ctx := &MigrateContext{Dir: dir, HostDeployPath: ""} // project-only mode

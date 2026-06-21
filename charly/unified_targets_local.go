@@ -278,8 +278,8 @@ func (t *LocalUnifiedTarget) Add(ctx context.Context, dctx *DeployContext, plans
 	// Resolve the kind:local template (when the deployment has a
 	// `local: <name>` ref) so its `images:` pre-pass + Check/DeployCheck
 	// reach the target. nil when the deployment uses inline add_candy:.
-	if node != nil && strings.TrimSpace(node.Local) != "" {
-		tgt.LocalSpec = findLocalSpec(dctx.Dir, strings.TrimSpace(node.Local))
+	if node != nil && strings.TrimSpace(node.From) != "" {
+		tgt.LocalSpec = findLocalSpec(dctx.Dir, strings.TrimSpace(node.From))
 	}
 	if dctx.Cfg != nil {
 		tgt.Cfg = dctx.Cfg

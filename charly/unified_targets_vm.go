@@ -323,8 +323,8 @@ func (t *VmUnifiedTarget) vmDomainName() string {
 // back to stripping a legacy "vm:<name>" deploy-key prefix, then to the
 // leaf of a nested dotted path (stack.myvm → myvm).
 func vmEntityForAdd(node *BundleNode, name string) (string, error) {
-	if node != nil && node.Vm != "" {
-		return node.Vm, nil
+	if node != nil && node.From != "" {
+		return node.From, nil
 	}
 	if strings.HasPrefix(name, "vm:") {
 		return vmNameFromDeployName(name)

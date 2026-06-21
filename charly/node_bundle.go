@@ -62,10 +62,10 @@ func buildBundleNode(gn *genericNode) (*BundleNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		// A GROUP/venue (no own workload target) places members ALONGSIDE (shared
-		// net → Peer); a WORKLOAD places its resource children INSIDE its venue
-		// (deploy-into → Nested).
-		if dn.Target == "" || gn.disc == "host" {
+		// A targetless GROUP (no own workload target) places members ALONGSIDE
+		// (shared net → Peer); a WORKLOAD places its resource children INSIDE its
+		// venue (deploy-into → Nested).
+		if dn.Target == "" {
 			if dn.Members == nil {
 				dn.Members = map[string]*BundleNode{}
 			}
@@ -88,10 +88,10 @@ func isResourceDisc(d string) bool {
 }
 
 // bundleTargetForDisc maps a node discriminator to the BundleNode Target.
-// `group`/`host` are groups/venues (no own workload target).
+// `group` is a targetless deploy group (no own workload target).
 func bundleTargetForDisc(d string) string {
 	switch d {
-	case "group", "host":
+	case "group":
 		return ""
 	default:
 		return d // pod | vm | k8s | local | android

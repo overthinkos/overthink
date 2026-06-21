@@ -131,8 +131,8 @@ func chainEntersVMGuest(chain DeployExecutor) bool {
 // guest (which has no parent-path concept — see the pod case).
 func appendHopForFlatPath(chain DeployExecutor, node *BundleNode, flatPath, leaf string) (DeployExecutor, error) {
 	switch classifyTarget(node) {
-	case "host", "local", "android":
-		// Host/local + android nodes share the parent venue: a local node's
+	case "local", "android":
+		// local + android nodes share the parent venue: a local node's
 		// venue IS the chain root (a ShellExecutor for host:local, or an
 		// SSHExecutor for host:<remote> — selected by rootExecutorForDeployNode
 		// and passed in as `root`), and an android device is reached via adb

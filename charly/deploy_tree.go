@@ -135,11 +135,11 @@ func deriveChildExecutor(node *BundleNode, parentExec DeployExecutor, deployName
 		return parentExec, nil
 	}
 	switch node.Target {
-	case "host", "local", "":
-		// When Target is empty, fall back to "pod" (default for
-		// named deploys). Local (was: host) with children →
-		// pass-through (children use parentExec or localhost).
-		if node.Target == "host" || node.Target == "local" {
+	case "local", "":
+		// When Target is empty, fall back to "pod" (default for named
+		// deploys). A local node with children → pass-through (children
+		// use parentExec or localhost).
+		if node.Target == "local" {
 			if parentExec != nil {
 				return parentExec, nil
 			}

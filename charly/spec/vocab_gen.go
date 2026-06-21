@@ -15,11 +15,11 @@ var KindWords = []string{
 	"candy",
 	"distro",
 	"group",
-	"host",
 	"init",
 	"k8s",
 	"local",
 	"module",
+	"package-group",
 	"pod",
 	"resource",
 	"sidecar",
@@ -34,7 +34,6 @@ var ResourceKinds = []string{
 	"k8s",
 	"local",
 	"android",
-	"host",
 	"group",
 }
 

@@ -10,7 +10,7 @@ import (
 // unchanged — the migration is behavior-preserving; only the normalizeNodeInto
 // dispatch switch is replaced by providerRegistry.ResolveKind. CueDefPath carries
 // the former reservedKindHandlers value (the CUE def the node value validates
-// against; the documented alias host→#HostValue is kept).
+// against).
 
 // candy — the special factory arm (buildCandy returns name + InlineCandy).
 type candyKind struct{ builtinKindBase }
@@ -100,17 +100,23 @@ func (agentKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
 type groupKind struct{ builtinKindBase }
 
 func (groupKind) Reserved() string   { return "group" }
-func (groupKind) CueDefPath() string { return "#Group" }
+func (groupKind) CueDefPath() string { return "#Deploy" }
 
-// DecodeNode — EDGE-INHERIT cutover B: group: is BOTH the Calamares package-group
-// (#Group, package/subgroup children) AND a TARGETLESS deploy group (resource
-// members, no own workload — the former targetless `bundle:`). Routed by shape: a
-// node carrying pod/vm/k8s/local/android resource MEMBERS is a deploy group; otherwise
-// it is the Calamares package group. (The Calamares group has zero on-disk corpus.)
+// DecodeNode — EDGE-INHERIT cutover C: group: is UNAMBIGUOUSLY a TARGETLESS deploy
+// group (resource members, no own workload — the former targetless `bundle:`). The
+// Calamares package group moved to its own `package-group:` kind, so the former
+// shape-routing is gone.
 func (groupKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
-	if len(resourceChildren(gn)) > 0 {
-		return buildBundleNodeInto(gn, uf)
-	}
+	return buildBundleNodeInto(gn, uf)
+}
+
+// packageGroupKind — the Calamares package group (EDGE-INHERIT cutover C split it off
+// `group:`). Decodes #Group into uf.Group; never a deploy.
+type packageGroupKind struct{ builtinKindBase }
+
+func (packageGroupKind) Reserved() string   { return "package-group" }
+func (packageGroupKind) CueDefPath() string { return "#Group" }
+func (packageGroupKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
 	return decodePtrInto(gn, &uf.Group)
 }
 
@@ -174,29 +180,15 @@ func isDeployShape(gn *genericNode) bool {
 	return false
 }
 
-// bundleKind — bundle / host, the explicit bundle-shaped nodes.
-type bundleKind struct {
-	builtinKindBase
-	word string
-	def  string
-}
-
-func (k bundleKind) Reserved() string   { return k.word }
-func (k bundleKind) CueDefPath() string { return k.def }
-func (k bundleKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
-	return buildBundleNodeInto(gn, uf)
-}
-
 func init() {
 	for _, p := range []KindProvider{
 		candyKind{}, boxKind{}, sidecarKind{},
-		distroKind{}, builderKind{}, initKind{}, resourceKind{}, agentKind{}, groupKind{}, targetKind{}, moduleKind{},
+		distroKind{}, builderKind{}, initKind{}, resourceKind{}, agentKind{}, groupKind{}, packageGroupKind{}, targetKind{}, moduleKind{},
 		standaloneKind{word: "pod", def: "#Pod"},
 		standaloneKind{word: "vm", def: "#Vm"},
 		standaloneKind{word: "k8s", def: "#K8s"},
 		standaloneKind{word: "local", def: "#Local"},
 		standaloneKind{word: "android", def: "#Android"},
-		bundleKind{word: "host", def: "#HostValue"},
 	} {
 		RegisterBuiltinProvider(p)
 	}

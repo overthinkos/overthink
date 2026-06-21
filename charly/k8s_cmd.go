@@ -1,6 +1,6 @@
 package main
 
-// `charly check k8s <method>` — Kubernetes cluster probe verbs.
+// `charly check kube <method>` — Kubernetes cluster probe verbs.
 //
 // Sibling of libvirt / spice / vnc / cdp / wl / dbus / mcp / record under
 // `charly check`. Hermetic: speaks the Kubernetes API directly via the minimal
@@ -34,10 +34,10 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// K8sCmd — the Kong command tree mounted at `charly check k8s`.
+// KubeCmd — the Kong command tree mounted at `charly check kube`.
 // ---------------------------------------------------------------------------
 
-type K8sCmd struct {
+type KubeCmd struct {
 	Nodes        K8sNodesCmd        `cmd:"" help:"List cluster nodes (name + Ready status per line)"`
 	WaitNodes    K8sWaitNodesCmd    `cmd:"" name:"wait-nodes" help:"Block until N nodes are Ready (or a named node is Ready)"`
 	Pods         K8sPodsCmd         `cmd:"" help:"List pods (optionally scoped by namespace and/or label selector)"`

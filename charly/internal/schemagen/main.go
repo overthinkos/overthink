@@ -180,7 +180,7 @@ var liveVerbs = []struct{ verb, def string }{
 	{"record", "#RecordMethod"},
 	{"spice", "#SpiceMethod"},
 	{"libvirt", "#LibvirtMethod"},
-	{"k8s", "#K8sMethod"},
+	{"kube", "#KubeMethod"},
 	{"adb", "#AdbMethod"},
 	{"appium", "#AppiumMethod"},
 }

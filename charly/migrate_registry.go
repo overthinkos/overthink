@@ -71,7 +71,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.169.0004")
+var latestSchemaVersion = mustCalVer("2026.172.0002")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -438,13 +438,19 @@ func migrationSteps() []MigrationStep {
 			hostChanged, herr := migrateHostOverlayDoc(c, stepVenueDoc)
 			return len(w) > 0 || hostChanged, herr
 		}},
+		// EDGE-INHERIT cutover A: rename the step PROBE VERBS that reused a reserved
+		// KIND word — `k8s:`→`kube:`, `group:`→`unix_group:` (+ the kube verb's
+		// `k8s_*` modifiers → `kube_*`), gated on isStepNode so the `k8s` deploy KIND
+		// and the Calamares `group` kind are untouched. Raises HEAD (a closed #Op
+		// rejects the legacy keys). See migrate_probe_verb_rename.go.
+		{mustCalVer("2026.172.0001"), "probe-verb-rename", false, MigrateProbeVerbRename},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up
 		// and every versioned file lands on this CalVer. This is the integer→CalVer
 		// transition step (version: 4 → version: <HEAD>) and the universal stamper.
 		// TouchesHost is false so it ALSO runs in project-only mode (remote-cache
 		// auto-migration); its host-file stamping is gated on ctx.HostDeployPath,
 		// which the project-only runner leaves empty.
-		{mustCalVer("2026.169.0004"), "calver-schema", false, func(c *MigrateContext) (bool, error) {
+		{mustCalVer("2026.172.0002"), "calver-schema", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateCalverSchema(c.Dir, c.HostDeployPath, latestSchemaVersion, c.DryRun)
 			return len(w) > 0, err
 		}},

@@ -204,9 +204,9 @@ k3s-server:
         exists: true
     k3s-server-step-3:
         check: the cluster reports at least one Ready node
-        k8s: wait-nodes
+        kube: wait-nodes
         cluster: "${DEPLOY_NAME}"
-        k8s_count: 1
+        kube_count: 1
         timeout: 180s
         stdout:
             contains: "Ready"
@@ -214,7 +214,7 @@ k3s-server:
             - runtime
     k3s-server-step-4:
         check: Traefik, ServiceLB, and local-path addons are all Ready
-        k8s: addons
+        kube: addons
         cluster: "${DEPLOY_NAME}"
         timeout: 240s
         exit_status: 0
@@ -222,7 +222,7 @@ k3s-server:
             - runtime
     k3s-server-step-5:
         check: Traefik is registered as the cluster's default ingress class
-        k8s: ingressclass
+        kube: ingressclass
         cluster: "${DEPLOY_NAME}"
         stdout:
             contains: "traefik"
@@ -230,7 +230,7 @@ k3s-server:
             - runtime
     k3s-server-step-6:
         check: local-path is registered as the cluster's default storage class
-        k8s: storageclass
+        kube: storageclass
         cluster: "${DEPLOY_NAME}"
         stdout:
             contains: "local-path"

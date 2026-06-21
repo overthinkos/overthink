@@ -90,7 +90,7 @@ type methodSpec struct {
 	artifact bool
 	// skipBox = true means the verb operates against a cluster or other
 	// non-image target, so the usual image/deploy-name positional must NOT
-	// be appended between the method path and posArgs. Used by k8s verbs.
+	// be appended between the method path and posArgs. Used by kube verbs.
 	skipBox bool
 }
 
@@ -309,9 +309,9 @@ var libvirtMethods = map[string]methodSpec{
 }
 
 // ---------------------------------------------------------------------------
-// k8s methods — `charly check k8s <method>` probes a Kubernetes cluster via the
+// kube methods — `charly check kube <method>` probes a Kubernetes cluster via the
 // vendored client-go SDK. Cluster selection is via --cluster <profile> /
-// --context / --kubeconfig (see cmd_test_k8s.go). Host-side; applicable to
+// --context / --kubeconfig (see checkrun_charly_verbs_test.go). Host-side; applicable to
 // any deploy whose post-provision registered a ClusterProfile (typically
 // a k3s-server candy).
 // ---------------------------------------------------------------------------
@@ -409,42 +409,42 @@ var appiumMethods = map[string]methodSpec{
 	"raw":     {path: []string{"appium", "raw"}, required: []string{"Method", "Path"}, posArgs: posAppiumRaw},
 }
 
-// k8s methods all run against a cluster, not an image/container, so
+// kube methods all run against a cluster, not an image/container, so
 // skipBox=true across the board.
-var k8sMethods = map[string]methodSpec{
-	"nodes":          {path: []string{"k8s", "nodes"}, posArgs: posK8sCluster, skipBox: true},
-	"wait-nodes":     {path: []string{"k8s", "wait-nodes"}, posArgs: posK8sWaitNodes, skipBox: true},
-	"pods":           {path: []string{"k8s", "pods"}, posArgs: posK8sPods, skipBox: true},
-	"wait-ready":     {path: []string{"k8s", "wait-ready"}, required: []string{"Kind", "Name"}, posArgs: posK8sWaitReady, skipBox: true},
-	"ingress":        {path: []string{"k8s", "ingress"}, posArgs: posK8sNamespaceOpt, skipBox: true},
-	"ingressclass":   {path: []string{"k8s", "ingressclass"}, posArgs: posK8sCluster, skipBox: true},
-	"storageclass":   {path: []string{"k8s", "storageclass"}, posArgs: posK8sCluster, skipBox: true},
-	"service":        {path: []string{"k8s", "service"}, posArgs: posK8sNamespaceOpt, skipBox: true},
-	"lb-external-ip": {path: []string{"k8s", "lb-external-ip"}, required: []string{"Namespace", "Name"}, posArgs: posK8sLbExternal, skipBox: true},
-	"addons":         {path: []string{"k8s", "addons"}, posArgs: posK8sAddons, skipBox: true},
-	"apply":          {path: []string{"k8s", "apply"}, required: []string{"Manifest"}, posArgs: posK8sApply, skipBox: true},
-	"delete":         {path: []string{"k8s", "delete"}, required: []string{"Manifest"}, posArgs: posK8sApply, skipBox: true},
-	"raw":            {path: []string{"k8s", "raw"}, required: []string{"Resource"}, posArgs: posK8sRaw, skipBox: true},
+var kubeMethods = map[string]methodSpec{
+	"nodes":          {path: []string{"kube", "nodes"}, posArgs: posKubeCluster, skipBox: true},
+	"wait-nodes":     {path: []string{"kube", "wait-nodes"}, posArgs: posKubeWaitNodes, skipBox: true},
+	"pods":           {path: []string{"kube", "pods"}, posArgs: posKubePods, skipBox: true},
+	"wait-ready":     {path: []string{"kube", "wait-ready"}, required: []string{"Kind", "Name"}, posArgs: posKubeWaitReady, skipBox: true},
+	"ingress":        {path: []string{"kube", "ingress"}, posArgs: posKubeNamespaceOpt, skipBox: true},
+	"ingressclass":   {path: []string{"kube", "ingressclass"}, posArgs: posKubeCluster, skipBox: true},
+	"storageclass":   {path: []string{"kube", "storageclass"}, posArgs: posKubeCluster, skipBox: true},
+	"service":        {path: []string{"kube", "service"}, posArgs: posKubeNamespaceOpt, skipBox: true},
+	"lb-external-ip": {path: []string{"kube", "lb-external-ip"}, required: []string{"Namespace", "Name"}, posArgs: posKubeLbExternal, skipBox: true},
+	"addons":         {path: []string{"kube", "addons"}, posArgs: posKubeAddons, skipBox: true},
+	"apply":          {path: []string{"kube", "apply"}, required: []string{"Manifest"}, posArgs: posKubeApply, skipBox: true},
+	"delete":         {path: []string{"kube", "delete"}, required: []string{"Manifest"}, posArgs: posKubeApply, skipBox: true},
+	"raw":            {path: []string{"kube", "raw"}, required: []string{"Resource"}, posArgs: posKubeRaw, skipBox: true},
 }
 
 // ---------------------------------------------------------------------------
-// k8s positional-arg builders — every method emits --cluster/--context/
-// --kubeconfig + its method-specific flags. Because k8s probes are run
+// kube positional-arg builders — every method emits --cluster/--context/
+// --kubeconfig + its method-specific flags. Because kube probes are run
 // against a cluster (not a container/image), the --image positional from
-// runCharlyVerb is still passed, but `charly check k8s ...` ignores it by accepting
+// runCharlyVerb is still passed, but `charly check kube ...` ignores it by accepting
 // arbitrary trailing args under Kong's default catch-all policy.
 // ---------------------------------------------------------------------------
 
-// posK8sCluster emits only the shared cluster-selection flags. Used by
+// posKubeCluster emits only the shared cluster-selection flags. Used by
 // methods that take no other parameters (nodes, ingressclass, storageclass).
-func posK8sCluster(c *Op) []string {
-	return k8sClusterArgs(c)
+func posKubeCluster(c *Op) []string {
+	return kubeClusterArgs(c)
 }
 
-func posK8sWaitNodes(c *Op) []string {
-	args := k8sClusterArgs(c)
-	if c.K8sCount > 0 {
-		args = append(args, "--count", strconv.Itoa(c.K8sCount))
+func posKubeWaitNodes(c *Op) []string {
+	args := kubeClusterArgs(c)
+	if c.KubeCount > 0 {
+		args = append(args, "--count", strconv.Itoa(c.KubeCount))
 	}
 	if c.Name != "" {
 		args = append(args, "--name", c.Name)
@@ -455,8 +455,8 @@ func posK8sWaitNodes(c *Op) []string {
 	return args
 }
 
-func posK8sPods(c *Op) []string {
-	args := k8sClusterArgs(c)
+func posKubePods(c *Op) []string {
+	args := kubeClusterArgs(c)
 	if c.Namespace != "" {
 		args = append(args, "--namespace", c.Namespace)
 	}
@@ -466,9 +466,9 @@ func posK8sPods(c *Op) []string {
 	return args
 }
 
-func posK8sWaitReady(c *Op) []string {
-	args := k8sClusterArgs(c)
-	args = append(args, "--kind", c.K8sKind, "--name", c.Name)
+func posKubeWaitReady(c *Op) []string {
+	args := kubeClusterArgs(c)
+	args = append(args, "--kind", c.KubeKind, "--name", c.Name)
 	if c.Namespace != "" {
 		args = append(args, "--namespace", c.Namespace)
 	}
@@ -478,16 +478,16 @@ func posK8sWaitReady(c *Op) []string {
 	return args
 }
 
-func posK8sNamespaceOpt(c *Op) []string {
-	args := k8sClusterArgs(c)
+func posKubeNamespaceOpt(c *Op) []string {
+	args := kubeClusterArgs(c)
 	if c.Namespace != "" {
 		args = append(args, "--namespace", c.Namespace)
 	}
 	return args
 }
 
-func posK8sLbExternal(c *Op) []string {
-	args := k8sClusterArgs(c)
+func posKubeLbExternal(c *Op) []string {
+	args := kubeClusterArgs(c)
 	args = append(args, "--namespace", c.Namespace, "--name", c.Name)
 	if c.Timeout != "" {
 		args = append(args, "--timeout", c.Timeout)
@@ -495,8 +495,8 @@ func posK8sLbExternal(c *Op) []string {
 	return args
 }
 
-func posK8sAddons(c *Op) []string {
-	args := k8sClusterArgs(c)
+func posKubeAddons(c *Op) []string {
+	args := kubeClusterArgs(c)
 	if c.Namespace != "" {
 		args = append(args, "--namespace", c.Namespace)
 	}
@@ -506,8 +506,8 @@ func posK8sAddons(c *Op) []string {
 	return args
 }
 
-func posK8sApply(c *Op) []string {
-	args := k8sClusterArgs(c)
+func posKubeApply(c *Op) []string {
+	args := kubeClusterArgs(c)
 	args = append(args, "--file", c.Manifest)
 	if c.Namespace != "" {
 		args = append(args, "--namespace", c.Namespace)
@@ -515,14 +515,14 @@ func posK8sApply(c *Op) []string {
 	return args
 }
 
-func posK8sRaw(c *Op) []string {
-	args := k8sClusterArgs(c)
-	args = append(args, "--resource", c.K8sResource)
-	if c.K8sGroup != "" {
-		args = append(args, "--group", c.K8sGroup)
+func posKubeRaw(c *Op) []string {
+	args := kubeClusterArgs(c)
+	args = append(args, "--resource", c.KubeResource)
+	if c.KubeGroup != "" {
+		args = append(args, "--group", c.KubeGroup)
 	}
-	if c.K8sVersion != "" {
-		args = append(args, "--version", c.K8sVersion)
+	if c.KubeVersion != "" {
+		args = append(args, "--version", c.KubeVersion)
 	}
 	if c.Name != "" {
 		args = append(args, "--name", c.Name)
@@ -532,7 +532,7 @@ func posK8sRaw(c *Op) []string {
 	}
 	if c.JSON {
 		// A check's `json: true` → `--json` flag on the underlying
-		// `charly check k8s raw` invocation. List-mode then emits the
+		// `charly check kube raw` invocation. List-mode then emits the
 		// full Kubernetes List JSON document instead of one
 		// `<namespace>/<name>` per line.
 		args = append(args, "--json")
@@ -540,15 +540,15 @@ func posK8sRaw(c *Op) []string {
 	return args
 }
 
-// k8sClusterArgs renders the shared --cluster / --context / --kubeconfig
+// kubeClusterArgs renders the shared --cluster / --context / --kubeconfig
 // selection flags from the Check.
-func k8sClusterArgs(c *Op) []string {
+func kubeClusterArgs(c *Op) []string {
 	var args []string
 	if c.Cluster != "" {
 		args = append(args, "--cluster", c.Cluster)
 	}
-	if c.K8sContext != "" {
-		args = append(args, "--context", c.K8sContext)
+	if c.KubeContext != "" {
+		args = append(args, "--context", c.KubeContext)
 	}
 	if c.Kubeconfig != "" {
 		args = append(args, "--kubeconfig", c.Kubeconfig)
@@ -1033,8 +1033,8 @@ func (r *Runner) runLibvirt(ctx context.Context, c *Op) CheckResult {
 	return r.runCharlyVerb(ctx, c, "libvirt", c.Libvirt, libvirtMethods)
 }
 
-func (r *Runner) runK8s(ctx context.Context, c *Op) CheckResult {
-	return r.runCharlyVerb(ctx, c, "k8s", c.K8s, k8sMethods)
+func (r *Runner) runKube(ctx context.Context, c *Op) CheckResult {
+	return r.runCharlyVerb(ctx, c, "kube", c.Kube, kubeMethods)
 }
 
 func (r *Runner) runAdb(ctx context.Context, c *Op) CheckResult {
@@ -1153,7 +1153,7 @@ func (r *Runner) runCharlyVerb(ctx context.Context, c *Op, verb, method string, 
 
 	// Build argv: ["check"] + spec.path + [image?] + spec.posArgs(c) + ["-i", instance]
 	// spec.skipBox=true elides the image/deploy-name positional (used by
-	// k8s verbs that operate against a cluster instead of an image).
+	// kube verbs that operate against a cluster instead of an image).
 	argv := append([]string{"check"}, spec.path...)
 	if !spec.skipBox {
 		argv = append(argv, r.Box)
@@ -1458,8 +1458,8 @@ func isZeroField(c *Op, name string) bool {
 		return c.Spice == ""
 	case "Libvirt":
 		return c.Libvirt == ""
-	case "K8s":
-		return c.K8s == ""
+	case "Kube":
+		return c.Kube == ""
 	case "Name":
 		return c.Name == ""
 	case "Namespace":
@@ -1472,23 +1472,23 @@ func isZeroField(c *Op, name string) bool {
 		return c.Manifest == ""
 	case "Kind":
 		// Kind is a METHOD on Check; required-field lookups of "Kind" target
-		// the k8s-specific K8sKind field to avoid the method-vs-field name
+		// the kube-specific KubeKind field to avoid the method-vs-field name
 		// clash that Go disallows.
-		return c.K8sKind == ""
-	case "K8sKind":
-		return c.K8sKind == ""
-	case "K8sContext":
-		return c.K8sContext == ""
+		return c.KubeKind == ""
+	case "KubeKind":
+		return c.KubeKind == ""
+	case "KubeContext":
+		return c.KubeContext == ""
 	case "Kubeconfig":
 		return c.Kubeconfig == ""
-	case "K8sCount":
-		return c.K8sCount == 0
-	case "K8sResource":
-		return c.K8sResource == ""
-	case "K8sGroup":
-		return c.K8sGroup == ""
-	case "K8sVersion":
-		return c.K8sVersion == ""
+	case "KubeCount":
+		return c.KubeCount == 0
+	case "KubeResource":
+		return c.KubeResource == ""
+	case "KubeGroup":
+		return c.KubeGroup == ""
+	case "KubeVersion":
+		return c.KubeVersion == ""
 	case "File":
 		return c.File == ""
 	case "Args":

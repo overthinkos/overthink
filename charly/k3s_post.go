@@ -8,7 +8,7 @@ package main
 // cannot:
 //   1. Merge the retrieved kubeconfig into ~/.kube/config under a context
 //      named after the deploy, so `kubectl --context <deploy> …` and
-//      `charly check k8s nodes --cluster <deploy>` both work immediately.
+//      `charly check kube nodes --cluster <deploy>` both work immediately.
 //   2. Write a ClusterProfile at ~/.config/charly/clusters/<deploy>.yaml with
 //      ingress.class=traefik and storage.class_default=local-path so any
 //      subsequent `charly bundle add <app> --target kubernetes` that selects

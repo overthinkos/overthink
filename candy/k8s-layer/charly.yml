@@ -8,7 +8,7 @@ k8s-layer:
             delegate the `cpuset` cgroup controller — k3s aborts with
             "failed to find cpuset cgroup (v2)" before kubelet starts.
             Instead, this layer runs a minimal Python http.server that
-            replays just the GET endpoints `charly check k8s` (client-go dynamic)
+            replays just the GET endpoints `charly check kube` (client-go dynamic)
             reaches: nodes, services, storageclasses, ingressclasses, the
             three k3s addons (traefik / local-path-provisioner /
             svclb-traefik). Every list returns a single Ready object so the
@@ -52,7 +52,7 @@ k8s-layer:
             """Minimal fake Kubernetes apiserver for the harness phase 5 recipe.
 
             Serves just enough of the Kubernetes REST API for client-go's
-            dynamic.Interface to satisfy the eight `charly check k8s` probes
+            dynamic.Interface to satisfy the eight `charly check kube` probes
             the kubernetes-cluster recipe runs:
 
               - GET /api/v1/nodes                                  → 1 Ready Node
@@ -342,7 +342,7 @@ k8s-layer:
         context:
             - runtime
     k8s-layer-step-4:
-        agent-check: the harness `charly check k8s` wait-nodes and addon rollups exit 0 against the fixture (nodes, storageclasses, ingressclasses, and the traefik / local-path-provisioner / svclb-traefik addons all report Ready)
+        agent-check: the harness `charly check kube` wait-nodes and addon rollups exit 0 against the fixture (nodes, storageclasses, ingressclasses, and the traefik / local-path-provisioner / svclb-traefik addons all report Ready)
     harness-k8s-python3:
         check: file=/usr/bin/python3
         id: harness-k8s-python3

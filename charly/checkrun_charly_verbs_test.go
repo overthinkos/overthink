@@ -247,13 +247,13 @@ func TestShortNameMatchesRef(t *testing.T) {
 	}
 }
 
-// TestPosK8sRaw_JsonFlagThreaded covers the 2026-04-27 cutover's
+// TestPosKubeRaw_JsonFlagThreaded covers the 2026-04-27 cutover's
 // `json: true` step modifier passthrough into the underlying
-// `charly check k8s raw --json` invocation. List-mode default emits
+// `charly check kube raw --json` invocation. List-mode default emits
 // `<namespace>/<name>` per line; --json emits the full JSON List
 // document for plan steps that author `stdout: { contains: kind }`.
-func TestPosK8sRaw_JsonFlagThreaded(t *testing.T) {
-	withJSON := posK8sRaw(&Op{K8sResource: "nodes", JSON: true})
+func TestPosKubeRaw_JsonFlagThreaded(t *testing.T) {
+	withJSON := posKubeRaw(&Op{KubeResource: "nodes", JSON: true})
 	foundJSON := false
 	for _, a := range withJSON {
 		if a == "--json" {
@@ -263,7 +263,7 @@ func TestPosK8sRaw_JsonFlagThreaded(t *testing.T) {
 	if !foundJSON {
 		t.Errorf("expected `--json` flag in argv when Check.JSON=true; got %v", withJSON)
 	}
-	withoutJSON := posK8sRaw(&Op{K8sResource: "nodes", JSON: false})
+	withoutJSON := posKubeRaw(&Op{KubeResource: "nodes", JSON: false})
 	for _, a := range withoutJSON {
 		if a == "--json" {
 			t.Errorf("expected NO `--json` flag when Check.JSON=false; got %v", withoutJSON)

@@ -144,6 +144,18 @@ func persistBedDeployOverrides(name string, node BundleNode) {
 	if node.IsGroup() {
 		return
 	}
+	// A LOCAL bed never runs `charly config` (kind:local applies candies in place
+	// during `charly bundle add` — see runCheckBed's `if !isLocal` config guard), so
+	// the whole reason persistBedDeployOverrides exists — seeding port/volume/env
+	// overrides BEFORE config — does not apply. Worse, a local bed's only persistable
+	// cross-ref is its `local:` template, which lives in the bed's OWN project; writing
+	// it into the GLOBAL per-host overlay makes that overlay un-loadable from every
+	// OTHER project (validateCheckBeds: "references local template … which is not
+	// defined"), poisoning concurrent/cross-project bed runs. Local deploys persist via
+	// the install ledger, not this bundle-map path, so skipping is also lossless.
+	if node.Target == "local" {
+		return
+	}
 	saveDeployState(name, "", SaveDeployStateInput{
 		Ports:         node.Port,
 		SetPorts:      len(node.Port) > 0,

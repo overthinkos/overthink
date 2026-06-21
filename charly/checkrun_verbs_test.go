@@ -145,7 +145,7 @@ func TestRunner_Group(t *testing.T) {
 		{matchPrefix: "getent group 'docker'", stdout: "docker:x:999:alice,bob\n", exit: 0},
 	}
 	gid := 999
-	res := r.Run(context.Background(), []Op{{Group: "docker", GID: &gid}})
+	res := r.Run(context.Background(), []Op{{UnixGroup: "docker", GID: &gid}})
 	if res[0].Status != TestPass {
 		t.Errorf("got %+v", res[0])
 	}

@@ -19,7 +19,7 @@ import (
 // applies to a remote cluster. The flat (non-nested) view therefore reports
 // generation state, never live pod health. Under opts.Nested it additionally
 // queries the live cluster (via the same vendored client-go subset the
-// `charly check k8s` verbs use) for the workload's readiness and refines Status
+// `charly check kube` verbs use) for the workload's readiness and refines Status
 // to running / not-ready / unreachable.
 type K8sCollector struct {
 	c *Collector
@@ -152,7 +152,7 @@ func k8sSpecFor(uf *UnifiedFile, node BundleNode) *K8sSpec {
 }
 
 // k8sLiveStatus probes the live cluster for the deploy's workload readiness,
-// reusing the same client-go subset and predicates the `charly check k8s` verbs
+// reusing the same client-go subset and predicates the `charly check kube` verbs
 // use. Returns ("running"|"not-ready", true) on a successful query, or
 // ("unreachable", true) when the cluster can't be reached; ("", false) only
 // when no workload GVR can be derived. Never panics, never blocks beyond the

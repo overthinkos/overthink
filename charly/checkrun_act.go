@@ -112,12 +112,12 @@ func (userVerb) RenderProvisionScript(c *Op, _ []string) (string, bool) {
 	return fmt.Sprintf("id %[1]s >/dev/null 2>&1 || useradd%[2]s %[1]s", name, flags), true
 }
 
-func (groupVerb) RenderProvisionScript(c *Op, _ []string) (string, bool) {
+func (unixGroupVerb) RenderProvisionScript(c *Op, _ []string) (string, bool) {
 	flags := ""
 	if c.GID != nil {
 		flags += fmt.Sprintf(" -g %d", *c.GID)
 	}
-	name := shellSingleQuote(c.Group)
+	name := shellSingleQuote(c.UnixGroup)
 	return fmt.Sprintf("getent group %[1]s >/dev/null 2>&1 || groupadd%[2]s %[1]s", name, flags), true
 }
 

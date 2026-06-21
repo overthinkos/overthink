@@ -164,7 +164,7 @@ var liveVerbDispatch = map[string]map[string]methodSpec{
 	"record":  recordMethods,
 	"spice":   spiceMethods,
 	"libvirt": libvirtMethods,
-	"k8s":     k8sMethods,
+	"kube":    kubeMethods,
 	"adb":     adbMethods,
 	"appium":  appiumMethods,
 }

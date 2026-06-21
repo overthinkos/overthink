@@ -114,15 +114,15 @@ func validateCheck(c *Op, loc string, errs *ValidationError) {
 	// so a lowercase token is silently passed through literally and reaches the
 	// verb as the string "${...}" (the k3s-server `cluster: "${deploy_name}"`
 	// class of bug — it passed both validate and runtime, resolving to no cluster).
-	// Scoped to the k8s/resource-identity modifiers, which are CLI-arg identifiers
-	// passed to `charly check k8s` — never a shell body (cmd:) or JS (cdp expression:),
+	// Scoped to the kube/resource-identity modifiers, which are CLI-arg identifiers
+	// passed to `charly check kube` — never a shell body (cmd:) or JS (cdp expression:),
 	// where a lowercase ${var} is legitimate. Did you mean an UPPERCASE check var
 	// (e.g. ${DEPLOY_NAME})?
 	for _, f := range []struct{ label, val string }{
 		{"cluster", c.Cluster}, {"name", c.Name}, {"namespace", c.Namespace},
-		{"label", c.Label}, {"kubeconfig", c.Kubeconfig}, {"k8s_context", c.K8sContext},
-		{"k8s_resource", c.K8sResource}, {"k8s_group", c.K8sGroup},
-		{"k8s_version", c.K8sVersion}, {"manifest", c.Manifest},
+		{"label", c.Label}, {"kubeconfig", c.Kubeconfig}, {"kube_context", c.KubeContext},
+		{"kube_resource", c.KubeResource}, {"kube_group", c.KubeGroup},
+		{"kube_version", c.KubeVersion}, {"manifest", c.Manifest},
 	} {
 		if m := lowercaseCheckVarPattern.FindString(f.val); m != "" {
 			errs.Add("%s: %s contains %s — check variables are UPPERCASE (e.g. ${DEPLOY_NAME}); a lowercase ${...} never resolves and is passed through literally", loc, f.label, m)

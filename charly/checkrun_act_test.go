@@ -38,7 +38,7 @@ func TestRenderProvisionScript(t *testing.T) {
 		{"service", Op{Service: "sshd"}, "service", true, "enable --now"},
 		{"file-content", Op{File: "/etc/x.conf", Content: "hi\n", Mode: "0644"}, "file", true, "chmod '0644'"},
 		{"user", Op{User: "bob"}, "user", true, "useradd"},
-		{"group", Op{Group: "devs"}, "group", true, "groupadd"},
+		{"unix_group", Op{UnixGroup: "devs"}, "unix_group", true, "groupadd"},
 		{"kernel-param", Op{KernelParam: "vm.swappiness", Value: MatcherList{{Op: "equals", Value: "10"}}}, "kernel-param", true, "sysctl -w 'vm.swappiness'='10'"},
 		// An observe-only verb has no act form → ok=false (falls to the probe handler).
 		{"port-observe", Op{Port: 80, Listening: &tr}, "port", false, ""},

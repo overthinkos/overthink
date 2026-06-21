@@ -17,9 +17,9 @@
 // the `--- verb discriminators ---` group in #Op.
 #OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" |
 	"command" | "file" | "package" | "service" | "port" | "process" | "http" |
-	"dns" | "user" | "group" | "interface" | "kernel-param" | "mount" | "addr" |
+	"dns" | "user" | "unix_group" | "interface" | "kernel-param" | "mount" | "addr" |
 	"matching" | "cdp" | "wl" | "dbus" | "vnc" | "mcp" | "record" | "spice" |
-	"libvirt" | "k8s" | "adb" | "appium" | "summarize" | "kill" | "plugin") @go(-)
+	"libvirt" | "kube" | "adb" | "appium" | "summarize" | "kill" | "plugin") @go(-)
 
 // ---------------------------------------------------------------------------
 // Plan steps: the unified run/check/agent-run/agent-check/include vocabulary.
@@ -58,7 +58,7 @@
 	http?:           string @go(HTTP)
 	dns?:            string @go(DNS)
 	user?:           string
-	group?:          string
+	unix_group?:     string @go(UnixGroup)
 	interface?:      string
 	"kernel-param"?: string @go(KernelParam)
 	mount?:          string
@@ -79,7 +79,7 @@
 	record?:         #RecordMethod
 	spice?:          #SpiceMethod
 	libvirt?:        #LibvirtMethod
-	k8s?:            #K8sMethod
+	kube?:           #KubeMethod
 	adb?:            #AdbMethod
 	appium?:         #AppiumMethod
 	summarize?:      string
@@ -100,15 +100,15 @@
 	cluster?:   string
 	manifest?:  string
 
-	// --- k8s-specific modifiers ---
-	k8s_kind?:     string @go(K8sKind)
-	k8s_context?:  string @go(K8sContext)
-	kubeconfig?:   string
-	k8s_count?:    int    @go(K8sCount,type=int)
-	k8s_resource?: string @go(K8sResource)
-	k8s_group?:    string @go(K8sGroup)
-	k8s_version?:  string @go(K8sVersion)
-	json?:         bool   @go(JSON)
+	// --- kube-specific modifiers ---
+	kube_kind?:     string @go(KubeKind)
+	kube_context?:  string @go(KubeContext)
+	kubeconfig?:    string
+	kube_count?:    int    @go(KubeCount,type=int)
+	kube_resource?: string @go(KubeResource)
+	kube_group?:    string @go(KubeGroup)
+	kube_version?:  string @go(KubeVersion)
+	json?:          bool   @go(JSON)
 
 	// --- shared modifiers ---
 	id?:           string @go(ID)
@@ -314,7 +314,7 @@
 #RecordMethod:  "list" | "start" | "stop" | "cmd" @go(-)
 #SpiceMethod:   "status" | "screenshot" | "cursor" | "click" | "mouse" | "type" | "key" @go(-)
 #LibvirtMethod: "list" | "info" | "screenshot" | "send-key" | "passwd" | "qmp" | "domain-xml" | "console" | "events" | "guest/ping" | "guest/info" | "guest/os-info" | "guest/time" | "guest/hostname" | "guest/users" | "guest/interfaces" | "guest/disks" | "guest/fsinfo" | "guest/vcpus" | "guest/exec" | "guest/fstrim" | "snapshot/list" | "snapshot/create" | "snapshot/info" | "snapshot/revert" | "snapshot/delete" @go(-)
-#K8sMethod:     "nodes" | "wait-nodes" | "pods" | "wait-ready" | "ingress" | "ingressclass" | "storageclass" | "service" | "lb-external-ip" | "addons" | "apply" | "delete" | "raw" @go(-)
+#KubeMethod:    "nodes" | "wait-nodes" | "pods" | "wait-ready" | "ingress" | "ingressclass" | "storageclass" | "service" | "lb-external-ip" | "addons" | "apply" | "delete" | "raw" @go(-)
 #AdbMethod:     "devices" | "shell" | "install" | "install-app" | "uninstall" | "getprop" | "screencap" | "logcat-tail" | "wait-for-device" | "wait-ui-settled" | "current-focus" | "keyevent" @go(-)
 #AppiumMethod:  "status" | "session-create" | "session-delete" | "install-app" | "find" | "click" | "send-keys" | "screenshot" | "get-text" | "get-attribute" | "clear" | "find-all" | "source" | "back" | "gesture-tap" | "gesture-double-tap" | "gesture-long-press" | "gesture-drag" | "gesture-swipe" | "gesture-scroll" | "gesture-fling" | "gesture-pinch-open" | "gesture-pinch-close" | "app-start-activity" | "app-activate" | "app-terminate" | "app-remove" | "app-clear" | "app-is-installed" | "app-state" | "app-current-activity" | "app-current-package" | "key-press" | "key-hide" | "key-shown" | "device-info" | "device-battery" | "device-time" | "device-orientation" | "device-set-orientation" | "device-notifications" | "device-get-clipboard" | "device-set-clipboard" | "device-contexts" | "device-context" | "execute" | "raw" @go(-)
 

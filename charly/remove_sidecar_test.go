@@ -24,7 +24,7 @@ func TestResolveSidecarNames(t *testing.T) {
 	}{
 		{
 			name: "no entry — returns nil",
-			deployYAML: `version: 2026.169.0004
+			deployYAML: `version: 2026.172.0002
 other:
   bundle:
     box: other
@@ -35,7 +35,7 @@ other:
 		},
 		{
 			name: "entry without sidecars — returns nil",
-			deployYAML: `version: 2026.169.0004
+			deployYAML: `version: 2026.172.0002
 foo:
   bundle:
     box: foo
@@ -46,7 +46,7 @@ foo:
 		},
 		{
 			name: "entry with one sidecar — single-name slice",
-			deployYAML: `version: 2026.169.0004
+			deployYAML: `version: 2026.172.0002
 foo:
   bundle:
     box: foo
@@ -59,7 +59,7 @@ foo:
 		},
 		{
 			name: "entry with multiple sidecars — sorted",
-			deployYAML: `version: 2026.169.0004
+			deployYAML: `version: 2026.172.0002
 foo:
   bundle:
     box: foo
@@ -73,7 +73,7 @@ foo:
 		},
 		{
 			name: "Pattern-A instance entry with sidecar",
-			deployYAML: `version: 2026.169.0004
+			deployYAML: `version: 2026.172.0002
 foo/inst1:
   bundle:
     box: foo

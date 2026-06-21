@@ -290,14 +290,14 @@ func TestValidateOps_LowercaseCheckVarInClusterField(t *testing.T) {
 	cfg := &Config{Box: map[string]BoxConfig{}}
 
 	bad := map[string]*Candy{
-		"lyr": opsCandy("lyr", Op{K8s: "addons", Cluster: "${deploy_name}", Context: []string{"deploy"}}),
+		"lyr": opsCandy("lyr", Op{Kube: "addons", Cluster: "${deploy_name}", Context: []string{"deploy"}}),
 	}
 	if got := runValidateOps(t, cfg, bad); !strings.Contains(got, "UPPERCASE") || !strings.Contains(got, "${deploy_name}") {
 		t.Errorf("expected lowercase-check-var rejection: %s", got)
 	}
 
 	ok := map[string]*Candy{
-		"lyr": opsCandy("lyr", Op{K8s: "addons", Cluster: "${DEPLOY_NAME}", Context: []string{"deploy"}}),
+		"lyr": opsCandy("lyr", Op{Kube: "addons", Cluster: "${DEPLOY_NAME}", Context: []string{"deploy"}}),
 	}
 	if got := runValidateOps(t, cfg, ok); strings.Contains(got, "UPPERCASE") {
 		t.Errorf("uppercase check var should pass: %s", got)

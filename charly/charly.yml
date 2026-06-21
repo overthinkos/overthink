@@ -1,4 +1,4 @@
-version: 2026.169.0004
+version: 2026.172.0002
 nvidia-gpu:
     resource:
         gpu:

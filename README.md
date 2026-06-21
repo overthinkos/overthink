@@ -603,7 +603,7 @@ getprop`, `appium: click`, …):
 - `charly check libvirt` — libvirt API (VM info, screenshot, send-key,
   QMP, snapshots, event stream).
 - `charly check record` — terminal asciinema or desktop ffmpeg.
-- `charly check k8s` — Kubernetes probes (nodes, pods, ingress,
+- `charly check kube` — Kubernetes probes (nodes, pods, ingress,
   wait-ready, storageclass, addons, raw kubectl).
 - `charly check adb` — Android Debug Bridge (devices, shell, install,
   getprop, screencap, logcat, wait-for-device).

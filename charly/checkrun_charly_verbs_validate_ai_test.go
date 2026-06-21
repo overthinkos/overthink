@@ -48,7 +48,7 @@ func TestArtifactValidatableMethods_MatchesArtifactProducingMethodSpecs(t *testi
 		"libvirt": libvirtMethods,
 		"spice":   spiceMethods,
 		"record":  recordMethods,
-		"k8s":     k8sMethods,
+		"kube":    kubeMethods,
 		"dbus":    dbusMethods,
 		"mcp":     mcpMethods,
 	} {

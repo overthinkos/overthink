@@ -205,9 +205,9 @@ func (r *Runner) runUser(ctx context.Context, c *Op) CheckResult {
 	return passf(c, fmt.Sprintf("uid=%d gid=%d", uid, gid))
 }
 
-// runGroup: getent group. Parses gid and members.
-func (r *Runner) runGroup(ctx context.Context, c *Op) CheckResult {
-	probe := fmt.Sprintf(`getent group %s`, shellSingleQuote(c.Group))
+// runUnixGroup: getent group. Parses gid and members.
+func (r *Runner) runUnixGroup(ctx context.Context, c *Op) CheckResult {
+	probe := fmt.Sprintf(`getent group %s`, shellSingleQuote(c.UnixGroup))
 	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
 		return failf(c, "probe: %v", err)

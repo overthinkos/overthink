@@ -51,7 +51,7 @@ type (
 	RecordMethod  = string
 	SpiceMethod   = string
 	LibvirtMethod = string
-	K8sMethod     = string
+	KubeMethod    = string
 	AdbMethod     = string
 	AppiumMethod  = string
 )

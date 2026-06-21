@@ -28,7 +28,7 @@ type Op struct {
 
 	User string `yaml:"user,omitempty" json:"user,omitempty"`
 
-	Group string `yaml:"group,omitempty" json:"group,omitempty"`
+	UnixGroup string `yaml:"unix_group,omitempty" json:"unix_group,omitempty"`
 
 	Interface string `yaml:"interface,omitempty" json:"interface,omitempty"`
 
@@ -70,7 +70,7 @@ type Op struct {
 
 	Libvirt LibvirtMethod `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
 
-	K8s K8sMethod `yaml:"k8s,omitempty" json:"k8s,omitempty"`
+	Kube KubeMethod `yaml:"kube,omitempty" json:"kube,omitempty"`
 
 	Adb AdbMethod `yaml:"adb,omitempty" json:"adb,omitempty"`
 
@@ -101,20 +101,20 @@ type Op struct {
 
 	Manifest string `yaml:"manifest,omitempty" json:"manifest,omitempty"`
 
-	// --- k8s-specific modifiers ---
-	K8sKind string `yaml:"k8s_kind,omitempty" json:"k8s_kind,omitempty"`
+	// --- kube-specific modifiers ---
+	KubeKind string `yaml:"kube_kind,omitempty" json:"kube_kind,omitempty"`
 
-	K8sContext string `yaml:"k8s_context,omitempty" json:"k8s_context,omitempty"`
+	KubeContext string `yaml:"kube_context,omitempty" json:"kube_context,omitempty"`
 
 	Kubeconfig string `yaml:"kubeconfig,omitempty" json:"kubeconfig,omitempty"`
 
-	K8sCount int `yaml:"k8s_count,omitempty" json:"k8s_count,omitempty"`
+	KubeCount int `yaml:"kube_count,omitempty" json:"kube_count,omitempty"`
 
-	K8sResource string `yaml:"k8s_resource,omitempty" json:"k8s_resource,omitempty"`
+	KubeResource string `yaml:"kube_resource,omitempty" json:"kube_resource,omitempty"`
 
-	K8sGroup string `yaml:"k8s_group,omitempty" json:"k8s_group,omitempty"`
+	KubeGroup string `yaml:"kube_group,omitempty" json:"kube_group,omitempty"`
 
-	K8sVersion string `yaml:"k8s_version,omitempty" json:"k8s_version,omitempty"`
+	KubeVersion string `yaml:"kube_version,omitempty" json:"kube_version,omitempty"`
 
 	JSON bool `yaml:"json,omitempty" json:"json,omitempty"`
 

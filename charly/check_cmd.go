@@ -78,7 +78,7 @@ type CheckCmd struct {
 	Spice   SpiceCmd   `cmd:"" help:"VM SPICE display (handshake, inputs, native screenshot)"`
 	Vnc     VncCmd     `cmd:"" help:"Control VNC desktop in running containers"`
 	Wl      WlCmd      `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
-	K8s     K8sCmd     `cmd:"" name:"k8s" help:"Kubernetes cluster probes (nodes, wait-nodes, pods, ingress, storageclass, addons, apply, delete, raw)"`
+	Kube    KubeCmd    `cmd:"" name:"kube" help:"Kubernetes cluster probes (nodes, wait-nodes, pods, ingress, storageclass, addons, apply, delete, raw)"`
 	Adb     AdbCmd     `cmd:"" help:"Android Debug Bridge — devices, shell, install, uninstall, getprop, screencap, logcat-tail, wait-for-device"`
 	Appium  AppiumCmd  `cmd:"" help:"Appium WebDriver — status, session-create/delete, install-app, find, click, send-keys, screenshot"`
 

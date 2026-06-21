@@ -230,7 +230,7 @@ var VerbCatalog = map[string]VerbSpec{
 	"package":      {ctxBuildDeployRuntime, DoAssert, true, StepKindSystemPackages},
 	"service":      {ctxBuildDeployRuntime, DoAssert, true, StepKindServicePackaged}, // act → enable the named packaged unit
 	"user":         {ctxBuildDeployRuntime, DoAssert, true, ""},                      // act → useradd (+ ReverseOpUserRemove)
-	"group":        {ctxBuildDeployRuntime, DoAssert, true, ""},                      // act → groupadd (+ ReverseOpGroupRemove)
+	"unix_group":   {ctxBuildDeployRuntime, DoAssert, true, ""},                      // act → groupadd (+ ReverseOpGroupRemove)
 	"kernel-param": {ctxBuildDeployRuntime, DoAssert, true, ""},                      // act → sysctl (+ ReverseOpSysctlRestore)
 	"mount":        {ctxDeployRuntime, DoAssert, true, ""},                           // act → mount (+ ReverseOpUmount)
 	"port":         {ctxBuildDeployRuntime, DoAssert, false, ""},                     // observe-only
@@ -242,7 +242,7 @@ var VerbCatalog = map[string]VerbSpec{
 	"matching":     {ctxBuildDeployRuntime, DoAssert, false, ""},
 
 	// live-container — runtime only; act drives UI/config, reversed via plan
-	// teardown (never the ledger). k8s also legal at deploy (apply manifest).
+	// teardown (never the ledger). kube also legal at deploy (apply manifest).
 	"cdp":     {ctxRuntimeOnly, DoAssert, false, ""},
 	"wl":      {ctxRuntimeOnly, DoAssert, false, ""},
 	"dbus":    {ctxRuntimeOnly, DoAssert, false, ""},
@@ -251,7 +251,7 @@ var VerbCatalog = map[string]VerbSpec{
 	"record":  {ctxRuntimeOnly, DoAssert, false, ""},
 	"spice":   {ctxRuntimeOnly, DoAssert, false, ""},
 	"libvirt": {ctxRuntimeOnly, DoAssert, false, ""},
-	"k8s":     {ctxDeployRuntime, DoAssert, false, ""},
+	"kube":    {ctxDeployRuntime, DoAssert, false, ""},
 	"adb":     {ctxRuntimeOnly, DoAssert, false, ""},
 	"appium":  {ctxRuntimeOnly, DoAssert, false, ""},
 

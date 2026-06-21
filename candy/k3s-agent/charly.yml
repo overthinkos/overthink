@@ -131,7 +131,7 @@ k3s-agent:
         contains: "k3s agent"
     k3s-agent-step-6:
         check: the worker node registers with the server and reaches Ready
-        k8s: wait-nodes
+        kube: wait-nodes
         cluster: "${K3S_CLUSTER}"
         name: "${HOSTNAME}"
         timeout: 180s

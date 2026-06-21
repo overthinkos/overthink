@@ -321,7 +321,7 @@ check:
 // `would apply unified-node`. The fix skips a top-level legacy-kind key whose
 // value is already node-shaped (nodeShapedValue && no `name:`).
 func TestMigrateUnifiedNode_NodeNamedAfterKindWordIsIdempotent(t *testing.T) {
-	const doc = `version: "` + "2026.169.0004" + `"
+	const doc = `version: "` + "2026.172.0002" + `"
 vm:
     vm:
         source:
@@ -368,7 +368,7 @@ vm-libvirt:
 // whose children are ENTITY NAMES, not kind discriminators) is NOT node-shaped, so
 // the idempotency guard must NOT skip it — it still migrates to node-form.
 func TestMigrateUnifiedNode_LegacyVmCollectionStillConverts(t *testing.T) {
-	const legacy = `version: "` + "2026.169.0004" + `"
+	const legacy = `version: "` + "2026.172.0002" + `"
 vm:
     arch:
         source:

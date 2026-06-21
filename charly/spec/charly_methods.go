@@ -81,7 +81,7 @@ func (c *Op) VerbsSet() []string {
 	// a modifier (e.g. argv for libvirt:guest/exec).
 	hasCharlyVerb := c.Cdp != "" || c.Wl != "" || c.Dbus != "" || c.Vnc != "" ||
 		c.Mcp != "" || c.Record != "" || c.Spice != "" || c.Libvirt != "" ||
-		c.K8s != "" || c.Adb != "" || c.Appium != ""
+		c.Kube != "" || c.Adb != "" || c.Appium != ""
 	if c.Command != "" && !hasCharlyVerb {
 		set = append(set, "command")
 	}
@@ -94,8 +94,8 @@ func (c *Op) VerbsSet() []string {
 	if c.User != "" {
 		set = append(set, "user")
 	}
-	if c.Group != "" {
-		set = append(set, "group")
+	if c.UnixGroup != "" {
+		set = append(set, "unix_group")
 	}
 	if c.Interface != "" {
 		set = append(set, "interface")
@@ -136,8 +136,8 @@ func (c *Op) VerbsSet() []string {
 	if c.Libvirt != "" {
 		set = append(set, "libvirt")
 	}
-	if c.K8s != "" {
-		set = append(set, "k8s")
+	if c.Kube != "" {
+		set = append(set, "kube")
 	}
 	if c.Adb != "" {
 		set = append(set, "adb")
@@ -162,7 +162,7 @@ func (c *Op) VerbsSet() []string {
 func (c *Op) StringFields() []*string {
 	return []*string{
 		&c.File, &c.Package, &c.Service, &c.Process, &c.Command,
-		&c.HTTP, &c.DNS, &c.User, &c.Group, &c.Interface,
+		&c.HTTP, &c.DNS, &c.User, &c.UnixGroup, &c.Interface,
 		&c.KernelParam, &c.Mount, &c.Addr,
 		&c.ID, &c.Description, &c.Timeout,
 		&c.Mode, &c.Owner, &c.GroupOf, &c.Filetype, &c.Sha256,
@@ -171,12 +171,12 @@ func (c *Op) StringFields() []*string {
 		&c.MountSource, &c.Filesystem,
 		// Test-mode live-container verb discriminators + modifiers.
 		&c.Cdp, &c.Wl, &c.Dbus, &c.Vnc, &c.Mcp,
-		&c.Record, &c.Spice, &c.Libvirt, &c.K8s,
+		&c.Record, &c.Spice, &c.Libvirt, &c.Kube,
 		&c.Adb, &c.Appium,
-		// k8s + shared resource-identity modifiers
+		// kube + shared resource-identity modifiers
 		&c.Name, &c.Namespace, &c.Label, &c.Cluster, &c.Manifest,
-		&c.K8sKind, &c.K8sContext, &c.Kubeconfig,
-		&c.K8sResource, &c.K8sGroup, &c.K8sVersion,
+		&c.KubeKind, &c.KubeContext, &c.Kubeconfig,
+		&c.KubeResource, &c.KubeGroup, &c.KubeVersion,
 		&c.Tab, &c.Expression, &c.URL, &c.Selector,
 		&c.Dest, &c.Path, &c.Artifact,
 		&c.Button, &c.Text, &c.KeyName, &c.Combo,

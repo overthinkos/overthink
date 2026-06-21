@@ -1,4 +1,4 @@
-version: 2026.169.0004
+version: 2026.172.0002
 # Canonical repo identity. After the 2026-06 box inversion main imports the three
 # active distro submodules (arch / cachyos / fedora) ONE-DIRECTIONALLY to reference
 # their relocated boxes; the submodules no longer import main as a namespace (they
@@ -304,30 +304,30 @@ check-k3s-vm:
     kv-k8s-nodes:
         check: k8s=nodes
         id: kv-k8s-nodes
-        k8s: nodes
+        kube: nodes
         cluster: "vm-k3s-vm"
         context: [runtime]
     kv-k8s-wait-nodes:
         check: k8s=wait-nodes
         id: kv-k8s-wait-nodes
-        k8s: "wait-nodes"
+        kube: "wait-nodes"
         cluster: "vm-k3s-vm"
-        k8s_count: 1
+        kube_count: 1
         timeout: "300s"
         context: [runtime]
     kv-k8s-pods:
         check: k8s=pods
         id: kv-k8s-pods
-        k8s: pods
+        kube: pods
         cluster: "vm-k3s-vm"
         namespace: kube-system
         context: [runtime]
     kv-k8s-wait-ready:
         check: k8s=wait-ready
         id: kv-k8s-wait-ready
-        k8s: "wait-ready"
+        kube: "wait-ready"
         cluster: "vm-k3s-vm"
-        k8s_kind: Deployment
+        kube_kind: Deployment
         namespace: kube-system
         name: coredns
         timeout: "180s"
@@ -335,34 +335,34 @@ check-k3s-vm:
     kv-k8s-addons:
         check: k8s=addons
         id: kv-k8s-addons
-        k8s: addons
+        kube: addons
         cluster: "vm-k3s-vm"
         context: [runtime]
     kv-k8s-ingressclass-traefik:
         check: k8s=ingressclass
         id: kv-k8s-ingressclass-traefik
-        k8s: ingressclass
+        kube: ingressclass
         cluster: "vm-k3s-vm"
         stdout: {contains: "traefik"}
         context: [runtime]
     kv-k8s-storageclass-localpath:
         check: k8s=storageclass
         id: kv-k8s-storageclass-localpath
-        k8s: storageclass
+        kube: storageclass
         cluster: "vm-k3s-vm"
         stdout: {contains: "local-path"}
         context: [runtime]
     kv-k8s-raw-version:
         check: k8s=raw
         id: kv-k8s-raw-version
-        k8s: raw
+        kube: raw
         cluster: "vm-k3s-vm"
         text: "version -o json"
         context: [runtime]
     kv-k8s-service-kubernetes:
         check: k8s=service
         id: kv-k8s-service-kubernetes
-        k8s: service
+        kube: service
         cluster: "vm-k3s-vm"
         namespace: default
         name: kubernetes
@@ -662,7 +662,7 @@ default:
             uid: 0
         default-step-5:
             check: the predetermined group is present in the group database
-            group: root
+            unix_group: root
             gid: 0
         default-step-6:
             check: the predetermined mountpoint is listed in the mount table
@@ -893,33 +893,33 @@ default:
             agent_provisioned: true
         default-step-41:
             check: at least one cluster node is listable
-            k8s: nodes
+            kube: nodes
         default-step-42:
             check: all cluster nodes reach Ready
-            k8s: wait-nodes
+            kube: wait-nodes
         default-step-43:
             check: the kube-system coredns Deployment reaches Ready
-            k8s: wait-ready
-            k8s_kind: Deployment
+            kube: wait-ready
+            kube_kind: Deployment
             name: coredns
             namespace: kube-system
         default-step-44:
             check: a default storage class is present
-            k8s: storageclass
+            kube: storageclass
         default-step-45:
             check: an ingress class is registered
-            k8s: ingressclass
+            kube: ingressclass
         default-step-46:
             check: the cluster addons report healthy
-            k8s: addons
+            kube: addons
         default-step-47:
             check: the kubernetes Service is listable
-            k8s: service
+            kube: service
             stdout: {contains: ["kubernetes"]}
         default-step-48:
             check: a raw API call to the /nodes resource returns a JSON document with a kind field
-            k8s: raw
-            k8s_resource: nodes
+            kube: raw
+            kube_resource: nodes
             json: true
             stdout: {contains: ["kind"]}
     desktop:

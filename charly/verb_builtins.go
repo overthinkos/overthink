@@ -78,11 +78,11 @@ func (userVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runUser(ctx, op)
 }
 
-type groupVerb struct{ builtinVerbBase }
+type unixGroupVerb struct{ builtinVerbBase }
 
-func (groupVerb) Reserved() string { return "group" }
-func (groupVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runGroup(ctx, op)
+func (unixGroupVerb) Reserved() string { return "unix_group" }
+func (unixGroupVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
+	return r.runUnixGroup(ctx, op)
 }
 
 type interfaceVerb struct{ builtinVerbBase }
@@ -176,11 +176,11 @@ func (libvirtVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runLibvirt(ctx, op)
 }
 
-type k8sVerb struct{ builtinVerbBase }
+type kubeVerb struct{ builtinVerbBase }
 
-func (k8sVerb) Reserved() string { return "k8s" }
-func (k8sVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runK8s(ctx, op)
+func (kubeVerb) Reserved() string { return "kube" }
+func (kubeVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
+	return r.runKube(ctx, op)
 }
 
 type adbVerb struct{ builtinVerbBase }
@@ -224,9 +224,9 @@ func (pluginVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 func init() {
 	for _, p := range []CheckVerbProvider{
 		fileVerb{}, portVerb{}, commandVerb{}, httpVerb{}, packageVerb{}, serviceVerb{},
-		processVerb{}, dnsVerb{}, userVerb{}, groupVerb{}, interfaceVerb{}, kernelParamVerb{},
+		processVerb{}, dnsVerb{}, userVerb{}, unixGroupVerb{}, interfaceVerb{}, kernelParamVerb{},
 		mountVerb{}, addrVerb{}, matchingVerb{}, cdpVerb{}, wlVerb{}, dbusVerb{}, vncVerb{},
-		mcpVerb{}, recordVerb{}, spiceVerb{}, libvirtVerb{}, k8sVerb{}, adbVerb{}, appiumVerb{},
+		mcpVerb{}, recordVerb{}, spiceVerb{}, libvirtVerb{}, kubeVerb{}, adbVerb{}, appiumVerb{},
 		summarizeVerb{}, killVerb{}, pluginVerb{},
 	} {
 		RegisterBuiltinProvider(p)

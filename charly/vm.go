@@ -1015,49 +1015,36 @@ func generateSSHKeypair(dir string) (string, error) {
 type VmSshCmd struct {
 	Box      string   `arg:"" help:"Box name"`
 	Instance string   `short:"i" long:"instance" help:"Instance name"`
-	Port     int      `short:"p" long:"port" default:"2222" help:"SSH port on host"`
-	User     string   `short:"l" long:"user" default:"root" help:"SSH username"`
+	Port     int      `short:"p" long:"port" help:"Override the host SSH port (default: resolved from the managed ssh_config alias)"`
+	User     string   `short:"l" long:"user" help:"Override the SSH username (default: resolved from the managed ssh_config alias)"`
 	Args     []string `arg:"" optional:"" help:"Additional SSH arguments or command"`
 }
 
 func (c *VmSshCmd) Run() error {
-	// Resolve SSH port from the kind:vm entity in vm.yml.
-	// (Legacy OCI LabelVm lookup was removed in the VM hard-cutover.)
-	if c.Port == 2222 {
-		if dir, derr := os.Getwd(); derr == nil {
-			if uf, ok, ufErr := LoadUnified(dir); ufErr == nil && ok && uf.VM != nil {
-				if spec, hit := uf.VM[c.Box]; hit && spec.SSH != nil && spec.SSH.Port != 0 {
-					c.Port = spec.SSH.Port
-				}
-			}
-		}
-	}
-
-	// All backends use direct SSH
 	sshBin, err := exec.LookPath("ssh")
 	if err != nil {
 		return fmt.Errorf("ssh not found: %w", err)
 	}
-
+	// Connect via the MANAGED ssh_config alias published at `charly vm create`
+	// (publishVmSshAlias): it resolves the user, the HOST SSH port — INCLUDING a qemu
+	// backend's AUTO-ALLOCATED port, which the removed `-p 2222` default + `@localhost`
+	// could never see (the auto port lives in VmDeployState, not the vm spec) — and the
+	// generated key from ~/.config/charly/ssh_config. The alias's Host stanza name IS
+	// `vmName` (`charly-<box>[-<instance>]`); -l/-p explicitly override it.
+	alias := vmName(c.Box, c.Instance)
 	args := []string{
 		"ssh",
 		"-o", "StrictHostKeyChecking=no",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "LogLevel=ERROR",
-		"-p", strconv.Itoa(c.Port),
 	}
-
-	// Auto-detect generated SSH key from VM state dir
-	name := vmName(c.Box, c.Instance)
-	if dir, err := vmDir(); err == nil {
-		keyPath := filepath.Join(dir, name, "id_ed25519")
-		if _, err := os.Stat(keyPath); err == nil {
-			args = append(args, "-i", keyPath)
-		}
+	if c.User != "" {
+		args = append(args, "-l", c.User)
 	}
-
-	args = append(args, fmt.Sprintf("%s@localhost", c.User))
+	if c.Port != 0 {
+		args = append(args, "-p", strconv.Itoa(c.Port))
+	}
+	args = append(args, alias)
 	args = append(args, c.Args...)
-
 	return syscall.Exec(sshBin, args, os.Environ())
 }

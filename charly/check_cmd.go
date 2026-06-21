@@ -157,11 +157,22 @@ func (c *CheckLiveCmd) Run() error {
 	// (validateDeployRequiresBox in unified.go / deploy.go) guarantees
 	// this lookup always finds a non-empty value.
 	dir, _ := os.Getwd()
-	var localPlan []Step
+	var localPlan, projectPlan []Step
 	var deployOverlay *BundleNode
 	var projectCfg *Config
 	if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
 		projectCfg = uf.ProjectConfig()
+		// The bed's OWN bundle node carries authored plan steps (status-shows-*,
+		// etc.). Merge them like the VM check path (loadVmCheckPlans) does — without
+		// this a bundle-node `check:` never runs under `charly check live`, only the
+		// baked candy/box plan + the per-host overlay do.
+		if pc := uf.ProjectBundleConfig(); pc != nil && pc.Bundle != nil {
+			if node := resolveNestedNode(pc.Bundle, c.Box); node != nil {
+				projectPlan = node.Plan
+			} else if entry, ok := pc.Bundle[c.Box]; ok {
+				projectPlan = entry.Plan
+			}
+		}
 	}
 	dc := loadDeployConfigForRead("charly check live")
 	if dc != nil {
@@ -173,6 +184,9 @@ func (c *CheckLiveCmd) Run() error {
 			deployOverlay = &entry
 		}
 	}
+	// Project bundle plan + per-host overlay (local replaces project by id via
+	// MergeDeployDescriptions' merge rules), mirroring loadVmCheckPlans.
+	overlayPlan := append(append([]Step(nil), projectPlan...), localPlan...)
 
 	// Resolve the deploy key → declared image short-name via THE shared
 	// resolver (deploy.go resolveDeployBoxName) — the same one charly config /
@@ -197,7 +211,7 @@ func (c *CheckLiveCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	set := MergeDeployDescriptions(meta.Description, localPlan, c.Box)
+	set := MergeDeployDescriptions(meta.Description, overlayPlan, c.Box)
 	if set == nil || set.IsEmpty() {
 		fmt.Fprintln(os.Stderr, "No plan steps defined for this image.")
 		return nil

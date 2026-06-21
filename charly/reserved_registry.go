@@ -86,60 +86,10 @@ var rootShapeKeySet = func() map[string]bool {
 // Reserved-word ⇄ handler registry + the bijection gate.
 // ---------------------------------------------------------------------------
 
-// reservedKindHandlers maps each AUTHORING kind keyword (spec.KindWords) to the
-// CUE entity def its node-form value validates against — the handler the loader's
-// normalizeNodeInto dispatch decodes it with. It captures the ONE documented alias
-// bundle->#Deploy (node.cue: #BundleValue = #Deploy), and the `host` kind which
-// validates via the inline #HostValue (no separate registered def). The
-// internal/egress-only kinds `check` + `kustomization` are registered in
-// cueKindDefs for VALIDATION only — never authored as a top-level node — so they
-// are deliberately ABSENT here and excluded from the bijection.
-var reservedKindHandlers = map[string]string{
-	"box":      "#Box",
-	"candy":    "#Candy",
-	"bundle":   "#Deploy", // documented alias: a bundle's value validates via #Deploy
-	"host":     "#HostValue",
-	"pod":      "#Pod",
-	"vm":       "#Vm",
-	"k8s":      "#K8s",
-	"local":    "#Local",
-	"android":  "#Android",
-	"distro":   "#Distro",
-	"builder":  "#Builder",
-	"init":     "#Init",
-	"resource": "#Resource",
-	"sidecar":  "#Sidecar",
-	"agent":    "#Agent",
-	"group":    "#Group",
-	"module":   "#Module",
-	"target":   "#Target",
-}
-
-// checkKindBijection verifies the AUTHORING kind handlers and the CUE kind
-// vocabulary are in exact bijection. Returns a descriptive error (init panics on
-// it); the test calls it with doctored inputs to prove it FAILS on a missing /
-// extra handler.
-func checkKindBijection(handlers map[string]string, kinds []string) error {
-	want := setFromSlice(kinds)
-	var missing []string // kind in spec but no handler
-	for k := range want {
-		if _, ok := handlers[k]; !ok {
-			missing = append(missing, k)
-		}
-	}
-	var extra []string // handler with no kind in spec
-	for k := range handlers {
-		if !want[k] {
-			extra = append(extra, k)
-		}
-	}
-	sort.Strings(missing)
-	sort.Strings(extra)
-	if len(missing) > 0 || len(extra) > 0 {
-		return fmt.Errorf("reserved-word registry: kind bijection broken — kinds in spec.KindWords with no handler: %v; registered handlers not in spec.KindWords: %v", missing, extra)
-	}
-	return nil
-}
+// The kind decode dispatch + the kind⇄def bijection now live on the KindProviders
+// (kind_builtins.go) — folded onto the providers in C2 (R3), replacing the former
+// hand-maintained handler map + its bijection gate. checkKindProviderBijection runs
+// in kind_builtins.go's init().
 
 // checkVerbBijection verifies the package-main VerbCatalog dispatch table and the
 // CUE verb vocabulary (spec.OpVerbs) are in exact bijection, and that every verb is
@@ -223,9 +173,6 @@ var liveVerbDispatch = map[string]map[string]methodSpec{
 // CUE vocabulary has exactly one Go handler and vice versa — a fail-fast that
 // makes a schema/handler divergence impossible to ship.
 func init() {
-	if err := checkKindBijection(reservedKindHandlers, spec.KindWords); err != nil {
-		panic(err)
-	}
 	if err := checkVerbBijection(VerbCatalog, spec.OpVerbs, spec.AuthoringVerbs); err != nil {
 		panic(err)
 	}

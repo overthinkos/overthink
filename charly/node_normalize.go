@@ -12,78 +12,22 @@ package main
 
 import "fmt"
 
-// normalizeNodeInto decodes one top-level entity node into uf's matching map.
-// Bundle/resource kinds carrying nested members route to the bundle builder
-// (node_bundle.go); a bare standalone resource (pod/vm/k8s/local/android with no
-// member children) decodes directly into its own spec map.
+// normalizeNodeInto decodes one top-level entity node into uf's matching map by
+// resolving the node's discriminator to its KindProvider and calling DecodeNode —
+// the per-kind decode switch is gone (C2). Bundle/resource kinds carrying nested
+// members route to the bundle builder (node_bundle.go); a bare standalone resource
+// (pod/vm/k8s/local/android with no member children) decodes directly into its own
+// spec map. Each kind's decode lives on its provider (kind_builtins.go).
 func normalizeNodeInto(gn *genericNode, uf *UnifiedFile) error {
-	switch gn.disc {
-	case "candy":
-		name, ic, err := buildCandy(gn)
-		if err != nil {
-			return err
-		}
-		ensureMap(&uf.Candy)
-		uf.Candy[name] = ic
-	case "box":
-		var b BoxConfig
-		if err := decodeNodeValue(gn, &b); err != nil {
-			return err
-		}
-		ensureMap(&uf.Box)
-		uf.Box[gn.name] = b
-	case "distro":
-		if err := decodePtrInto(gn, &uf.Distro); err != nil {
-			return err
-		}
-	case "builder":
-		if err := decodePtrInto(gn, &uf.Builder); err != nil {
-			return err
-		}
-	case "init":
-		if err := decodePtrInto(gn, &uf.Init); err != nil {
-			return err
-		}
-	case "resource":
-		if err := decodePtrInto(gn, &uf.Resource); err != nil {
-			return err
-		}
-	case "agent":
-		if err := decodePtrInto(gn, &uf.Agent); err != nil {
-			return err
-		}
-	case "group":
-		if err := decodePtrInto(gn, &uf.Group); err != nil {
-			return err
-		}
-	case "target":
-		if err := decodePtrInto(gn, &uf.Target); err != nil {
-			return err
-		}
-	case "module":
-		if err := decodePtrInto(gn, &uf.Module); err != nil {
-			return err
-		}
-	case "sidecar":
-		var s SidecarDef
-		if err := decodeNodeValue(gn, &s); err != nil {
-			return err
-		}
-		ensureMap(&uf.Sidecar)
-		uf.Sidecar[gn.name] = s
-	case "pod", "vm", "k8s", "local", "android":
-		// A standalone resource entity (no bundle members). When it carries
-		// resource children it is a bundle-shaped node → the bundle builder.
-		if len(resourceChildren(gn)) > 0 {
-			return buildBundleNodeInto(gn, uf)
-		}
-		return buildStandaloneResource(gn, uf)
-	case "bundle", "host":
-		return buildBundleNodeInto(gn, uf)
-	default:
+	prov, ok := providerRegistry.ResolveKind(gn.disc)
+	if !ok {
 		return fmt.Errorf("node %q: unsupported discriminator %q", gn.name, gn.disc)
 	}
-	return nil
+	kp, ok := prov.(KindProvider)
+	if !ok {
+		return fmt.Errorf("node %q: kind %q has no in-process decoder", gn.name, gn.disc)
+	}
+	return kp.DecodeNode(gn, uf)
 }
 
 // buildStandaloneResource decodes a bare pod/vm/k8s/local/android entity (steps

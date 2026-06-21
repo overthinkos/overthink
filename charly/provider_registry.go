@@ -7,9 +7,10 @@ import (
 	"sync"
 )
 
-// providerRegistry is the ONE process-wide registry of Providers — the
-// generalization of the three hand-maintained reserved-word maps
-// (reservedKindHandlers + VerbCatalog + liveVerbDispatch in reserved_registry.go).
+// providerRegistry is the ONE process-wide registry of Providers — the unified
+// dispatch surface the per-class built-in switches register into (kinds, verbs,
+// and deploy targets so far; VerbCatalog + liveVerbDispatch in reserved_registry.go
+// remain as the verb-metadata + live-method-allowlist maps).
 // Built-ins register from init() (RegisterBuiltinProvider); plugins register
 // lazily after the loader connects them (RegisterPluginProviders). Every reserved
 // word resolves through here regardless of transport.

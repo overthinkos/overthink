@@ -43,6 +43,7 @@ var DocDirectives = []string{
 	"discover",
 	"import",
 	"install_hints",
+	"ovmf_paths",
 	"providers",
 	"provides",
 	"repo",

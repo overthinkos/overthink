@@ -147,5 +147,10 @@ _reservedNode: "^(candy|pod|vm|k8s|local|android|distro|builder|init|resource|si
 	// dependency install suggestions, formerly the Go var installHints (distro.go), now
 	// data in the embedded charly.yml. An "AUR: <cmd>" value carries its own install line.
 	install_hints?: {[string]: {[string]: string}}
-	{[!~"^(version|repo|import|discover|defaults|provides|providers|context_ignore_baseline|install_hints)$"]: #Node}
+	// ovmf_paths — distro family (fedora|arch|debian) → secure/nonsecure ordered OVMF
+	// firmware candidate path pairs, formerly inline literals in ovmf_paths.go. The
+	// alias→family resolution + secure selection + unknown-distro union stay Go logic;
+	// only the path DATA is here. {code, vars} per candidate.
+	ovmf_paths?: {[string]: {secure: [...{code: string, vars: string}], nonsecure: [...{code: string, vars: string}]}}
+	{[!~"^(version|repo|import|discover|defaults|provides|providers|context_ignore_baseline|install_hints|ovmf_paths)$"]: #Node}
 })

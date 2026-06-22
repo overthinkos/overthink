@@ -52,58 +52,79 @@ func ResolveOvmfPaths(distroID string, secure bool) (OvmfPaths, error) {
 	return OvmfPaths{}, ovmfNotFoundError(distroID, secure)
 }
 
-// ovmfCandidatesForDistro returns the ordered candidate path pairs for
-// a given distro + secure-boot combination. More than one candidate
-// per distro covers historical path variation (e.g. Fedora pre-40 used
-// /usr/share/edk2-ovmf/ instead of /usr/share/OVMF/).
+// ovmfPathYAML is the decode shape for one ovmf_paths candidate in the embedded charly.yml.
+type ovmfPathYAML struct {
+	Code string `yaml:"code"`
+	Vars string `yaml:"vars"`
+}
+
+// ovmfFamilyPaths holds the secure/nonsecure candidate lists for one distro family.
+type ovmfFamilyPaths struct {
+	Secure    []OvmfPaths
+	Nonsecure []OvmfPaths
+}
+
+// ovmfPathTable is the per-family OVMF firmware candidate table, read from the ovmf_paths
+// directive in the embedded charly.yml (Phase 4: the path DATA moved out of Go). The
+// alias→family resolution, secure selection, and unknown-distro union remain logic in
+// ovmfCandidatesForDistro below.
+var ovmfPathTable = parseEmbeddedOvmfPaths()
+
+func parseEmbeddedOvmfPaths() map[string]ovmfFamilyPaths {
+	var doc struct {
+		OvmfPaths map[string]struct {
+			Secure    []ovmfPathYAML `yaml:"secure"`
+			Nonsecure []ovmfPathYAML `yaml:"nonsecure"`
+		} `yaml:"ovmf_paths"`
+	}
+	unmarshalEmbeddedDefaults(&doc)
+	if len(doc.OvmfPaths) == 0 {
+		panic("ovmf: embedded charly.yml has no ovmf_paths: directive")
+	}
+	conv := func(in []ovmfPathYAML) []OvmfPaths {
+		out := make([]OvmfPaths, len(in))
+		for i, p := range in {
+			out[i] = OvmfPaths{CodePath: p.Code, VarsTemplate: p.Vars}
+		}
+		return out
+	}
+	table := make(map[string]ovmfFamilyPaths, len(doc.OvmfPaths))
+	for fam, fp := range doc.OvmfPaths {
+		table[fam] = ovmfFamilyPaths{Secure: conv(fp.Secure), Nonsecure: conv(fp.Nonsecure)}
+	}
+	return table
+}
+
+// ovmfCandidatesForDistro returns the ordered candidate path pairs for a given distro +
+// secure-boot combination. More than one candidate per distro covers historical path
+// variation (e.g. Fedora pre-40 used /usr/share/edk2-ovmf/ instead of /usr/share/OVMF/).
+// The path data lives in the embedded charly.yml (ovmfPathTable); this resolves the distro
+// alias to its family, selects secure/nonsecure, and unions the three for an unknown distro.
 func ovmfCandidatesForDistro(distroID string, secure bool) []OvmfPaths {
+	var family string
 	switch distroID {
 	case "fedora", "centos", "rhel", "rocky", "alma":
-		if secure {
-			return []OvmfPaths{
-				{CodePath: "/usr/share/OVMF/OVMF_CODE.secboot.fd", VarsTemplate: "/usr/share/OVMF/OVMF_VARS.secboot.fd"},
-				{CodePath: "/usr/share/edk2/ovmf/OVMF_CODE.secboot.fd", VarsTemplate: "/usr/share/edk2/ovmf/OVMF_VARS.secboot.fd"},
-			}
-		}
-		return []OvmfPaths{
-			{CodePath: "/usr/share/OVMF/OVMF_CODE.fd", VarsTemplate: "/usr/share/OVMF/OVMF_VARS.fd"},
-			{CodePath: "/usr/share/edk2/ovmf/OVMF_CODE.fd", VarsTemplate: "/usr/share/edk2/ovmf/OVMF_VARS.fd"},
-		}
-
+		family = "fedora"
 	case "arch", "manjaro", "endeavouros":
-		if secure {
-			return []OvmfPaths{
-				{CodePath: "/usr/share/edk2/x64/OVMF_CODE.secboot.4m.fd", VarsTemplate: "/usr/share/edk2/x64/OVMF_VARS.4m.fd"},
-				{CodePath: "/usr/share/edk2-ovmf/x64/OVMF_CODE.secboot.fd", VarsTemplate: "/usr/share/edk2-ovmf/x64/OVMF_VARS.fd"},
-			}
-		}
-		return []OvmfPaths{
-			{CodePath: "/usr/share/edk2/x64/OVMF_CODE.4m.fd", VarsTemplate: "/usr/share/edk2/x64/OVMF_VARS.4m.fd"},
-			{CodePath: "/usr/share/edk2-ovmf/x64/OVMF_CODE.fd", VarsTemplate: "/usr/share/edk2-ovmf/x64/OVMF_VARS.fd"},
-		}
-
+		family = "arch"
 	case "debian", "ubuntu":
-		if secure {
-			return []OvmfPaths{
-				{CodePath: "/usr/share/OVMF/OVMF_CODE_4M.ms.fd", VarsTemplate: "/usr/share/OVMF/OVMF_VARS_4M.ms.fd"},
-				{CodePath: "/usr/share/OVMF/OVMF_CODE.secboot.fd", VarsTemplate: "/usr/share/OVMF/OVMF_VARS.secboot.fd"},
-			}
-		}
-		return []OvmfPaths{
-			{CodePath: "/usr/share/OVMF/OVMF_CODE_4M.fd", VarsTemplate: "/usr/share/OVMF/OVMF_VARS_4M.fd"},
-			{CodePath: "/usr/share/OVMF/OVMF_CODE.fd", VarsTemplate: "/usr/share/OVMF/OVMF_VARS.fd"},
-		}
+		family = "debian"
+	default:
+		// Unknown distro — try the union of common paths.
+		fedora := ovmfCandidatesForDistro("fedora", secure)
+		arch := ovmfCandidatesForDistro("arch", secure)
+		debian := ovmfCandidatesForDistro("debian", secure)
+		merged := make([]OvmfPaths, 0, len(fedora)+len(arch)+len(debian))
+		merged = append(merged, fedora...)
+		merged = append(merged, arch...)
+		merged = append(merged, debian...)
+		return merged
 	}
-
-	// Unknown distro — try the union of common paths.
-	fedora := ovmfCandidatesForDistro("fedora", secure)
-	arch := ovmfCandidatesForDistro("arch", secure)
-	debian := ovmfCandidatesForDistro("debian", secure)
-	merged := make([]OvmfPaths, 0, len(fedora)+len(arch)+len(debian))
-	merged = append(merged, fedora...)
-	merged = append(merged, arch...)
-	merged = append(merged, debian...)
-	return merged
+	fp := ovmfPathTable[family]
+	if secure {
+		return fp.Secure
+	}
+	return fp.Nonsecure
 }
 
 // ovmfNotFoundError returns a clear error with distro-appropriate

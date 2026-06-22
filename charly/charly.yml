@@ -58,6 +58,32 @@ install_hints:
     nvidia-smi: {arch: nvidia-utils, fedora: nvidia-driver, debian: nvidia-utils}
     gvproxy: {arch: "AUR: yay -S gvisor-tap-vsock", fedora: gvisor-tap-vsock, debian: golang-github-containers-gvisor-tap-vsock}
 
+# ovmf_paths — distro family -> secure/nonsecure ordered OVMF firmware candidate path
+# pairs, formerly inline literals in ovmf_paths.go. The alias->family resolution, secure
+# selection, and unknown-distro union stay Go logic; only the path data is here.
+ovmf_paths:
+    fedora:
+        secure:
+            - {code: /usr/share/OVMF/OVMF_CODE.secboot.fd, vars: /usr/share/OVMF/OVMF_VARS.secboot.fd}
+            - {code: /usr/share/edk2/ovmf/OVMF_CODE.secboot.fd, vars: /usr/share/edk2/ovmf/OVMF_VARS.secboot.fd}
+        nonsecure:
+            - {code: /usr/share/OVMF/OVMF_CODE.fd, vars: /usr/share/OVMF/OVMF_VARS.fd}
+            - {code: /usr/share/edk2/ovmf/OVMF_CODE.fd, vars: /usr/share/edk2/ovmf/OVMF_VARS.fd}
+    arch:
+        secure:
+            - {code: /usr/share/edk2/x64/OVMF_CODE.secboot.4m.fd, vars: /usr/share/edk2/x64/OVMF_VARS.4m.fd}
+            - {code: /usr/share/edk2-ovmf/x64/OVMF_CODE.secboot.fd, vars: /usr/share/edk2-ovmf/x64/OVMF_VARS.fd}
+        nonsecure:
+            - {code: /usr/share/edk2/x64/OVMF_CODE.4m.fd, vars: /usr/share/edk2/x64/OVMF_VARS.4m.fd}
+            - {code: /usr/share/edk2-ovmf/x64/OVMF_CODE.fd, vars: /usr/share/edk2-ovmf/x64/OVMF_VARS.fd}
+    debian:
+        secure:
+            - {code: /usr/share/OVMF/OVMF_CODE_4M.ms.fd, vars: /usr/share/OVMF/OVMF_VARS_4M.ms.fd}
+            - {code: /usr/share/OVMF/OVMF_CODE.secboot.fd, vars: /usr/share/OVMF/OVMF_VARS.secboot.fd}
+        nonsecure:
+            - {code: /usr/share/OVMF/OVMF_CODE_4M.fd, vars: /usr/share/OVMF/OVMF_VARS_4M.fd}
+            - {code: /usr/share/OVMF/OVMF_CODE.fd, vars: /usr/share/OVMF/OVMF_VARS.fd}
+
 nvidia-gpu:
     resource:
         gpu:

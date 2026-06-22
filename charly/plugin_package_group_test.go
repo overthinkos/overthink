@@ -19,8 +19,8 @@ import (
 //	(2) VALIDATED at load time against the plugin's served #PackageGroupInput schema
 //	    (runPluginKind → loadBuiltinPluginUnits gate → validateAuthoredPluginInput);
 //	(3) DECODED out-of-the-closed-core via Invoke(OpLoad) into
-//	    uf.PluginKinds["package-group"] — NOT a typed core map (the former core map
-//	    was removed);
+//	    uf.PluginKinds["package-group"]["mygroup"] — NAME-KEYED (the node key is the
+//	    storage key), NOT a typed core map (the former core map was removed);
 //	(4) CARRIED through mergeUnified (the mergePluginKindsMap merge) so the full
 //	    loader path keeps it instead of dropping the per-document `sub`.
 //
@@ -49,10 +49,15 @@ mygroup:
 	if len(entities) != 1 {
 		t.Fatalf("expected 1 package-group entity in uf.PluginKinds, got %d (%v)", len(entities), uf.PluginKinds)
 	}
+	// Name-keyed: the entity is stored under its node name (the top-level key).
+	body, ok := entities["mygroup"]
+	if !ok {
+		t.Fatalf("expected package-group entity keyed by node name %q, got keys %v", "mygroup", entities)
+	}
 
 	// The plugin returns canonical entity JSON; a consumer reads it back into spec.Group.
 	var g spec.Group
-	if err := json.Unmarshal(entities[0], &g); err != nil {
+	if err := json.Unmarshal(body, &g); err != nil {
 		t.Fatalf("decode plugin-kind entity JSON into spec.Group: %v", err)
 	}
 	if g.Description != "a test netinstall group" {
@@ -70,6 +75,48 @@ mygroup:
 	// The non-scalar `require` field, authored as a folded child node, round-trips.
 	if len(g.Require) != 2 || g.Require[0] != "base" || g.Require[1] != "core" {
 		t.Errorf("require = %v, want [base core]", g.Require)
+	}
+}
+
+// TestLoadUnified_PluginKindNameOverride proves Cutover A end-to-end through the REAL
+// loader: two documents in one charly.yml each author a `package-group:` named "dup".
+// Under name-keyed root-wins storage they collapse to ONE entry — the FIRST (root)
+// document wins — instead of the two appended entries the pre-cutover nameless list
+// produced. This is the property Cutover B's sidecar/agent extraction relies on (a
+// project entity overriding an embedded/imported one of the same name).
+func TestLoadUnified_PluginKindNameOverride(t *testing.T) {
+	dir := t.TempDir()
+	doc := `version: "` + latestSchemaVersion.String() + `"
+dup:
+  package-group:
+    description: first wins
+---
+dup:
+  package-group:
+    description: second loses
+`
+	if err := os.WriteFile(filepath.Join(dir, UnifiedFileName), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	uf, _, err := LoadUnified(dir)
+	if err != nil {
+		t.Fatalf("LoadUnified plugin-kind override: %v", err)
+	}
+
+	entities := uf.PluginKinds["package-group"]
+	if len(entities) != 1 {
+		t.Fatalf("expected 1 package-group entity after name-keyed override, got %d (%v)", len(entities), entities)
+	}
+	body, ok := entities["dup"]
+	if !ok {
+		t.Fatalf("expected entity keyed by node name %q, got keys %v", "dup", entities)
+	}
+	var g spec.Group
+	if err := json.Unmarshal(body, &g); err != nil {
+		t.Fatalf("decode override entity into spec.Group: %v", err)
+	}
+	if g.Description != "first wins" {
+		t.Errorf("root-wins override failed: description = %q, want %q (the first/root document)", g.Description, "first wins")
 	}
 }
 

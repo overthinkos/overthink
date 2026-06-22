@@ -112,12 +112,18 @@ type UnifiedFile struct {
 	// See agent_config.go.
 	Agent map[string]*AgentConfig `yaml:"agent,omitempty" json:"agent,omitempty"`
 
-	// PluginKinds holds entities of KINDS contributed by EXTERNAL plugins (a kind
-	// the core has no Go type for). Decoded out-of-process via the plugin's Invoke
-	// envelope (runPluginKind) and stored as the plugin's canonical entity JSON,
-	// keyed by the kind word. Built-in kinds decode into their typed maps above.
-	// Host-internal — never serialized.
-	PluginKinds map[string][]json.RawMessage `yaml:"-" json:"-"`
+	// PluginKinds holds entities of KINDS contributed by plugins (a kind the core
+	// has no typed map for). Decoded via the plugin's Invoke envelope
+	// (runPluginKind) and stored as the plugin's canonical entity JSON, NAME-KEYED:
+	// kind word → entity NAME (the node key) → canonical body. The entity body
+	// itself stays NAMELESS (the node name is the top-level key, never an authored
+	// body field), so #<Kind>Input is untouched; the NAME is mechanism metadata the
+	// host threads from the node key into the storage key. Name-keyed so consumers
+	// can look an entity up by name (the shape uf.Agent/uf.Sidecar need) and so the
+	// merge is root-wins OVERRIDE (a project entity overrides an embedded/imported
+	// one of the same name) — see mergePluginKindsMap. Built-in kinds decode into
+	// their typed maps above. Host-internal — never serialized.
+	PluginKinds map[string]map[string]json.RawMessage `yaml:"-" json:"-"`
 
 	// A check bed is a `disposable: true` bundle in the Bundle map (the separate
 	// kind:check block was removed in the node-form cutover); CheckBeds() derives
@@ -1591,21 +1597,33 @@ func mergeLocalMap(dst *map[string]*LocalSpec, src map[string]*LocalSpec) {
 	}
 }
 
-// mergePluginKindsMap accumulates plugin-contributed kind entities (uf.PluginKinds:
-// kind word → list of canonical entity JSON) across every merged document/file. The
-// list has no per-NAME key (runPluginKind appends one entry per authored node), so the
-// merge APPENDS src's entries onto dst's — the loader visits each file once, so no
-// duplication. Without this, plugin-kind entities decoded into a per-document `sub`
-// UnifiedFile are silently dropped at mergeUnified (every document flows through here).
-func mergePluginKindsMap(dst *map[string][]json.RawMessage, src map[string][]json.RawMessage) {
+// mergePluginKindsMap merges plugin-contributed kind entities (uf.PluginKinds:
+// kind word → entity NAME → canonical entity JSON) across every merged
+// document/file. Root-wins NAME-KEYED OVERRIDE, byte-identical in spirit to
+// mergeAgentMap/mergeSidecarMap: for each kind, an existing dst entry for a given
+// name is PRESERVED and src fills only the names dst does not have. So a project's
+// entity overrides an embedded/imported one of the same name (one entry, not two) —
+// the property Cutover B's sidecar/agent extraction relies on. Without this,
+// plugin-kind entities decoded into a per-document `sub` UnifiedFile are silently
+// dropped at mergeUnified (every document flows through here).
+func mergePluginKindsMap(dst *map[string]map[string]json.RawMessage, src map[string]map[string]json.RawMessage) {
 	if len(src) == 0 {
 		return
 	}
 	if *dst == nil {
-		*dst = make(map[string][]json.RawMessage)
+		*dst = make(map[string]map[string]json.RawMessage)
 	}
-	for k, v := range src {
-		(*dst)[k] = append((*dst)[k], v...)
+	for kind, entities := range src {
+		d := (*dst)[kind]
+		if d == nil {
+			d = make(map[string]json.RawMessage)
+			(*dst)[kind] = d
+		}
+		for name, body := range entities {
+			if _, exists := d[name]; !exists {
+				d[name] = body
+			}
+		}
 	}
 }
 

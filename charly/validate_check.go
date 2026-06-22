@@ -71,12 +71,10 @@ func validateCheck(c *Op, loc string, errs *ValidationError) {
 		errs.Add("%s: %v", loc, err)
 		return
 	}
-	// port range (0-65535), timeout (#Duration), and the context enum
-	// (build|deploy|runtime) are enforced by #Op; only the verb-specific
-	// "port verb needs a non-zero port" cross-field rule stays here.
-	if verb == "port" && c.Port == 0 {
-		errs.Add("%s: port verb requires a non-zero port number", loc)
-	}
+	// port range (>0, <=65535), timeout (#Duration), and the context enum are enforced
+	// by the closed #Op. The former "port verb needs a non-zero port" rule was removed
+	// as structurally unreachable: VerbsSet (spec/charly_methods.go) classifies an op as
+	// the `port` verb ONLY when c.Port != 0, so verb=="port" already implies Port!=0.
 	if spec, ok := VerbCatalog[verb]; ok {
 		for _, ctx := range opEffectiveContexts(c) {
 			if !spec.HasContext(ctx) {

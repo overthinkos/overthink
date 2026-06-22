@@ -1883,15 +1883,6 @@ var (
 	taskUserLiteralPattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]*$`)
 	taskUserUIDGIDPattern  = regexp.MustCompile(`^\d+:\d+$`)
 	taskCapsPattern        = regexp.MustCompile(`^cap_[a-z_]+[=+][a-z]+(,cap_[a-z_]+[=+][a-z]+)*$`)
-	taskExtractValid       = map[string]bool{
-		"":        true, // auto-detect
-		"tar.gz":  true,
-		"tar.xz":  true,
-		"tar.zst": true,
-		"zip":     true,
-		"none":    true,
-		"sh":      true,
-	}
 )
 
 // validateCandyTasks enforces the tasks: schema:
@@ -2062,10 +2053,9 @@ func validateDownloadTask(candyName string, idx int, t *Op, errs *ValidationErro
 	if t.Download == "" {
 		errs.Add("candy %q: tasks[%d]: download: requires a URL", candyName, idx)
 	}
-	if !taskExtractValid[t.Extract] {
-		errs.Add("candy %q: tasks[%d]: download extract: %q not valid (expected one of tar.gz, tar.xz, tar.zst, zip, none, sh)", candyName, idx, t.Extract)
-	}
-	// to: required unless extract=sh (script typically decides own install path)
+	// The extract enum (tar.gz/tar.xz/tar.zst/zip/none/sh/"") is enforced by the closed
+	// #Op via the CUE step gate (validateNodeFormSteps). to: required unless extract=sh
+	// (the script typically decides its own install path).
 	if t.Extract != "sh" && t.To == "" {
 		errs.Add("candy %q: tasks[%d]: download requires to: destination (unless extract: sh)", candyName, idx)
 	}

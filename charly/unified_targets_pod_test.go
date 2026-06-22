@@ -44,6 +44,42 @@ func TestPodUnifiedTarget_Rebuild_RealInvocations(t *testing.T) {
 	}
 }
 
+// TestPodUnifiedTarget_Del_DelegatesToRemove is the regression guard for the
+// bundle-del-pod fix: a pod carries NO ledger DeployRecord (only VM/local deploys
+// write one), so Del MUST tear down via the canonical `charly remove` delegation
+// (record-free) — NOT the old findContainerDeploy lookup, which always returned nil
+// for a pod and errored "no container deploy named ... in ledger". This stubs
+// runCharlySubcommand and asserts the actual `remove <name>` argv.
+func TestPodUnifiedTarget_Del_DelegatesToRemove(t *testing.T) {
+	var calls [][]string
+	orig := runCharlySubcommand
+	runCharlySubcommand = func(args ...string) error {
+		calls = append(calls, append([]string(nil), args...))
+		return nil
+	}
+	defer func() { runCharlySubcommand = orig }()
+
+	// KeepImage=true skips the overlay-image cleanup (which shells out to the
+	// engine), isolating the delegation behaviour under test.
+	target := &PodUnifiedTarget{NodeName: "check-x-pod", KeepImage: true}
+	if err := target.Del(context.Background(), DelOpts{}); err != nil {
+		t.Fatalf("Del: %v", err)
+	}
+	want := [][]string{{"remove", "check-x-pod"}}
+	if len(calls) != 1 || strings.Join(calls[0], " ") != strings.Join(want[0], " ") {
+		t.Fatalf("Del charly subcommands = %v, want %v", calls, want)
+	}
+
+	// Dry-run must NOT shell out.
+	calls = nil
+	if err := target.Del(context.Background(), DelOpts{DryRun: true}); err != nil {
+		t.Fatalf("Del dry-run: %v", err)
+	}
+	if len(calls) != 0 {
+		t.Fatalf("Del dry-run invoked subcommands %v, want none", calls)
+	}
+}
+
 // TestPodUnifiedTarget_Basics verifies the trivial accessor methods.
 func TestPodUnifiedTarget_Basics(t *testing.T) {
 	target := &PodUnifiedTarget{NodeName: "check-sway-browser-vnc-pod"}

@@ -22,65 +22,58 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 )
 
-// Del stops + removes the container deploy, removes the overlay image
-// (unless KeepImage is set), and cleans up the ledger entry.
+// Del tears the pod deploy down. Pods carry NO ledger DeployRecord — only VM/local
+// deploys (which apply candies to a filesystem/guest) write one; a pod bakes its
+// candies into an overlay image and persists charly.yml state. So teardown is
+// RECORD-FREE: it delegates the container + quadlet + sidecar + charly.yml cleanup to
+// the canonical `charly remove` path (consistent with the sibling lifecycle
+// delegations Start/Stop/Update), then drops the deploy's synthesized overlay image
+// (bundle del's one extra over `charly remove`) and cancels any ephemeral TTL lifecycle.
 //
-// KeepImage isn't on DelOpts (the unified type is uniform across kinds);
-// the dispatcher passes it via the target's KeepImage field instead.
+// KeepImage isn't on DelOpts (the unified type is uniform across kinds); the
+// dispatcher passes it via the target's KeepImage field instead.
 func (t *PodUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
-	paths, err := DefaultLedgerPaths()
-	if err != nil {
-		return err
-	}
-	rec, err := findContainerDeploy(paths, t.NodeName)
-	if err != nil {
-		return err
-	}
-	if rec == nil {
-		return fmt.Errorf("no container deploy named %q in ledger", t.NodeName)
-	}
 	if opts.DryRun {
-		fmt.Printf("[dry-run] would stop container %s, remove image %s (keep=%v)\n",
-			t.NodeName, rec.Image, t.KeepImage)
+		fmt.Printf("[dry-run] charly remove %s + drop %s-overlay:* images (keep-image=%v)\n",
+			t.NodeName, t.NodeName, t.KeepImage)
 		return nil
 	}
-	engine := t.engine()
-	_ = runPodmanCommand(engine, "stop", t.NodeName)
-	_ = runPodmanCommand(engine, "rm", "-f", t.NodeName)
-
-	// Overlay image cleanup — only attempted for the synthesized
-	// <name>-overlay images; non-overlay images (like a base ref) are
-	// preserved so a re-add doesn't have to repull/rebuild.
-	overlayRef := rec.Image
-	if !t.KeepImage && strings.HasSuffix(overlayRef, "-overlay") {
-		_ = runPodmanCommand(engine, "rmi", overlayRef)
-	}
-
-	for _, layer := range rec.Candy {
-		_, shouldRemove, lerr := RemoveCandyDeployment(paths, layer, rec.DeployID)
-		if lerr != nil {
-			return lerr
-		}
-		if shouldRemove {
-			_ = DeleteCandyRecord(paths, layer)
-		}
-	}
-
-	if err := DeleteDeployRecord(paths, rec.DeployID); err != nil {
+	// Canonical, record-free pod teardown (container + quadlet + sidecars + charly.yml).
+	if err := runCharlySubcommand("remove", t.NodeName); err != nil {
 		return err
 	}
-
-	if node, ok := loadDeployConfigForRead("pod target ephemeral-teardown").LookupKey(t.NodeName); ok && node.IsEphemeral() {
+	// bundle del's one extra over `charly remove`: drop the synthesized, deploy-specific
+	// <name>-overlay:* images. A shared base ref is never named that, so it is preserved.
+	if !t.KeepImage {
+		removeDeployOverlayImages(t.engine(), t.NodeName)
+	}
+	// Cancel an ephemeral TTL lifecycle if this deploy was marked ephemeral.
+	if node, ok := loadDeployConfigForRead("pod bundle-del ephemeral-teardown").LookupKey(t.NodeName); ok && node.IsEphemeral() {
 		if tdErr := TeardownEphemeralLifecycle(&node, t.NodeName); tdErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: ephemeral lifecycle teardown: %v\n", tdErr)
 		}
 	}
-
-	fmt.Printf("Removed container deploy %s\n", t.NodeName)
 	return nil
+}
+
+// removeDeployOverlayImages best-effort removes the synthesized <deployName>-overlay
+// images (all tags) for a pod deploy. Record-free: it queries the engine for images
+// whose repository is "<deployName>-overlay" — the OverlayImageRef naming convention
+// (deploy_target_pod.go) — so only the deploy-specific overlays are removed; a shared
+// base ref is never named that.
+func removeDeployOverlayImages(engine, deployName string) {
+	out, err := exec.Command(EngineBinary(engine), "images",
+		"--filter", "reference="+deployName+"-overlay", "--format", "{{.Repository}}:{{.Tag}}").Output()
+	if err != nil {
+		return
+	}
+	for _, ref := range strings.Fields(string(out)) {
+		_ = exec.Command(EngineBinary(engine), "rmi", ref).Run()
+	}
 }
 
 // engine returns the configured engine. Defaults to "podman" when the

@@ -21,7 +21,6 @@ import (
 	"maps"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 )
 
@@ -623,38 +622,6 @@ func (c *BundleDelCmd) resolveDelNode() (*BundleNode, string) {
 		}
 	}
 	return &BundleNode{Target: "pod"}, "pod"
-}
-
-// findContainerDeploy locates the deploy record with matching Target.
-// Accepts both canonical ("pod:<name>") and legacy ("container:<name>")
-// keying; Phase 6 migration rewrites existing records to the new form.
-func findContainerDeploy(paths *LedgerPaths, name string) (*DeployRecord, error) {
-	entries, err := os.ReadDir(paths.Deploys)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	wantPod := "pod:" + name
-	wantContainer := "container:" + name
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(paths.Deploys, e.Name()))
-		if err != nil {
-			continue
-		}
-		var rec DeployRecord
-		if err := json.Unmarshal(data, &rec); err != nil {
-			continue
-		}
-		if rec.Target == wantPod || rec.Target == wantContainer {
-			return &rec, nil
-		}
-	}
-	return nil, nil
 }
 
 // runPodmanCommand invokes the given podman subcommand, capturing

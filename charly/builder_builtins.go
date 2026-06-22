@@ -60,22 +60,8 @@ func (pixiBuilder) CollectContext(layer *Candy, _ *ResolvedBox) map[string]any {
 	return map[string]any{"env_name": pixiDefaultEnvName(layer)}
 }
 
-// cargo — binaries tracked by name; the host target reads Cargo.toml [[bin]]
-// entries at install time and updates the ledger (empty list → best-effort).
-type cargoBuilder struct{ builtinBuilderBase }
-
-func (cargoBuilder) Reserved() string { return "cargo" }
-func (cargoBuilder) Reverse(s *BuilderStep) []ReverseOp {
-	if bins := extractStringSlice(s.RawStageContext, "binaries"); len(bins) > 0 {
-		return []ReverseOp{{
-			Kind:    ReverseOpCargoUninstall,
-			Targets: bins,
-			Scope:   ScopeUser,
-		}}
-	}
-	return nil
-}
-func (cargoBuilder) CollectContext(_ *Candy, _ *ResolvedBox) map[string]any { return nil }
+// cargo (the `cargo` builder) lives in its own dedicated file
+// (plugin_builder_cargo.go) as the externalizable dedicated-provider pattern.
 
 // npm — globals tracked by package name from package.json (read host-side).
 type npmBuilder struct{ builtinBuilderBase }

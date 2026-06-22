@@ -4,12 +4,8 @@ package main
 // UnifiedDeployTarget unchanged — the migration is behavior-preserving; the
 // ResolveTarget dispatch switch is replaced by providerRegistry.ResolveDeploy.
 
-type localTarget struct{ builtinDeployBase }
-
-func (localTarget) Reserved() string { return "local" }
-func (localTarget) ResolveTarget(_ *BundleNode, name string) (UnifiedDeployTarget, error) {
-	return &LocalUnifiedTarget{NodeName: name}, nil
-}
+// localTarget (the `local` deploy target) lives in its own dedicated file
+// (plugin_deploy_local.go) as the externalizable dedicated-provider pattern.
 
 type vmTarget struct{ builtinDeployBase }
 

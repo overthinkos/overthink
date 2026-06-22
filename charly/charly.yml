@@ -4,13 +4,16 @@ version: 2026.173.1742
 # contributes). Read at init (registry_bootstrap.go) to drive built-in provider
 # registration from THIS embedded default config instead of a hardcoded Go list. A
 # bijection gate keeps it in sync with the compiled-in instances. External providers
-# load via plugin: candy blocks, not here.
+# load via plugin: candy blocks, not here. A schema-less IR provider extracted into
+# its own dedicated plugin_<class>_<name>.go file (the externalizable
+# dedicated-provider pattern — e.g. deploy:local, builder:cargo, step:Reboot)
+# self-registers from that file and is intentionally NOT listed here.
 providers:
     kind: [agent, android, builder, candy, distro, group, init, k8s, local, module, pod, resource, sidecar, target, vm]
     verb: [adb, addr, appium, cdp, command, dbus, file, http, interface, kernel-param, kill, kube, libvirt, mcp, mount, package, plugin, record, service, spice, summarize, unix_group, user, vnc, wl]
-    deploy: [android, k8s, local, pod, vm]
-    step: [ApkInstall, Builder, File, LocalPkgInstall, Op, Reboot, RepoChange, ServiceCustom, ServicePackaged, ShellHook, ShellSnippet, SystemPackages]
-    builder: [aur, cargo, npm, pixi]
+    deploy: [android, k8s, pod, vm]
+    step: [ApkInstall, Builder, File, LocalPkgInstall, Op, RepoChange, ServiceCustom, ServicePackaged, ShellHook, ShellSnippet, SystemPackages]
+    builder: [aur, npm, pixi]
 
 # context_ignore_baseline — the built-in build-context ignore patterns (VCS/binary
 # excludes + cache-hygiene globs), formerly the Go var baselineContextIgnore. Read by

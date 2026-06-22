@@ -15,6 +15,16 @@ import (
 // the instances it names, and init() gates the two into bijection. Adding a built-in
 // is a charly.yml manifest entry PLUS its instance here; the gate fails loudly if
 // either side is missing. (Replaces the five per-class init() registration loops.)
+//
+// EXCEPTION — the externalizable dedicated-provider pattern: a schema-less IR provider
+// (a deploy-target / step / builder — derived from cross-refs or candy-internal, never
+// user-authored) may live in its OWN dedicated plugin_<class>_<name>.go file and
+// self-register via registerDedicatedBuiltin. Such a provider is INTENTIONALLY absent
+// from BOTH this slice and the `providers:` manifest (so it does not fit the
+// schema-carrying RegisterBuiltinPluginUnit path either), yet dispatches identically
+// through providerRegistry. The per-class bijection gates below still prove it is
+// registered (deploy/step have a gate; builders have none). See plugin_deploy_local.go,
+// plugin_step_reboot.go, plugin_builder_cargo.go.
 var builtinProviderInstances = []Provider{
 	// verbs (ClassVerb)
 	fileVerb{}, commandVerb{}, httpVerb{}, packageVerb{}, serviceVerb{},
@@ -30,15 +40,31 @@ var builtinProviderInstances = []Provider{
 	standaloneKind{word: "k8s", def: "#K8s"},
 	standaloneKind{word: "local", def: "#Local"},
 	standaloneKind{word: "android", def: "#Android"},
-	// deploy targets (ClassDeployTarget)
-	localTarget{}, vmTarget{}, podTarget{}, k8sTarget{}, androidTarget{},
-	// steps (ClassStep)
+	// deploy targets (ClassDeployTarget) — `local` self-registers from
+	// plugin_deploy_local.go (the externalizable dedicated-provider pattern).
+	vmTarget{}, podTarget{}, k8sTarget{}, androidTarget{},
+	// steps (ClassStep) — `Reboot` self-registers from plugin_step_reboot.go.
 	systemPackagesStepProvider{}, builderStepProvider{}, opStepProvider{}, fileStepProvider{},
 	servicePackagedStepProvider{}, serviceCustomStepProvider{}, shellHookStepProvider{},
 	shellSnippetStepProvider{}, repoChangeStepProvider{}, apkInstallStepProvider{},
-	localPkgInstallStepProvider{}, rebootStepProvider{},
-	// builders (ClassBuilder)
-	aurBuilder{}, pixiBuilder{}, cargoBuilder{}, npmBuilder{},
+	localPkgInstallStepProvider{},
+	// builders (ClassBuilder) — `cargo` self-registers from plugin_builder_cargo.go.
+	aurBuilder{}, pixiBuilder{}, npmBuilder{},
+}
+
+// registerDedicatedBuiltin self-registers a built-in Provider that lives in its OWN
+// dedicated file (the externalizable IR-provider pattern: a schema-less deploy-target,
+// step, or builder — NOT a user-authored candy, so neither a `providers:`-manifest
+// entry nor a builtinProviderInstances member). Each such file calls this from a
+// package-var initializer, which Go runs before ANY init() — so the per-class
+// bijection gates in init() below observe the registration WITHOUT depending on
+// cross-file init ordering (the alphabetical race the gates were structured to avoid).
+// Returns the provider so the `var _ = registerDedicatedBuiltin(...)` call site reads
+// cleanly. RegisterBuiltinProvider panics on a duplicate (class, word), so a provider
+// left in BOTH the manifest/slice and a dedicated file is caught loudly at startup.
+func registerDedicatedBuiltin(p Provider) Provider {
+	RegisterBuiltinProvider(p)
+	return p
 }
 
 // providerManifest is the parsed `providers:` directive — provider class → the

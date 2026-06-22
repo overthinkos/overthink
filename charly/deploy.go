@@ -765,6 +765,30 @@ func scopeVolumesToDeployKey(meta *BoxMetadata, deployName, instance string) {
 // Volumes without a deploy override remain as named volumes.
 // Volumes with type=bind or type=encrypted become ResolvedBindMount.
 // Deploy-only volumes (with Path set, not in labels) are also supported.
+// resolveVolumeHostPath computes the host-side path for a bind/encrypted deploy
+// volume. It is the single home for the host-path strategy (R3): ResolveVolumeBacking
+// applies it in two passes — label-matched volumes (keyed by the short name) and
+// deploy-only volumes (keyed by the config name) — that previously carried
+// byte-identical copies of this switch differing only in that name argument.
+//
+//	encrypted + explicit Host:  <Host>/plain
+//	encrypted + default:        <encStoragePath>/<storageDir>/plain  (per-deploy)
+//	bind + explicit Host:       <Host>
+//	bind + default:             <volumesPath>/<storageDir>/<name>    (per-deploy)
+func resolveVolumeHostPath(dv DeployVolumeConfig, name, storageDir, encStoragePath, volumesPath string) string {
+	switch {
+	case dv.Type == "encrypted":
+		if dv.Host != "" {
+			return filepath.Join(expandHostHome(dv.Host), "plain")
+		}
+		return encryptedPlainDir(encStoragePath, storageDir, name)
+	case dv.Host != "":
+		return expandHostHome(dv.Host)
+	default:
+		return filepath.Join(volumesPath, storageDir, name)
+	}
+}
+
 func ResolveVolumeBacking(boxName, instance string, labelVolumes []VolumeMount, deployVolumes []DeployVolumeConfig, home string, encStoragePath string, volumesPath string) ([]VolumeMount, []ResolvedBindMount) {
 	// Index deploy volume configs by name
 	deployByName := make(map[string]DeployVolumeConfig, len(deployVolumes))
@@ -788,22 +812,7 @@ func ResolveVolumeBacking(boxName, instance string, labelVolumes []VolumeMount, 
 		}
 
 		if hasOverride && (dv.Type == "bind" || dv.Type == "encrypted") {
-			var hostPath string
-			switch {
-			case dv.Type == "encrypted":
-				if dv.Host != "" {
-					// Explicit per-volume path: /path/{cipher,plain}
-					hostPath = filepath.Join(expandHostHome(dv.Host), "plain")
-				} else {
-					// Global default, per-deploy: <encStoragePath>/charly-<deploy>-<name>/{cipher,plain}
-					hostPath = encryptedPlainDir(encStoragePath, deployStorageDir(boxName, instance), shortName)
-				}
-			case dv.Host != "":
-				hostPath = expandHostHome(dv.Host)
-			default:
-				// Auto path, per-deploy: <volumesPath>/<deploy>/<name>
-				hostPath = filepath.Join(volumesPath, deployStorageDir(boxName, instance), shortName)
-			}
+			hostPath := resolveVolumeHostPath(dv, shortName, deployStorageDir(boxName, instance), encStoragePath, volumesPath)
 			bindMounts = append(bindMounts, ResolvedBindMount{
 				Name:      shortName,
 				HostPath:  hostPath,
@@ -823,19 +832,7 @@ func ResolveVolumeBacking(boxName, instance string, labelVolumes []VolumeMount, 
 		}
 		containerPath := ExpandPath(dv.Path, home)
 		if dv.Type == "bind" || dv.Type == "encrypted" {
-			var hostPath string
-			switch {
-			case dv.Type == "encrypted":
-				if dv.Host != "" {
-					hostPath = filepath.Join(expandHostHome(dv.Host), "plain")
-				} else {
-					hostPath = encryptedPlainDir(encStoragePath, deployStorageDir(boxName, instance), dv.Name)
-				}
-			case dv.Host != "":
-				hostPath = expandHostHome(dv.Host)
-			default:
-				hostPath = filepath.Join(volumesPath, deployStorageDir(boxName, instance), dv.Name)
-			}
+			hostPath := resolveVolumeHostPath(dv, dv.Name, deployStorageDir(boxName, instance), encStoragePath, volumesPath)
 			bindMounts = append(bindMounts, ResolvedBindMount{
 				Name:      dv.Name,
 				HostPath:  hostPath,

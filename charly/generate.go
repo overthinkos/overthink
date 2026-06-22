@@ -302,23 +302,23 @@ func (g *Generator) Generate() error {
 // editor and Python/Node cruft from busting the build cache. Project-specific
 // heavy directories are layered on top via defaults.context_ignore so a
 // third-party project with no context_ignore still gets sane defaults.
-var baselineContextIgnore = []string{
-	".git",
-	"bin",
-	"charly",
-	"*.md",
-	"**/__pycache__",
-	"**/*.pyc",
-	"**/*.pyo",
-	"**/*.egg-info",
-	"**/node_modules",
-	"**/.git",
-	"**/.DS_Store",
-	"**/*~",
-	"**/*.swp",
-	"**/*.swo",
-	"**/.pytest_cache",
-	"**/.mypy_cache",
+// baselineContextIgnore is the built-in build-context ignore baseline, read from the
+// context_ignore_baseline directive in the embedded charly.yml (Phase 4: data moved out of
+// Go) rather than hardcoded here. A project's defaults.context_ignore overlays on top.
+var baselineContextIgnore = parseEmbeddedContextIgnoreBaseline()
+
+// parseEmbeddedContextIgnoreBaseline reads the context_ignore_baseline list from the
+// embedded charly.yml via the shared minimal decoder; panics if the embed is malformed or
+// the directive is empty (a build-time invariant, never a runtime input).
+func parseEmbeddedContextIgnoreBaseline() []string {
+	var doc struct {
+		ContextIgnoreBaseline []string `yaml:"context_ignore_baseline"`
+	}
+	unmarshalEmbeddedDefaults(&doc)
+	if len(doc.ContextIgnoreBaseline) == 0 {
+		panic("generate: embedded charly.yml has no context_ignore_baseline: directive")
+	}
+	return doc.ContextIgnoreBaseline
 }
 
 // contextIgnoreFiles are the two engine-native build-context ignore files charly

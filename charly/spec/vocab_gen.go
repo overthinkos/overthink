@@ -38,6 +38,7 @@ var ResourceKinds = []string{
 
 // DocDirectives is the reserved document directives (#NodeDoc top-level keys).
 var DocDirectives = []string{
+	"context_ignore_baseline",
 	"defaults",
 	"discover",
 	"import",

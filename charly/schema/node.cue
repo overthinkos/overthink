@@ -138,5 +138,10 @@ _reservedNode: "^(candy|pod|vm|k8s|local|android|distro|builder|init|resource|si
 	// recognized here so a document carrying it is not mis-read as a node named
 	// "providers". A gate keeps it in bijection with the compiled-in instances.
 	providers?: {[string]: [...string]}
-	{[!~"^(version|repo|import|discover|defaults|provides|providers)$"]: #Node}
+	// context_ignore_baseline — the built-in build-context ignore patterns (VCS/binary
+	// excludes + cache-hygiene globs), formerly the Go var baselineContextIgnore, now
+	// data in the embedded charly.yml. Read by generate.go to emit .containerignore /
+	// .dockerignore; a project's defaults.context_ignore still overlays on top.
+	context_ignore_baseline?: [...string]
+	{[!~"^(version|repo|import|discover|defaults|provides|providers|context_ignore_baseline)$"]: #Node}
 })

@@ -12,6 +12,28 @@ providers:
     step: [ApkInstall, Builder, File, LocalPkgInstall, Op, Reboot, RepoChange, ServiceCustom, ServicePackaged, ShellHook, ShellSnippet, SystemPackages]
     builder: [aur, cargo, npm, pixi]
 
+# context_ignore_baseline — the built-in build-context ignore patterns (VCS/binary
+# excludes + cache-hygiene globs), formerly the Go var baselineContextIgnore. Read by
+# generate.go to emit .containerignore / .dockerignore; a project's
+# defaults.context_ignore overlays on top of these.
+context_ignore_baseline:
+    - .git
+    - bin
+    - charly
+    - "*.md"
+    - "**/__pycache__"
+    - "**/*.pyc"
+    - "**/*.pyo"
+    - "**/*.egg-info"
+    - "**/node_modules"
+    - "**/.git"
+    - "**/.DS_Store"
+    - "**/*~"
+    - "**/*.swp"
+    - "**/*.swo"
+    - "**/.pytest_cache"
+    - "**/.mypy_cache"
+
 nvidia-gpu:
     resource:
         gpu:

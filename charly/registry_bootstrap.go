@@ -79,17 +79,25 @@ func manifestInstanceProblems(manifest providerManifest, byKey map[string]Provid
 	return problems
 }
 
-// parseEmbeddedProviderManifest extracts ONLY the `providers:` directive from the
-// embedded charly.yml via a minimal yaml decode — deliberately NOT the full node-form
-// loader, which needs the kind providers this very manifest registers (the bootstrap
-// circularity). embeddedCharlyDefaults is a //go:embed var, populated before init().
+// unmarshalEmbeddedDefaults decodes the embedded charly.yml (the //go:embed default
+// config) into dst via a minimal yaml decode — the shared reader for top-level directives
+// (providers, context_ignore_baseline) that must be read WITHOUT the full node-form loader
+// (the bootstrap circularity: the loader needs the kind providers the manifest registers).
+// embeddedCharlyDefaults is populated before init(). Panics on an unparseable embed (a
+// build-time invariant, never a runtime input).
+func unmarshalEmbeddedDefaults(dst any) {
+	if err := yaml.Unmarshal(embeddedCharlyDefaults, dst); err != nil {
+		panic(fmt.Errorf("embedded charly.yml unparseable: %w", err))
+	}
+}
+
+// parseEmbeddedProviderManifest extracts ONLY the `providers:` directive from the embedded
+// charly.yml. embeddedCharlyDefaults is a //go:embed var, populated before init().
 func parseEmbeddedProviderManifest() providerManifest {
 	var doc struct {
 		Providers providerManifest `yaml:"providers"`
 	}
-	if err := yaml.Unmarshal(embeddedCharlyDefaults, &doc); err != nil {
-		panic(fmt.Errorf("registry bootstrap: parse embedded providers: manifest: %w", err))
-	}
+	unmarshalEmbeddedDefaults(&doc)
 	if len(doc.Providers) == 0 {
 		panic("registry bootstrap: embedded charly.yml has no providers: manifest")
 	}

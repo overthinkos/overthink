@@ -47,7 +47,6 @@ type CLI struct {
 	// with --dir.
 	Repo string `long:"repo" env:"CHARLY_PROJECT_REPO" placeholder:"OWNER/REPO[@REF]" help:"Read charly.yml from a remote git repo (e.g. overthinkos/overthink). Use 'default' for overthinkos/overthink."`
 
-	Alias       AliasCmd          `cmd:"" help:"Manage command aliases for container images"`
 	Clean       CleanCmd          `cmd:"" help:"Prune reusable build artifacts to defaults: retention (images, check runs) + sweep one-time makepkg leftovers"`
 	Cmd         CmdCmd            `cmd:"" help:"Run a command in a running container (with notification)"`
 	Config      BoxConfigCmd      `cmd:"" help:"Configure box deployment (setup, secrets, encrypted volumes)"`
@@ -59,25 +58,21 @@ type CLI struct {
 	Volume      VolumeCmd         `cmd:"" name:"volume" help:"List or reset a deployment's charly-managed named volumes"`
 	Plugin      PluginInternalCmd `cmd:"" name:"__plugin" hidden:"" help:"internal: plugin server/relay plumbing"`
 	Cp          CpCmd             `cmd:"" name:"cp" help:"Copy a file between the host and a running container (':' prefix marks the container side)"`
-	Mcp         McpCmdGroup       `cmd:"" help:"Run an MCP server exposing the charly CLI as tools"`
 	Migrate     MigrateCmd        `cmd:"" help:"Migrate any opencharly config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
-	Preempt     PreemptCmd        `cmd:"" help:"Inspect and recover exclusive-resource preemption leases (preemptible holders stopped to free a resource for a claimant)"`
 	ReapOrphans ReapOrphansCmd    `cmd:"reap-orphans" help:"Find ephemeral deployments whose underlying resource is gone and clean them up"`
 	Remove      RemoveCmd         `cmd:"" help:"Remove service container"`
 	Restart     RestartCmd        `cmd:"" help:"Restart a service container atomically (systemctl --user restart)"`
-	Secrets     SecretsCmdGroup   `cmd:"" help:"Manage credentials (Secret Service / config) and GPG-encrypted .secrets files"`
 	Service     ServiceCmd        `cmd:"" help:"Manage supervisord services inside a running container"`
 	Settings    SettingsCmd       `cmd:"" help:"Manage runtime configuration (get/set/list)"`
 	Shell       ShellCmd          `cmd:"" help:"Start a bash shell in a container image"`
-	Ssh         SshCmd            `cmd:"" help:"SSH helpers (tunnel SPICE/VNC/unix sockets from a remote libvirt host to the local machine)"`
 	Start       StartCmd          `cmd:"" help:"Start a container as a background service"`
 	Status      StatusCmd         `cmd:"" help:"Show service status (all if no box given)"`
 	Stop        StopCmd           `cmd:"" help:"Stop a running service container"`
 	Check       CheckCmd          `cmd:"" help:"Evaluate boxes and deployments — pure-box (disposable), live (running deployment), AI-driven iteration, and live-container probe verbs (cdp/wl/dbus/vnc/mcp/spice/libvirt/record/k8s)"`
 	Feature     FeatureCmd        `cmd:"" help:"plan-shaped description authoring: list/pending/validate"`
-	Tmux        TmuxCmd           `cmd:"" help:"Manage tmux sessions inside running containers"`
-	// `Udev` is no longer a hardcoded field — it arrives via cli.Plugins as the
-	// builtin CommandProvider in plugin_command_udev.go (collectCommandPlugins()).
+	// The leaf-domain commands `alias`, `tmux`, `ssh`, `secrets`, `preempt`, `mcp`, and
+	// `udev` are no longer hardcoded fields — each arrives via cli.Plugins as a builtin
+	// CommandProvider in its own plugin_command_<name>.go (collectCommandPlugins()).
 	Update  UpdateCmd  `cmd:"" help:"Update box and restart if active"`
 	Version VersionCmd `cmd:"" help:"Print computed CalVer tag"`
 	Vm      VmCmd      `cmd:"" help:"Manage virtual machines from bootc images"`

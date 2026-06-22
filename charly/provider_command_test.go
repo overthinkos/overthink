@@ -44,3 +44,75 @@ func TestCommandSeam_PluginCommandInjected(t *testing.T) {
 		t.Fatalf("expected the plugin command selected, got %q", got)
 	}
 }
+
+// TestCommandProviders_ExtractedLeafCommands proves every leaf-domain command extracted
+// into a dedicated COMMAND-class provider (alias/tmux/ssh/secrets/preempt/mcp — the udev
+// batch siblings) is (1) registered in providerRegistry as a CommandProvider with the
+// matching Reserved() word, and (2) collected by collectCommandPlugins() and injected
+// into the REAL charly CLI grammar via kong.Plugins, so its subcommand path parses and
+// selects exactly as before the extraction. The test FAILS if any dedicated registration
+// regresses or the command seam stops wiring one of them into the root.
+func TestCommandProviders_ExtractedLeafCommands(t *testing.T) {
+	cases := []struct {
+		word     string   // Reserved() + top-level command name
+		parse    []string // argv selecting a leaf subcommand
+		selected string   // expected ctx.Command() after parse
+	}{
+		{"alias", []string{"alias", "list"}, "alias list"},
+		{"tmux", []string{"tmux", "list", "mybox"}, "tmux list <box>"},
+		{"ssh", []string{"ssh", "tunnel", "spice", "myvm"}, "ssh tunnel spice <vm>"},
+		{"secrets", []string{"secrets", "list"}, "secrets list"},
+		{"preempt", []string{"preempt", "status"}, "preempt status"},
+		{"mcp", []string{"mcp", "serve"}, "mcp serve"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.word, func(t *testing.T) {
+			// 1. Registered as a COMMAND-class provider, resolvable through the registry.
+			p, ok := providerRegistry.resolve(ClassCommand, tc.word)
+			if !ok {
+				t.Fatalf("command:%s not registered — dedicated self-registration regressed", tc.word)
+			}
+			cp, ok := p.(CommandProvider)
+			if !ok {
+				t.Fatalf("%s provider is not a CommandProvider (got %T)", tc.word, p)
+			}
+			if cp.Reserved() != tc.word {
+				t.Fatalf("%s provider Reserved() = %q, want %q", tc.word, cp.Reserved(), tc.word)
+			}
+
+			// 2. Collected by the command seam and injected into the real CLI grammar.
+			var cli CLI
+			cli.Plugins = collectCommandPlugins()
+			parser, err := kong.New(&cli, kong.Name("charly"), kong.Exit(func(int) {}))
+			if err != nil {
+				t.Fatalf("kong.New with the command-plugin seam failed: %v", err)
+			}
+			ctx, err := parser.Parse(tc.parse)
+			if err != nil {
+				t.Fatalf("%s command not injected into the CLI grammar: %v", tc.word, err)
+			}
+			if got := ctx.Command(); got != tc.selected {
+				t.Fatalf("expected %q selected, got %q", tc.selected, got)
+			}
+		})
+	}
+}
+
+// TestCommandProviders_ExtractedReachMCP proves the extraction did not change the
+// reflected MCP tool surface for the extracted commands — collectCommandPlugins() feeds
+// buildMcpServer's modelCLI exactly as it feeds the real CLI, so each command's leaves
+// stay auto-generated tools (toolIndex mirrors buildMcpServer via buildTestKong). `mcp`
+// is the deliberate exception: `mcp.serve` is path-skipped (mcpSkipToolPaths) — you do
+// not expose "start an MCP server" as a tool inside the MCP server — and the extraction
+// must preserve that skip (the skip is path-keyed, not origin-keyed), so it stays ABSENT.
+func TestCommandProviders_ExtractedReachMCP(t *testing.T) {
+	tools := toolIndex(t, false)
+	for _, name := range []string{"alias.list", "tmux.list", "secrets.list", "preempt.status"} {
+		if _, ok := tools[name]; !ok {
+			t.Errorf("%s missing from the MCP tool surface after extracting its command into a CommandProvider", name)
+		}
+	}
+	if _, ok := tools["mcp.serve"]; ok {
+		t.Error("mcp.serve unexpectedly present in the MCP tool surface — its mcpSkipToolPaths skip must survive the command extraction")
+	}
+}

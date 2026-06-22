@@ -127,7 +127,6 @@ type (
 	MatcherList              = spec.MatcherList
 	MCPServerYAML            = spec.MCPServerYAML
 	MergeConfig              = spec.MergeConfig
-	ModuleSpec               = spec.ModuleSpec
 	Op                       = spec.Op
 	PackageItem              = spec.PackageItem
 	PacstrapRepo             = spec.PacstrapRepo

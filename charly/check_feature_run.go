@@ -68,10 +68,11 @@ func resolveGraderAgent(dir, name string) (*AgentConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading project for the ai: catalog: %w", err)
 	}
-	if !ok || uf == nil || len(uf.Agent) == 0 {
+	agents := uf.Agents()
+	if !ok || uf == nil || len(agents) == 0 {
 		return nil, fmt.Errorf("agent grader needs a kind:agent entry (an `agent:` map in check.yml); add one or pass --no-agent for deterministic-only")
 	}
-	ai, _, err := ResolveAgent(uf.Agent, name)
+	ai, _, err := ResolveAgent(agents, name)
 	if err != nil {
 		return nil, err
 	}

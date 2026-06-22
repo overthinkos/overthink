@@ -13,6 +13,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -66,6 +67,35 @@ var (
 // ---------------------------------------------------------------------------
 // Resolution + defaults
 // ---------------------------------------------------------------------------
+
+// Agents reconstructs the name-keyed AI-CLI grader catalog from uf.PluginKinds.
+// The `agent` kind is a plugin kind (plugin_agent.go) — an `agent:` node lands in
+// uf.PluginKinds["agent"][<name>] as canonical spec.Agent JSON (produced by the
+// plugin's Invoke). This accessor decodes each body back into *AgentConfig
+// (= *spec.Agent), yielding the SAME map[string]*AgentConfig shape the harness
+// consumed when agent was a typed core map (the former uf.Agent). Recomputed per call
+// (the catalog is a handful of CLIs); returns nil when no agents are configured. A
+// decode error is impossible in practice — the body is canonical JSON the plugin
+// Marshalled from spec.Agent — but a bad entry is skipped rather than poisoning the
+// whole catalog.
+func (uf *UnifiedFile) Agents() map[string]*AgentConfig {
+	if uf == nil {
+		return nil
+	}
+	bodies := uf.PluginKinds["agent"]
+	if len(bodies) == 0 {
+		return nil
+	}
+	out := make(map[string]*AgentConfig, len(bodies))
+	for name, body := range bodies {
+		var a AgentConfig
+		if err := json.Unmarshal(body, &a); err != nil {
+			continue
+		}
+		out[name] = &a
+	}
+	return out
+}
 
 // ResolveAgent returns the named AI entry, or the sole entry if name == "" and
 // exactly one is configured. Applies Go-level defaults:

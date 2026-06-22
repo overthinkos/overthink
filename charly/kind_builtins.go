@@ -100,13 +100,12 @@ func (resourceKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
 	return decodePtrInto(gn, &uf.Resource)
 }
 
-type agentKind struct{ builtinKindBase }
-
-func (agentKind) Reserved() string   { return "agent" }
-func (agentKind) CueDefPath() string { return "#Agent" }
-func (agentKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
-	return decodePtrInto(gn, &uf.Agent)
-}
+// The `agent` KIND (the AI-CLI grader catalog) is no longer a core builtin kind — it
+// was extracted into a dedicated plugin UNIT (plugin_agent.go + plugin/builtins/agent),
+// mirroring the package-group kind→plugin extraction. An `agent:` node now routes
+// through runPluginKind (Invoke/OpLoad) into uf.PluginKinds["agent"], validated against
+// the plugin's served #AgentInput schema; UnifiedFile.Agents() reads it back into the
+// name-keyed map[string]*AgentConfig the harness consumes.
 
 type groupKind struct{ builtinKindBase }
 
@@ -135,13 +134,11 @@ func (targetKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
 	return decodePtrInto(gn, &uf.Target)
 }
 
-type moduleKind struct{ builtinKindBase }
-
-func (moduleKind) Reserved() string   { return "module" }
-func (moduleKind) CueDefPath() string { return "#Module" }
-func (moduleKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
-	return decodePtrInto(gn, &uf.Module)
-}
+// The `module` KIND (the Calamares installer module) is no longer a core builtin kind
+// — it was extracted into a dedicated plugin UNIT (plugin_module.go +
+// plugin/builtins/module), mirroring the package-group kind→plugin extraction. A
+// `module:` node now routes through runPluginKind (Invoke/OpLoad) into
+// uf.PluginKinds["module"], validated against the plugin's served #ModuleInput schema.
 
 // standaloneKind — the 5 resource-deploy kinds (pod/vm/k8s/local/android). A
 // standalone entity unless it carries resource children, in which case it is a

@@ -132,6 +132,14 @@ func TestCueKinds_Corpus(t *testing.T) {
 				}
 			}
 			if kind == "" {
+				// Not a CORE kind. It may be a PLUGIN kind (agent/module/package-group)
+				// — validated by the plugin's served #<Kind>Input schema at
+				// runPluginKind, NOT by #NodeDoc — so skip it here (this test covers the
+				// core #NodeDoc grammar only; the plugin path is exercised by
+				// LoadUnified + the per-plugin loader tests).
+				if nodeHasPluginKindDisc(node) {
+					continue
+				}
 				t.Errorf("FAIL %s:%s: no entity discriminator found in node-form node", f, name)
 				continue
 			}
@@ -150,4 +158,25 @@ func TestCueKinds_Corpus(t *testing.T) {
 	if total == 0 {
 		t.Fatal("no real entities validated (node-form discovery wrong?)")
 	}
+}
+
+// nodeHasPluginKindDisc reports whether a node's discriminator is a registered PLUGIN
+// kind (a ClassKind provider that is NOT a core kindWordSet entry — agent / module /
+// package-group). Such entities are validated by the plugin's served schema at
+// runPluginKind, not by #NodeDoc, so the core-grammar corpus test skips them.
+func nodeHasPluginKindDisc(node cue.Value) bool {
+	it, err := node.Fields()
+	if err != nil {
+		return false
+	}
+	for it.Next() {
+		k := it.Selector().Unquoted()
+		if kindWordSet[k] {
+			continue // a core kind — already handled by the kinds loop
+		}
+		if _, ok := providerRegistry.ResolveKind(k); ok {
+			return true // a registered plugin kind
+		}
+	}
+	return false
 }

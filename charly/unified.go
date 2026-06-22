@@ -108,9 +108,12 @@ type UnifiedFile struct {
 	// substrate; the apps ride in on the deploy's candies). See android_spec.go.
 	Android map[string]*AndroidSpec `yaml:"android,omitempty" json:"android,omitempty"`
 
-	// Agent catalog (kind:agent) — the AI-CLI graders the iterate loop drives.
-	// See agent_config.go.
-	Agent map[string]*AgentConfig `yaml:"agent,omitempty" json:"agent,omitempty"`
+	// Agent catalog (kind:agent) — the AI-CLI graders the iterate loop drives — is no
+	// longer a typed core map: it was extracted into a dedicated plugin kind
+	// (plugin_agent.go), so an `agent:` entity lands in PluginKinds["agent"]. The
+	// name-keyed map[string]*AgentConfig the harness consumes is reconstructed on
+	// demand by the Agents() accessor (decodes the canonical bodies back into
+	// AgentConfig = spec.Agent). See agent_config.go + Agents().
 
 	// PluginKinds holds entities of KINDS contributed by plugins (a kind the core
 	// has no typed map for). Decoded via the plugin's Invoke envelope
@@ -119,9 +122,10 @@ type UnifiedFile struct {
 	// itself stays NAMELESS (the node name is the top-level key, never an authored
 	// body field), so #<Kind>Input is untouched; the NAME is mechanism metadata the
 	// host threads from the node key into the storage key. Name-keyed so consumers
-	// can look an entity up by name (the shape uf.Agent/uf.Sidecar need) and so the
-	// merge is root-wins OVERRIDE (a project entity overrides an embedded/imported
-	// one of the same name) — see mergePluginKindsMap. Built-in kinds decode into
+	// can look an entity up by name (the shape uf.Sidecar + the Agents() accessor
+	// need) and so the merge is root-wins OVERRIDE (a project entity overrides an
+	// embedded/imported one of the same name) — see mergePluginKindsMap. Built-in
+	// kinds decode into
 	// their typed maps above. Host-internal — never serialized.
 	PluginKinds map[string]map[string]json.RawMessage `yaml:"-" json:"-"`
 
@@ -130,14 +134,13 @@ type UnifiedFile struct {
 	// the R10 bed set from those disposable bundles. `charly check run <bed>`
 	// drives the full R10 sequence.
 
-	// Calamares-aligned kinds. `target:` ↔ Calamares settings.conf install
-	// target; `module:` ↔ Calamares module.desc descriptor. The Calamares
-	// netinstall package group (`package-group:`) is no longer a core typed map —
-	// it was extracted into a dedicated plugin kind (plugin_package_group.go), so a
-	// `package-group:` entity lands in PluginKinds, not here. Importers/emitters are
-	// deferred to a follow-up additive PR; this cutover lands the schema.
+	// Calamares-aligned kinds. `target:` ↔ Calamares settings.conf install target.
+	// The Calamares netinstall package group (`package-group:`) and the Calamares
+	// installer module (`module:`) are no longer core typed maps — each was extracted
+	// into a dedicated plugin kind (plugin_package_group.go / plugin_module.go), so
+	// such an entity lands in PluginKinds, not here. Importers/emitters are deferred
+	// to a follow-up additive PR; this cutover lands the schema.
 	Target map[string]*TargetSpec `yaml:"target,omitempty" json:"target,omitempty"`
-	Module map[string]*ModuleSpec `yaml:"module,omitempty" json:"module,omitempty"`
 
 	// Resource (kind:resource) — exclusive host-resource definitions: a token
 	// name (matching requires_exclusive: / preemptible.holds:) → an optional
@@ -1372,10 +1375,8 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeK8sMap(&dst.K8s, src.K8s)
 	mergeLocalMap(&dst.Local, src.Local)
 	mergeAndroidMap(&dst.Android, src.Android)
-	mergeAgentMap(&dst.Agent, src.Agent)
 	mergePluginKindsMap(&dst.PluginKinds, src.PluginKinds)
 	mergeTargetMap(&dst.Target, src.Target)
-	mergeModuleMap(&dst.Module, src.Module)
 	mergeResourceMap(&dst.Resource, src.Resource)
 	mergeSidecarMap(&dst.Sidecar, src.Sidecar)
 	mergeDeployMaps(&dst.Bundle, src.Bundle)
@@ -1410,22 +1411,6 @@ func mergeDistroMap(dst *map[string]*DistroDef, src map[string]*DistroDef) {
 	}
 	if *dst == nil {
 		*dst = make(map[string]*DistroDef)
-	}
-	for k, v := range src {
-		if _, exists := (*dst)[k]; !exists {
-			(*dst)[k] = v
-		}
-	}
-}
-
-// mergeAgentMap merges agent-catalog entries (kind:agent). Root-wins: existing dst
-// keys are preserved; src keys are only added if dst doesn't have them.
-func mergeAgentMap(dst *map[string]*AgentConfig, src map[string]*AgentConfig) {
-	if len(src) == 0 {
-		return
-	}
-	if *dst == nil {
-		*dst = make(map[string]*AgentConfig)
 	}
 	for k, v := range src {
 		if _, exists := (*dst)[k]; !exists {
@@ -1599,11 +1584,12 @@ func mergeLocalMap(dst *map[string]*LocalSpec, src map[string]*LocalSpec) {
 
 // mergePluginKindsMap merges plugin-contributed kind entities (uf.PluginKinds:
 // kind word → entity NAME → canonical entity JSON) across every merged
-// document/file. Root-wins NAME-KEYED OVERRIDE, byte-identical in spirit to
-// mergeAgentMap/mergeSidecarMap: for each kind, an existing dst entry for a given
-// name is PRESERVED and src fills only the names dst does not have. So a project's
-// entity overrides an embedded/imported one of the same name (one entry, not two) —
-// the property Cutover B's sidecar/agent extraction relies on. Without this,
+// document/file. Root-wins NAME-KEYED OVERRIDE, byte-identical in spirit to the
+// build-vocab map merges (mergeSidecarMap et al.): for each kind, an existing dst
+// entry for a given name is PRESERVED and src fills only the names dst does not have.
+// So a project's entity overrides an embedded/imported one of the same name (one
+// entry, not two) — the property the agent extraction (and Cutover B2's sidecar
+// extraction) relies on. Without this,
 // plugin-kind entities decoded into a per-document `sub` UnifiedFile are silently
 // dropped at mergeUnified (every document flows through here).
 func mergePluginKindsMap(dst *map[string]map[string]json.RawMessage, src map[string]map[string]json.RawMessage) {
@@ -1634,20 +1620,6 @@ func mergeTargetMap(dst *map[string]*TargetSpec, src map[string]*TargetSpec) {
 	}
 	if *dst == nil {
 		*dst = make(map[string]*TargetSpec)
-	}
-	for k, v := range src {
-		if _, exists := (*dst)[k]; !exists {
-			(*dst)[k] = v
-		}
-	}
-}
-
-func mergeModuleMap(dst *map[string]*ModuleSpec, src map[string]*ModuleSpec) {
-	if len(src) == 0 {
-		return
-	}
-	if *dst == nil {
-		*dst = make(map[string]*ModuleSpec)
 	}
 	for k, v := range src {
 		if _, exists := (*dst)[k]; !exists {
@@ -1804,8 +1776,9 @@ func validateAndroidDevices(uf *UnifiedFile) error {
 //     pure include: steps without a single direct check: is rejected here).
 func validateIterateBed(uf *UnifiedFile, name string, node *BundleNode) error {
 	it := node.Iterate
+	agents := uf.Agents() // agent is a plugin kind now; reconstruct the name-keyed catalog
 	for _, a := range it.Agent {
-		if _, ok := uf.Agent[a]; !ok {
+		if _, ok := agents[a]; !ok {
 			return fmt.Errorf("iterate bed %q: agent %q is not defined in the agent: catalog", name, a)
 		}
 	}

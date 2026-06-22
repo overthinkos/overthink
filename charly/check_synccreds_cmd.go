@@ -51,8 +51,9 @@ func (c *CheckSyncCredCmd) RunActual() error {
 		return fmt.Errorf("harness sync-credential: score %q has no agents configured", c.Score)
 	}
 
+	agents := uf.Agents()
 	for _, aiName := range aiNames {
-		ai, _, err := ResolveAgent(uf.Agent, aiName)
+		ai, _, err := ResolveAgent(agents, aiName)
 		if err != nil {
 			return err
 		}

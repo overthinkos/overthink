@@ -32,9 +32,12 @@ var builtinProviderInstances = []Provider{
 	mountVerb{}, addrVerb{}, cdpVerb{}, wlVerb{}, dbusVerb{}, vncVerb{},
 	mcpVerb{}, recordVerb{}, spiceVerb{}, libvirtVerb{}, kubeVerb{}, adbVerb{}, appiumVerb{},
 	summarizeVerb{}, killVerb{}, pluginVerb{},
-	// kinds (ClassKind)
+	// kinds (ClassKind) — agent + module + package-group are NOT here: each is a
+	// dedicated plugin UNIT (plugin_agent.go / plugin_module.go / plugin_package_group.go)
+	// that self-registers via RegisterBuiltinPluginUnit, absent from both this slice and
+	// the providers: manifest (the kind→plugin extraction).
 	candyKind{}, sidecarKind{}, distroKind{}, builderKind{}, initKind{}, resourceKind{},
-	agentKind{}, groupKind{}, targetKind{}, moduleKind{},
+	groupKind{}, targetKind{},
 	standaloneKind{word: "pod", def: "#Pod"},
 	standaloneKind{word: "vm", def: "#Vm"},
 	standaloneKind{word: "k8s", def: "#K8s"},

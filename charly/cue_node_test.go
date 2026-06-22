@@ -6,19 +6,42 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestNodeDoc_AgentOutputFormat_RejectedByCUE proves the closed CUE schema rejects an
-// illegal agent output_format at LOAD (agent.cue: output_format: *"" | "stream-json",
-// under the closed #NodeDoc gate). It fails LOUDLY if the CUE gate ever stops covering
-// it — signalling a Go-side output_format validator would be required.
-func TestNodeDoc_AgentOutputFormat_RejectedByCUE(t *testing.T) {
-	valid := "myagent:\n  agent:\n    command: [\"x\"]\n    output_format: stream-json\n"
-	if nodeFormRejected(valid) {
-		t.Fatalf("valid agent (output_format: stream-json) was rejected by the node-form gates")
+// TestAgentPlugin_OutputFormat_RejectedAtLoad proves the `agent` plugin kind's served
+// #AgentInput schema rejects an illegal output_format at LOAD. The agent kind was
+// externalized into a dedicated plugin unit (plugin_agent.go), so this validation
+// moved from the core #NodeDoc gate to runPluginKind → validateAuthoredPluginInput
+// against the plugin's #AgentInput (output_format: *"" | "stream-json"). A valid agent
+// normalizes cleanly; `output_format: bogus` is a hard load error. It fails LOUDLY if
+// the plugin schema ever stops covering it.
+func TestAgentPlugin_OutputFormat_RejectedAtLoad(t *testing.T) {
+	if err := normalizeAgentDoc(t, "myagent:\n  agent:\n    command: [\"x\"]\n    output_format: stream-json\n"); err != nil {
+		t.Fatalf("valid agent (output_format: stream-json) was rejected at load: %v", err)
 	}
-	bad := "myagent:\n  agent:\n    command: [\"x\"]\n    output_format: bogus\n"
-	if !nodeFormRejected(bad) {
-		t.Fatal("illegal agent output_format 'bogus' was NOT rejected by the closed CUE schema — a Go-side output_format validator is required")
+	if err := normalizeAgentDoc(t, "myagent:\n  agent:\n    command: [\"x\"]\n    output_format: bogus\n"); err == nil {
+		t.Fatal("illegal agent output_format 'bogus' was NOT rejected by the plugin #AgentInput schema at load")
 	}
+}
+
+// normalizeAgentDoc runs a single-node doc through the parse + normalize path (the
+// same one LoadUnified uses), so an `agent:` node is dispatched to runPluginKind and
+// validated against the served #AgentInput. Returns the load error, if any.
+func normalizeAgentDoc(t *testing.T, doc string) error {
+	t.Helper()
+	var d yaml.Node
+	if err := yaml.Unmarshal([]byte(doc), &d); err != nil {
+		t.Fatalf("yaml: %v", err)
+	}
+	_, nodes, err := parseNodeTree(&d)
+	if err != nil {
+		return err
+	}
+	uf := &UnifiedFile{}
+	for _, gn := range nodes {
+		if err := normalizeNodeInto(gn, uf); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // TestNodeFormSteps_RejectsStepTypo proves E1's plan-step typo gate: a node-form

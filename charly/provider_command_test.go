@@ -162,6 +162,103 @@ func TestCommandProviders_DeployLifecycleCommands(t *testing.T) {
 	}
 }
 
+// TestCommandProviders_NonMachineryCommands proves the last three non-machinery commands
+// extracted into dedicated COMMAND-class providers — vm, feature, and check — are (1)
+// registered in providerRegistry as a CommandProvider with the matching Reserved() word,
+// and (2) collected by collectCommandPlugins() and injected into the REAL charly CLI
+// grammar via kong.Plugins, so each subcommand path parses and selects exactly as before
+// the extraction (the Run handlers — VM lifecycle, plan-description authoring, the check
+// tree — are preserved verbatim). The test FAILS if any dedicated registration regresses
+// or the command seam stops wiring one of them into the root.
+func TestCommandProviders_NonMachineryCommands(t *testing.T) {
+	cases := []struct {
+		word     string   // Reserved() + top-level command name
+		parse    []string // argv selecting a leaf subcommand
+		selected string   // expected ctx.Command() after parse
+	}{
+		{"vm", []string{"vm", "list"}, "vm list"},
+		{"feature", []string{"feature", "list"}, "feature list"},
+		{"check", []string{"check", "box", "myimg"}, "check box <image>"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.word, func(t *testing.T) {
+			// 1. Registered as a COMMAND-class provider, resolvable through the registry.
+			p, ok := providerRegistry.resolve(ClassCommand, tc.word)
+			if !ok {
+				t.Fatalf("command:%s not registered — dedicated self-registration regressed", tc.word)
+			}
+			cp, ok := p.(CommandProvider)
+			if !ok {
+				t.Fatalf("%s provider is not a CommandProvider (got %T)", tc.word, p)
+			}
+			if cp.Reserved() != tc.word {
+				t.Fatalf("%s provider Reserved() = %q, want %q", tc.word, cp.Reserved(), tc.word)
+			}
+
+			// 2. Collected by the command seam and injected into the real CLI grammar.
+			var cli CLI
+			cli.Plugins = collectCommandPlugins()
+			parser, err := kong.New(&cli, kong.Name("charly"), kong.Exit(func(int) {}))
+			if err != nil {
+				t.Fatalf("kong.New with the command-plugin seam failed: %v", err)
+			}
+			ctx, err := parser.Parse(tc.parse)
+			if err != nil {
+				t.Fatalf("%s command not injected into the CLI grammar: %v", tc.word, err)
+			}
+			if got := ctx.Command(); got != tc.selected {
+				t.Fatalf("expected %q selected, got %q", tc.selected, got)
+			}
+		})
+	}
+}
+
+// TestCommandProviders_CheckNestedPluginsInjected proves the coupled half of the check
+// extraction: the nested OUT-OF-PROCESS command plugins (NestedCommandProvider with
+// CommandParent()=="check" — the shape charly check kube/adb/appium take once externalized)
+// still attach UNDER the extracted `check` command. It registers a fake nested-under-check
+// provider, collects the builtin command grammar (which now carries `check`), collects the
+// external command plugins, and wires them together via attachNestedCheckPlugins exactly as
+// main() does — then asserts BOTH that the nested subcommand parses under `check` AND that
+// the verbatim built-in check subcommands still parse. The test FAILS if extracting check
+// dropped the kong.Plugins nesting seam.
+func TestCommandProviders_CheckNestedPluginsInjected(t *testing.T) {
+	// Register a fake out-of-process nested-under-check command provider.
+	RegisterBuiltinProvider(&fakeNestedCheckCmd{})
+
+	// Collect the builtin command providers (includes the extracted `check`) and the
+	// external command plugins (includes the fake nested one), then wire the nested set
+	// into the check holder the SAME way main() does.
+	cmdPlugins := collectCommandPlugins()
+	_, nestedByParent, _ := collectExternalCommandPlugins()
+	attachNestedCheckPlugins(cmdPlugins, nestedByParent["check"])
+
+	var cli CLI
+	cli.Plugins = cmdPlugins
+	parser, err := kong.New(&cli, kong.Name("charly"), kong.Exit(func(int) {}))
+	if err != nil {
+		t.Fatalf("kong.New with the check command + nested plugin: %v", err)
+	}
+
+	// 1. The nested external subcommand parses under `check` (kube/adb/appium analogue).
+	ctx, err := parser.Parse([]string{"check", "examplekube", "nodes"})
+	if err != nil {
+		t.Fatalf("nested check subcommand not injected after extracting check: %v", err)
+	}
+	if got := commandPathKey(ctx.Command()); got != "check examplekube" {
+		t.Fatalf("expected nested command \"check examplekube\", got %q", got)
+	}
+
+	// 2. The built-in check subcommands still parse (verbatim CheckCmd survived).
+	ctx2, err := parser.Parse([]string{"check", "box", "myimg"})
+	if err != nil {
+		t.Fatalf("built-in check subcommand regressed after extraction: %v", err)
+	}
+	if got := ctx2.Command(); got != "check box <image>" {
+		t.Fatalf("expected \"check box <image>\", got %q", got)
+	}
+}
+
 // TestCommandProviders_ExtractedReachMCP proves the extraction did not change the
 // reflected MCP tool surface for the extracted commands — collectCommandPlugins() feeds
 // buildMcpServer's modelCLI exactly as it feeds the real CLI, so each command's leaves

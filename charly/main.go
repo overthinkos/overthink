@@ -54,20 +54,18 @@ type CLI struct {
 	Plugin   PluginInternalCmd `cmd:"" name:"__plugin" hidden:"" help:"internal: plugin server/relay plumbing"`
 	Migrate  MigrateCmd        `cmd:"" help:"Migrate any opencharly config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
 	Settings SettingsCmd       `cmd:"" help:"Manage runtime configuration (get/set/list)"`
-	// The deploy-lifecycle + leaf-domain commands — alias, tmux, ssh, secrets, preempt,
-	// mcp, udev, plus start, stop, status, restart, update, remove, logs, shell, cmd, cp,
-	// volume, service, config, bundle, and reap-orphans — are no longer hardcoded fields:
-	// each arrives via cli.Plugins as a builtin CommandProvider in its own
-	// plugin_command_<name>.go (collectCommandPlugins()). KongCommand() returns the
-	// existing <Name>Cmd struct verbatim, so the Run handler (and the core deploy/bundle
-	// machinery it calls — LoadBundleConfig, the deploy targets, …) is unchanged: only the
-	// CLI registration LOCATION moved. The machinery commands above (clean/doctor/box/
-	// candy/__plugin/migrate/settings) plus check/feature/vm below stay hardcoded; check
-	// is read as cli.Check.Plugins (nested command plugins), so it cannot move yet.
-	Check   CheckCmd   `cmd:"" help:"Evaluate boxes and deployments — pure-box (disposable), live (running deployment), AI-driven iteration, and live-container probe verbs (cdp/wl/dbus/vnc/mcp/spice/libvirt/record/k8s)"`
-	Feature FeatureCmd `cmd:"" help:"plan-shaped description authoring: list/pending/validate"`
+	// Every non-machinery command — the deploy-lifecycle + leaf-domain set (alias, tmux,
+	// ssh, secrets, preempt, mcp, udev, start, stop, status, restart, update, remove, logs,
+	// shell, cmd, cp, volume, service, config, bundle, reap-orphans) PLUS vm, feature, and
+	// check — is no longer a hardcoded field: each arrives via cli.Plugins as a builtin
+	// CommandProvider in its own plugin_command_<name>.go (collectCommandPlugins()).
+	// KongCommand() returns the existing <Name>Cmd struct verbatim, so the Run handler (and
+	// the core machinery it calls) is unchanged: only the CLI registration LOCATION moved.
+	// check is special-cased: its nested out-of-process command plugins (charly check
+	// kube/adb/appium) are injected into the holder's CheckCmd.Plugins by
+	// attachNestedCheckPlugins below. Only the machinery commands above (clean/doctor/box/
+	// candy/__plugin/migrate/settings) plus version stay hardcoded.
 	Version VersionCmd `cmd:"" help:"Print computed CalVer tag"`
-	Vm      VmCmd      `cmd:"" help:"Manage virtual machines from bootc images"`
 }
 
 // GenerateCmd generates Containerfiles
@@ -768,8 +766,12 @@ func main() {
 	// manually after parse, since those structs carry no Run() for Kong to call). Top-level
 	// ones embed on the CLI root; nested ones (e.g. `check kube`) embed under their parent.
 	topCmds, nestedCmds, extCmdTable := collectExternalCommandPlugins()
-	cli.Plugins = append(collectCommandPlugins(), topCmds...)
-	cli.Check.Plugins = nestedCmds["check"]
+	cmdPlugins := collectCommandPlugins()
+	// `charly check` is now itself a builtin command provider; inject its nested
+	// out-of-process subcommands (charly check kube/adb/appium) into the holder's
+	// CheckCmd.Plugins — the wiring that previously read cli.Check.Plugins directly.
+	attachNestedCheckPlugins(cmdPlugins, nestedCmds["check"])
+	cli.Plugins = append(cmdPlugins, topCmds...)
 	ctx := kong.Parse(&cli,
 		kong.Name("charly"),
 		kong.Description("OpenCharly - the container management experience for you and your agents"),

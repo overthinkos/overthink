@@ -61,9 +61,15 @@ func classifyDisc(k string, asChild bool) string {
 		return "step"
 	case dataKeySet[k]:
 		return "data"
-	default:
-		return ""
 	}
+	// A plugin-contributed kind: a registered ClassKind provider whose word is NOT a
+	// core kind keyword (kindWordSet). Recognized dynamically so an external kind node
+	// parses and routes to runPluginKind (E3 — every kind is a plugin, builtin or
+	// external). Only reached for non-core discriminators, so the hot path is untouched.
+	if _, ok := providerRegistry.ResolveKind(k); ok {
+		return "entity"
+	}
+	return ""
 }
 
 // parseNode builds a genericNode from a node mapping (the value under `name:`).

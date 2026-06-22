@@ -23,11 +23,13 @@ func normalizeNodeInto(gn *genericNode, uf *UnifiedFile) error {
 	if !ok {
 		return fmt.Errorf("node %q: unsupported discriminator %q", gn.name, gn.disc)
 	}
-	kp, ok := prov.(KindProvider)
-	if !ok {
-		return fmt.Errorf("node %q: kind %q has no in-process decoder", gn.name, gn.disc)
+	// Built-in kind: the typed DecodeNode fast path (no JSON). External plugin kind:
+	// the serializable Invoke envelope (runPluginKind) — the E3 generalization of the
+	// verb dual-path to the kind class.
+	if kp, ok := prov.(KindProvider); ok {
+		return kp.DecodeNode(gn, uf)
 	}
-	return kp.DecodeNode(gn, uf)
+	return runPluginKind(prov, gn, uf)
 }
 
 // buildStandaloneResource decodes a bare pod/vm/k8s/local/android entity (steps

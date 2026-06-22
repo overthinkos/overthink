@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -110,6 +111,13 @@ type UnifiedFile struct {
 	// Agent catalog (kind:agent) — the AI-CLI graders the iterate loop drives.
 	// See agent_config.go.
 	Agent map[string]*AgentConfig `yaml:"agent,omitempty" json:"agent,omitempty"`
+
+	// PluginKinds holds entities of KINDS contributed by EXTERNAL plugins (a kind
+	// the core has no Go type for). Decoded out-of-process via the plugin's Invoke
+	// envelope (runPluginKind) and stored as the plugin's canonical entity JSON,
+	// keyed by the kind word. Built-in kinds decode into their typed maps above.
+	// Host-internal — never serialized.
+	PluginKinds map[string][]json.RawMessage `yaml:"-" json:"-"`
 
 	// A check bed is a `disposable: true` bundle in the Bundle map (the separate
 	// kind:check block was removed in the node-form cutover); CheckBeds() derives

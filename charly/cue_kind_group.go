@@ -1,9 +1,10 @@
 package main
 
-// EDGE-INHERIT cutover C: `group:` is a targetless DEPLOY group (validated as a
-// #Deploy, matching groupKind.CueDefPath); the Calamares package group moved to its
-// own `package-group:` kind (validated as #Group, matching packageGroupKind).
+// `group:` is a targetless DEPLOY group (validated as a #Deploy, matching
+// groupKind.CueDefPath). The Calamares package group (`package-group:`) is no longer a
+// core kind — it was extracted into a dedicated plugin unit (plugin_package_group.go),
+// so it carries no core CUE-kind registration; its served #PackageGroupInput schema
+// validates authored input through the plugin path (runPluginKind).
 func init() {
 	registerCueKind("group", "#Deploy")
-	registerCueKind("package-group", "#Group")
 }

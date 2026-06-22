@@ -36,6 +36,13 @@ func runPluginKind(prov Provider, gn *genericNode, uf *UnifiedFile) error {
 	if err != nil {
 		return fmt.Errorf("node %q: to json: %w", gn.name, err)
 	}
+	// A plugin KIND validates at LOAD time (inside the loader), BEFORE the
+	// check/deploy paths gate plugin schemas (loadProjectPlugins). Ensure every
+	// builtin plugin unit's served schema is loaded so validateAuthoredPluginInput
+	// can find this kind's def; idempotent (sync.Once), local (no fetch).
+	if err := loadBuiltinPluginUnits(); err != nil {
+		return fmt.Errorf("node %q: builtin plugin schema gate: %w", gn.name, err)
+	}
 	// Validate the authored value against the plugin's served #Kind .cue BEFORE
 	// dispatch — identical gate to the verb path (validateAuthoredPluginInput).
 	if err := validateAuthoredPluginInput(ClassKind, gn.disc, paramsJSON); err != nil {

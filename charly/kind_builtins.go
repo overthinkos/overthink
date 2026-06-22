@@ -121,15 +121,11 @@ func (groupKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
 	return buildBundleNodeInto(gn, uf)
 }
 
-// packageGroupKind — the Calamares package group (EDGE-INHERIT cutover C split it off
-// `group:`). Decodes #Group into uf.Group; never a deploy.
-type packageGroupKind struct{ builtinKindBase }
-
-func (packageGroupKind) Reserved() string   { return "package-group" }
-func (packageGroupKind) CueDefPath() string { return "#Group" }
-func (packageGroupKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
-	return decodePtrInto(gn, &uf.Group)
-}
+// The Calamares package group (`package-group:`) is no longer a core builtin kind —
+// it was extracted into a dedicated plugin UNIT (plugin_package_group.go +
+// plugin/builtins/package-group), the first kind→plugin extraction. A
+// `package-group:` node now routes through runPluginKind (Invoke/OpLoad) into
+// uf.PluginKinds, validated against the plugin's served #PackageGroupInput schema.
 
 type targetKind struct{ builtinKindBase }
 

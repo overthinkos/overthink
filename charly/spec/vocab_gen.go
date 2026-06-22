@@ -18,7 +18,6 @@ var KindWords = []string{
 	"k8s",
 	"local",
 	"module",
-	"package-group",
 	"pod",
 	"resource",
 	"sidecar",

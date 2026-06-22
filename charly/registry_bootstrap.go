@@ -24,7 +24,7 @@ var builtinProviderInstances = []Provider{
 	summarizeVerb{}, killVerb{}, pluginVerb{},
 	// kinds (ClassKind)
 	candyKind{}, sidecarKind{}, distroKind{}, builderKind{}, initKind{}, resourceKind{},
-	agentKind{}, groupKind{}, packageGroupKind{}, targetKind{}, moduleKind{},
+	agentKind{}, groupKind{}, targetKind{}, moduleKind{},
 	standaloneKind{word: "pod", def: "#Pod"},
 	standaloneKind{word: "vm", def: "#Vm"},
 	standaloneKind{word: "k8s", def: "#K8s"},

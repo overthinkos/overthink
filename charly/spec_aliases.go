@@ -49,7 +49,6 @@ type (
 	ExtractYAML              = spec.ExtractYAML
 	FormatRule               = spec.FormatRule
 	GpuSelector              = spec.GpuSelector
-	GroupSpec                = spec.GroupSpec
 	HooksConfig              = spec.HooksConfig
 	InitDef                  = spec.InitDef
 	InstallOptsConfig        = spec.InstallOptsConfig

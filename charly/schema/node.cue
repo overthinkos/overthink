@@ -19,7 +19,7 @@
 
 // Reserved discriminators = the kind keywords. Negated regex so a child's NAME
 // cannot shadow a kind keyword.
-_reservedNode: "^(candy|pod|vm|k8s|local|android|distro|builder|init|resource|sidecar|agent|group|package-group|module|target)$"
+_reservedNode: "^(candy|pod|vm|k8s|local|android|distro|builder|init|resource|sidecar|agent|group|module|target)$"
 
 // #ResourceKind — the DEPLOYABLE subset of the kind keywords: the kinds whose
 // #Node arm admits a sub-ENTITY (resource) child (a deploy-into / alongside
@@ -71,13 +71,14 @@ _reservedNode: "^(candy|pod|vm|k8s|local|android|distro|builder|init|resource|si
 #SidecarValue:  #Sidecar
 #AgentValue:    #Agent
 // group: is a TARGETLESS deploy group (#Deploy with members, no own workload — the
-// former targetless `bundle:`). EDGE-INHERIT cutover C moved the Calamares package
-// group to its own `package-group:` kind, so `group:` is now UNAMBIGUOUSLY the deploy
-// group (no shape routing). @go(-): the Go type is BundleNode via the loader.
-#GroupValue:        #DeployValue @go(-)
-#PackageGroupValue: #Group
-#ModuleValue:       #Module
-#TargetValue:       #Target
+// former targetless `bundle:`). @go(-): the Go type is BundleNode via the loader. The
+// Calamares package group (`package-group:`) is no longer a core kind — it was
+// extracted into a dedicated plugin unit, so it has no #Node arm; a `package-group:`
+// node passes #NodeDoc as a registered non-core discriminator and is validated by the
+// plugin's served #PackageGroupInput schema (runPluginKind).
+#GroupValue:  #DeployValue @go(-)
+#ModuleValue: #Module
+#TargetValue: #Target
 
 // #DeployValue — the AUTHORED deploy shape (the disjunct under each substrate arm):
 // the COMPLETE #Deploy minus the structural nested/peer maps + the derived target —
@@ -113,14 +114,13 @@ _reservedNode: "^(candy|pod|vm|k8s|local|android|distro|builder|init|resource|si
 #SidecarArm: close({sidecar: #SidecarValue, {[!~_reservedNode]: _}})
 #AgentArm: close({agent: #AgentValue, {[!~_reservedNode]: _}})
 #GroupArm: close({group: #GroupValue, {[!~_reservedNode]: _}})
-#PackageGroupArm: close({"package-group": #PackageGroupValue, {[!~_reservedNode]: _}})
 #ModuleArm: close({module: #ModuleValue, {[!~_reservedNode]: _}})
 #TargetArm: close({target: #TargetValue, {[!~_reservedNode]: _}})
 
 // The unified node — a disjunction of the closed per-kind arms.
 #Node: #CandyArm | #PodArm | #VmArm | #K8sArm | #LocalArm |
 	#AndroidArm | #DistroArm | #BuilderArm | #InitArm | #ResourceArm |
-	#SidecarArm | #AgentArm | #GroupArm | #PackageGroupArm | #ModuleArm | #TargetArm
+	#SidecarArm | #AgentArm | #GroupArm | #ModuleArm | #TargetArm
 
 // #NodeDoc — a whole charly.yml document in unified node-form: the reserved DOCUMENT
 // directives plus a flat map of name-first entity nodes. Validating a document

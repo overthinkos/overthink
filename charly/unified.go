@@ -124,13 +124,12 @@ type UnifiedFile struct {
 	// the R10 bed set from those disposable bundles. `charly check run <bed>`
 	// drives the full R10 sequence.
 
-	// Calamares-aligned kinds (2026-05 cutover). `group:` ↔ Calamares
-	// netinstall package group; `target:` ↔ Calamares settings.conf
-	// install target; `module:` ↔ Calamares module.desc descriptor.
-	// Convention files: groups.yml / targets.yml / modules.yml — or
-	// inlined in charly.yml. Importers/emitters are deferred to a
-	// follow-up additive PR; this cutover lands the schema.
-	Group  map[string]*GroupSpec  `yaml:"group,omitempty" json:"group,omitempty"`
+	// Calamares-aligned kinds. `target:` ↔ Calamares settings.conf install
+	// target; `module:` ↔ Calamares module.desc descriptor. The Calamares
+	// netinstall package group (`package-group:`) is no longer a core typed map —
+	// it was extracted into a dedicated plugin kind (plugin_package_group.go), so a
+	// `package-group:` entity lands in PluginKinds, not here. Importers/emitters are
+	// deferred to a follow-up additive PR; this cutover lands the schema.
 	Target map[string]*TargetSpec `yaml:"target,omitempty" json:"target,omitempty"`
 	Module map[string]*ModuleSpec `yaml:"module,omitempty" json:"module,omitempty"`
 
@@ -1368,7 +1367,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeLocalMap(&dst.Local, src.Local)
 	mergeAndroidMap(&dst.Android, src.Android)
 	mergeAgentMap(&dst.Agent, src.Agent)
-	mergeGroupMap(&dst.Group, src.Group)
+	mergePluginKindsMap(&dst.PluginKinds, src.PluginKinds)
 	mergeTargetMap(&dst.Target, src.Target)
 	mergeModuleMap(&dst.Module, src.Module)
 	mergeResourceMap(&dst.Resource, src.Resource)
@@ -1592,21 +1591,25 @@ func mergeLocalMap(dst *map[string]*LocalSpec, src map[string]*LocalSpec) {
 	}
 }
 
-// Calamares-aligned merge helpers (root-wins, same shape as the rest).
-func mergeGroupMap(dst *map[string]*GroupSpec, src map[string]*GroupSpec) {
+// mergePluginKindsMap accumulates plugin-contributed kind entities (uf.PluginKinds:
+// kind word → list of canonical entity JSON) across every merged document/file. The
+// list has no per-NAME key (runPluginKind appends one entry per authored node), so the
+// merge APPENDS src's entries onto dst's — the loader visits each file once, so no
+// duplication. Without this, plugin-kind entities decoded into a per-document `sub`
+// UnifiedFile are silently dropped at mergeUnified (every document flows through here).
+func mergePluginKindsMap(dst *map[string][]json.RawMessage, src map[string][]json.RawMessage) {
 	if len(src) == 0 {
 		return
 	}
 	if *dst == nil {
-		*dst = make(map[string]*GroupSpec)
+		*dst = make(map[string][]json.RawMessage)
 	}
 	for k, v := range src {
-		if _, exists := (*dst)[k]; !exists {
-			(*dst)[k] = v
-		}
+		(*dst)[k] = append((*dst)[k], v...)
 	}
 }
 
+// Calamares-aligned merge helpers (root-wins, same shape as the rest).
 func mergeTargetMap(dst *map[string]*TargetSpec, src map[string]*TargetSpec) {
 	if len(src) == 0 {
 		return

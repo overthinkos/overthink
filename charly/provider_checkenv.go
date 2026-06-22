@@ -86,6 +86,16 @@ func (r *Runner) runPluginVerb(ctx context.Context, c *Op) CheckResult {
 		res.Message = err.Error()
 		return res
 	}
+	// A CheckVerbProvider plugin unit is IN-PROCESS and keeps the live executor: an
+	// EXECUTION-NEEDING verb (one that reaches r.Exec / the *Runner) dispatches via
+	// RunVerb, which carries the *Runner that cannot cross the wire. Only an
+	// OUT-OF-PROCESS provider falls through to invokeVerbProvider, which marshals the
+	// Op into the Invoke envelope (necessarily dropping the *Runner).
+	if cv, ok := prov.(CheckVerbProvider); ok {
+		res = cv.RunVerb(ctx, r, c)
+		res.Verb = "plugin"
+		return res
+	}
 	res = r.invokeVerbProvider(ctx, prov, word, c)
 	res.Verb = "plugin"
 	return res

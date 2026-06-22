@@ -1,10 +1,6 @@
 package main
 
-import (
-	"github.com/overthinkos/overthink/charly/spec"
-
-	"gopkg.in/yaml.v3"
-)
+import "gopkg.in/yaml.v3"
 
 // The built-in kinds as KindProviders. Each wraps its existing decode logic
 // unchanged — the migration is behavior-preserving; only the normalizeNodeInto
@@ -193,23 +189,4 @@ func isDeployShape(gn *genericNode) bool {
 		}
 	}
 	return false
-}
-
-func init() {
-	for _, p := range []KindProvider{
-		candyKind{}, sidecarKind{},
-		distroKind{}, builderKind{}, initKind{}, resourceKind{}, agentKind{}, groupKind{}, packageGroupKind{}, targetKind{}, moduleKind{},
-		standaloneKind{word: "pod", def: "#Pod"},
-		standaloneKind{word: "vm", def: "#Vm"},
-		standaloneKind{word: "k8s", def: "#K8s"},
-		standaloneKind{word: "local", def: "#Local"},
-		standaloneKind{word: "android", def: "#Android"},
-	} {
-		RegisterBuiltinProvider(p)
-	}
-	// Same-init() gate (after registration) so it can't race the alphabetical
-	// init order: every CUE-declared kind has an in-proc KindProvider.
-	if err := checkKindProviderBijection(spec.KindWords); err != nil {
-		panic(err)
-	}
 }

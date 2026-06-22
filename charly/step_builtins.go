@@ -240,17 +240,3 @@ func (rebootStepProvider) EmitLocal(t *LocalDeployTarget, step InstallStep, _ *I
 func (rebootStepProvider) EmitVM(t *VmDeployTarget, ctx context.Context, step InstallStep, _ *InstallPlan, opts EmitOpts, _ *CandyRecord) error {
 	return t.execReboot(ctx, step.(*RebootStep), opts)
 }
-
-func init() {
-	for _, p := range []StepProvider{
-		systemPackagesStepProvider{}, builderStepProvider{}, opStepProvider{}, fileStepProvider{},
-		servicePackagedStepProvider{}, serviceCustomStepProvider{}, shellHookStepProvider{},
-		shellSnippetStepProvider{}, repoChangeStepProvider{}, apkInstallStepProvider{},
-		localPkgInstallStepProvider{}, rebootStepProvider{},
-	} {
-		RegisterBuiltinProvider(p)
-	}
-	if err := checkStepProviderBijection(); err != nil {
-		panic(err)
-	}
-}

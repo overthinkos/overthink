@@ -92,11 +92,3 @@ func (npmBuilder) Reverse(s *BuilderStep) []ReverseOp {
 	return nil
 }
 func (npmBuilder) CollectContext(_ *Candy, _ *ResolvedBox) map[string]any { return nil }
-
-func init() {
-	for _, p := range []BuilderProvider{
-		aurBuilder{}, pixiBuilder{}, cargoBuilder{}, npmBuilder{},
-	} {
-		RegisterBuiltinProvider(p)
-	}
-}

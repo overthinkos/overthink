@@ -1,10 +1,6 @@
 package main
 
-import (
-	"context"
-
-	"github.com/overthinkos/overthink/charly/spec"
-)
+import "context"
 
 // The built-in check verbs as CheckVerbProviders. Each wraps its existing
 // r.runX handler unchanged — the migration is behavior-preserving; only the
@@ -219,26 +215,4 @@ type pluginVerb struct{ builtinVerbBase }
 func (pluginVerb) Reserved() string { return "plugin" }
 func (pluginVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runPluginVerb(ctx, op)
-}
-
-func init() {
-	for _, p := range []CheckVerbProvider{
-		fileVerb{}, portVerb{}, commandVerb{}, httpVerb{}, packageVerb{}, serviceVerb{},
-		processVerb{}, dnsVerb{}, userVerb{}, unixGroupVerb{}, interfaceVerb{}, kernelParamVerb{},
-		mountVerb{}, addrVerb{}, matchingVerb{}, cdpVerb{}, wlVerb{}, dbusVerb{}, vncVerb{},
-		mcpVerb{}, recordVerb{}, spiceVerb{}, libvirtVerb{}, kubeVerb{}, adbVerb{}, appiumVerb{},
-		summarizeVerb{}, killVerb{}, pluginVerb{},
-	} {
-		RegisterBuiltinProvider(p)
-	}
-	// Same-init() gates (after registration) so they can't race the alphabetical
-	// init order: every CUE-declared verb has an in-proc CheckVerbProvider, and every
-	// live verb's provider-owned method allowlist matches spec.LiveVerbMethods (E4 —
-	// read from the registered LiveVerbProviders, no central liveVerbDispatch).
-	if err := checkVerbProviderBijection(spec.OpVerbs); err != nil {
-		panic(err)
-	}
-	if err := checkMethodAllowlists(spec.LiveVerbMethods); err != nil {
-		panic(err)
-	}
 }

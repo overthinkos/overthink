@@ -40,14 +40,3 @@ func (androidTarget) Reserved() string { return "android" }
 func (androidTarget) ResolveTarget(_ *BundleNode, name string) (UnifiedDeployTarget, error) {
 	return &AndroidUnifiedTarget{NodeName: name}, nil
 }
-
-func init() {
-	for _, p := range []DeployTargetProvider{
-		localTarget{}, vmTarget{}, podTarget{}, k8sTarget{}, androidTarget{},
-	} {
-		RegisterBuiltinProvider(p)
-	}
-	if err := checkDeployProviderBijection(); err != nil {
-		panic(err)
-	}
-}

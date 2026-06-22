@@ -14,7 +14,7 @@ import (
 // Its Invoke(OpLoad) echoes the validated value as the entity.
 type e3KindTestProv struct{}
 
-func (e3KindTestProv) Reserved() string    { return "e3kind" }
+func (e3KindTestProv) Reserved() string     { return "e3kind" }
 func (e3KindTestProv) Class() ProviderClass { return ClassKind }
 func (e3KindTestProv) Invoke(_ context.Context, op *Operation) (*Result, error) {
 	return &Result{JSON: op.Params}, nil

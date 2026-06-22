@@ -231,9 +231,14 @@ func init() {
 	} {
 		RegisterBuiltinProvider(p)
 	}
-	// Same-init() gate (after registration) so it can't race the alphabetical
-	// init order: every CUE-declared verb has an in-proc CheckVerbProvider.
+	// Same-init() gates (after registration) so they can't race the alphabetical
+	// init order: every CUE-declared verb has an in-proc CheckVerbProvider, and every
+	// live verb's provider-owned method allowlist matches spec.LiveVerbMethods (E4 —
+	// read from the registered LiveVerbProviders, no central liveVerbDispatch).
 	if err := checkVerbProviderBijection(spec.OpVerbs); err != nil {
+		panic(err)
+	}
+	if err := checkMethodAllowlists(spec.LiveVerbMethods); err != nil {
 		panic(err)
 	}
 }

@@ -56,33 +56,43 @@ func TestReservedWordRegistry_VerbBijection(t *testing.T) {
 	}
 }
 
-// TestReservedWordRegistry_MethodAllowlists proves the 11 live-verb dispatch maps'
-// keys equal spec.LiveVerbMethods and that drift is detected.
+// TestReservedWordRegistry_MethodAllowlists proves every live-verb provider's method
+// allowlist (LiveVerbProvider.Methods) equals spec.LiveVerbMethods and that drift is
+// detected. The check reads each allowlist from the registered provider (E4 — no
+// central liveVerbDispatch); drift is simulated by doctoring the passed CUE side.
 func TestReservedWordRegistry_MethodAllowlists(t *testing.T) {
-	if err := checkMethodAllowlists(liveVerbDispatch, spec.LiveVerbMethods); err != nil {
+	if err := checkMethodAllowlists(spec.LiveVerbMethods); err != nil {
 		t.Fatalf("live method allowlists drifted from spec.LiveVerbMethods: %v", err)
 	}
 
-	// Inject a dispatch method that the CUE enum doesn't carry → must be reported.
-	doctored := map[string]map[string]methodSpec{
-		"cdp": {"ghostmethod": {path: []string{"cdp", "ghost"}}},
+	// A CUE method the provider's allowlist lacks → reported as a CUE method with no
+	// dispatch entry.
+	withGhost := map[string][]string{}
+	for k, v := range spec.LiveVerbMethods {
+		withGhost[k] = v
 	}
-	if err := checkMethodAllowlists(doctored, spec.LiveVerbMethods); err == nil ||
+	withGhost["cdp"] = append(append([]string{}, spec.LiveVerbMethods["cdp"]...), "ghostmethod")
+	if err := checkMethodAllowlists(withGhost); err == nil ||
 		!strings.Contains(err.Error(), "ghostmethod") {
-		t.Fatalf("expected method-allowlist check to FAIL on an extra dispatch method, got: %v", err)
+		t.Fatalf("expected method-allowlist check to FAIL on a CUE method with no dispatch entry, got: %v", err)
 	}
 
-	// Drop a CUE method from the dispatch map → must be reported as missing.
-	cdpMinusOne := map[string]methodSpec{}
-	for k, v := range cdpMethods {
-		if k == "status" {
+	// A provider method dropped from the CUE side → reported as not-in-spec.
+	minusStatus := map[string][]string{}
+	for k, v := range spec.LiveVerbMethods {
+		minusStatus[k] = v
+	}
+	cdpNoStatus := []string{}
+	for _, m := range spec.LiveVerbMethods["cdp"] {
+		if m == "status" {
 			continue
 		}
-		cdpMinusOne[k] = v
+		cdpNoStatus = append(cdpNoStatus, m)
 	}
-	if err := checkMethodAllowlists(map[string]map[string]methodSpec{"cdp": cdpMinusOne}, spec.LiveVerbMethods); err == nil ||
+	minusStatus["cdp"] = cdpNoStatus
+	if err := checkMethodAllowlists(minusStatus); err == nil ||
 		!strings.Contains(err.Error(), "status") {
-		t.Fatalf("expected method-allowlist check to FAIL on a missing dispatch method, got: %v", err)
+		t.Fatalf("expected method-allowlist check to FAIL on a provider method dropped from the CUE side, got: %v", err)
 	}
 }
 

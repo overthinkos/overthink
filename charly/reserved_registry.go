@@ -120,18 +120,28 @@ func checkVerbBijection(catalog map[string]VerbSpec, verbs, authoring []string) 
 	return nil
 }
 
-// checkMethodAllowlists verifies every live-verb method-dispatch map's key set
-// equals the CUE-derived spec.LiveVerbMethods enum for that verb — so the hand
-// dispatch tables (cdpMethods/wlMethods/…, which carry the per-method posArgs /
-// required-modifier logic) can never drift from the CUE method vocabulary the
-// schema + validateCharlyVerb enforce.
-func checkMethodAllowlists(dispatch map[string]map[string]methodSpec, cueMethods map[string][]string) error {
+// checkMethodAllowlists verifies every live-verb provider's method-allowlist key
+// set equals the CUE-derived spec.LiveVerbMethods enum for that verb — so the hand
+// dispatch tables (cdpMethods/wlMethods/…, owned by each provider via Methods() and
+// carrying the per-method posArgs / required-modifier logic) can never drift from the
+// CUE method vocabulary the schema + validateCharlyVerb enforce. E4: reads each
+// verb's allowlist from its registered LiveVerbProvider — there is no central
+// liveVerbDispatch — so it MUST run AFTER the verb providers register (called from
+// their init(), after registration, to avoid the alphabetical init-order race).
+func checkMethodAllowlists(cueMethods map[string][]string) error {
 	var problems []string
-	for verb, m := range dispatch {
-		if len(cueMethods[verb]) == 0 {
-			problems = append(problems, fmt.Sprintf("%s: no spec.LiveVerbMethods entry", verb))
+	for verb := range cueMethods {
+		prov, ok := providerRegistry.ResolveVerb(verb)
+		if !ok {
+			problems = append(problems, fmt.Sprintf("%s: no registered verb provider for a spec.LiveVerbMethods verb", verb))
 			continue
 		}
+		lv, ok := prov.(LiveVerbProvider)
+		if !ok {
+			problems = append(problems, fmt.Sprintf("%s: registered but not a LiveVerbProvider (no method contract)", verb))
+			continue
+		}
+		m := lv.Methods()
 		want := setFromSlice(cueMethods[verb])
 		for method := range m {
 			if !want[method] {
@@ -151,32 +161,13 @@ func checkMethodAllowlists(dispatch map[string]map[string]methodSpec, cueMethods
 	return nil
 }
 
-// liveVerbDispatch is the per-verb method-dispatch table set — the 11 hand maps in
-// checkrun_charly_verbs.go, keyed by verb. Their KEYS are gated against
-// spec.LiveVerbMethods (the CUE method enums) by the bijection gate; the VALUES
-// (posArgs / required-modifier specs) stay hand Go dispatch logic.
-var liveVerbDispatch = map[string]map[string]methodSpec{
-	"cdp":     cdpMethods,
-	"wl":      wlMethods,
-	"dbus":    dbusMethods,
-	"vnc":     vncMethods,
-	"mcp":     mcpMethods,
-	"record":  recordMethods,
-	"spice":   spiceMethods,
-	"libvirt": libvirtMethods,
-	"kube":    kubeMethods,
-	"adb":     adbMethods,
-	"appium":  appiumMethods,
-}
-
-// init is the startup bijection gate. It panics unless every reserved word in the
-// CUE vocabulary has exactly one Go handler and vice versa — a fail-fast that
-// makes a schema/handler divergence impossible to ship.
+// init is the startup verb-bijection gate. It panics unless every reserved word in
+// the CUE vocabulary has exactly one Go handler and vice versa — a fail-fast that
+// makes a schema/handler divergence impossible to ship. The live-verb method-
+// allowlist gate (checkMethodAllowlists) reads from the registered providers, so it
+// runs in the verb-registration init() (after registration), not here.
 func init() {
 	if err := checkVerbBijection(VerbCatalog, spec.OpVerbs, spec.AuthoringVerbs); err != nil {
-		panic(err)
-	}
-	if err := checkMethodAllowlists(liveVerbDispatch, spec.LiveVerbMethods); err != nil {
 		panic(err)
 	}
 }

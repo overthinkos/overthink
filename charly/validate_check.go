@@ -141,39 +141,27 @@ func validateCheck(c *Op, loc string, errs *ValidationError) {
 // deploy-scope enforcement for the cdp/wl/dbus/vnc/mcp verbs. No-op for
 // other verbs.
 func validateCharlyVerb(c *Op, verb, loc string, errs *ValidationError) {
-	var (
-		method    string
-		allowlist map[string]methodSpec
-	)
-	switch verb {
-	case "cdp":
-		method, allowlist = c.Cdp, cdpMethods
-	case "wl":
-		method, allowlist = c.Wl, wlMethods
-	case "dbus":
-		method, allowlist = c.Dbus, dbusMethods
-	case "vnc":
-		method, allowlist = c.Vnc, vncMethods
-	case "mcp":
-		method, allowlist = c.Mcp, mcpMethods
-	case "record":
-		method, allowlist = c.Record, recordMethods
-	case "spice":
-		method, allowlist = c.Spice, spiceMethods
-	case "libvirt":
-		method, allowlist = c.Libvirt, libvirtMethods
-	case "adb":
-		method, allowlist = c.Adb, adbMethods
-	case "appium":
-		method, allowlist = c.Appium, appiumMethods
-	default:
+	// E4: the verb's method contract is owned by its provider (LiveVerbProvider),
+	// reached through the registry — the former central per-verb switch is gone. A
+	// goss verb (file/port/…) resolves but is NOT a LiveVerbProvider (it has no
+	// method contract), so there is nothing to check. Every live verb in the
+	// registry is now covered uniformly — INCLUDING kube, whose required-modifier
+	// specs (apply→Manifest, wait-ready→{Kind,Name}, …) the old 10-case switch
+	// silently omitted.
+	prov, ok := providerRegistry.ResolveVerb(verb)
+	if !ok {
 		return
 	}
+	lv, ok := prov.(LiveVerbProvider)
+	if !ok {
+		return
+	}
+	method := lv.MethodField(c)
 
 	// The method-name allowlist is enforced by the per-verb #*Method CUE enums;
 	// an unknown method is rejected there. Here we only need the spec to drive
 	// the cross-field required-modifier / artifact checks below.
-	spec, ok := allowlist[method]
+	spec, ok := lv.Methods()[method]
 	if !ok {
 		return
 	}

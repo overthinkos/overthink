@@ -275,3 +275,167 @@ var Provider_ServiceDesc = grpc.ServiceDesc{
 	},
 	Metadata: "plugin.proto",
 }
+
+const (
+	ExecutorService_Venue_FullMethodName     = "/charlyplugin.ExecutorService/Venue"
+	ExecutorService_RunSystem_FullMethodName = "/charlyplugin.ExecutorService/RunSystem"
+	ExecutorService_RunUser_FullMethodName   = "/charlyplugin.ExecutorService/RunUser"
+)
+
+// ExecutorServiceClient is the client API for ExecutorService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type ExecutorServiceClient interface {
+	Venue(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*VenueReply, error)
+	RunSystem(ctx context.Context, in *RunRequest, opts ...grpc.CallOption) (*RunReply, error)
+	RunUser(ctx context.Context, in *RunRequest, opts ...grpc.CallOption) (*RunReply, error)
+}
+
+type executorServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewExecutorServiceClient(cc grpc.ClientConnInterface) ExecutorServiceClient {
+	return &executorServiceClient{cc}
+}
+
+func (c *executorServiceClient) Venue(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*VenueReply, error) {
+	out := new(VenueReply)
+	err := c.cc.Invoke(ctx, ExecutorService_Venue_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *executorServiceClient) RunSystem(ctx context.Context, in *RunRequest, opts ...grpc.CallOption) (*RunReply, error) {
+	out := new(RunReply)
+	err := c.cc.Invoke(ctx, ExecutorService_RunSystem_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *executorServiceClient) RunUser(ctx context.Context, in *RunRequest, opts ...grpc.CallOption) (*RunReply, error) {
+	out := new(RunReply)
+	err := c.cc.Invoke(ctx, ExecutorService_RunUser_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// ExecutorServiceServer is the server API for ExecutorService service.
+// All implementations must embed UnimplementedExecutorServiceServer
+// for forward compatibility
+type ExecutorServiceServer interface {
+	Venue(context.Context, *Empty) (*VenueReply, error)
+	RunSystem(context.Context, *RunRequest) (*RunReply, error)
+	RunUser(context.Context, *RunRequest) (*RunReply, error)
+	mustEmbedUnimplementedExecutorServiceServer()
+}
+
+// UnimplementedExecutorServiceServer must be embedded to have forward compatible implementations.
+type UnimplementedExecutorServiceServer struct {
+}
+
+func (UnimplementedExecutorServiceServer) Venue(context.Context, *Empty) (*VenueReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Venue not implemented")
+}
+func (UnimplementedExecutorServiceServer) RunSystem(context.Context, *RunRequest) (*RunReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RunSystem not implemented")
+}
+func (UnimplementedExecutorServiceServer) RunUser(context.Context, *RunRequest) (*RunReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RunUser not implemented")
+}
+func (UnimplementedExecutorServiceServer) mustEmbedUnimplementedExecutorServiceServer() {}
+
+// UnsafeExecutorServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ExecutorServiceServer will
+// result in compilation errors.
+type UnsafeExecutorServiceServer interface {
+	mustEmbedUnimplementedExecutorServiceServer()
+}
+
+func RegisterExecutorServiceServer(s grpc.ServiceRegistrar, srv ExecutorServiceServer) {
+	s.RegisterService(&ExecutorService_ServiceDesc, srv)
+}
+
+func _ExecutorService_Venue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Empty)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServiceServer).Venue(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ExecutorService_Venue_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServiceServer).Venue(ctx, req.(*Empty))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ExecutorService_RunSystem_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RunRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServiceServer).RunSystem(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ExecutorService_RunSystem_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServiceServer).RunSystem(ctx, req.(*RunRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ExecutorService_RunUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RunRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServiceServer).RunUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ExecutorService_RunUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServiceServer).RunUser(ctx, req.(*RunRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// ExecutorService_ServiceDesc is the grpc.ServiceDesc for ExecutorService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var ExecutorService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "charlyplugin.ExecutorService",
+	HandlerType: (*ExecutorServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Venue",
+			Handler:    _ExecutorService_Venue_Handler,
+		},
+		{
+			MethodName: "RunSystem",
+			Handler:    _ExecutorService_RunSystem_Handler,
+		},
+		{
+			MethodName: "RunUser",
+			Handler:    _ExecutorService_RunUser_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "plugin.proto",
+}

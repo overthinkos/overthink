@@ -52,6 +52,23 @@ message InvokeRequest {
   bytes  params_json = 3;  // the CUE-generated params (Op for verbs/steps; entity for kinds)
   bytes  env_json = 4;     // snapshotCheckEnv / venue descriptor (serializable invocation ctx)
   string class = 5;        // the ProviderClass ("verb"/"kind"/...) — words aren't unique across classes
+  uint32 executor_broker_id = 6; // E3b: the go-plugin broker id the host serves ExecutorService on for a deploy/step/builder op; 0 = none (verb/kind ops need no executor)
 }
 message InvokeReply { bytes result_json = 1; }   // CheckResult / InstallPlan / Diagnostics, JSON
 message Frame       { bytes result_json = 1; }   // one streamed result frame (single-shot sends one)
+
+// ExecutorService — the HOST-SERVED reverse channel (E3b). A deploy/step/builder
+// provider's live DeployExecutor (shell/SSH on the venue) cannot cross the process
+// boundary, so an OUT-OF-PROCESS deploy/step/builder plugin drives it by calling
+// BACK to the host: the host serves this service on the go-plugin GRPCBroker, passes
+// its broker id in InvokeRequest.executor_broker_id, and the plugin dials that id to
+// run RunSystem/RunUser/Venue against the real venue. Built-in providers use the
+// typed DeployExecutor directly (no wire); this is the external path only.
+service ExecutorService {
+  rpc Venue(Empty) returns (VenueReply);
+  rpc RunSystem(RunRequest) returns (RunReply);
+  rpc RunUser(RunRequest) returns (RunReply);
+}
+message VenueReply { string venue = 1; }
+message RunRequest { string script = 1; bytes opts_json = 2; } // opts_json = EmitOpts, JSON
+message RunReply   { string error = 1; }                       // empty error = success

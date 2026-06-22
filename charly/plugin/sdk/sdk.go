@@ -59,18 +59,23 @@ type grpcPlugin struct {
 	metaSrv     pb.PluginMetaServer
 }
 
-func (p *grpcPlugin) GRPCServer(_ *plugin.GRPCBroker, s *grpc.Server) error { //nolint:unparam // go-plugin GRPCPlugin mandates the error return
+func (p *grpcPlugin) GRPCServer(broker *plugin.GRPCBroker, s *grpc.Server) error { //nolint:unparam // go-plugin GRPCPlugin mandates the error return
+	servedBroker = broker // E3b: a deploy/step/builder Invoke dials the host's ExecutorService through this
 	pb.RegisterProviderServer(s, p.providerSrv)
 	pb.RegisterPluginMetaServer(s, p.metaSrv)
 	return nil
 }
 
-func (p *grpcPlugin) GRPCClient(_ context.Context, _ *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) { //nolint:unparam // go-plugin GRPCPlugin mandates the (any,error) return
-	return &Conn{Provider: pb.NewProviderClient(c), Meta: pb.NewPluginMetaClient(c)}, nil
+func (p *grpcPlugin) GRPCClient(_ context.Context, broker *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) { //nolint:unparam // go-plugin GRPCPlugin mandates the (any,error) return
+	return &Conn{Provider: pb.NewProviderClient(c), Meta: pb.NewPluginMetaClient(c), Broker: broker}, nil
 }
 
 // Conn is the dispensed client handle — charly's side of a connected plugin.
 type Conn struct {
 	Provider pb.ProviderClient
 	Meta     pb.PluginMetaClient
+	// Broker is this connection's go-plugin GRPCBroker — the host's handle to stand up
+	// the E3b reverse-channel ExecutorService a deploy/step/builder plugin dials back
+	// to. Nil for an in-proc transport (no reverse channel needed).
+	Broker *plugin.GRPCBroker
 }

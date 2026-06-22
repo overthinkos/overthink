@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 
+	"google.golang.org/grpc"
+
 	pb "github.com/overthinkos/overthink/charly/plugin/proto"
 	"github.com/overthinkos/overthink/charly/plugin/sdk"
 )
@@ -128,6 +130,39 @@ func (g *grpcProvider) Class() ProviderClass { return g.class }
 func (g *grpcProvider) Invoke(ctx context.Context, op *Operation) (*Result, error) {
 	rep, err := g.conn.Provider.Invoke(ctx, &pb.InvokeRequest{
 		Reserved: op.Reserved, Op: op.Op, ParamsJson: op.Params, EnvJson: op.Env, Class: string(g.class),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &Result{JSON: rep.GetResultJson()}, nil
+}
+
+// InvokeWithExecutor invokes a deploy/step/builder op WITH the E3b reverse channel: it
+// stands up the host's ExecutorService (delegating to exec) on this connection's
+// go-plugin broker, passes the broker id in the request, and the out-of-process plugin
+// dials back to run shell/SSH ops on exec's real venue. The reverse server lives for
+// the duration of the (synchronous) Invoke. Falls back to a plain Invoke (broker id 0)
+// when the connection has no broker (an in-proc transport) or no executor is given.
+func (g *grpcProvider) InvokeWithExecutor(ctx context.Context, op *Operation, exec DeployExecutor) (*Result, error) {
+	var brokerID uint32
+	if g.conn.Broker != nil && exec != nil {
+		id := g.conn.Broker.NextId()
+		var srv *grpc.Server
+		go g.conn.Broker.AcceptAndServe(id, func(opts []grpc.ServerOption) *grpc.Server {
+			srv = grpc.NewServer(opts...)
+			pb.RegisterExecutorServiceServer(srv, &executorReverseServer{exec: exec})
+			return srv
+		})
+		defer func() {
+			if srv != nil {
+				srv.Stop()
+			}
+		}()
+		brokerID = id
+	}
+	rep, err := g.conn.Provider.Invoke(ctx, &pb.InvokeRequest{
+		Reserved: op.Reserved, Op: op.Op, ParamsJson: op.Params, EnvJson: op.Env,
+		Class: string(g.class), ExecutorBrokerId: brokerID,
 	})
 	if err != nil {
 		return nil, err

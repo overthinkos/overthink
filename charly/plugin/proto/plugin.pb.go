@@ -204,14 +204,15 @@ func (x *ProvidedCapability) GetInputDef() string {
 }
 
 type InvokeRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Reserved      string                 `protobuf:"bytes,1,opt,name=reserved,proto3" json:"reserved,omitempty"`                       // the reserved word, e.g. "exampleprobe","cdp","local"
-	Op            string                 `protobuf:"bytes,2,opt,name=op,proto3" json:"op,omitempty"`                                   // operation selector for the word's class
-	ParamsJson    []byte                 `protobuf:"bytes,3,opt,name=params_json,json=paramsJson,proto3" json:"params_json,omitempty"` // the CUE-generated params (Op for verbs/steps; entity for kinds)
-	EnvJson       []byte                 `protobuf:"bytes,4,opt,name=env_json,json=envJson,proto3" json:"env_json,omitempty"`          // snapshotCheckEnv / venue descriptor (serializable invocation ctx)
-	Class         string                 `protobuf:"bytes,5,opt,name=class,proto3" json:"class,omitempty"`                             // the ProviderClass ("verb"/"kind"/...) — words aren't unique across classes
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Reserved         string                 `protobuf:"bytes,1,opt,name=reserved,proto3" json:"reserved,omitempty"`                                            // the reserved word, e.g. "exampleprobe","cdp","local"
+	Op               string                 `protobuf:"bytes,2,opt,name=op,proto3" json:"op,omitempty"`                                                        // operation selector for the word's class
+	ParamsJson       []byte                 `protobuf:"bytes,3,opt,name=params_json,json=paramsJson,proto3" json:"params_json,omitempty"`                      // the CUE-generated params (Op for verbs/steps; entity for kinds)
+	EnvJson          []byte                 `protobuf:"bytes,4,opt,name=env_json,json=envJson,proto3" json:"env_json,omitempty"`                               // snapshotCheckEnv / venue descriptor (serializable invocation ctx)
+	Class            string                 `protobuf:"bytes,5,opt,name=class,proto3" json:"class,omitempty"`                                                  // the ProviderClass ("verb"/"kind"/...) — words aren't unique across classes
+	ExecutorBrokerId uint32                 `protobuf:"varint,6,opt,name=executor_broker_id,json=executorBrokerId,proto3" json:"executor_broker_id,omitempty"` // E3b: the go-plugin broker id the host serves ExecutorService on for a deploy/step/builder op; 0 = none (verb/kind ops need no executor)
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *InvokeRequest) Reset() {
@@ -277,6 +278,13 @@ func (x *InvokeRequest) GetClass() string {
 		return x.Class
 	}
 	return ""
+}
+
+func (x *InvokeRequest) GetExecutorBrokerId() uint32 {
+	if x != nil {
+		return x.ExecutorBrokerId
+	}
+	return 0
 }
 
 type InvokeReply struct {
@@ -367,6 +375,146 @@ func (x *Frame) GetResultJson() []byte {
 	return nil
 }
 
+type VenueReply struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Venue         string                 `protobuf:"bytes,1,opt,name=venue,proto3" json:"venue,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VenueReply) Reset() {
+	*x = VenueReply{}
+	mi := &file_plugin_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VenueReply) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VenueReply) ProtoMessage() {}
+
+func (x *VenueReply) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VenueReply.ProtoReflect.Descriptor instead.
+func (*VenueReply) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *VenueReply) GetVenue() string {
+	if x != nil {
+		return x.Venue
+	}
+	return ""
+}
+
+type RunRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Script        string                 `protobuf:"bytes,1,opt,name=script,proto3" json:"script,omitempty"`
+	OptsJson      []byte                 `protobuf:"bytes,2,opt,name=opts_json,json=optsJson,proto3" json:"opts_json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunRequest) Reset() {
+	*x = RunRequest{}
+	mi := &file_plugin_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunRequest) ProtoMessage() {}
+
+func (x *RunRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunRequest.ProtoReflect.Descriptor instead.
+func (*RunRequest) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *RunRequest) GetScript() string {
+	if x != nil {
+		return x.Script
+	}
+	return ""
+}
+
+func (x *RunRequest) GetOptsJson() []byte {
+	if x != nil {
+		return x.OptsJson
+	}
+	return nil
+}
+
+type RunReply struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Error         string                 `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunReply) Reset() {
+	*x = RunReply{}
+	mi := &file_plugin_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunReply) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunReply) ProtoMessage() {}
+
+func (x *RunReply) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunReply.ProtoReflect.Descriptor instead.
+func (*RunReply) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *RunReply) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 var File_plugin_proto protoreflect.FileDescriptor
 
 const file_plugin_proto_rawDesc = "" +
@@ -382,26 +530,40 @@ const file_plugin_proto_rawDesc = "" +
 	"\x12ProvidedCapability\x12\x14\n" +
 	"\x05class\x18\x01 \x01(\tR\x05class\x12\x12\n" +
 	"\x04word\x18\x02 \x01(\tR\x04word\x12\x1b\n" +
-	"\tinput_def\x18\x03 \x01(\tR\binputDef\"\x8d\x01\n" +
+	"\tinput_def\x18\x03 \x01(\tR\binputDef\"\xbb\x01\n" +
 	"\rInvokeRequest\x12\x1a\n" +
 	"\breserved\x18\x01 \x01(\tR\breserved\x12\x0e\n" +
 	"\x02op\x18\x02 \x01(\tR\x02op\x12\x1f\n" +
 	"\vparams_json\x18\x03 \x01(\fR\n" +
 	"paramsJson\x12\x19\n" +
 	"\benv_json\x18\x04 \x01(\fR\aenvJson\x12\x14\n" +
-	"\x05class\x18\x05 \x01(\tR\x05class\".\n" +
+	"\x05class\x18\x05 \x01(\tR\x05class\x12,\n" +
+	"\x12executor_broker_id\x18\x06 \x01(\rR\x10executorBrokerId\".\n" +
 	"\vInvokeReply\x12\x1f\n" +
 	"\vresult_json\x18\x01 \x01(\fR\n" +
 	"resultJson\"(\n" +
 	"\x05Frame\x12\x1f\n" +
 	"\vresult_json\x18\x01 \x01(\fR\n" +
-	"resultJson2I\n" +
+	"resultJson\"\"\n" +
+	"\n" +
+	"VenueReply\x12\x14\n" +
+	"\x05venue\x18\x01 \x01(\tR\x05venue\"A\n" +
+	"\n" +
+	"RunRequest\x12\x16\n" +
+	"\x06script\x18\x01 \x01(\tR\x06script\x12\x1b\n" +
+	"\topts_json\x18\x02 \x01(\fR\boptsJson\" \n" +
+	"\bRunReply\x12\x14\n" +
+	"\x05error\x18\x01 \x01(\tR\x05error2I\n" +
 	"\n" +
 	"PluginMeta\x12;\n" +
 	"\bDescribe\x12\x13.charlyplugin.Empty\x1a\x1a.charlyplugin.Capabilities2\x90\x01\n" +
 	"\bProvider\x12@\n" +
 	"\x06Invoke\x12\x1b.charlyplugin.InvokeRequest\x1a\x19.charlyplugin.InvokeReply\x12B\n" +
-	"\fInvokeStream\x12\x1b.charlyplugin.InvokeRequest\x1a\x13.charlyplugin.Frame0\x01B6Z4github.com/overthinkos/overthink/charly/plugin/protob\x06proto3"
+	"\fInvokeStream\x12\x1b.charlyplugin.InvokeRequest\x1a\x13.charlyplugin.Frame0\x012\xc5\x01\n" +
+	"\x0fExecutorService\x126\n" +
+	"\x05Venue\x12\x13.charlyplugin.Empty\x1a\x18.charlyplugin.VenueReply\x12=\n" +
+	"\tRunSystem\x12\x18.charlyplugin.RunRequest\x1a\x16.charlyplugin.RunReply\x12;\n" +
+	"\aRunUser\x12\x18.charlyplugin.RunRequest\x1a\x16.charlyplugin.RunReplyB6Z4github.com/overthinkos/overthink/charly/plugin/protob\x06proto3"
 
 var (
 	file_plugin_proto_rawDescOnce sync.Once
@@ -415,7 +577,7 @@ func file_plugin_proto_rawDescGZIP() []byte {
 	return file_plugin_proto_rawDescData
 }
 
-var file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_plugin_proto_goTypes = []any{
 	(*Empty)(nil),              // 0: charlyplugin.Empty
 	(*Capabilities)(nil),       // 1: charlyplugin.Capabilities
@@ -423,17 +585,26 @@ var file_plugin_proto_goTypes = []any{
 	(*InvokeRequest)(nil),      // 3: charlyplugin.InvokeRequest
 	(*InvokeReply)(nil),        // 4: charlyplugin.InvokeReply
 	(*Frame)(nil),              // 5: charlyplugin.Frame
+	(*VenueReply)(nil),         // 6: charlyplugin.VenueReply
+	(*RunRequest)(nil),         // 7: charlyplugin.RunRequest
+	(*RunReply)(nil),           // 8: charlyplugin.RunReply
 }
 var file_plugin_proto_depIdxs = []int32{
 	2, // 0: charlyplugin.Capabilities.provided:type_name -> charlyplugin.ProvidedCapability
 	0, // 1: charlyplugin.PluginMeta.Describe:input_type -> charlyplugin.Empty
 	3, // 2: charlyplugin.Provider.Invoke:input_type -> charlyplugin.InvokeRequest
 	3, // 3: charlyplugin.Provider.InvokeStream:input_type -> charlyplugin.InvokeRequest
-	1, // 4: charlyplugin.PluginMeta.Describe:output_type -> charlyplugin.Capabilities
-	4, // 5: charlyplugin.Provider.Invoke:output_type -> charlyplugin.InvokeReply
-	5, // 6: charlyplugin.Provider.InvokeStream:output_type -> charlyplugin.Frame
-	4, // [4:7] is the sub-list for method output_type
-	1, // [1:4] is the sub-list for method input_type
+	0, // 4: charlyplugin.ExecutorService.Venue:input_type -> charlyplugin.Empty
+	7, // 5: charlyplugin.ExecutorService.RunSystem:input_type -> charlyplugin.RunRequest
+	7, // 6: charlyplugin.ExecutorService.RunUser:input_type -> charlyplugin.RunRequest
+	1, // 7: charlyplugin.PluginMeta.Describe:output_type -> charlyplugin.Capabilities
+	4, // 8: charlyplugin.Provider.Invoke:output_type -> charlyplugin.InvokeReply
+	5, // 9: charlyplugin.Provider.InvokeStream:output_type -> charlyplugin.Frame
+	6, // 10: charlyplugin.ExecutorService.Venue:output_type -> charlyplugin.VenueReply
+	8, // 11: charlyplugin.ExecutorService.RunSystem:output_type -> charlyplugin.RunReply
+	8, // 12: charlyplugin.ExecutorService.RunUser:output_type -> charlyplugin.RunReply
+	7, // [7:13] is the sub-list for method output_type
+	1, // [1:7] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
 	1, // [1:1] is the sub-list for extension extendee
 	0, // [0:1] is the sub-list for field type_name
@@ -450,9 +621,9 @@ func file_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_plugin_proto_rawDesc), len(file_plugin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   9,
 			NumExtensions: 0,
-			NumServices:   2,
+			NumServices:   3,
 		},
 		GoTypes:           file_plugin_proto_goTypes,
 		DependencyIndexes: file_plugin_proto_depIdxs,

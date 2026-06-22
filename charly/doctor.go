@@ -452,15 +452,21 @@ func getBinaryVersion(name string) string {
 }
 
 // deviceDescriptions maps device patterns to human-readable descriptions.
-var deviceDescriptions = map[string]string{
-	"/dev/dri/renderD*": "GPU render node",
-	"/dev/kfd":          "AMD Kernel Fusion Driver (ROCm compute)",
-	"/dev/kvm":          "KVM virtualization",
-	"/dev/vhost-net":    "vhost network acceleration",
-	"/dev/vhost-vsock":  "VM socket communication",
-	"/dev/fuse":         "FUSE filesystem",
-	"/dev/net/tun":      "TUN/TAP network device",
-	"/dev/hwrng":        "hardware random number generator",
+// deviceDescriptions maps a host device path to a human description for `charly doctor`'s
+// hardware section, read from the device_descriptions directive in the embedded charly.yml
+// (Phase 4: data moved out of Go) via the shared minimal decoder. Panics if the directive
+// is empty/malformed (a build-time invariant, never a runtime input).
+var deviceDescriptions = parseEmbeddedDeviceDescriptions()
+
+func parseEmbeddedDeviceDescriptions() map[string]string {
+	var doc struct {
+		DeviceDescriptions map[string]string `yaml:"device_descriptions"`
+	}
+	unmarshalEmbeddedDefaults(&doc)
+	if len(doc.DeviceDescriptions) == 0 {
+		panic("doctor: embedded charly.yml has no device_descriptions: directive")
+	}
+	return doc.DeviceDescriptions
 }
 
 // runHardwareChecks probes for GPU and devices, matching DetectHostDevices() behavior.

@@ -152,5 +152,8 @@ _reservedNode: "^(candy|pod|vm|k8s|local|android|distro|builder|init|resource|si
 	// alias→family resolution + secure selection + unknown-distro union stay Go logic;
 	// only the path DATA is here. {code, vars} per candidate.
 	ovmf_paths?: {[string]: {secure: [...{code: string, vars: string}], nonsecure: [...{code: string, vars: string}]}}
-	{[!~"^(version|repo|import|discover|defaults|provides|providers|context_ignore_baseline|install_hints|ovmf_paths)$"]: #Node}
+	// device_descriptions — host device path → human description for `charly doctor`'s
+	// hardware section, formerly the Go var deviceDescriptions (doctor.go); data, not code.
+	device_descriptions?: {[string]: string}
+	{[!~"^(version|repo|import|discover|defaults|provides|providers|context_ignore_baseline|install_hints|ovmf_paths|device_descriptions)$"]: #Node}
 })

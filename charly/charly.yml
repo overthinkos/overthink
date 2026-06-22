@@ -84,6 +84,18 @@ ovmf_paths:
             - {code: /usr/share/OVMF/OVMF_CODE_4M.fd, vars: /usr/share/OVMF/OVMF_VARS_4M.fd}
             - {code: /usr/share/OVMF/OVMF_CODE.fd, vars: /usr/share/OVMF/OVMF_VARS.fd}
 
+# device_descriptions — host device path -> human description for `charly doctor`'s
+# hardware section, formerly the Go var deviceDescriptions (doctor.go).
+device_descriptions:
+    "/dev/dri/renderD*": GPU render node
+    /dev/kfd: AMD Kernel Fusion Driver (ROCm compute)
+    /dev/kvm: KVM virtualization
+    /dev/vhost-net: vhost network acceleration
+    /dev/vhost-vsock: VM socket communication
+    /dev/fuse: FUSE filesystem
+    /dev/net/tun: TUN/TAP network device
+    /dev/hwrng: hardware random number generator
+
 nvidia-gpu:
     resource:
         gpu:

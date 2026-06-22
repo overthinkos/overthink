@@ -40,6 +40,7 @@ var ResourceKinds = []string{
 var DocDirectives = []string{
 	"context_ignore_baseline",
 	"defaults",
+	"device_descriptions",
 	"discover",
 	"import",
 	"install_hints",

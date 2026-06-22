@@ -27,13 +27,11 @@ import (
 // Types
 // ---------------------------------------------------------------------------
 
-// AIOutputFormat* constants enumerate the legal values of
-// AgentConfig.OutputFormat. The validator in validateHarnessSemantics
-// rejects anything else with a list-of-legal-values hint.
-const (
-	AgentOutputFormatPlain      = ""
-	AgentOutputFormatStreamJSON = "stream-json"
-)
+// AgentOutputFormatStreamJSON is the explicit non-default value of
+// AgentConfig.OutputFormat (the default "" is the plain format). The legal set
+// {"", "stream-json"} is enforced by the closed CUE schema at load
+// (agent.cue: output_format: *"" | "stream-json").
+const AgentOutputFormatStreamJSON = "stream-json"
 
 // DefaultProgressCheckInterval / DefaultProgressNoImprovementTimeout are
 // the Go-level defaults the harness loop applies when an AI's

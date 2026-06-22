@@ -6,46 +6,6 @@ import (
 	"testing"
 )
 
-func TestValidateAgentCatalog_OutputFormatPlain(t *testing.T) {
-	u := &UnifiedFile{
-		Agent: map[string]*AgentConfig{
-			"claude": {Command: []string{"claude"}, OutputFormat: ""},
-		},
-	}
-	if err := validateAgentCatalog(u); err != nil {
-		t.Errorf("plain output_format should validate, got: %v", err)
-	}
-}
-
-func TestValidateAgentCatalog_OutputFormatStreamJSON(t *testing.T) {
-	u := &UnifiedFile{
-		Agent: map[string]*AgentConfig{
-			"claude": {Command: []string{"claude"}, OutputFormat: AgentOutputFormatStreamJSON},
-		},
-	}
-	if err := validateAgentCatalog(u); err != nil {
-		t.Errorf("stream-json output_format should validate, got: %v", err)
-	}
-}
-
-func TestValidateAgentCatalog_OutputFormatBogus(t *testing.T) {
-	u := &UnifiedFile{
-		Agent: map[string]*AgentConfig{
-			"claude": {Command: []string{"claude"}, OutputFormat: "ndjson-but-not-quite"},
-		},
-	}
-	err := validateAgentCatalog(u)
-	if err == nil {
-		t.Fatal("expected error for invalid output_format, got nil")
-	}
-	if !strings.Contains(err.Error(), "output_format") {
-		t.Errorf("error should mention output_format: %v", err)
-	}
-	if !strings.Contains(err.Error(), "stream-json") {
-		t.Errorf("error should list stream-json as a legal value: %v", err)
-	}
-}
-
 func TestResolveAI_NoAIs(t *testing.T) {
 	if _, _, err := ResolveAgent(nil, ""); !errors.Is(err, ErrNoAgents) {
 		t.Errorf("expected ErrNoAgents, got %v", err)

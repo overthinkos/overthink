@@ -769,9 +769,6 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 			root,
 		)
 	}
-	if err := validateAgentCatalog(merged); err != nil {
-		return nil, true, fmt.Errorf("%s: %w", root, err)
-	}
 	return merged, true, nil
 }
 
@@ -1297,23 +1294,6 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 // -----------------------------------------------------------------------------
 // AI-CLI catalog validation.
 // -----------------------------------------------------------------------------
-
-// validateAgentCatalog checks every kind:agent entry's output_format is legal.
-func validateAgentCatalog(u *UnifiedFile) error {
-	for name, ai := range u.Agent {
-		if ai == nil {
-			continue
-		}
-		switch ai.OutputFormat {
-		case AgentOutputFormatPlain, AgentOutputFormatStreamJSON:
-			// ok
-		default:
-			return fmt.Errorf("agent %q: output_format: %q is not a legal value (allowed: %q, %q)",
-				name, ai.OutputFormat, AgentOutputFormatPlain, AgentOutputFormatStreamJSON)
-		}
-	}
-	return nil
-}
 
 // -----------------------------------------------------------------------------
 // Merge helpers.

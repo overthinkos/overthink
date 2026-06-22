@@ -6,6 +6,21 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// TestNodeDoc_AgentOutputFormat_RejectedByCUE proves the closed CUE schema rejects an
+// illegal agent output_format at LOAD (agent.cue: output_format: *"" | "stream-json",
+// under the closed #NodeDoc gate). It fails LOUDLY if the CUE gate ever stops covering
+// it — signalling a Go-side output_format validator would be required.
+func TestNodeDoc_AgentOutputFormat_RejectedByCUE(t *testing.T) {
+	valid := "myagent:\n  agent:\n    command: [\"x\"]\n    output_format: stream-json\n"
+	if nodeFormRejected(valid) {
+		t.Fatalf("valid agent (output_format: stream-json) was rejected by the node-form gates")
+	}
+	bad := "myagent:\n  agent:\n    command: [\"x\"]\n    output_format: bogus\n"
+	if !nodeFormRejected(bad) {
+		t.Fatal("illegal agent output_format 'bogus' was NOT rejected by the closed CUE schema — a Go-side output_format validator is required")
+	}
+}
+
 // nodeFormRejected reports whether the layered node-form strictness gates reject a
 // document — the CUE document gate (closed kind VALUES + two-discriminator /
 // reserved-key closedness) OR the Go parser (a typo'd discriminator, a wrong-kind /

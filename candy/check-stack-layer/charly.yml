@@ -66,10 +66,12 @@ check-stack-layer:
     check-port-listening:
         check: port=18794
         id: check-port-listening
-        port: 18794
-        listening: true
         context:
             - runtime
+        plugin: port
+        plugin_input:
+            port: 18794
+            listening: true
     check-ss-listening:
         check: command=ss -tlnp 2>/dev/null | grep ':18794'
         id: check-ss-listening

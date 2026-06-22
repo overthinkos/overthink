@@ -17,8 +17,8 @@ import (
 // either side is missing. (Replaces the five per-class init() registration loops.)
 var builtinProviderInstances = []Provider{
 	// verbs (ClassVerb)
-	fileVerb{}, portVerb{}, commandVerb{}, httpVerb{}, packageVerb{}, serviceVerb{},
-	processVerb{}, dnsVerb{}, userVerb{}, unixGroupVerb{}, interfaceVerb{}, kernelParamVerb{},
+	fileVerb{}, commandVerb{}, httpVerb{}, packageVerb{}, serviceVerb{},
+	userVerb{}, unixGroupVerb{}, interfaceVerb{}, kernelParamVerb{},
 	mountVerb{}, addrVerb{}, cdpVerb{}, wlVerb{}, dbusVerb{}, vncVerb{},
 	mcpVerb{}, recordVerb{}, spiceVerb{}, libvirtVerb{}, kubeVerb{}, adbVerb{}, appiumVerb{},
 	summarizeVerb{}, killVerb{}, pluginVerb{},

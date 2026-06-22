@@ -71,12 +71,6 @@ func (c *Op) VerbsSet() []string {
 	if c.Service != "" {
 		set = append(set, "service")
 	}
-	if c.Port != 0 {
-		set = append(set, "port")
-	}
-	if c.Process != "" {
-		set = append(set, "process")
-	}
 	// Treat `command:` as a verb only when no charly-verb is set; otherwise it's
 	// a modifier (e.g. argv for libvirt:guest/exec).
 	hasCharlyVerb := c.Cdp != "" || c.Wl != "" || c.Dbus != "" || c.Vnc != "" ||
@@ -87,9 +81,6 @@ func (c *Op) VerbsSet() []string {
 	}
 	if c.HTTP != "" {
 		set = append(set, "http")
-	}
-	if c.DNS != "" {
-		set = append(set, "dns")
 	}
 	if c.User != "" {
 		set = append(set, "user")
@@ -158,13 +149,13 @@ func (c *Op) VerbsSet() []string {
 // in-place ${VAR} expansion driven by ExpandVars (free function in main).
 func (c *Op) StringFields() []*string {
 	return []*string{
-		&c.File, &c.Package, &c.Service, &c.Process, &c.Command,
-		&c.HTTP, &c.DNS, &c.User, &c.UnixGroup, &c.Interface,
+		&c.File, &c.Package, &c.Service, &c.Command,
+		&c.HTTP, &c.User, &c.UnixGroup, &c.Interface,
 		&c.KernelParam, &c.Mount, &c.Addr,
 		&c.ID, &c.Description, &c.Timeout,
 		&c.Mode, &c.Owner, &c.GroupOf, &c.Filetype, &c.Sha256,
-		&c.IP, &c.CAFile, &c.Method, &c.RequestBody,
-		&c.Server, &c.Home, &c.Shell,
+		&c.CAFile, &c.Method, &c.RequestBody,
+		&c.Home, &c.Shell,
 		&c.MountSource, &c.Filesystem,
 		// Test-mode live-container verb discriminators + modifiers.
 		&c.Cdp, &c.Wl, &c.Dbus, &c.Vnc, &c.Mcp,

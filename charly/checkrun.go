@@ -665,50 +665,57 @@ func normalizeFiletype(s string) string {
 //   - listening: true (default when unset) → probe via Exec (container-internal)
 //   - reachable/from-host semantics → dial 127.0.0.1:<HOST_PORT:N> from host
 //     (only meaningful in RunModeLive; RunModeBox skips with reason)
-func (r *Runner) runPort(ctx context.Context, c *Op) CheckResult {
+//
+// runPort: the port number + modifiers (listening/reachable/ip) arrive from the
+// `port` plugin's typed plugin_input (params.PortInput, decoded by portVerb.RunVerb in
+// plugin_port.go) — the verb left the closed #Op, so they no longer ride the (removed)
+// Op.Port/Listening/IP fields. c is retained for result metadata + the shared
+// r.Mode/r.Exec/r.DialTimeout.
+func (r *Runner) runPort(ctx context.Context, c *Op, port int, listening, reachable *bool, ip string) CheckResult {
 	wantListening := true
-	if c.Listening != nil {
-		wantListening = *c.Listening
+	if listening != nil {
+		wantListening = *listening
 	}
 
 	// If the user asked for outside-in reachability (listening:false with a
 	// HOST_PORT substitution already performed, or Reachable explicitly set),
 	// dial from host.
-	if c.Reachable != nil || (c.Listening != nil && !*c.Listening) {
+	if reachable != nil || (listening != nil && !*listening) {
 		if r.Mode == RunModeBox {
 			return skipf(c, "host-side port check not meaningful under charly check box")
 		}
-		return r.dialPort(c)
+		return r.dialPort(c, port, ip, reachable)
 	}
 
 	// In-container listening probe: ss first, netstat fallback.
 	probe := fmt.Sprintf(
 		`(ss -tlnH 2>/dev/null || netstat -tln 2>/dev/null) | awk '{print $4}' | grep -E ':%d$' >/dev/null`,
-		c.Port)
+		port)
 	_, stderr, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
 		return failf(c, "probe failed: %v (%s)", err, stderr)
 	}
-	listening := exit == 0
-	if listening != wantListening {
-		return failf(c, "listening=%v, want %v (on port %d)", listening, wantListening, c.Port)
+	isListening := exit == 0
+	if isListening != wantListening {
+		return failf(c, "listening=%v, want %v (on port %d)", isListening, wantListening, port)
 	}
-	return passf(c, fmt.Sprintf("port %d listening=%v", c.Port, listening))
+	return passf(c, fmt.Sprintf("port %d listening=%v", port, isListening))
 }
 
 // dialPort attempts a TCP dial on 127.0.0.1:<port> from the host. Used for
 // deploy-scope reachability checks where ${HOST_PORT:N} has been substituted
-// into the Port field. If the Port was remapped by charly.yml, the substituted
-// value is what we'll dial.
-func (r *Runner) dialPort(c *Op) CheckResult {
-	addr := fmt.Sprintf("127.0.0.1:%d", c.Port)
-	if c.IP != "" {
-		addr = fmt.Sprintf("%s:%d", c.IP, c.Port)
+// into the port value. If the port was remapped by charly.yml, the substituted
+// value is what we'll dial. The port/ip/reachable arrive decoded from the port
+// plugin's plugin_input (see runPort).
+func (r *Runner) dialPort(c *Op, port int, ip string, reachable *bool) CheckResult {
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	if ip != "" {
+		addr = fmt.Sprintf("%s:%d", ip, port)
 	}
 	conn, err := net.DialTimeout("tcp", addr, r.DialTimeout)
 	wantReachable := true
-	if c.Reachable != nil {
-		wantReachable = *c.Reachable
+	if reachable != nil {
+		wantReachable = *reachable
 	}
 	if err != nil {
 		if !wantReachable {
@@ -1048,10 +1055,7 @@ func FormatResultsText(w io.Writer, results []CheckResult) int {
 			skips++
 		}
 		verb := r.Verb
-		subject := firstNonEmpty(r.Op.File, r.Op.HTTP, r.Op.Command, r.Op.DNS, r.Op.Addr)
-		if r.Op.Port != 0 {
-			subject = fmt.Sprintf("%d", r.Op.Port)
-		}
+		subject := firstNonEmpty(r.Op.File, r.Op.HTTP, r.Op.Command, r.Op.Addr)
 		fmt.Fprintf(w, "%s %s %s — %s\n", glyph, verb, subject, r.Message)
 		if r.Op.Origin != "" && r.Status == TestFail {
 			fmt.Fprintf(w, "  from %s\n", r.Op.Origin)
@@ -1083,10 +1087,7 @@ func FormatResultsJSON(w io.Writer, results []CheckResult) int {
 	out := make([]entry, 0, len(results))
 	fails := 0
 	for _, r := range results {
-		subject := firstNonEmpty(r.Op.File, r.Op.HTTP, r.Op.Command, r.Op.DNS, r.Op.Addr)
-		if r.Op.Port != 0 {
-			subject = fmt.Sprintf("%d", r.Op.Port)
-		}
+		subject := firstNonEmpty(r.Op.File, r.Op.HTTP, r.Op.Command, r.Op.Addr)
 		if r.Status == TestFail {
 			fails++
 		}
@@ -1109,10 +1110,7 @@ func FormatResultsTAP(w io.Writer, results []CheckResult) int {
 	fails := 0
 	fmt.Fprintf(w, "TAP version 13\n1..%d\n", len(results))
 	for i, r := range results {
-		subject := firstNonEmpty(r.Op.File, r.Op.HTTP, r.Op.Command, r.Op.DNS, r.Op.Addr)
-		if r.Op.Port != 0 {
-			subject = fmt.Sprintf("%d", r.Op.Port)
-		}
+		subject := firstNonEmpty(r.Op.File, r.Op.HTTP, r.Op.Command, r.Op.Addr)
 		label := fmt.Sprintf("%s %s - %s", r.Verb, subject, r.Message)
 		switch r.Status {
 		case TestPass:

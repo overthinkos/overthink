@@ -1,4 +1,4 @@
-version: 2026.173.1616
+version: 2026.173.1742
 
 # providers — the registry membership manifest (provider class -> the words it
 # contributes). Read at init (registry_bootstrap.go) to drive built-in provider
@@ -7,7 +7,7 @@ version: 2026.173.1616
 # load via plugin: candy blocks, not here.
 providers:
     kind: [agent, android, builder, candy, distro, group, init, k8s, local, module, package-group, pod, resource, sidecar, target, vm]
-    verb: [adb, addr, appium, cdp, command, dbus, dns, file, http, interface, kernel-param, kill, kube, libvirt, mcp, mount, package, plugin, port, process, record, service, spice, summarize, unix_group, user, vnc, wl]
+    verb: [adb, addr, appium, cdp, command, dbus, file, http, interface, kernel-param, kill, kube, libvirt, mcp, mount, package, plugin, record, service, spice, summarize, unix_group, user, vnc, wl]
     deploy: [android, k8s, local, pod, vm]
     step: [ApkInstall, Builder, File, LocalPkgInstall, Op, Reboot, RepoChange, ServiceCustom, ServicePackaged, ShellHook, ShellSnippet, SystemPackages]
     builder: [aur, cargo, npm, pixi]

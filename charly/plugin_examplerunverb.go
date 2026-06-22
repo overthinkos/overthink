@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/overthinkos/overthink/charly/plugin/builtins/examplerunverb"
@@ -29,18 +28,15 @@ func (exampleRunVerbProvider) Reserved() string { return "examplerunverb" }
 // value round-trips author → provider → result) AND a fact read off the live *Runner
 // (the run mode) — which an out-of-proc Invoke could never reach, proving the
 // CheckVerbProvider dispatch keeps the executor. It decodes op.PluginInput (already a
-// map on the *Op handed to RunVerb) into the CUE-GENERATED struct
-// (params.ExamplerunverbInput, generated from the unit's schema/examplerunverb.cue) —
-// never a hand-parsed map.
+// map on the *Op handed to RunVerb) through the shared decodePluginInput (R3) into the
+// CUE-GENERATED struct (params.ExamplerunverbInput, generated from the unit's
+// schema/examplerunverb.cue) — never a hand-parsed map.
 func (exampleRunVerbProvider) RunVerb(_ context.Context, r *Runner, op *Op) CheckResult {
 	marker := "examplerunverb-ok"
-	if op.PluginInput != nil {
-		if b, err := json.Marshal(op.PluginInput); err == nil {
-			var in params.ExamplerunverbInput
-			if err := json.Unmarshal(b, &in); err == nil && in.Marker != "" {
-				marker = in.Marker
-			}
-		}
+	var in params.ExamplerunverbInput
+	decodePluginInput(op.PluginInput, &in)
+	if in.Marker != "" {
+		marker = in.Marker
 	}
 	return CheckResult{
 		Status:  TestPass,

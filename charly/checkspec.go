@@ -233,10 +233,7 @@ var VerbCatalog = map[string]VerbSpec{
 	"unix_group":   {ctxBuildDeployRuntime, DoAssert, true, ""},                      // act → groupadd (+ ReverseOpGroupRemove)
 	"kernel-param": {ctxBuildDeployRuntime, DoAssert, true, ""},                      // act → sysctl (+ ReverseOpSysctlRestore)
 	"mount":        {ctxDeployRuntime, DoAssert, true, ""},                           // act → mount (+ ReverseOpUmount)
-	"port":         {ctxBuildDeployRuntime, DoAssert, false, ""},                     // observe-only
-	"process":      {ctxBuildDeployRuntime, DoAssert, false, ""},                     // observe-only
 	"http":         {ctxDeployRuntime, DoAssert, false, ""},                          // act → request (no reverse)
-	"dns":          {ctxDeployRuntime, DoAssert, false, ""},                          // observe-only
 	"interface":    {ctxRuntimeOnly, DoAssert, false, ""},                            // observe-only
 	"addr":         {ctxDeployRuntime, DoAssert, false, ""},                          // observe-only
 

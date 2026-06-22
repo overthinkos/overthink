@@ -16,15 +16,9 @@ type Op struct {
 
 	Service string `yaml:"service,omitempty" json:"service,omitempty"`
 
-	Port int `yaml:"port,omitempty" json:"port,omitempty"`
-
-	Process string `yaml:"process,omitempty" json:"process,omitempty"`
-
 	Command string `yaml:"command,omitempty" json:"command,omitempty"`
 
 	HTTP string `yaml:"http,omitempty" json:"http,omitempty"`
-
-	DNS string `yaml:"dns,omitempty" json:"dns,omitempty"`
 
 	User string `yaml:"user,omitempty" json:"user,omitempty"`
 
@@ -250,11 +244,6 @@ type Op struct {
 
 	Running *bool `yaml:"running,omitempty" json:"running,omitempty"`
 
-	// --- port ---
-	Listening *bool `yaml:"listening,omitempty" json:"listening,omitempty"`
-
-	IP string `yaml:"ip,omitempty" json:"ip,omitempty"`
-
 	// --- command ---
 	ExitStatus *int `yaml:"exit_status,omitempty" json:"exit_status,omitempty"`
 
@@ -281,12 +270,8 @@ type Op struct {
 
 	RequestBody string `yaml:"request_body,omitempty" json:"request_body,omitempty"`
 
-	// --- dns ---
-	Resolvable *bool `yaml:"resolvable,omitempty" json:"resolvable,omitempty"`
-
+	// --- addrs (shared: dns plugin hostname-resolve match + interface address list) ---
 	Addrs []string `yaml:"addrs,omitempty" json:"addrs,omitempty"`
-
-	Server string `yaml:"server,omitempty" json:"server,omitempty"`
 
 	// --- user / group ---
 	UID *int `yaml:"uid,omitempty" json:"uid,omitempty"`

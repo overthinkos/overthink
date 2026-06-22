@@ -72,12 +72,17 @@ func TestRunner_Service(t *testing.T) {
 	})
 }
 
-// Process verb — pgrep exit status.
-func TestRunner_Process(t *testing.T) {
+// process plugin verb — pgrep exit status, now a dedicated built-in plugin unit
+// dispatched IN-PROCESS via the CheckVerbProvider RunVerb path (keeping the live
+// *Runner the pgrep probe needs). Authored as plugin: process + plugin_input
+// (TestMain loads its schema).
+func TestRunner_ProcessPlugin(t *testing.T) {
 	t.Run("running", func(t *testing.T) {
 		r, fake := newFakeRunner(t, RunModeLive)
 		fake.responses = []fakeResponse{{matchPrefix: "pgrep -x 'redis-server'", exit: 0}}
-		res := r.Run(context.Background(), []Op{{Process: "redis-server"}})
+		res := r.Run(context.Background(), []Op{
+			{Plugin: "process", PluginInput: map[string]any{"process": "redis-server"}},
+		})
 		if res[0].Status != TestPass {
 			t.Errorf("got %+v", res[0])
 		}
@@ -85,19 +90,25 @@ func TestRunner_Process(t *testing.T) {
 	t.Run("expected absent", func(t *testing.T) {
 		r, fake := newFakeRunner(t, RunModeLive)
 		fake.responses = []fakeResponse{{matchPrefix: "pgrep -x 'worm'", exit: 1}}
-		res := r.Run(context.Background(), []Op{{Process: "worm", Running: new(false)}})
+		res := r.Run(context.Background(), []Op{
+			{Plugin: "process", PluginInput: map[string]any{"process": "worm", "running": false}},
+		})
 		if res[0].Status != TestPass {
 			t.Errorf("got %+v", res[0])
 		}
 	})
 }
 
-// DNS verb — host-side resolution for a guaranteed-resolvable hostname,
-// and expected-unresolvable for a never-assigned TLD.
-func TestRunner_DNS(t *testing.T) {
+// dns plugin verb — host-side resolution for a guaranteed-resolvable hostname,
+// and expected-unresolvable for a never-assigned TLD. Now a dedicated built-in plugin
+// unit dispatched IN-PROCESS via the CheckVerbProvider RunVerb path (TestMain loads its
+// schema); authored as plugin: dns + plugin_input.
+func TestRunner_DNSPlugin(t *testing.T) {
 	t.Run("resolvable localhost", func(t *testing.T) {
 		r, _ := newFakeRunner(t, RunModeLive)
-		res := r.Run(context.Background(), []Op{{DNS: "localhost"}})
+		res := r.Run(context.Background(), []Op{
+			{Plugin: "dns", PluginInput: map[string]any{"dns": "localhost"}},
+		})
 		if res[0].Status != TestPass {
 			t.Errorf("expected pass, got %+v", res[0])
 		}
@@ -105,7 +116,7 @@ func TestRunner_DNS(t *testing.T) {
 	t.Run("unresolvable as expected", func(t *testing.T) {
 		r, _ := newFakeRunner(t, RunModeLive)
 		res := r.Run(context.Background(), []Op{
-			{DNS: "this-host-will-never-exist.invalid", Resolvable: new(false)},
+			{Plugin: "dns", PluginInput: map[string]any{"dns": "this-host-will-never-exist.invalid", "resolvable": false}},
 		})
 		if res[0].Status != TestPass {
 			t.Errorf("expected pass, got %+v", res[0])

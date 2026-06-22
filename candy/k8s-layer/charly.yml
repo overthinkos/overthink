@@ -363,10 +363,12 @@ k8s-layer:
     harness-k8s-port-listening:
         check: port=6443
         id: harness-k8s-port-listening
-        port: 6443
-        listening: true
         context:
             - runtime
+        plugin: port
+        plugin_input:
+            port: 6443
+            listening: true
     harness-k8s-storageclass-endpoint:
         check: http=http://127.0.0.1:${HOST_PORT:6443}/apis/storage.k8s.io/v1/storageclasses
         id: harness-k8s-storageclass-endpoint

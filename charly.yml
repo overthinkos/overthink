@@ -1,4 +1,4 @@
-version: 2026.173.1616
+version: 2026.173.1742
 # Canonical repo identity. After the 2026-06 box inversion main imports the three
 # active distro submodules (arch / cachyos / fedora) ONE-DIRECTIONALLY to reference
 # their relocated boxes; the submodules no longer import main as a namespace (they
@@ -286,15 +286,19 @@ check-k3s-vm:
     kv-k3s-process:
         check: process=k3s-server
         id: kv-k3s-process
-        process: "k3s-server"
-        running: true
         context: [runtime]
+        plugin: process
+        plugin_input:
+            process: "k3s-server"
+            running: true
     kv-port-6443-listening:
         check: port=6443
         id: kv-port-6443-listening
-        port: 6443
-        listening: true
         context: [runtime]
+        plugin: port
+        plugin_input:
+            port: 6443
+            listening: true
     kv-kubeconfig-file:
         check: file=/etc/rancher/k3s/k3s.yaml
         id: kv-kubeconfig-file
@@ -486,8 +490,10 @@ charly-cli:
             agent_provisioned: true
         charly-cli-step-0:
             check: the os pod the agent built with `charly box build` + started with charly is running
-            process: supervisord
-            running: true
+            plugin: process
+            plugin_input:
+                process: supervisord
+                running: true
         charly-cli-step-1:
             check: the built os image's predetermined marker file is present
             file: /etc/charly-os-marker
@@ -652,8 +658,10 @@ default:
             installed: true
         default-step-3:
             check: a predetermined process is running by name
-            process: bash
-            running: true
+            plugin: process
+            plugin_input:
+                process: bash
+                running: true
         default-step-4:
             check: the predetermined user account is present in the user database
             user: root
@@ -685,8 +693,10 @@ default:
             installed: true
         default-step-11:
             check: the HTTP server's port is listening inside the pod
-            port: 8080
-            listening: true
+            plugin: port
+            plugin_input:
+                port: 8080
+                listening: true
         default-step-12:
             check: the HTTP server's port is reachable from the host
             addr: "127.0.0.1:${HOST_PORT:8080}"
@@ -711,8 +721,10 @@ default:
             agent_provisioned: true
         default-step-16:
             check: the data store's primary process is running
-            process: redis-server
-            running: true
+            plugin: process
+            plugin_input:
+                process: redis-server
+                running: true
         default-step-17:
             check: the data store is reachable from a separate pod
             command: "ss -tln | grep ':6379' | grep -v '127.0.0.1'"
@@ -1050,19 +1062,25 @@ default:
                 agent_provisioned: true
             default-step-73:
                 check: the inner pod's primary process is running
-                process: nginx
-                running: true
+                plugin: process
+                plugin_input:
+                    process: nginx
+                    running: true
             default-step-74:
                 check: the inner pod's predetermined port is listening
-                port: 8080
-                listening: true
+                plugin: port
+                plugin_input:
+                    port: 8080
+                    listening: true
             nested-redis-pod:
                 pod:
                     agent_provisioned: true
                 default-step-75:
                     check: the nested data store's primary process is running
-                    process: redis-server
-                    running: true
+                    plugin: process
+                    plugin_input:
+                        process: redis-server
+                        running: true
                 default-step-76:
                     check: the nested data store is reachable on the network (not loopback only)
                     command: "ss -tln | grep ':6379' | grep -v '127.0.0.1'"

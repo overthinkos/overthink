@@ -70,7 +70,9 @@ redis-server-layer:
     harness-redis-port-listening:
         check: port=6379
         id: harness-redis-port-listening
-        port: 6379
-        listening: true
         context:
             - runtime
+        plugin: port
+        plugin_input:
+            port: 6379
+            listening: true

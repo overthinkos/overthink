@@ -16,8 +16,8 @@
 // VerbCatalog entry (the registry bijection gate proves it). Keep in lockstep with
 // the `--- verb discriminators ---` group in #Op.
 #OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" |
-	"command" | "file" | "package" | "service" | "port" | "process" | "http" |
-	"dns" | "user" | "unix_group" | "interface" | "kernel-param" | "mount" | "addr" |
+	"command" | "file" | "package" | "service" | "http" |
+	"user" | "unix_group" | "interface" | "kernel-param" | "mount" | "addr" |
 	"cdp" | "wl" | "dbus" | "vnc" | "mcp" | "record" | "spice" |
 	"libvirt" | "kube" | "adb" | "appium" | "summarize" | "kill" | "plugin") @go(-)
 
@@ -52,11 +52,8 @@
 	file?:           string
 	package?:        string
 	service?:        string
-	port?:           int & >0 & <=65535 @go(,type=int)
-	process?:        string
 	command?:        string
 	http?:           string @go(HTTP)
-	dns?:            string @go(DNS)
 	user?:           string
 	unix_group?:     string @go(UnixGroup)
 	interface?:      string
@@ -202,10 +199,6 @@
 	enabled?: bool @go(,type=*bool)
 	running?: bool @go(,type=*bool)
 
-	// --- port ---
-	listening?: bool   @go(,type=*bool)
-	ip?:        string @go(IP)
-
 	// --- command ---
 	exit_status?: int @go(ExitStatus,type=*int)
 	stdout?:      #MatcherList
@@ -222,10 +215,8 @@
 	method?:              string
 	request_body?:        string @go(RequestBody)
 
-	// --- dns ---
-	resolvable?: bool @go(,type=*bool)
+	// --- addrs (shared: dns plugin hostname-resolve match + interface address list) ---
 	addrs?: [...string]
-	server?: string
 
 	// --- user / group ---
 	uid?:   int & >=0 @go(UID,type=*int)

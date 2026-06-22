@@ -18,12 +18,11 @@ func TestCheck_Kind(t *testing.T) {
 		wantErr string // substring
 	}{
 		{"file", Op{File: "/usr/bin/redis"}, "file", ""},
-		{"port", Op{Port: 6379}, "port", ""},
 		{"http", Op{HTTP: "http://x"}, "http", ""},
 		{"command", Op{Command: "redis-cli ping"}, "command", ""},
 		{"plugin", Op{Plugin: "matching"}, "plugin", ""},
 		{"none", Op{}, "", "no verb"},
-		{"two", Op{File: "/x", Port: 6379}, "", "multiple verbs"},
+		{"two", Op{File: "/x", HTTP: "http://x"}, "", "multiple verbs"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -51,8 +50,10 @@ func TestCheck_UnmarshalYAMLList(t *testing.T) {
 - file: /usr/bin/redis-server
   exists: true
   mode: "0755"
-- port: 6379
-  listening: true
+- plugin: port
+  plugin_input:
+    port: 6379
+    listening: true
 - command: redis-cli ping
   stdout: PONG
 - http: http://127.0.0.1:8888/api
@@ -84,12 +85,13 @@ func TestCheck_UnmarshalYAMLList(t *testing.T) {
 		t.Errorf("mode = %q, want 0755", got[0].Mode)
 	}
 
-	// 1: port listening
-	if got[1].Port != 6379 {
-		t.Errorf("port = %d, want 6379", got[1].Port)
+	// 1: port listening — now the `port` plugin verb (authored as plugin: port +
+	// plugin_input, validated against the port plugin's spliced #PortInput schema).
+	if got[1].Plugin != "port" {
+		t.Errorf("plugin = %q, want port", got[1].Plugin)
 	}
-	if got[1].Listening == nil || !*got[1].Listening {
-		t.Errorf("listening should be pointer-to-true")
+	if got[1].PluginInput == nil || got[1].PluginInput["listening"] != true {
+		t.Errorf("plugin_input = %v, want a map with listening:true", got[1].PluginInput)
 	}
 
 	// 2: command with stdout matcher
@@ -242,7 +244,7 @@ func TestCheck_ExpandVars(t *testing.T) {
 		File:    "${HOME}/.redis",
 		Command: "redis-cli -p ${HOST_PORT:6379}",
 		HTTP:    "http://${CONTAINER_IP}:8080/health",
-		IP:      "${MISSING}",
+		Owner:   "${MISSING}",
 	}
 	env := map[string]string{
 		"HOME":           "/home/user",
@@ -260,8 +262,8 @@ func TestCheck_ExpandVars(t *testing.T) {
 	if c.HTTP != "http://10.0.0.5:8080/health" {
 		t.Errorf("HTTP = %q", c.HTTP)
 	}
-	if c.IP != "${MISSING}" {
-		t.Errorf("IP should remain unresolved: %q", c.IP)
+	if c.Owner != "${MISSING}" {
+		t.Errorf("Owner should remain unresolved: %q", c.Owner)
 	}
 	wantMissing := []string{"MISSING"}
 	if !reflect.DeepEqual(missing, wantMissing) {

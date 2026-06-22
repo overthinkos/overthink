@@ -41,7 +41,7 @@ func TestRenderProvisionScript(t *testing.T) {
 		{"unix_group", Op{UnixGroup: "devs"}, "unix_group", true, "groupadd"},
 		{"kernel-param", Op{KernelParam: "vm.swappiness", Value: MatcherList{{Op: "equals", Value: "10"}}}, "kernel-param", true, "sysctl -w 'vm.swappiness'='10'"},
 		// An observe-only verb has no act form → ok=false (falls to the probe handler).
-		{"port-observe", Op{Port: 80, Listening: &tr}, "port", false, ""},
+		{"addr-observe", Op{Addr: "127.0.0.1:80", Reachable: &tr}, "addr", false, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -77,9 +77,9 @@ func TestRunProvisionActDispatch(t *testing.T) {
 		t.Fatalf("expected the rendered script to execute once; calls=%v", fe.calls)
 	}
 
-	// port has no act form → ok=false (caller falls through to the probe handler).
-	if _, ok := r.runProvisionAct(ctx, &Op{Port: 80}, "port"); ok {
-		t.Fatalf("runProvisionAct(port) ok=true, want false (no act form)")
+	// addr has no act form → ok=false (caller falls through to the probe handler).
+	if _, ok := r.runProvisionAct(ctx, &Op{Addr: "127.0.0.1:80"}, "addr"); ok {
+		t.Fatalf("runProvisionAct(addr) ok=true, want false (no act form)")
 	}
 
 	// An unknown verb (no provider) → ok=false.

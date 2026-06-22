@@ -71,7 +71,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.173.1616")
+var latestSchemaVersion = mustCalVer("2026.173.1742")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -472,13 +472,35 @@ func migrationSteps() []MigrationStep {
 			w, err := MigrateMatchingToPlugin(c.Dir, c.DryRun)
 			return len(w) > 0, err
 		}},
+		// 2026-06 observe-only goss-verb extraction: the OBSERVE-ONLY goss check verbs —
+		// `process` (pgrep), `port` (listening/reachability), `dns` (resolve) — left the
+		// closed `#Op`/`spec.OpVerbs` and became BUILTIN plugin units
+		// (plugin/builtins/{process,port,dns}), dispatched IN-PROCESS via the
+		// CheckVerbProvider RunVerb path so each keeps the live *Runner its probe needs. A
+		// plan step authoring such a verb inline now authors the generic plugin step
+		// `plugin: <verb>` + a typed `plugin_input:`. This step CONVERTS a deterministic
+		// `check:` step (verb + companion fields → plugin: <verb> + plugin_input:) and STRIPS
+		// the vestigial keys on any other step. The STATE-PROVISION verbs `package`/`service`
+		// are NOT extracted (they carry act forms + install-plan lowering the check-only
+		// plugin model does not cover), so their steps are untouched. SHARED companion fields
+		// (process→running [service], port→reachable [addr], dns→addrs [interface]) STAY in
+		// #Op for the non-extracted verb but MOVE for the extracted verb's step. Gated on
+		// isStepNode so a box's published `port:` / a candy's `package:` install list is never
+		// rewritten, and a migrated config's nested plugin_input is a no-op (idempotent).
+		// Raises HEAD (a closed `#Op` rejects the extracted verb keys). TouchesHost false →
+		// remote-cache auto-migration applies it to fetched candy manifests. See
+		// migrate_goss_verbs_to_plugin.go + CHANGELOG/.
+		{mustCalVer("2026.173.1741"), "goss-verbs-to-plugin", false, func(c *MigrateContext) (bool, error) {
+			w, err := MigrateGossVerbsToPlugin(c.Dir, c.DryRun)
+			return len(w) > 0, err
+		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up
 		// and every versioned file lands on this CalVer. This is the integer→CalVer
 		// transition step (version: 4 → version: <HEAD>) and the universal stamper.
 		// TouchesHost is false so it ALSO runs in project-only mode (remote-cache
 		// auto-migration); its host-file stamping is gated on ctx.HostDeployPath,
 		// which the project-only runner leaves empty.
-		{mustCalVer("2026.173.1616"), "calver-schema", false, func(c *MigrateContext) (bool, error) {
+		{mustCalVer("2026.173.1742"), "calver-schema", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateCalverSchema(c.Dir, c.HostDeployPath, latestSchemaVersion, c.DryRun)
 			return len(w) > 0, err
 		}},

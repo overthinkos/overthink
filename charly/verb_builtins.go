@@ -18,13 +18,6 @@ func (fileVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runFile(ctx, op)
 }
 
-type portVerb struct{ builtinVerbBase }
-
-func (portVerb) Reserved() string { return "port" }
-func (portVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runPort(ctx, op)
-}
-
 type commandVerb struct{ builtinVerbBase }
 
 func (commandVerb) Reserved() string { return "command" }
@@ -51,20 +44,6 @@ type serviceVerb struct{ builtinVerbBase }
 func (serviceVerb) Reserved() string { return "service" }
 func (serviceVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runService(ctx, op)
-}
-
-type processVerb struct{ builtinVerbBase }
-
-func (processVerb) Reserved() string { return "process" }
-func (processVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runProcess(ctx, op)
-}
-
-type dnsVerb struct{ builtinVerbBase }
-
-func (dnsVerb) Reserved() string { return "dns" }
-func (dnsVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runDNS(ctx, op)
 }
 
 type userVerb struct{ builtinVerbBase }

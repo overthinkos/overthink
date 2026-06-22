@@ -9,7 +9,7 @@ import (
 // (flat root imports) and single-key maps (namespaced child imports).
 func TestImportList_Unmarshal(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.173.1616
+	writeFixture(t, root, "charly.yml", `version: 2026.173.1742
 import:
   - build.yml
   - sub: ./sub.yml
@@ -17,7 +17,7 @@ import:
 	writeFixture(t, root, "build.yml", `defaults:
   build: [rpm]
 `)
-	writeFixture(t, root, "sub.yml", `version: 2026.173.1616
+	writeFixture(t, root, "sub.yml", `version: 2026.173.1742
 widget:
   candy:
     base: quay.io/fedora/fedora:43
@@ -48,7 +48,7 @@ widget:
 // qualified image ref through the projected Config.
 func TestResolveImageRef_Qualified(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.173.1616
+	writeFixture(t, root, "charly.yml", `version: 2026.173.1742
 import:
   - sub: ./sub.yml
 app:
@@ -60,7 +60,7 @@ app:
   app-candy:
     candy: []
 `)
-	writeFixture(t, root, "sub.yml", `version: 2026.173.1616
+	writeFixture(t, root, "sub.yml", `version: 2026.173.1742
 widget:
   candy:
     base: quay.io/fedora/fedora:43
@@ -103,7 +103,7 @@ widget:
 // load-time error pointing at charly migrate.
 func TestLoadUnified_RejectInclude(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.173.1616
+	writeFixture(t, root, "charly.yml", `version: 2026.173.1742
 include:
   - build.yml
 `)
@@ -147,7 +147,7 @@ include:
 // cycle-broken at load (the shared resolved-ref cache).
 func TestImportNamespace_MutualCycle(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.173.1616
+	writeFixture(t, root, "charly.yml", `version: 2026.173.1742
 import:
   - sub: ./sub
 app:
@@ -157,7 +157,7 @@ app:
   app-distro:
     distro: [fedora]
 `)
-	writeFixture(t, root, "sub/charly.yml", `version: 2026.173.1616
+	writeFixture(t, root, "sub/charly.yml", `version: 2026.173.1742
 import:
   - up: ../
 widget:
@@ -195,7 +195,7 @@ widget:
 // combination the prior tests never exercised.
 func TestResolveNamespacedBase_BuilderRefRequalified(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.173.1616
+	writeFixture(t, root, "charly.yml", `version: 2026.173.1742
 import:
   - sub: ./sub
 app:
@@ -212,7 +212,7 @@ archlike-builder:
   archlike-builder-distro:
     distro: [fedora]
 `)
-	writeFixture(t, root, "sub/charly.yml", `version: 2026.173.1616
+	writeFixture(t, root, "sub/charly.yml", `version: 2026.173.1742
 import:
   - up: ../
 buildable:
@@ -261,7 +261,7 @@ widget:
 // — the exact bug that silently built a Fedora builder for cachyos images.
 func TestResolveBuilder_DistroKeyed_NoExplicitMap(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "charly.yml", `version: 2026.173.1616
+	writeFixture(t, root, "charly.yml", `version: 2026.173.1742
 import:
   - sub: ./sub
 defaults:
@@ -298,7 +298,7 @@ fedora-app:
   candy:
     base: sub.fedora
 `)
-	writeFixture(t, root, "sub/charly.yml", `version: 2026.173.1616
+	writeFixture(t, root, "sub/charly.yml", `version: 2026.173.1742
 import:
   - up: ../
 cachyos:

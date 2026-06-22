@@ -34,6 +34,30 @@ context_ignore_baseline:
     - "**/.pytest_cache"
     - "**/.mypy_cache"
 
+# install_hints — binary name -> (distro ID -> package name) for `charly doctor` host
+# dependency install suggestions, formerly the Go var installHints (distro.go). An
+# "AUR: <cmd>" value carries its own install line.
+install_hints:
+    docker: {arch: docker, fedora: docker-ce, debian: docker-ce}
+    podman: {arch: podman, fedora: podman, debian: podman}
+    git: {arch: git, fedora: git, debian: git}
+    skopeo: {arch: skopeo, fedora: skopeo, debian: skopeo}
+    gocryptfs: {arch: gocryptfs, fedora: gocryptfs, debian: gocryptfs}
+    fusermount3: {arch: fuse3, fedora: fuse3, debian: fuse3}
+    systemd-ask-password: {arch: systemd, fedora: systemd, debian: systemd}
+    qemu-system-x86_64: {arch: qemu-full, fedora: qemu-kvm, debian: qemu-system-x86}
+    qemu-system-aarch64: {arch: qemu-full, fedora: qemu-kvm, debian: qemu-system-arm}
+    qemu-img: {arch: qemu-img, fedora: qemu-img, debian: qemu-utils}
+    virtiofsd: {arch: virtiofsd, fedora: virtiofsd, debian: virtiofsd}
+    virsh: {arch: libvirt, fedora: libvirt-client, debian: libvirt-clients}
+    ssh: {arch: openssh, fedora: openssh-clients, debian: openssh-client}
+    script: {arch: util-linux, fedora: util-linux, debian: bsdutils}
+    systemctl: {arch: systemd, fedora: systemd, debian: systemd}
+    tailscale: {arch: tailscale, fedora: tailscale, debian: tailscale}
+    cloudflared: {arch: "AUR: yay -S cloudflared-bin", fedora: cloudflared, debian: cloudflared}
+    nvidia-smi: {arch: nvidia-utils, fedora: nvidia-driver, debian: nvidia-utils}
+    gvproxy: {arch: "AUR: yay -S gvisor-tap-vsock", fedora: gvisor-tap-vsock, debian: golang-github-containers-gvisor-tap-vsock}
+
 nvidia-gpu:
     resource:
         gpu:

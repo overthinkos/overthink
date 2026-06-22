@@ -143,5 +143,9 @@ _reservedNode: "^(candy|pod|vm|k8s|local|android|distro|builder|init|resource|si
 	// data in the embedded charly.yml. Read by generate.go to emit .containerignore /
 	// .dockerignore; a project's defaults.context_ignore still overlays on top.
 	context_ignore_baseline?: [...string]
-	{[!~"^(version|repo|import|discover|defaults|provides|providers|context_ignore_baseline)$"]: #Node}
+	// install_hints — binary name → (distro ID → package name) for `charly doctor` host
+	// dependency install suggestions, formerly the Go var installHints (distro.go), now
+	// data in the embedded charly.yml. An "AUR: <cmd>" value carries its own install line.
+	install_hints?: {[string]: {[string]: string}}
+	{[!~"^(version|repo|import|discover|defaults|provides|providers|context_ignore_baseline|install_hints)$"]: #Node}
 })

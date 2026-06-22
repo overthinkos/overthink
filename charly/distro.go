@@ -52,27 +52,21 @@ func parseOsRelease(content string) Distro {
 	return d
 }
 
-// installHints maps binary names to per-distro package names.
-var installHints = map[string]map[string]string{
-	"docker":               {"arch": "docker", "fedora": "docker-ce", "debian": "docker-ce"},
-	"podman":               {"arch": "podman", "fedora": "podman", "debian": "podman"},
-	"git":                  {"arch": "git", "fedora": "git", "debian": "git"},
-	"skopeo":               {"arch": "skopeo", "fedora": "skopeo", "debian": "skopeo"},
-	"gocryptfs":            {"arch": "gocryptfs", "fedora": "gocryptfs", "debian": "gocryptfs"},
-	"fusermount3":          {"arch": "fuse3", "fedora": "fuse3", "debian": "fuse3"},
-	"systemd-ask-password": {"arch": "systemd", "fedora": "systemd", "debian": "systemd"},
-	"qemu-system-x86_64":   {"arch": "qemu-full", "fedora": "qemu-kvm", "debian": "qemu-system-x86"},
-	"qemu-system-aarch64":  {"arch": "qemu-full", "fedora": "qemu-kvm", "debian": "qemu-system-arm"},
-	"qemu-img":             {"arch": "qemu-img", "fedora": "qemu-img", "debian": "qemu-utils"},
-	"virtiofsd":            {"arch": "virtiofsd", "fedora": "virtiofsd", "debian": "virtiofsd"},
-	"virsh":                {"arch": "libvirt", "fedora": "libvirt-client", "debian": "libvirt-clients"},
-	"ssh":                  {"arch": "openssh", "fedora": "openssh-clients", "debian": "openssh-client"},
-	"script":               {"arch": "util-linux", "fedora": "util-linux", "debian": "bsdutils"},
-	"systemctl":            {"arch": "systemd", "fedora": "systemd", "debian": "systemd"},
-	"tailscale":            {"arch": "tailscale", "fedora": "tailscale", "debian": "tailscale"},
-	"cloudflared":          {"arch": "AUR: yay -S cloudflared-bin", "fedora": "cloudflared", "debian": "cloudflared"},
-	"nvidia-smi":           {"arch": "nvidia-utils", "fedora": "nvidia-driver", "debian": "nvidia-utils"},
-	"gvproxy":              {"arch": "AUR: yay -S gvisor-tap-vsock", "fedora": "gvisor-tap-vsock", "debian": "golang-github-containers-gvisor-tap-vsock"},
+// installHints maps binary names to per-distro package names, read from the install_hints
+// directive in the embedded charly.yml (Phase 4: data moved out of Go) via the shared
+// minimal decoder. Panics if the directive is empty/malformed (a build-time invariant).
+var installHints = parseEmbeddedInstallHints()
+
+// parseEmbeddedInstallHints reads the install_hints map from the embedded charly.yml.
+func parseEmbeddedInstallHints() map[string]map[string]string {
+	var doc struct {
+		InstallHints map[string]map[string]string `yaml:"install_hints"`
+	}
+	unmarshalEmbeddedDefaults(&doc)
+	if len(doc.InstallHints) == 0 {
+		panic("distro: embedded charly.yml has no install_hints: directive")
+	}
+	return doc.InstallHints
 }
 
 // InstallHint returns a distro-appropriate install command for the given binary.

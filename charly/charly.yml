@@ -14,7 +14,7 @@ providers:
     kind: [agent, android, builder, candy, distro, group, init, k8s, local, module, pod, resource, sidecar, target, vm]
     verb: [adb, addr, appium, cdp, command, dbus, file, http, interface, kernel-param, kill, kube, libvirt, mcp, mount, package, plugin, record, service, spice, summarize, unix_group, user, vnc, wl]
     deploy: []
-    step: [ApkInstall, Builder, File, LocalPkgInstall, Op, RepoChange, ServiceCustom, ServicePackaged, ShellHook, ShellSnippet, SystemPackages]
+    step: []
     builder: []
 
 # context_ignore_baseline — the built-in build-context ignore patterns (VCS/binary

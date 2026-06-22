@@ -171,3 +171,51 @@ func TestDedicatedProviders_BulkResolveAndAbsent(t *testing.T) {
 		t.Fatalf("aur StagingMount() = %q, want %q", st.StagingMount(), "/tmp/aur-pkgs")
 	}
 }
+
+// TestDedicatedProviders_BulkStepResolveAndAbsent proves the Phase 3 STEP extraction:
+// every InstallStep provider (formerly bundled in step_builtins.go) now lives in its OWN
+// dedicated plugin_step_<name>.go file, self-registers via registerDedicatedBuiltin, and
+// is INTENTIONALLY absent from both builtinProviderInstances and the `providers:` manifest
+// — yet still resolves through the SAME providerRegistry and dispatches via the typed
+// StepProvider adapter (the step bijection gate in init() also sees them registered; a
+// missing one would panic at startup). The test fails if any dedicated step registration
+// regresses or if a step leaks back into the manifest-driven instance supply.
+func TestDedicatedProviders_BulkStepResolveAndAbsent(t *testing.T) {
+	byKey := builtinInstanceMap()
+	manifest := parseEmbeddedProviderManifest()
+	inManifest := func(class ProviderClass, word string) bool {
+		for _, w := range manifest[string(class)] {
+			if w == word {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Every InstallStep kind (the full allStepKinds vocabulary) resolves to a StepProvider
+	// and is absent from the manifest-driven instance supply.
+	for _, kind := range allStepKinds {
+		sp, ok := stepProviderFor(kind)
+		if !ok {
+			t.Fatalf("stepProviderFor(%q) not resolved — dedicated self-registration regressed", kind)
+		}
+		if sp.Reserved() != string(kind) {
+			t.Fatalf("step:%s Reserved() = %q, want %q", kind, sp.Reserved(), kind)
+		}
+		if sp.Class() != ClassStep {
+			t.Fatalf("step:%s Class() = %q, want %q", kind, sp.Class(), ClassStep)
+		}
+		if _, in := byKey[provKey(ClassStep, string(kind))]; in {
+			t.Fatalf("step:%s is still in builtinProviderInstances — must self-register from its dedicated file", kind)
+		}
+		if inManifest(ClassStep, string(kind)) {
+			t.Fatalf("step:%s is still in the providers: manifest — a dedicated provider must not be listed there", kind)
+		}
+	}
+
+	// The `providers:` manifest carries NO step entries at all — the whole class is
+	// externalized.
+	if len(manifest[string(ClassStep)]) != 0 {
+		t.Fatalf("providers: manifest step list = %v, want empty (every step is a dedicated provider)", manifest[string(ClassStep)])
+	}
+}

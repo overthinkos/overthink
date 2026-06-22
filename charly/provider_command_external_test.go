@@ -53,3 +53,59 @@ func TestExternalCommandSeam_DynamicCommandDispatch(t *testing.T) {
 		t.Fatalf("plugin received args %v, want [nodes --wide] (passthrough incl. the flag)", fake.gotArgs)
 	}
 }
+
+// fakeNestedCheckCmd is a NestedCommandProvider that nests its command under `check` —
+// the shape the dep-shed extractions (charly check kube/adb/appium) take.
+type fakeNestedCheckCmd struct{ gotArgs []string }
+
+func (*fakeNestedCheckCmd) Reserved() string      { return "examplekube" }
+func (*fakeNestedCheckCmd) Class() ProviderClass  { return ClassCommand }
+func (*fakeNestedCheckCmd) CommandParent() string { return "check" }
+func (f *fakeNestedCheckCmd) Invoke(_ context.Context, op *Operation) (*Result, error) {
+	var p struct {
+		Args []string `json:"args"`
+	}
+	_ = json.Unmarshal(op.Params, &p)
+	f.gotArgs = p.Args
+	return &Result{}, nil
+}
+
+// TestExternalCommandSeam_NestedCheckCommand proves a NestedCommandProvider's dynamic
+// command nests UNDER `check` (kong.Plugins embedded in a CheckCmd-like parent, exactly
+// like the real CheckCmd embed), parses `check examplekube …`, keys the dispatch table by
+// the full path "check examplekube" (commandPathKey), and forwards the pass-through args.
+func TestExternalCommandSeam_NestedCheckCommand(t *testing.T) {
+	fake := &fakeNestedCheckCmd{}
+	field := exportedCommandField("examplekube")
+	holder := externalCommandHolder("examplekube", field)
+
+	type checkLike struct {
+		Box struct {
+			X bool
+		} `cmd:"" help:"static sibling"`
+		kong.Plugins
+	}
+	var cli struct {
+		Check checkLike `cmd:""`
+	}
+	cli.Check.Plugins = kong.Plugins{holder}
+
+	parser, err := kong.New(&cli, kong.Name("charly"))
+	if err != nil {
+		t.Fatalf("kong.New nested: %v", err)
+	}
+	kctx, err := parser.Parse([]string{"check", "examplekube", "nodes", "--wide"})
+	if err != nil {
+		t.Fatalf("kong.Parse nested: %v", err)
+	}
+	if key := commandPathKey(kctx.Command()); key != "check examplekube" {
+		t.Fatalf("commandPathKey(%q) = %q, want %q", kctx.Command(), key, "check examplekube")
+	}
+	d := externalCommandDispatch{prov: fake, holder: holder, field: field}
+	if err := dispatchExternalCommand(d); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if len(fake.gotArgs) != 2 || fake.gotArgs[0] != "nodes" || fake.gotArgs[1] != "--wide" {
+		t.Fatalf("nested plugin got args %v, want [nodes --wide]", fake.gotArgs)
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/alecthomas/kong"
 	"gopkg.in/yaml.v3"
 )
 
@@ -92,6 +93,12 @@ type CheckCmd struct {
 	List      CheckListRunsCmd  `cmd:"" name:"list" help:"List past check runs under .check/<score>/"`
 	Report    CheckReportCmd    `cmd:"" name:"report" help:"Render a past result-<calver>.yml"`
 	Note      CheckNoteCmd      `cmd:"" name:"note" help:"Read/append the persistent NOTES.md memory for a score"`
+
+	// Out-of-process CHECK subcommand plugins (e.g. `charly check kube`/`adb`/`appium`
+	// extracted to shed client-go/selenium) attach here as dynamic kong commands. Populated
+	// in main from collectExternalCommandPlugins' nestedByParent["check"] and dispatched
+	// manually post-parse (they carry no Run()). Empty until such a plugin registers.
+	kong.Plugins
 }
 
 // CheckLiveCmd runs tests against a running service — the deploy-time entry point.

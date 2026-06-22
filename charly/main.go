@@ -777,9 +777,11 @@ func main() {
 	var cli CLI
 	// 6th seam: subcommands contributed by command providers — builtin (static KongCommand)
 	// PLUS out-of-process command plugins (dynamic reflect.StructOf commands dispatched
-	// manually after parse, since those structs carry no Run() for Kong to call).
-	extCmds, extCmdTable := collectExternalCommandPlugins()
-	cli.Plugins = append(collectCommandPlugins(), extCmds...)
+	// manually after parse, since those structs carry no Run() for Kong to call). Top-level
+	// ones embed on the CLI root; nested ones (e.g. `check kube`) embed under their parent.
+	topCmds, nestedCmds, extCmdTable := collectExternalCommandPlugins()
+	cli.Plugins = append(collectCommandPlugins(), topCmds...)
+	cli.Check.Plugins = nestedCmds["check"]
 	ctx := kong.Parse(&cli,
 		kong.Name("charly"),
 		kong.Description("OpenCharly - the container management experience for you and your agents"),
@@ -840,7 +842,7 @@ func main() {
 	// it manually (Invoke the provider with the pass-through args); everything else runs
 	// through Kong's normal ctx.Run().
 	var err error
-	if d, ok := extCmdTable[firstCommandWord(ctx.Command())]; ok {
+	if d, ok := extCmdTable[commandPathKey(ctx.Command())]; ok {
 		err = dispatchExternalCommand(d)
 	} else {
 		err = ctx.Run()

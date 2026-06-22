@@ -24,11 +24,13 @@ type externalCommandDispatch struct {
 // builtin ones contribute a static KongCommand()). reflect.StructOf cannot attach methods,
 // so a dynamic command has no Run() handler and Kong's ctx.Run() cannot dispatch it; these
 // are dispatched MANUALLY post-parse via dispatchExternalCommand. Returns the holder structs
-// for kong.Plugins embedding on the CLI root + the dispatch table keyed by command word.
-// Empty until a real external command plugin registers (the Phase-1+ command extractions).
-func collectExternalCommandPlugins() (kong.Plugins, map[string]externalCommandDispatch) {
-	var plugins kong.Plugins
-	table := map[string]externalCommandDispatch{}
+// for kong.Plugins embedding — TOP-LEVEL on the CLI root, or NESTED under a parent command
+// (e.g. `check`) for a provider implementing NestedCommandProvider — plus the dispatch table
+// keyed by the full command PATH ("vm" top-level, "check kube" nested). Empty until a real
+// external command plugin registers (the Phase-1+ command extractions, e.g. check kube).
+func collectExternalCommandPlugins() (topLevel kong.Plugins, nestedByParent map[string]kong.Plugins, table map[string]externalCommandDispatch) {
+	nestedByParent = map[string]kong.Plugins{}
+	table = map[string]externalCommandDispatch{}
 	for _, p := range providerRegistry.allProviders() {
 		if p.Class() != ClassCommand {
 			continue
@@ -39,10 +41,34 @@ func collectExternalCommandPlugins() (kong.Plugins, map[string]externalCommandDi
 		word := p.Reserved()
 		field := exportedCommandField(word)
 		holder := externalCommandHolder(word, field)
-		plugins = append(plugins, holder)
-		table[word] = externalCommandDispatch{prov: p, holder: holder, field: field}
+		d := externalCommandDispatch{prov: p, holder: holder, field: field}
+		if ncp, ok := p.(NestedCommandProvider); ok {
+			if parent := ncp.CommandParent(); parent != "" {
+				nestedByParent[parent] = append(nestedByParent[parent], holder)
+				table[parent+" "+word] = d
+				continue
+			}
+		}
+		topLevel = append(topLevel, holder)
+		table[word] = d
 	}
-	return plugins, table
+	return topLevel, nestedByParent, table
+}
+
+// NestedCommandProvider is an optional refinement of a ClassCommand Provider: it nests its
+// command UNDER an existing parent command (e.g. `check`) rather than at the CLI root. The
+// parent command must embed kong.Plugins for the dynamic subcommand to attach (CheckCmd
+// does). Used by the dep-shed command extractions — `charly check kube`/`adb`/`appium`.
+type NestedCommandProvider interface {
+	Provider
+	CommandParent() string
+}
+
+// commandPathKey strips the trailing " <args>" placeholder Kong renders for an external
+// command's pass-through Args, yielding the command PATH that keys the dispatch table:
+// "examplecmd <args>" → "examplecmd"; "check kube <args>" → "check kube".
+func commandPathKey(kongCommand string) string {
+	return strings.TrimSuffix(kongCommand, " <args>")
 }
 
 // externalCommandHolder builds a Kong command holder for one out-of-process command:
@@ -88,16 +114,6 @@ func dispatchExternalCommand(d externalCommandDispatch) error {
 		return fmt.Errorf("command %q: %w", d.prov.Reserved(), err)
 	}
 	return nil
-}
-
-// firstCommandWord returns the leading token of a kong ctx.Command() path (e.g.
-// "examplecmd <args>" → "examplecmd"), used to match a top-level external command word
-// against the dispatch table built by collectExternalCommandPlugins.
-func firstCommandWord(cmd string) string {
-	if i := strings.IndexByte(cmd, ' '); i >= 0 {
-		return cmd[:i]
-	}
-	return cmd
 }
 
 // exportedCommandField makes an exported (capitalized, alnum-only) Go field name from a

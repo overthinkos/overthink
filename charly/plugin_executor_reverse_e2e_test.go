@@ -64,4 +64,25 @@ func TestExternalDeployPlugin_ReverseChannelEndToEnd(t *testing.T) {
 	if res == nil || len(res.JSON) == 0 {
 		t.Fatal("plugin returned no result over the wire")
 	}
+
+	// E3-deploy consumer: register the external provider, route it through ResolveTarget
+	// to the externalDeployTarget adapter, and confirm the adapter's Add drives the SAME
+	// reverse channel through the deploy flow (not just a direct InvokeWithExecutor).
+	if err := providerRegistry.RegisterPluginProviders(unit.Providers, "e3deploy-test", closer); err != nil {
+		t.Fatalf("RegisterPluginProviders: %v", err)
+	}
+	tgt, err := ResolveTarget(&BundleNode{Target: "exampledeploy"}, "e3deploy")
+	if err != nil {
+		t.Fatalf("ResolveTarget(external deploy): %v", err)
+	}
+	if _, ok := tgt.(*externalDeployTarget); !ok {
+		t.Fatalf("ResolveTarget routed external deploy to %T, want *externalDeployTarget", tgt)
+	}
+	addFake := &reverseFakeExec{}
+	if err := (&externalDeployTarget{name: "e3deploy", prov: gp, exec: addFake}).Add(ctx, nil, nil, EmitOpts{}); err != nil {
+		t.Fatalf("externalDeployTarget.Add: %v", err)
+	}
+	if addFake.lastSystem != "exampledeploy-reverse-ran" {
+		t.Fatalf("E3-deploy: adapter.Add did not drive the reverse channel, got %q", addFake.lastSystem)
+	}
 }

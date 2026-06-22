@@ -315,11 +315,16 @@ func ResolveTarget(node *BundleNode, name string) (UnifiedDeployTarget, error) {
 		return nil, fmt.Errorf("deployment %q: unknown target %q "+
 			"(want local|vm|pod|k8s|android)", name, node.Target)
 	}
-	dp, ok := prov.(DeployTargetProvider)
-	if !ok {
-		return nil, fmt.Errorf("deployment %q: target %q has no in-process resolver", name, node.Target)
+	if dp, ok := prov.(DeployTargetProvider); ok {
+		return dp.ResolveTarget(node, name)
 	}
-	return dp.ResolveTarget(node, name)
+	// An OUT-OF-PROCESS deploy provider (a grpcProvider, Invoke-only) drives the deploy
+	// lifecycle via the E3b reverse channel — Add Invokes it with the host executor
+	// served on the go-plugin broker (E3-deploy). Built-in targets take the typed path.
+	if gp, ok := prov.(*grpcProvider); ok {
+		return &externalDeployTarget{name: name, prov: gp, exec: ShellExecutor{}}, nil
+	}
+	return nil, fmt.Errorf("deployment %q: target %q has no in-process resolver and is not an out-of-proc plugin provider", name, node.Target)
 }
 
 // compile-time assertion: every adapter satisfies the interfaces it
@@ -330,6 +335,7 @@ var (
 	_ UnifiedDeployTarget = (*PodUnifiedTarget)(nil)
 	_ UnifiedDeployTarget = (*K8sUnifiedTarget)(nil)
 	_ UnifiedDeployTarget = (*AndroidUnifiedTarget)(nil)
+	_ UnifiedDeployTarget = (*externalDeployTarget)(nil)
 
 	_ LifecycleTarget = (*LocalUnifiedTarget)(nil)
 	_ LifecycleTarget = (*VmUnifiedTarget)(nil)

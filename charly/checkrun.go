@@ -457,8 +457,11 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 		} else if cv, ok := prov.(CheckVerbProvider); ok {
 			dr = cv.RunVerb(ctx, r, &expanded)
 		} else {
-			dr.Status = TestSkip
-			dr.Message = fmt.Sprintf("verb %q has no in-process check handler", kind)
+			// An OUT-OF-PROCESS verb provider (a grpcProvider, not a CheckVerbProvider):
+			// dispatch the live verb word to the Invoke envelope with the full Op — the
+			// external-charly-verb path. The verb's params stay authored in #Op (no
+			// migration); the plugin reads them from params_json.
+			dr = r.invokeVerbProvider(ctx, prov, kind, &expanded)
 		}
 		return dr
 	}

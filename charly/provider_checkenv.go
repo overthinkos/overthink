@@ -86,28 +86,42 @@ func (r *Runner) runPluginVerb(ctx context.Context, c *Op) CheckResult {
 		res.Message = err.Error()
 		return res
 	}
+	res = r.invokeVerbProvider(ctx, prov, word, c)
+	res.Verb = "plugin"
+	return res
+}
+
+// invokeVerbProvider marshals the Op + the check env, Invokes the provider's OpRun, and
+// decodes the pluginCheckResult into a CheckResult. It is the transport-invisible verb
+// dispatch shared by the `plugin:` verb (runPluginVerb, after plugin_input validation)
+// AND the external-charly-verb path (a live verb word — cdp/kube/… — whose provider is
+// OUT-OF-PROCESS, not a CheckVerbProvider): an external verb reads the FULL Op it is
+// handed here (params_json), so a verb's params stay authored in #Op with NO migration
+// when its implementation moves out-of-tree. The caller sets res.Verb.
+func (r *Runner) invokeVerbProvider(ctx context.Context, prov Provider, word string, c *Op) CheckResult {
+	res := CheckResult{}
 	params, err := marshalJSON(c)
 	if err != nil {
 		res.Status = TestFail
-		res.Message = "plugin verb: marshal op: " + err.Error()
+		res.Message = fmt.Sprintf("verb %q: marshal op: %v", word, err)
 		return res
 	}
 	env, err := marshalJSON(snapshotCheckEnv(r, c))
 	if err != nil {
 		res.Status = TestFail
-		res.Message = "plugin verb: marshal env: " + err.Error()
+		res.Message = fmt.Sprintf("verb %q: marshal env: %v", word, err)
 		return res
 	}
 	out, err := prov.Invoke(ctx, &Operation{Reserved: word, Op: OpRun, Params: params, Env: env})
 	if err != nil {
 		res.Status = TestFail
-		res.Message = fmt.Sprintf("plugin verb %q: %v", word, err)
+		res.Message = fmt.Sprintf("verb %q: %v", word, err)
 		return res
 	}
 	var pr pluginCheckResult
 	if err := json.Unmarshal(out.JSON, &pr); err != nil {
 		res.Status = TestFail
-		res.Message = fmt.Sprintf("plugin verb %q: decode result: %v", word, err)
+		res.Message = fmt.Sprintf("verb %q: decode result: %v", word, err)
 		return res
 	}
 	switch pr.Status {

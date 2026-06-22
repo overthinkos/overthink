@@ -23,8 +23,9 @@ type BundleConfig struct {
 	Bundle   map[string]BundleNode `yaml:"deploy" json:"deploy"`
 	// Sidecar carries the project's sidecar-template library (the embedded
 	// default set merged with any project-declared root sidecar: entries).
-	// Projected from UnifiedFile.Sidecar by ProjectBundleConfig(); deploy-time
-	// resolution merges these UNDER each deploy node's own sidecar overrides.
+	// Projected from the UnifiedFile.Sidecars() accessor (over PluginKinds["sidecar"])
+	// by ProjectBundleConfig(); deploy-time resolution merges these UNDER each deploy
+	// node's own sidecar overrides.
 	Sidecar map[string]SidecarDef `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
 }
 

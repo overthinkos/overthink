@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
@@ -10,6 +11,37 @@ import (
 	"strings"
 	"text/template"
 )
+
+// Sidecars reconstructs the name-keyed sidecar-template library from uf.PluginKinds.
+// The `sidecar` kind is a plugin kind (plugin_sidecar.go) — a `sidecar:` node (incl.
+// the binary-embedded `tailscale` template) lands in uf.PluginKinds["sidecar"][<name>]
+// as canonical spec.Sidecar JSON (produced by the plugin's Invoke). This accessor
+// decodes each body back into a SidecarDef (= spec.Sidecar) value, yielding the SAME
+// map[string]SidecarDef shape the deploy/quadlet code consumed when sidecar was a typed
+// core map (the former uf.Sidecar). It is the single point where the projections
+// (Config.Sidecar / BundleConfig.Sidecar) and EmbeddedSidecarTemplates read the
+// templates. Recomputed per call (the library is a handful of templates); returns nil
+// when none are configured. A decode error is impossible in practice — the body is
+// canonical JSON the plugin Marshalled from spec.Sidecar — but a bad entry is skipped
+// rather than poisoning the whole library.
+func (uf *UnifiedFile) Sidecars() map[string]SidecarDef {
+	if uf == nil {
+		return nil
+	}
+	bodies := uf.PluginKinds["sidecar"]
+	if len(bodies) == 0 {
+		return nil
+	}
+	out := make(map[string]SidecarDef, len(bodies))
+	for name, body := range bodies {
+		var s SidecarDef
+		if err := json.Unmarshal(body, &s); err != nil {
+			continue
+		}
+		out[name] = s
+	}
+	return out
+}
 
 // SidecarKeyContext is the template input for SidecarSecret.EnvFrom rendering.
 // Exposes the resolved Parameter map as `.Parameter` (so templates can
@@ -279,7 +311,9 @@ func EmbeddedSidecarTemplates() (map[string]SidecarDef, error) {
 	if err != nil {
 		return nil, err
 	}
-	return def.Sidecar, nil
+	// sidecar is a plugin kind now: the embedded `tailscale` template lands in
+	// def.PluginKinds["sidecar"], read back via the Sidecars() accessor.
+	return def.Sidecars(), nil
 }
 
 // ResolveSidecarsForConfig builds the effective sidecar defs for a deploy: the

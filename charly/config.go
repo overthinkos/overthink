@@ -18,7 +18,8 @@ type Config struct {
 	Local map[string]*LocalSpec `yaml:"local,omitempty" json:"local,omitempty"`
 	// Sidecar carries the project's sidecar-template library (the embedded
 	// default set merged with any project-declared sidecar: entries). Populated
-	// from UnifiedFile.Sidecar by ProjectConfig(). See /charly-automation:sidecar.
+	// from the UnifiedFile.Sidecars() accessor (over PluginKinds["sidecar"]) by
+	// ProjectConfig(). See /charly-automation:sidecar.
 	Sidecar map[string]SidecarDef `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
 	// Namespaces carries child namespaces mounted by namespaced `import:`
 	// entries (alias → projected sub-Config). Qualified refs like

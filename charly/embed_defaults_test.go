@@ -108,8 +108,10 @@ func TestEmbeddedDefaults_SameLoaderPath(t *testing.T) {
 	if def.Resource["nvidia-gpu"] == nil {
 		t.Error("embedded resource nvidia-gpu missing from unified parse")
 	}
-	// Sidecar-template view — from the SAME parse, the SAME UnifiedFile.
-	ts, ok := def.Sidecar["tailscale"]
+	// Sidecar-template view — sidecar is a plugin kind now (plugin_sidecar.go), so the
+	// embedded tailscale template is read back via the Sidecars() accessor (over
+	// def.PluginKinds["sidecar"]) from the SAME parse, the SAME UnifiedFile.
+	ts, ok := def.Sidecars()["tailscale"]
 	if !ok {
 		t.Fatal("embedded sidecar tailscale missing from unified parse")
 	}
@@ -120,7 +122,12 @@ func TestEmbeddedDefaults_SameLoaderPath(t *testing.T) {
 
 // TestEmbeddedDefaults_SidecarProjectWins proves a project may declare a root
 // `sidecar:` template that OVERRIDES the embedded one (project-wins), routed
-// through LoadUnified exactly like the build vocabulary.
+// through LoadUnified. This is the load-bearing behavior the sidecar→plugin
+// extraction relies on: sidecar is a plugin kind now, so the project's `tailscale`
+// lands in uf.PluginKinds["sidecar"]["tailscale"] and the embedded one (merged in by
+// applyEmbeddedDefaults via the generic root-wins mergePluginKindsMap — Cutover A's
+// name-keyed override) fills only absent names — so the project's value WINS, ONE
+// entry, not two appended.
 func TestEmbeddedDefaults_SidecarProjectWins(t *testing.T) {
 	dir := t.TempDir()
 	writeFixture(t, dir, "charly.yml", `version: `+LatestSchemaVersion().String()+`
@@ -132,8 +139,12 @@ tailscale:
 	if err != nil {
 		t.Fatalf("LoadUnified: %v", err)
 	}
-	if uf.Sidecar["tailscale"].Image != "example.com/custom-tailscale:pinned" {
-		t.Errorf("project sidecar override lost (embed wrongly won); got %q", uf.Sidecar["tailscale"].Image)
+	sidecars := uf.Sidecars()
+	if n := len(sidecars); n != 1 {
+		t.Fatalf("expected exactly 1 tailscale entry after root-wins override, got %d (%v)", n, sidecars)
+	}
+	if sidecars["tailscale"].Image != "example.com/custom-tailscale:pinned" {
+		t.Errorf("project sidecar override lost (embed wrongly won); got %q", sidecars["tailscale"].Image)
 	}
 }
 

@@ -35,7 +35,8 @@ func embeddedDefaults() (*UnifiedFile, error) {
 //
 // The embedded set is the BASE; the project's entries are the overlay that
 // wins. Implemented via the gap-filling per-key maps (mergeDistroMap /
-// mergeBuilderMap / mergeInitMap / mergeResourceMap / mergeSidecarMap), which
+// mergeBuilderMap / mergeInitMap / mergeResourceMap) plus the generic name-keyed
+// mergePluginKindsMap (for the sidecar template library, now a plugin kind), which
 // copy a key only when it is ABSENT. So calling this AFTER all project sources
 // are merged fills only what the project did not define — project-wins is
 // structural, not order-dependent. Called at the depth-0 boundary of
@@ -50,6 +51,11 @@ func applyEmbeddedDefaults(uf *UnifiedFile) error {
 	mergeBuilderMap(&uf.Builder, def.Builder)
 	mergeInitMap(&uf.Init, def.Init)
 	mergeResourceMap(&uf.Resource, def.Resource)
-	mergeSidecarMap(&uf.Sidecar, def.Sidecar)
+	// sidecar is a plugin kind now (plugin_sidecar.go): the embedded `tailscale`
+	// template lands in def.PluginKinds["sidecar"], merged UNDER the project's own
+	// entries by the generic root-wins mergePluginKindsMap — so a project's
+	// `sidecar: tailscale` overrides the embedded one (the exact override Cutover A's
+	// name-keyed merge exists for). Replaces the former explicit mergeSidecarMap.
+	mergePluginKindsMap(&uf.PluginKinds, def.PluginKinds)
 	return nil
 }

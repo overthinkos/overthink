@@ -53,19 +53,13 @@ func candyIsImage(gn *genericNode) bool {
 	return false
 }
 
-type sidecarKind struct{ builtinKindBase }
-
-func (sidecarKind) Reserved() string   { return "sidecar" }
-func (sidecarKind) CueDefPath() string { return "#Sidecar" }
-func (sidecarKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
-	var s SidecarDef
-	if err := decodeNodeValue(gn, &s); err != nil {
-		return err
-	}
-	ensureMap(&uf.Sidecar)
-	uf.Sidecar[gn.name] = s
-	return nil
-}
+// The `sidecar` KIND (the sidecar-container template library) is no longer a core
+// builtin kind — it was extracted into a dedicated plugin UNIT (plugin_sidecar.go +
+// plugin/builtins/sidecar), mirroring the agent/module kind→plugin extractions. A
+// `sidecar:` node now routes through runPluginKind (Invoke/OpLoad) into
+// uf.PluginKinds["sidecar"], validated against the plugin's served #SidecarInput schema;
+// UnifiedFile.Sidecars() reads it back into the name-keyed map[string]SidecarDef the
+// deploy/quadlet code consumes.
 
 // The pointer-into-map kinds (decodePtrInto into a typed uf.<X> map).
 type distroKind struct{ builtinKindBase }

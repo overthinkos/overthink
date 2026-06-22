@@ -62,7 +62,7 @@ func TestRunPluginKind_DecodesViaEnvelope(t *testing.T) {
 // the merge itself: uf.PluginKinds is kind→name→body, and merging a source that
 // authors the SAME kind+name as the destination yields ONE entry — the destination
 // (root/project) wins and the source (embedded/import) is dropped — exactly the
-// build-vocab map merge (mergeSidecarMap) rule. A new name in the source is gap-filled. (The
+// build-vocab map merge (mergeDistroMap) rule. A new name in the source is gap-filled. (The
 // pre-cutover append semantics would have produced two entries for the shared name.)
 func TestMergePluginKindsMap_NameKeyedOverride(t *testing.T) {
 	dst := map[string]map[string]json.RawMessage{

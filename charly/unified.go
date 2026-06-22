@@ -122,9 +122,10 @@ type UnifiedFile struct {
 	// itself stays NAMELESS (the node name is the top-level key, never an authored
 	// body field), so #<Kind>Input is untouched; the NAME is mechanism metadata the
 	// host threads from the node key into the storage key. Name-keyed so consumers
-	// can look an entity up by name (the shape uf.Sidecar + the Agents() accessor
+	// can look an entity up by name (the shape the Agents() / Sidecars() accessors
 	// need) and so the merge is root-wins OVERRIDE (a project entity overrides an
-	// embedded/imported one of the same name) — see mergePluginKindsMap. Built-in
+	// embedded/imported one of the same name — e.g. a project `sidecar: tailscale`
+	// over the embedded one) — see mergePluginKindsMap. Built-in
 	// kinds decode into
 	// their typed maps above. Host-internal — never serialized.
 	PluginKinds map[string]map[string]json.RawMessage `yaml:"-" json:"-"`
@@ -149,13 +150,16 @@ type UnifiedFile struct {
 	// set lives in the embedded charly.yml (embed_defaults.go).
 	Resource map[string]*ResourceDef `yaml:"resource,omitempty" json:"resource,omitempty"`
 
-	// Sidecar — the reusable sidecar-container template library (sidecar name
-	// → SidecarDef). The binary-embedded default set (e.g. `tailscale`) lives
-	// in the embedded charly.yml (embed_defaults.go) and is merged UNDER a
-	// project's own entries by applyEmbeddedDefaults (project-wins). A deploy
-	// references a template by name under `deploy.<name>.sidecar:` and overrides
-	// per-instance. See /charly-automation:sidecar.
-	Sidecar map[string]SidecarDef `yaml:"sidecar,omitempty" json:"sidecar,omitempty"`
+	// Sidecar — the reusable sidecar-container template library — is no longer a
+	// typed core map: it was extracted into a dedicated plugin kind
+	// (plugin_sidecar.go), so a `sidecar:` node (incl. the binary-embedded `tailscale`
+	// template) lands in PluginKinds["sidecar"]. The name-keyed map[string]SidecarDef
+	// the deploy/quadlet code consumes is reconstructed on demand by the Sidecars()
+	// accessor (decodes the canonical bodies back into SidecarDef = spec.Sidecar) and
+	// projected into Config.Sidecar / BundleConfig.Sidecar. The binary-embedded default
+	// set (e.g. `tailscale`) merges UNDER a project's own entries via the generic
+	// root-wins mergePluginKindsMap (applyEmbeddedDefaults). See sidecar.go +
+	// Sidecars(), /charly-automation:sidecar.
 
 	// Namespaces holds child namespaces mounted by namespaced `import:`
 	// entries (alias → fully-resolved isolated UnifiedFile). NOT authored
@@ -1378,7 +1382,6 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergePluginKindsMap(&dst.PluginKinds, src.PluginKinds)
 	mergeTargetMap(&dst.Target, src.Target)
 	mergeResourceMap(&dst.Resource, src.Resource)
-	mergeSidecarMap(&dst.Sidecar, src.Sidecar)
 	mergeDeployMaps(&dst.Bundle, src.Bundle)
 	if dst.Provides == nil && src.Provides != nil {
 		dst.Provides = src.Provides
@@ -1455,25 +1458,6 @@ func mergeResourceMap(dst *map[string]*ResourceDef, src map[string]*ResourceDef)
 	}
 	if *dst == nil {
 		*dst = make(map[string]*ResourceDef)
-	}
-	for k, v := range src {
-		if _, exists := (*dst)[k]; !exists {
-			(*dst)[k] = v
-		}
-	}
-}
-
-// mergeSidecarMap merges sidecar-template definitions. Root-wins gap-fill,
-// like the other build-vocab maps — a project's own sidecar: entries are
-// preserved and the embedded defaults fill only the names the project did not
-// declare (applyEmbeddedDefaults relies on this). SidecarDef is a value type,
-// so the merge copies the value, not a pointer.
-func mergeSidecarMap(dst *map[string]SidecarDef, src map[string]SidecarDef) {
-	if len(src) == 0 {
-		return
-	}
-	if *dst == nil {
-		*dst = make(map[string]SidecarDef)
 	}
 	for k, v := range src {
 		if _, exists := (*dst)[k]; !exists {
@@ -1585,11 +1569,12 @@ func mergeLocalMap(dst *map[string]*LocalSpec, src map[string]*LocalSpec) {
 // mergePluginKindsMap merges plugin-contributed kind entities (uf.PluginKinds:
 // kind word → entity NAME → canonical entity JSON) across every merged
 // document/file. Root-wins NAME-KEYED OVERRIDE, byte-identical in spirit to the
-// build-vocab map merges (mergeSidecarMap et al.): for each kind, an existing dst
+// build-vocab map merges (mergeDistroMap et al.): for each kind, an existing dst
 // entry for a given name is PRESERVED and src fills only the names dst does not have.
 // So a project's entity overrides an embedded/imported one of the same name (one
-// entry, not two) — the property the agent extraction (and Cutover B2's sidecar
-// extraction) relies on. Without this,
+// entry, not two) — the property the agent + sidecar extractions rely on (a project's
+// `sidecar: tailscale` overriding the binary-embedded one, merged in via
+// applyEmbeddedDefaults). Without this,
 // plugin-kind entities decoded into a per-document `sub` UnifiedFile are silently
 // dropped at mergeUnified (every document flows through here).
 func mergePluginKindsMap(dst *map[string]map[string]json.RawMessage, src map[string]map[string]json.RawMessage) {
@@ -2053,7 +2038,7 @@ func (uf *UnifiedFile) projectConfigCached(cache map[*UnifiedFile]*Config) *Conf
 		Defaults: uf.Defaults,
 		Box:      images,
 		Local:    uf.Local,
-		Sidecar:  uf.Sidecar,
+		Sidecar:  uf.Sidecars(), // sidecar is a plugin kind now; decode the name-keyed library
 	}
 	cache[uf] = c // cache BEFORE recursing (cycle break)
 	if len(uf.Namespaces) > 0 {
@@ -2093,13 +2078,14 @@ func (uf *UnifiedFile) ProjectInitConfig() *InitConfig {
 // of the authored file, independent of any per-machine ~/.config/charly/charly.yml
 // which remains loaded separately by LoadBundleConfig).
 func (uf *UnifiedFile) ProjectBundleConfig() *BundleConfig {
-	if uf == nil || (len(uf.Bundle) == 0 && uf.Provides == nil && len(uf.Sidecar) == 0) {
+	sidecars := uf.Sidecars() // sidecar is a plugin kind now; decode the name-keyed library once
+	if uf == nil || (len(uf.Bundle) == 0 && uf.Provides == nil && len(sidecars) == 0) {
 		return nil
 	}
 	return &BundleConfig{
 		Provides: uf.Provides,
 		Bundle:   uf.Bundle,
-		Sidecar:  uf.Sidecar,
+		Sidecar:  sidecars,
 	}
 }
 

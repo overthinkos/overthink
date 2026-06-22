@@ -1,4 +1,17 @@
 version: 2026.172.0006
+
+# providers — the registry membership manifest (provider class -> the words it
+# contributes). Read at init (registry_bootstrap.go) to drive built-in provider
+# registration from THIS embedded default config instead of a hardcoded Go list. A
+# bijection gate keeps it in sync with the compiled-in instances. External providers
+# load via plugin: candy blocks, not here.
+providers:
+    kind: [agent, android, builder, candy, distro, group, init, k8s, local, module, package-group, pod, resource, sidecar, target, vm]
+    verb: [adb, addr, appium, cdp, command, dbus, dns, file, http, interface, kernel-param, kill, kube, libvirt, matching, mcp, mount, package, plugin, port, process, record, service, spice, summarize, unix_group, user, vnc, wl]
+    deploy: [android, k8s, local, pod, vm]
+    step: [ApkInstall, Builder, File, LocalPkgInstall, Op, Reboot, RepoChange, ServiceCustom, ServicePackaged, ShellHook, ShellSnippet, SystemPackages]
+    builder: [aur, cargo, npm, pixi]
+
 nvidia-gpu:
     resource:
         gpu:

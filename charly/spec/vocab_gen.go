@@ -41,6 +41,7 @@ var DocDirectives = []string{
 	"defaults",
 	"discover",
 	"import",
+	"providers",
 	"provides",
 	"repo",
 	"version",

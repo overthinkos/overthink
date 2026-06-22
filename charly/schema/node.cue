@@ -132,5 +132,11 @@ _reservedNode: "^(candy|pod|vm|k8s|local|android|distro|builder|init|resource|si
 	discover?: _
 	defaults?: _
 	provides?: _
-	{[!~"^(version|repo|import|discover|defaults|provides)$"]: #Node}
+	// providers — the registry membership manifest (provider class → the words it
+	// contributes). Read at init by registry_bootstrap.go to drive built-in provider
+	// registration from the embedded charly.yml (the binary's default config);
+	// recognized here so a document carrying it is not mis-read as a node named
+	// "providers". A gate keeps it in bijection with the compiled-in instances.
+	providers?: {[string]: [...string]}
+	{[!~"^(version|repo|import|discover|defaults|provides|providers)$"]: #Node}
 })

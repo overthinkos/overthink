@@ -1,14 +1,20 @@
 package main
 
-import "github.com/overthinkos/overthink/charly/spec"
+import (
+	"fmt"
 
-// builtinProviderInstances is the SINGLE list of every compiled-in Provider —
-// verbs, kinds, deploy targets, steps, builders. It replaces the five per-class
-// init() registration for-loops (verb/kind/deploy/step/builder_builtins.go) with
-// ONE registration site + ONE gate pass, in one sequential init() (below). Each
-// instance's (Class, Reserved) is its registry key; RegisterBuiltinProvider keys on
-// those. This is the consolidation precursor to the charly.yml-declared provider
-// manifest (the next cutover data-drives THIS list's membership from charly.yml).
+	"github.com/overthinkos/overthink/charly/spec"
+	"gopkg.in/yaml.v3"
+)
+
+// builtinProviderInstances supplies every compiled-in Provider INSTANCE — verbs,
+// kinds, deploy targets, steps, builders. The Go types can only be instantiated in
+// Go (data cannot construct a Go value), but WHICH of them register is driven by the
+// `providers:` manifest in the embedded charly.yml (parsed at init below), NOT by
+// this list's membership: the manifest is the registry authority, this list supplies
+// the instances it names, and init() gates the two into bijection. Adding a built-in
+// is a charly.yml manifest entry PLUS its instance here; the gate fails loudly if
+// either side is missing. (Replaces the five per-class init() registration loops.)
 var builtinProviderInstances = []Provider{
 	// verbs (ClassVerb)
 	fileVerb{}, portVerb{}, commandVerb{}, httpVerb{}, packageVerb{}, serviceVerb{},
@@ -35,16 +41,76 @@ var builtinProviderInstances = []Provider{
 	aurBuilder{}, pixiBuilder{}, cargoBuilder{}, npmBuilder{},
 }
 
-// init is the ONE built-in provider registration site. It registers every Provider
-// from builtinProviderInstances, THEN runs every per-class bijection gate — all in
-// one sequential init(). Each gate runs after ALL registration, so it observes the
-// full registry: the same after-registration guarantee the five per-class init()s
-// each gave for their own class, now unified in one place. This single registration
-// site is the structural foundation for data-driving provider membership from a
-// charly.yml provider manifest (the next cutover).
-func init() {
+// providerManifest is the parsed `providers:` directive — provider class → the
+// reserved words it contributes (matched against each instance's Class()+Reserved()).
+type providerManifest map[string][]string
+
+// builtinInstanceMap keys every compiled-in instance by provKey(Class, Reserved).
+func builtinInstanceMap() map[string]Provider {
+	m := make(map[string]Provider, len(builtinProviderInstances))
 	for _, p := range builtinProviderInstances {
-		RegisterBuiltinProvider(p)
+		m[provKey(p.Class(), p.Reserved())] = p
+	}
+	return m
+}
+
+// manifestInstanceProblems reports every break in the bijection between the manifest
+// and the compiled-in instances: a manifest entry with no instance, or an instance no
+// manifest entry names. Empty result ⇒ they agree exactly. Pure (no registration), so
+// it is unit-testable with doctored inputs.
+func manifestInstanceProblems(manifest providerManifest, byKey map[string]Provider) []string {
+	var problems []string
+	named := make(map[string]bool, len(byKey))
+	for class, words := range manifest {
+		for _, w := range words {
+			key := provKey(ProviderClass(class), w)
+			if _, ok := byKey[key]; !ok {
+				problems = append(problems, key+" (manifest entry has no compiled-in instance)")
+				continue
+			}
+			named[key] = true
+		}
+	}
+	for key := range byKey {
+		if !named[key] {
+			problems = append(problems, key+" (compiled-in instance absent from the providers: manifest)")
+		}
+	}
+	return problems
+}
+
+// parseEmbeddedProviderManifest extracts ONLY the `providers:` directive from the
+// embedded charly.yml via a minimal yaml decode — deliberately NOT the full node-form
+// loader, which needs the kind providers this very manifest registers (the bootstrap
+// circularity). embeddedCharlyDefaults is a //go:embed var, populated before init().
+func parseEmbeddedProviderManifest() providerManifest {
+	var doc struct {
+		Providers providerManifest `yaml:"providers"`
+	}
+	if err := yaml.Unmarshal(embeddedCharlyDefaults, &doc); err != nil {
+		panic(fmt.Errorf("registry bootstrap: parse embedded providers: manifest: %w", err))
+	}
+	if len(doc.Providers) == 0 {
+		panic("registry bootstrap: embedded charly.yml has no providers: manifest")
+	}
+	return doc.Providers
+}
+
+// init is the ONE built-in provider registration site. The `providers:` manifest in
+// the embedded charly.yml is the authoritative membership: it gates the manifest ⇄
+// compiled-in instances into exact bijection, registers exactly the providers the
+// manifest names, then runs every per-class bijection gate after ALL registration so
+// each observes the full registry.
+func init() {
+	byKey := builtinInstanceMap()
+	manifest := parseEmbeddedProviderManifest()
+	if problems := manifestInstanceProblems(manifest, byKey); len(problems) > 0 {
+		panic(fmt.Errorf("registry bootstrap: providers: manifest ⇄ compiled-in instances bijection broken: %v", problems))
+	}
+	for class, words := range manifest {
+		for _, w := range words {
+			RegisterBuiltinProvider(byKey[provKey(ProviderClass(class), w)])
+		}
 	}
 	for _, gate := range []func() error{
 		func() error { return checkVerbProviderBijection(spec.OpVerbs) },

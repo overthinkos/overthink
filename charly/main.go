@@ -775,7 +775,11 @@ func main() {
 	}
 
 	var cli CLI
-	cli.Plugins = collectCommandPlugins() // 6th seam: subcommands contributed by command providers
+	// 6th seam: subcommands contributed by command providers — builtin (static KongCommand)
+	// PLUS out-of-process command plugins (dynamic reflect.StructOf commands dispatched
+	// manually after parse, since those structs carry no Run() for Kong to call).
+	extCmds, extCmdTable := collectExternalCommandPlugins()
+	cli.Plugins = append(collectCommandPlugins(), extCmds...)
 	ctx := kong.Parse(&cli,
 		kong.Name("charly"),
 		kong.Description("OpenCharly - the container management experience for you and your agents"),
@@ -832,7 +836,15 @@ func main() {
 	InstallSignalHandler()
 	SweepStaleTemps()
 
-	err := ctx.Run()
+	// An OUT-OF-PROCESS command plugin's dynamic command has no Run() method, so dispatch
+	// it manually (Invoke the provider with the pass-through args); everything else runs
+	// through Kong's normal ctx.Run().
+	var err error
+	if d, ok := extCmdTable[firstCommandWord(ctx.Command())]; ok {
+		err = dispatchExternalCommand(d)
+	} else {
+		err = ctx.Run()
+	}
 	// `charly check` distinguishes "the thing under test is broken" from "the
 	// command/usage/infra errored" via a distinct exit code: 0 = pass,
 	// 1 = command error (Kong's FatalIfErrorf default), 2 = check checks

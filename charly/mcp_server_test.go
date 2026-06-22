@@ -21,6 +21,9 @@ import (
 func buildTestKong(t *testing.T) *kong.Kong {
 	t.Helper()
 	var cli CLI
+	// Mirror buildMcpServer: embed the builtin command-provider grammar so the
+	// test model reflects the same leaf set the real MCP server exposes.
+	cli.Plugins = collectCommandPlugins()
 	k, err := kong.New(&cli, kong.Name("charly"), kong.UsageOnError())
 	if err != nil {
 		t.Fatalf("building kong: %v", err)

@@ -255,6 +255,10 @@ func buildMcpServer(readOnly bool) (*mcp.Server, error) {
 	// each tool call gets its own fresh parser + CLI struct so in-memory state
 	// from one call doesn't leak into the next.
 	var modelCLI CLI
+	// Embed the builtin command-provider grammar (e.g. `udev`) so leaf commands
+	// contributed via cli.Plugins are reflected as MCP tools exactly like the
+	// hardcoded CLI-struct fields — main() wires the identical seam.
+	modelCLI.Plugins = collectCommandPlugins()
 	k, err := kong.New(&modelCLI, kong.Name("charly"), kong.UsageOnError())
 	if err != nil {
 		return nil, fmt.Errorf("building kong model: %w", err)
@@ -718,6 +722,10 @@ func captureAndRun(argv []string) (stdout, stderr string, err error) {
 		}()
 
 		var cli CLI
+		// Embed the builtin command-provider grammar so a tool invoking an
+		// extracted command (e.g. `udev status`) parses + dispatches identically
+		// to a hardcoded CLI-struct command.
+		cli.Plugins = collectCommandPlugins()
 		k, kerr := kong.New(&cli,
 			kong.Name("charly"),
 			kong.UsageOnError(),

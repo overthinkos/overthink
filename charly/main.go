@@ -76,10 +76,11 @@ type CLI struct {
 	Check       CheckCmd          `cmd:"" help:"Evaluate boxes and deployments — pure-box (disposable), live (running deployment), AI-driven iteration, and live-container probe verbs (cdp/wl/dbus/vnc/mcp/spice/libvirt/record/k8s)"`
 	Feature     FeatureCmd        `cmd:"" help:"plan-shaped description authoring: list/pending/validate"`
 	Tmux        TmuxCmd           `cmd:"" help:"Manage tmux sessions inside running containers"`
-	Udev        UdevCmd           `cmd:"" help:"Manage udev rules for GPU device access in containers"`
-	Update      UpdateCmd         `cmd:"" help:"Update box and restart if active"`
-	Version     VersionCmd        `cmd:"" help:"Print computed CalVer tag"`
-	Vm          VmCmd             `cmd:"" help:"Manage virtual machines from bootc images"`
+	// `Udev` is no longer a hardcoded field — it arrives via cli.Plugins as the
+	// builtin CommandProvider in plugin_command_udev.go (collectCommandPlugins()).
+	Update  UpdateCmd  `cmd:"" help:"Update box and restart if active"`
+	Version VersionCmd `cmd:"" help:"Print computed CalVer tag"`
+	Vm      VmCmd      `cmd:"" help:"Manage virtual machines from bootc images"`
 }
 
 // GenerateCmd generates Containerfiles

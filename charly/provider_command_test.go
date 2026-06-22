@@ -98,6 +98,70 @@ func TestCommandProviders_ExtractedLeafCommands(t *testing.T) {
 	}
 }
 
+// TestCommandProviders_DeployLifecycleCommands proves every deploy-lifecycle + remaining
+// leaf command extracted into a dedicated COMMAND-class provider (the udev/alias-template
+// batch: start/stop/status/restart/update/remove/logs/shell/cmd/cp/volume/service/config/
+// bundle/reap-orphans) is (1) registered in providerRegistry as a CommandProvider with the
+// matching Reserved() word, and (2) collected by collectCommandPlugins() and injected into
+// the REAL charly CLI grammar via kong.Plugins, so its subcommand path parses and selects
+// exactly as before the extraction (the Run handler — which calls the unchanged core
+// deploy/bundle machinery — is preserved verbatim). The test FAILS if any dedicated
+// registration regresses or the command seam stops wiring one of them into the root.
+func TestCommandProviders_DeployLifecycleCommands(t *testing.T) {
+	cases := []struct {
+		word     string   // Reserved() + top-level command name
+		parse    []string // argv selecting the command (or a leaf subcommand)
+		selected string   // expected ctx.Command() after parse
+	}{
+		{"start", []string{"start", "mybox"}, "start <box>"},
+		{"stop", []string{"stop", "mybox"}, "stop <box>"},
+		{"status", []string{"status", "mybox"}, "status <box>"},
+		{"restart", []string{"restart", "mybox"}, "restart <box>"},
+		{"update", []string{"update", "mybox"}, "update <box>"},
+		{"remove", []string{"remove", "mybox"}, "remove <box>"},
+		{"logs", []string{"logs", "mybox"}, "logs <box>"},
+		{"shell", []string{"shell", "mybox"}, "shell <box>"},
+		{"cmd", []string{"cmd", "mybox", "echo hi"}, "cmd <box> <command>"},
+		{"cp", []string{"cp", "mybox", ":/a", "/b"}, "cp <box> <src> <dst>"},
+		{"volume", []string{"volume", "list", "mybox"}, "volume list <box>"},
+		{"service", []string{"service", "status", "mybox"}, "service status <box>"},
+		{"config", []string{"config", "status", "mybox"}, "config status <box>"},
+		{"bundle", []string{"bundle", "path"}, "bundle path"},
+		{"reap-orphans", []string{"reap-orphans"}, "reap-orphans"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.word, func(t *testing.T) {
+			// 1. Registered as a COMMAND-class provider, resolvable through the registry.
+			p, ok := providerRegistry.resolve(ClassCommand, tc.word)
+			if !ok {
+				t.Fatalf("command:%s not registered — dedicated self-registration regressed", tc.word)
+			}
+			cp, ok := p.(CommandProvider)
+			if !ok {
+				t.Fatalf("%s provider is not a CommandProvider (got %T)", tc.word, p)
+			}
+			if cp.Reserved() != tc.word {
+				t.Fatalf("%s provider Reserved() = %q, want %q", tc.word, cp.Reserved(), tc.word)
+			}
+
+			// 2. Collected by the command seam and injected into the real CLI grammar.
+			var cli CLI
+			cli.Plugins = collectCommandPlugins()
+			parser, err := kong.New(&cli, kong.Name("charly"), kong.Exit(func(int) {}))
+			if err != nil {
+				t.Fatalf("kong.New with the command-plugin seam failed: %v", err)
+			}
+			ctx, err := parser.Parse(tc.parse)
+			if err != nil {
+				t.Fatalf("%s command not injected into the CLI grammar: %v", tc.word, err)
+			}
+			if got := ctx.Command(); got != tc.selected {
+				t.Fatalf("expected %q selected, got %q", tc.selected, got)
+			}
+		})
+	}
+}
+
 // TestCommandProviders_ExtractedReachMCP proves the extraction did not change the
 // reflected MCP tool surface for the extracted commands — collectCommandPlugins() feeds
 // buildMcpServer's modelCLI exactly as it feeds the real CLI, so each command's leaves

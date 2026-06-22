@@ -377,8 +377,6 @@ check-k3s-vm:
     kv-matching:
         agent-check: agent-check
         id: kv-matching
-        matching: "check-k3s-vm up"
-        contains: {contains: "k3s"}
         context: [runtime]
     status-shows-vm:
         check: command=charly status --json
@@ -678,8 +676,6 @@ default:
             addrs: ["127.0.0.1/8"]
         default-step-9:
             agent-check: an in-process matcher resolves a literal predetermined string
-            matching: "charly-os-content-marker"
-            contains: ["charly-os-content-marker"]
     web:
         pod:
             agent_provisioned: true

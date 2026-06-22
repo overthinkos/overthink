@@ -224,11 +224,15 @@ func TestRunner_Addr(t *testing.T) {
 	}
 }
 
-// matching verb — pure in-process value matching.
-func TestRunner_Matching(t *testing.T) {
+// matching plugin verb — pure in-process value matching, now a dedicated built-in
+// plugin unit dispatched through the provider registry (TestMain loads its schema).
+func TestRunner_MatchingPlugin(t *testing.T) {
 	r, _ := newFakeRunner(t, RunModeLive)
 	res := r.Run(context.Background(), []Op{
-		{Matching: "hello world", Contains: ContainsList{{Op: "contains", Value: "world"}}},
+		{Plugin: "matching", PluginInput: map[string]any{
+			"matching": "hello world",
+			"contains": map[string]any{"contains": "world"},
+		}},
 	})
 	if res[0].Status != TestPass {
 		t.Errorf("got %+v", res[0])

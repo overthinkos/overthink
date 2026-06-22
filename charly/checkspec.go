@@ -239,7 +239,6 @@ var VerbCatalog = map[string]VerbSpec{
 	"dns":          {ctxDeployRuntime, DoAssert, false, ""},                          // observe-only
 	"interface":    {ctxRuntimeOnly, DoAssert, false, ""},                            // observe-only
 	"addr":         {ctxDeployRuntime, DoAssert, false, ""},                          // observe-only
-	"matching":     {ctxBuildDeployRuntime, DoAssert, false, ""},
 
 	// live-container — runtime only; act drives UI/config, reversed via plan
 	// teardown (never the ledger). kube also legal at deploy (apply manifest).

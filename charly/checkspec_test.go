@@ -21,7 +21,7 @@ func TestCheck_Kind(t *testing.T) {
 		{"port", Op{Port: 6379}, "port", ""},
 		{"http", Op{HTTP: "http://x"}, "http", ""},
 		{"command", Op{Command: "redis-cli ping"}, "command", ""},
-		{"matching", Op{Matching: 42}, "matching", ""},
+		{"plugin", Op{Plugin: "matching"}, "plugin", ""},
 		{"none", Op{}, "", "no verb"},
 		{"two", Op{File: "/x", Port: 6379}, "", "multiple verbs"},
 	}

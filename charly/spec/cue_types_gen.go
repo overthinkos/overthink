@@ -38,8 +38,6 @@ type Op struct {
 
 	Addr string `yaml:"addr,omitempty" json:"addr,omitempty"`
 
-	Matching any/* CUE top */ `yaml:"matching,omitempty" json:"matching,omitempty"`
-
 	Mkdir string `yaml:"mkdir,omitempty" json:"mkdir,omitempty"`
 
 	Copy string `yaml:"copy,omitempty" json:"copy,omitempty"`

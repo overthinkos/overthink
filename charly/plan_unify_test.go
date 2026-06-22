@@ -18,8 +18,8 @@ func TestPlanUnify_CheckStepRuns(t *testing.T) {
 	set := &LabelDescriptionSet{Candy: []LabeledDescription{{
 		Origin: "candy:x",
 		Plan: []Step{{Check: "the marker resolves", Op: Op{
-			Matching: "charly-marker",
-			Contains: ContainsList{{Op: "contains", Value: "charly-marker"}},
+			Plugin:      "matching",
+			PluginInput: map[string]any{"matching": "charly-marker", "contains": map[string]any{"contains": "charly-marker"}},
 		}}},
 	}}}
 	r := NewRunner(nil, nil, RunModeLive)
@@ -42,7 +42,8 @@ func TestPlanUnify_VerifyOnlySkipsRun(t *testing.T) {
 		Plan: []Step{
 			{Run: "mutate the world", Op: Op{Command: "echo should-not-run"}},
 			{Check: "the marker resolves", Op: Op{
-				Matching: "m", Contains: ContainsList{{Op: "contains", Value: "m"}},
+				Plugin:      "matching",
+				PluginInput: map[string]any{"matching": "m", "contains": map[string]any{"contains": "m"}},
 			}},
 		},
 	}}}
@@ -78,7 +79,8 @@ func TestPlanUnify_SkipDeterministicRunSkipsInstall(t *testing.T) {
 		Plan: []Step{
 			{Run: "pip install /ctx/pkg", Op: Op{Command: "false"}}, // would FAIL if executed
 			{Check: "the marker resolves", Op: Op{
-				Matching: "m", Contains: ContainsList{{Op: "contains", Value: "m"}},
+				Plugin:      "matching",
+				PluginInput: map[string]any{"matching": "m", "contains": map[string]any{"contains": "m"}},
 			}},
 			{AgentRun: "an agent drives the UI", Op: Op{}}, // agent step, NOT a deterministic install
 		},

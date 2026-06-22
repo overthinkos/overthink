@@ -109,9 +109,6 @@ func (c *Op) VerbsSet() []string {
 	if c.Addr != "" {
 		set = append(set, "addr")
 	}
-	if c.Matching != nil {
-		set = append(set, "matching")
-	}
 	if c.Cdp != "" {
 		set = append(set, "cdp")
 	}

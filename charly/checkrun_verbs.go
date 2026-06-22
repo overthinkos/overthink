@@ -344,17 +344,6 @@ func (r *Runner) runAddr(ctx context.Context, c *Op) CheckResult {
 	return passf(c, fmt.Sprintf("reachable=%v", reachable))
 }
 
-// runMatching is purely in-process: evaluates the Contains matchers against
-// the Matching value. Useful as a building block for future derived checks
-// that don't fit any other verb.
-func (r *Runner) runMatching(_ context.Context, c *Op) CheckResult {
-	value := sdk.MatchValueString(c.Matching)
-	if err := sdk.MatchAll(value, c.Contains); err != nil {
-		return failf(c, "%v", err)
-	}
-	return passf(c, fmt.Sprintf("value=%s", value))
-}
-
 // splitHostPort splits "host:port"; unlike net.SplitHostPort it doesn't
 // error on missing port — returns ("", "") in that case so the probe fails
 // with a clear message.

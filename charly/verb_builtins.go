@@ -109,13 +109,6 @@ func (addrVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runAddr(ctx, op)
 }
 
-type matchingVerb struct{ builtinVerbBase }
-
-func (matchingVerb) Reserved() string { return "matching" }
-func (matchingVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runMatching(ctx, op)
-}
-
 type cdpVerb struct{ builtinVerbBase }
 
 func (cdpVerb) Reserved() string { return "cdp" }

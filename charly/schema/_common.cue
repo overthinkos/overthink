@@ -18,7 +18,7 @@
 #OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" |
 	"command" | "file" | "package" | "service" | "port" | "process" | "http" |
 	"dns" | "user" | "unix_group" | "interface" | "kernel-param" | "mount" | "addr" |
-	"matching" | "cdp" | "wl" | "dbus" | "vnc" | "mcp" | "record" | "spice" |
+	"cdp" | "wl" | "dbus" | "vnc" | "mcp" | "record" | "spice" |
 	"libvirt" | "kube" | "adb" | "appium" | "summarize" | "kill" | "plugin") @go(-)
 
 // ---------------------------------------------------------------------------
@@ -63,7 +63,6 @@
 	"kernel-param"?: string @go(KernelParam)
 	mount?:          string
 	addr?:           string
-	matching?:       _ // verb value is any (scalar/list/map)
 	mkdir?:          string
 	copy?:           string
 	write?:          string

@@ -108,7 +108,7 @@ func validateEntityClosedCUE(kind, label string, entity cue.Value) error {
 // whole entity against its #Kind: a deploy entity (a `vm:`/`pod:` block carrying
 // disposable/lifecycle/from/install_opts) mixes deploy-envelope fields the workload
 // #Kind does not model — those are gated by #NodeDoc's deploy arm, not here.
-// plugin_input:/matching: stay open (a plugin step's params are validated by the
+// plugin_input: stays open (a plugin step's params are validated by the
 // plugin's own spliced schema, not base #Op).
 func assembleAndValidateEntitySteps(gn *genericNode, label string) error {
 	body, err := assembleEntityBody(gn)

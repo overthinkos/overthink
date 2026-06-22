@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/overthinkos/overthink/charly/plugin/sdk"
 )
 
 // ---------------------------------------------------------------------------
@@ -274,7 +276,7 @@ func (r *Runner) runKernelParam(ctx context.Context, c *Op) CheckResult {
 	if len(c.Value) == 0 {
 		return passf(c, fmt.Sprintf("value=%s", value))
 	}
-	if err := matchAll(value, c.Value); err != nil {
+	if err := sdk.MatchAll(value, c.Value); err != nil {
 		return failf(c, "value=%s: %v", value, err)
 	}
 	return passf(c, fmt.Sprintf("value=%s", value))
@@ -304,7 +306,7 @@ func (r *Runner) runMount(ctx context.Context, c *Op) CheckResult {
 		return failf(c, "filesystem=%s, want %s", fstype, c.Filesystem)
 	}
 	if len(c.Opts) > 0 {
-		if err := matchAll(opts, c.Opts); err != nil {
+		if err := sdk.MatchAll(opts, c.Opts); err != nil {
 			return failf(c, "opts %q: %v", opts, err)
 		}
 	}
@@ -346,8 +348,8 @@ func (r *Runner) runAddr(ctx context.Context, c *Op) CheckResult {
 // the Matching value. Useful as a building block for future derived checks
 // that don't fit any other verb.
 func (r *Runner) runMatching(_ context.Context, c *Op) CheckResult {
-	value := matchValueString(c.Matching)
-	if err := matchAll(value, c.Contains); err != nil {
+	value := sdk.MatchValueString(c.Matching)
+	if err := sdk.MatchAll(value, c.Contains); err != nil {
 		return failf(c, "%v", err)
 	}
 	return passf(c, fmt.Sprintf("value=%s", value))

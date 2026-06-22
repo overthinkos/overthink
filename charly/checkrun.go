@@ -12,11 +12,12 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/overthinkos/overthink/charly/plugin/sdk"
 )
 
 // CheckStatus is the outcome of a single Check.
@@ -600,7 +601,7 @@ fi`, shellSingleQuote(path))
 		if err != nil {
 			return failf(c, "read for contains: %v", err)
 		}
-		if err := matchAll(contents, c.Contains); err != nil {
+		if err := sdk.MatchAll(contents, c.Contains); err != nil {
 			return failf(c, "contains: %v", err)
 		}
 	}
@@ -850,10 +851,10 @@ func (r *Runner) runCommand(ctx context.Context, c *Op) CheckResult {
 	if exit != wantExit {
 		return failf(c, "exit=%d, want %d (stderr: %s)", exit, wantExit, trimPreview(stderr))
 	}
-	if err := matchAll(stdout, c.Stdout); err != nil {
+	if err := sdk.MatchAll(stdout, c.Stdout); err != nil {
 		return failf(c, "stdout: %v (got: %s)", err, trimPreview(stdout))
 	}
-	if err := matchAll(stderr, c.Stderr); err != nil {
+	if err := sdk.MatchAll(stderr, c.Stderr); err != nil {
 		return failf(c, "stderr: %v (got: %s)", err, trimPreview(stderr))
 	}
 	return passf(c, fmt.Sprintf("exit=%d", exit))
@@ -905,7 +906,7 @@ func (r *Runner) runHTTPFromHost(ctx context.Context, c *Op) CheckResult {
 	}
 	if len(c.Headers) > 0 {
 		headerBlob := formatHeaders(resp.Header)
-		if err := matchAll(headerBlob, c.Headers); err != nil {
+		if err := sdk.MatchAll(headerBlob, c.Headers); err != nil {
 			return failf(c, "headers: %v", err)
 		}
 	}
@@ -914,7 +915,7 @@ func (r *Runner) runHTTPFromHost(ctx context.Context, c *Op) CheckResult {
 		if err != nil {
 			return failf(c, "reading body: %v", err)
 		}
-		if err := matchAll(string(bodyBytes), c.Body); err != nil {
+		if err := sdk.MatchAll(string(bodyBytes), c.Body); err != nil {
 			return failf(c, "body: %v", err)
 		}
 	}
@@ -946,7 +947,7 @@ func (r *Runner) runHTTPInContainer(ctx context.Context, c *Op) CheckResult {
 		if err != nil || exit != 0 {
 			return failf(c, "reading body: exit=%d err=%v", exit, err)
 		}
-		if err := matchAll(body, c.Body); err != nil {
+		if err := sdk.MatchAll(body, c.Body); err != nil {
 			return failf(c, "body: %v", err)
 		}
 	}
@@ -999,141 +1000,6 @@ func formatHeaders(h http.Header) string {
 		}
 	}
 	return b.String()
-}
-
-// ---------------------------------------------------------------------------
-// Matcher checkuation
-// ---------------------------------------------------------------------------
-
-// matchAll returns nil if every matcher succeeds against the value. The first
-// failure wins (reports the specific unmet expectation).
-//
-// Takes []Matcher rather than MatcherList so callers can pass any named slice
-// type whose underlying element is Matcher (e.g. ContainsList) without an
-// explicit conversion at every call site.
-func matchAll(value string, matchers []Matcher) error {
-	for _, m := range matchers {
-		if err := matchOne(value, m); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// matchOne evaluates a single matcher. The operator set here must stay in
-// lockstep with #MatchOpMap (the CUE matcher-operator authority in _common.cue)
-// — if the schema accepts an op, the runner must handle it.
-func matchOne(value string, m Matcher) error {
-	switch m.Op {
-	case "equals":
-		want := matchValueString(m.Value)
-		if strings.TrimRight(value, "\r\n") != want {
-			return fmt.Errorf("expected exactly %q", want)
-		}
-	case "not_equals":
-		want := matchValueString(m.Value)
-		if strings.TrimRight(value, "\r\n") == want {
-			return fmt.Errorf("expected NOT to equal %q", want)
-		}
-	case "contains":
-		for _, want := range matchValueStrings(m.Value) {
-			if !strings.Contains(value, want) {
-				return fmt.Errorf("expected to contain %q", want)
-			}
-		}
-	case "not_contains":
-		for _, want := range matchValueStrings(m.Value) {
-			if strings.Contains(value, want) {
-				return fmt.Errorf("expected NOT to contain %q", want)
-			}
-		}
-	case "matches":
-		re, err := regexp.Compile(matchValueString(m.Value))
-		if err != nil {
-			return fmt.Errorf("bad regex %v: %w", m.Value, err)
-		}
-		if !re.MatchString(value) {
-			return fmt.Errorf("expected to match /%s/", re.String())
-		}
-	case "not_matches":
-		re, err := regexp.Compile(matchValueString(m.Value))
-		if err != nil {
-			return fmt.Errorf("bad regex %v: %w", m.Value, err)
-		}
-		if re.MatchString(value) {
-			return fmt.Errorf("expected NOT to match /%s/", re.String())
-		}
-	case "lt", "le", "gt", "ge":
-		return matchNumeric(value, m)
-	default:
-		return fmt.Errorf("unsupported matcher op %q", m.Op)
-	}
-	return nil
-}
-
-// matchNumeric compares both sides as float64. Used for HTTP status codes,
-// kernel-param integers, port counts — anywhere an ordering-aware matcher
-// makes sense. String values with leading/trailing whitespace (like
-// `sysctl -n` output) are trimmed before parsing.
-func matchNumeric(value string, m Matcher) error {
-	wantStr := matchValueString(m.Value)
-	want, err := strconv.ParseFloat(strings.TrimSpace(wantStr), 64)
-	if err != nil {
-		return fmt.Errorf("%s: operand %q not numeric: %w", m.Op, wantStr, err)
-	}
-	got, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
-	if err != nil {
-		return fmt.Errorf("%s: observed %q not numeric: %w", m.Op, value, err)
-	}
-	var ok bool
-	switch m.Op {
-	case "lt":
-		ok = got < want
-	case "le":
-		ok = got <= want
-	case "gt":
-		ok = got > want
-	case "ge":
-		ok = got >= want
-	}
-	if !ok {
-		return fmt.Errorf("expected %s %v (got %v)", m.Op, want, got)
-	}
-	return nil
-}
-
-// matchValueString coerces a matcher's stored Value (any) to a string. For
-// numeric types it renders canonically; for everything else it falls back
-// to fmt.Sprint.
-func matchValueString(v any) string {
-	switch x := v.(type) {
-	case string:
-		return x
-	case int:
-		return strconv.Itoa(x)
-	case int64:
-		return strconv.FormatInt(x, 10)
-	case float64:
-		return strconv.FormatFloat(x, 'f', -1, 64)
-	case bool:
-		return strconv.FormatBool(x)
-	case nil:
-		return ""
-	}
-	return fmt.Sprint(v)
-}
-
-// matchValueStrings handles list-valued matchers like {contains: [a, b]}.
-// A scalar value becomes a singleton list.
-func matchValueStrings(v any) []string {
-	if list, ok := v.([]any); ok {
-		out := make([]string, 0, len(list))
-		for _, e := range list {
-			out = append(out, matchValueString(e))
-		}
-		return out
-	}
-	return []string{matchValueString(v)}
 }
 
 // ---------------------------------------------------------------------------

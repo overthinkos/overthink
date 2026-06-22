@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/overthinkos/overthink/charly/plugin/sdk"
 )
 
 // artifactValidatableMethods lists the verb/method pairs that
@@ -1190,10 +1192,10 @@ func (r *Runner) runCharlyVerb(ctx context.Context, c *Op, verb, method string, 
 		return failf(c, "%s: %s: exit=%d, want %d (stderr: %s)", verb, method, exit, wantExit, trimPreview(stderr))
 	}
 
-	if err := matchAll(stdout, c.Stdout); err != nil {
+	if err := sdk.MatchAll(stdout, c.Stdout); err != nil {
 		return failf(c, "%s: %s: stdout: %v (got: %s)", verb, method, err, trimPreview(stdout))
 	}
-	if err := matchAll(stderr, c.Stderr); err != nil {
+	if err := sdk.MatchAll(stderr, c.Stderr); err != nil {
 		return failf(c, "%s: %s: stderr: %v (got: %s)", verb, method, err, trimPreview(stderr))
 	}
 

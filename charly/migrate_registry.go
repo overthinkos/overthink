@@ -71,7 +71,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.172.0006")
+var latestSchemaVersion = mustCalVer("2026.173.1616")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -456,13 +456,29 @@ func migrationSteps() []MigrationStep {
 		// candy of the same name route to distinct maps). Raises HEAD (the `box` kind is
 		// gone from the schema). See migrate_box_to_candy.go.
 		{mustCalVer("2026.172.0005"), "box-to-candy", false, MigrateBoxToCandy},
+		// 2026-06 matching-verb extraction: the `matching` check verb (pure in-process
+		// value matching) left the closed `#Op`/`spec.OpVerbs` and became a BUILTIN
+		// plugin unit (plugin/builtins/matching). A plan step authoring `matching:
+		// <value>` (+ optional `contains:`) now authors the generic plugin step
+		// `plugin: matching` + a typed `plugin_input:` ({matching, contains}). This
+		// step CONVERTS a deterministic `check:` step (matching:/contains: → plugin:
+		// matching + plugin_input:) and STRIPS the vestigial matching:/contains: on
+		// any other step (agent-check/agent-run/run/include). Gated on isStepNode so a
+		// migrated config's nested plugin_input matching: is a no-op (idempotent).
+		// Raises HEAD (a closed `#Op` rejects the `matching:` key). TouchesHost false →
+		// remote-cache auto-migration applies it to fetched candy manifests. See
+		// migrate_matching_to_plugin.go + CHANGELOG/.
+		{mustCalVer("2026.173.1615"), "matching-to-plugin", false, func(c *MigrateContext) (bool, error) {
+			w, err := MigrateMatchingToPlugin(c.Dir, c.DryRun)
+			return len(w) > 0, err
+		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up
 		// and every versioned file lands on this CalVer. This is the integer→CalVer
 		// transition step (version: 4 → version: <HEAD>) and the universal stamper.
 		// TouchesHost is false so it ALSO runs in project-only mode (remote-cache
 		// auto-migration); its host-file stamping is gated on ctx.HostDeployPath,
 		// which the project-only runner leaves empty.
-		{mustCalVer("2026.172.0006"), "calver-schema", false, func(c *MigrateContext) (bool, error) {
+		{mustCalVer("2026.173.1616"), "calver-schema", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateCalverSchema(c.Dir, c.HostDeployPath, latestSchemaVersion, c.DryRun)
 			return len(w) > 0, err
 		}},

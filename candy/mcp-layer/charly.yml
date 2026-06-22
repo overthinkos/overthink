@@ -260,9 +260,11 @@ mcp-layer:
             - runtime
     mcp-layer-step-7:
         check: the server port accepts a TCP connection from the host
-        addr: 127.0.0.1:${HOST_PORT:8888}
-        reachable: true
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:8888}
+            reachable: true
     mcp-layer-step-8:
         agent-check: a tools/call invocation of list_notebooks returns a notebook listing, and insert_cell / execute_cell respond without a JSON-RPC protocol error against the live fixture

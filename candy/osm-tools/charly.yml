@@ -204,18 +204,22 @@ osm-tools:
             - runtime
     osm-tools-step-12:
         check: the martin port accepts a TCP connection from the host
-        addr: 127.0.0.1:${HOST_PORT:3000}
-        reachable: true
         timeout: 10s
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:3000}
+            reachable: true
     osm-tools-step-13:
         check: martin answers GET /catalog with HTTP 200 (empty source list pre-DAG, populated post-DAG)
-        http: http://127.0.0.1:${HOST_PORT:3000}/catalog
-        status: 200
         timeout: 10s
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:3000}/catalog
+            status: 200
     osm-tools-step-14:
         agent-check: martin auto-discovers PMTiles files written into /workspace/tiles/pmtiles/ and serves each as a named vector-tile source (Content-Type application/x-protobuf) under /<source>/{z}/{x}/{y}
     jq-installed:

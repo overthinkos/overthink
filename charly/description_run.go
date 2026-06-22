@@ -236,8 +236,12 @@ func substituteIndex(c *Op, indexVar string, idx int) *Op {
 	out.Text = replace(out.Text)
 	out.URL = replace(out.URL)
 	out.Expression = replace(out.Expression)
-	out.HTTP = replace(out.HTTP)
 	out.Input = replace(out.Input)
+	// http/addr/interface left #Op; their discriminator + modifiers ride plugin_input
+	// (a map, not a string field). Index-var (${<indexVar>}) replication of plugin_input
+	// is not performed — matching the already-extracted process/port/dns verbs, whose
+	// params are likewise not index-replicated. The common runtime ${HOST_PORT:N} /
+	// ${VAR} substitution in plugin_input IS handled, generically, by opExpandVars.
 	return &out
 }
 

@@ -67,11 +67,13 @@ chrome-devtools-mcp:
     chrome-devtools-mcp-port-2:
         check: addr=127.0.0.1:${HOST_PORT:9224}
         id: chrome-devtools-mcp-port
-        addr: 127.0.0.1:${HOST_PORT:9224}
-        reachable: true
         timeout: 5s
         # Readiness wait: the mcp-proxy binds 9224 shortly after start.
         eventually: 60s
         retry_interval: 2s
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:9224}
+            reachable: true

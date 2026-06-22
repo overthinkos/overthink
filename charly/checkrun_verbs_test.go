@@ -162,16 +162,17 @@ func TestRunner_Group(t *testing.T) {
 	}
 }
 
-// interface verb — presence + MTU check.
+// interface plugin verb — presence + MTU check. Now a dedicated built-in plugin unit
+// dispatched IN-PROCESS via the CheckVerbProvider RunVerb path (TestMain loads its
+// schema); authored as plugin: interface + plugin_input.
 func TestRunner_Interface(t *testing.T) {
 	r, fake := newFakeRunner(t, RunModeLive)
 	fake.responses = []fakeResponse{
 		{matchPrefix: "ip -o addr show 'eth0'", stdout: "2: eth0 inet 10.0.0.5/24\n", exit: 0},
 		{matchPrefix: "ip -o link show 'eth0'", stdout: "1500\n", exit: 0},
 	}
-	mtu := 1500
 	res := r.Run(context.Background(), []Op{
-		{Interface: "eth0", MTU: &mtu, Addrs: []string{"10.0.0.5/24"}},
+		{Plugin: "interface", PluginInput: map[string]any{"interface": "eth0", "mtu": 1500, "addrs": []any{"10.0.0.5/24"}}},
 	})
 	if res[0].Status != TestPass {
 		t.Errorf("got %+v", res[0])
@@ -207,7 +208,9 @@ func TestRunner_Mount(t *testing.T) {
 	}
 }
 
-// addr verb — host-side dial against a real httptest listener.
+// addr plugin verb — host-side dial against a real httptest listener. Now a dedicated
+// built-in plugin unit dispatched IN-PROCESS via the CheckVerbProvider RunVerb path
+// (TestMain loads its schema); authored as plugin: addr + plugin_input.
 func TestRunner_Addr(t *testing.T) {
 	srv := httptest.NewServer(nil)
 	defer srv.Close()
@@ -215,7 +218,7 @@ func TestRunner_Addr(t *testing.T) {
 	u := strings.TrimPrefix(srv.URL, "http://")
 
 	r, _ := newFakeRunner(t, RunModeLive)
-	res := r.Run(context.Background(), []Op{{Addr: u}})
+	res := r.Run(context.Background(), []Op{{Plugin: "addr", PluginInput: map[string]any{"addr": u}}})
 	if res[0].Status != TestPass {
 		t.Errorf("expected reachable, got %+v", res[0])
 	}
@@ -228,7 +231,7 @@ func TestRunner_Addr(t *testing.T) {
 	addr := l.Addr().String()
 	_ = l.Close() // free the port
 	res = r.Run(context.Background(), []Op{
-		{Addr: addr, Reachable: new(false)},
+		{Plugin: "addr", PluginInput: map[string]any{"addr": addr, "reachable": false}},
 	})
 	if res[0].Status != TestPass {
 		t.Errorf("expected unreachable-as-expected, got %+v", res[0])

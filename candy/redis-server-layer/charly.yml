@@ -50,10 +50,12 @@ redis-server-layer:
             - runtime
     redis-server-layer-step-5:
         check: the published redis TCP port is reachable from the host
-        addr: 127.0.0.1:${HOST_PORT:6379}
-        reachable: true
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:6379}
+            reachable: true
     redis-server-layer-step-6:
         agent-check: redis-server-layer is deployed with --bind 0.0.0.0 and protected-mode off
     redis-server-layer-step-7:

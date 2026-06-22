@@ -127,8 +127,10 @@ sshd:
     sshd-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:2222}
         id: sshd-port-reachable
-        addr: 127.0.0.1:${HOST_PORT:2222}
-        reachable: true
         timeout: 5s
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:2222}
+            reachable: true

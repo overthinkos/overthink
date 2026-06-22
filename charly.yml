@@ -1,4 +1,4 @@
-version: 2026.173.1742
+version: 2026.173.2300
 # Canonical repo identity. After the 2026-06 box inversion main imports the three
 # active distro submodules (arch / cachyos / fedora) ONE-DIRECTIONALLY to reference
 # their relocated boxes; the submodules no longer import main as a namespace (they
@@ -680,8 +680,10 @@ default:
             value: {matches: "."}
         default-step-8:
             check: the loopback interface is present
-            interface: lo
-            addrs: ["127.0.0.1/8"]
+            plugin: interface
+            plugin_input:
+                interface: lo
+                addrs: ["127.0.0.1/8"]
         default-step-9:
             agent-check: an in-process matcher resolves a literal predetermined string
     web:
@@ -699,13 +701,17 @@ default:
                 listening: true
         default-step-12:
             check: the HTTP server's port is reachable from the host
-            addr: "127.0.0.1:${HOST_PORT:8080}"
-            reachable: true
+            plugin: addr
+            plugin_input:
+                addr: "127.0.0.1:${HOST_PORT:8080}"
+                reachable: true
         default-step-13:
             check: GET / returns 200 with the predetermined content marker
-            http: "http://localhost:8080/"
-            status: 200
-            body: {contains: ["charly-web-content-marker"]}
+            plugin: http
+            plugin_input:
+                http: "http://localhost:8080/"
+                status: 200
+                body: {contains: ["charly-web-content-marker"]}
         default-step-14:
             check: the served content file persists on disk with the predetermined marker
             file: /srv/fixture/index.html

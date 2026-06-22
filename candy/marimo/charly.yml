@@ -184,19 +184,23 @@ marimo:
     marimo-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:2718}
         id: marimo-port-reachable
-        addr: "127.0.0.1:${HOST_PORT:2718}"
-        reachable: true
         timeout: 5s
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: "127.0.0.1:${HOST_PORT:2718}"
+            reachable: true
     marimo-http-up:
         check: http=http://127.0.0.1:${HOST_PORT:2718}/
         id: marimo-http-up
-        http: "http://127.0.0.1:${HOST_PORT:2718}/"
-        status: 200
         timeout: 10s
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: "http://127.0.0.1:${HOST_PORT:2718}/"
+            status: 200
     mcp-marimo-ping:
         check: mcp=ping
         id: mcp-marimo-ping

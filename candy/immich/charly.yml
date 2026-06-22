@@ -320,12 +320,14 @@ immich:
         contains: "CREATE EXTENSION IF NOT EXISTS vector"
     immich-step-18:
         check: the running Immich API answers its health ping on port 2283
-        http: http://127.0.0.1:${HOST_PORT:2283}/api/server/ping
-        status: 200
-        body:
-            - contains: "pong"
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:2283}/api/server/ping
+            status: 200
+            body:
+                - contains: "pong"
     immich-step-19:
         agent-check: the web UI presents a usable first-run / login experience
     immich-initdb-sql:
@@ -348,18 +350,22 @@ immich:
     immich-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:2283}
         id: immich-port-reachable
-        addr: 127.0.0.1:${HOST_PORT:2283}
-        reachable: true
         timeout: 5s
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:2283}
+            reachable: true
     immich-http-ping:
         check: http=http://127.0.0.1:${HOST_PORT:2283}/api/server/ping
         id: immich-http-ping
-        http: http://127.0.0.1:${HOST_PORT:2283}/api/server/ping
-        status: 200
         timeout: 10s
-        body:
-            - contains: "pong"
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:2283}/api/server/ping
+            status: 200
+            body:
+                - contains: "pong"

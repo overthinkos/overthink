@@ -65,12 +65,14 @@ jupyter:
             - runtime
     jupyter-step-4:
         check: the JupyterLab REST API answers on the published port with a server version
-        http: http://127.0.0.1:${HOST_PORT:8888}/api
-        status: 200
-        body:
-            - contains: version
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:8888}/api
+            status: 200
+            body:
+                - contains: version
     jupyter-step-5:
         check: the Jupyter MCP server responds to a protocol ping
         mcp: ping
@@ -106,11 +108,13 @@ jupyter:
     jupyter-port-2:
         check: addr=127.0.0.1:${HOST_PORT:8888}
         id: jupyter-port
-        addr: 127.0.0.1:${HOST_PORT:8888}
-        reachable: true
         timeout: 5s
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:8888}
+            reachable: true
     mcp-jupyter-list-tools:
         check: mcp=list-tools
         id: mcp-jupyter-list-tools

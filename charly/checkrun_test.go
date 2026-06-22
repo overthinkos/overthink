@@ -227,10 +227,13 @@ func TestRunner_HTTPVerb(t *testing.T) {
 	}))
 	defer srv.Close()
 
+	// http is a builtin plugin verb (plugin: http + plugin_input); the http-exclusive
+	// status/body ride plugin_input while the GENERAL timeout stays a step-level #Op
+	// modifier (read off the step Op). TestMain loads the http unit's schema.
 	t.Run("status + body contains", func(t *testing.T) {
 		r, _ := newFakeRunner(t, RunModeLive)
 		res := r.Run(context.Background(), []Op{
-			{HTTP: srv.URL + "/ok", Status: 200, Body: MatcherList{{Op: "contains", Value: "ready"}}},
+			{Plugin: "http", PluginInput: map[string]any{"http": srv.URL + "/ok", "status": 200, "body": []any{map[string]any{"contains": "ready"}}}},
 		})
 		if res[0].Status != TestPass {
 			t.Errorf("expected pass, got %+v", res[0])
@@ -240,7 +243,7 @@ func TestRunner_HTTPVerb(t *testing.T) {
 	t.Run("status mismatch", func(t *testing.T) {
 		r, _ := newFakeRunner(t, RunModeLive)
 		res := r.Run(context.Background(), []Op{
-			{HTTP: srv.URL + "/boom", Status: 200},
+			{Plugin: "http", PluginInput: map[string]any{"http": srv.URL + "/boom", "status": 200}},
 		})
 		if res[0].Status != TestFail {
 			t.Errorf("expected fail, got %+v", res[0])
@@ -255,7 +258,7 @@ func TestRunner_HTTPVerb(t *testing.T) {
 		defer slow.Close()
 		r, _ := newFakeRunner(t, RunModeLive)
 		res := r.Run(context.Background(), []Op{
-			{HTTP: slow.URL, Status: 200, Timeout: "10ms"},
+			{Plugin: "http", PluginInput: map[string]any{"http": slow.URL, "status": 200}, Timeout: "10ms"},
 		})
 		if res[0].Status != TestFail {
 			t.Errorf("expected timeout failure, got %+v", res[0])
@@ -314,7 +317,7 @@ func TestRunner_EmptyCheck(t *testing.T) {
 func TestFormatResultsText(t *testing.T) {
 	results := []CheckResult{
 		{Op: &Op{File: "/x"}, Verb: "file", Status: TestPass, Message: "ok"},
-		{Op: &Op{Addr: "127.0.0.1:6379"}, Verb: "addr", Status: TestFail, Message: "not reachable", Elapsed: 5 * time.Millisecond},
+		{Op: &Op{Plugin: "addr", PluginInput: map[string]any{"addr": "127.0.0.1:6379"}}, Verb: "addr", Status: TestFail, Message: "not reachable", Elapsed: 5 * time.Millisecond},
 		{Op: &Op{Command: "a"}, Verb: "command", Status: TestSkip, Message: "skipped"},
 	}
 	var buf bytes.Buffer

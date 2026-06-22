@@ -181,11 +181,13 @@ android-emulator-layer:
             - runtime
     android-emulator-layer-step-9:
         check: the adb server port is reachable on the host
-        addr: 127.0.0.1:${HOST_PORT:5037}
-        reachable: true
         timeout: 5s
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:5037}
+            reachable: true
     android-emulator-layer-step-10:
         check: adb reports the device fully booted
         adb: wait-for-device

@@ -18,19 +18,13 @@ type Op struct {
 
 	Command string `yaml:"command,omitempty" json:"command,omitempty"`
 
-	HTTP string `yaml:"http,omitempty" json:"http,omitempty"`
-
 	User string `yaml:"user,omitempty" json:"user,omitempty"`
 
 	UnixGroup string `yaml:"unix_group,omitempty" json:"unix_group,omitempty"`
 
-	Interface string `yaml:"interface,omitempty" json:"interface,omitempty"`
-
 	KernelParam string `yaml:"kernel-param,omitempty" json:"kernel-param,omitempty"`
 
 	Mount string `yaml:"mount,omitempty" json:"mount,omitempty"`
-
-	Addr string `yaml:"addr,omitempty" json:"addr,omitempty"`
 
 	Mkdir string `yaml:"mkdir,omitempty" json:"mkdir,omitempty"`
 
@@ -253,25 +247,13 @@ type Op struct {
 
 	FromHost bool `yaml:"from_host,omitempty" json:"from_host,omitempty"`
 
-	// --- http ---
-	Status int `yaml:"status,omitempty" json:"status,omitempty"`
-
-	Body MatcherList `yaml:"body,omitempty" json:"body,omitempty"`
-
-	Headers MatcherList `yaml:"header,omitempty" json:"header,omitempty"`
-
-	AllowInsecure bool `yaml:"allow_insecure,omitempty" json:"allow_insecure,omitempty"`
-
-	NoFollowRedir bool `yaml:"no_follow_redirects,omitempty" json:"no_follow_redirects,omitempty"`
-
-	CAFile string `yaml:"ca_file,omitempty" json:"ca_file,omitempty"`
-
+	// --- shared request modifiers (the http plugin verb + the live cdp/dbus/libvirt
+	// verbs read these off the step Op; they are NOT carried in the http plugin's
+	// plugin_input — the http-exclusive request fields status/body/header/…/ca_file
+	// moved into #HttpInput, see charly/plugin/builtins/http) ---
 	Method string `yaml:"method,omitempty" json:"method,omitempty"`
 
 	RequestBody string `yaml:"request_body,omitempty" json:"request_body,omitempty"`
-
-	// --- addrs (shared: dns plugin hostname-resolve match + interface address list) ---
-	Addrs []string `yaml:"addrs,omitempty" json:"addrs,omitempty"`
 
 	// --- user / group ---
 	UID *int `yaml:"uid,omitempty" json:"uid,omitempty"`
@@ -284,9 +266,6 @@ type Op struct {
 
 	Groups []string `yaml:"groups,omitempty" json:"groups,omitempty"`
 
-	// --- interface ---
-	MTU *int `yaml:"mtu,omitempty" json:"mtu,omitempty"`
-
 	// --- kernel-param / mount ---
 	Value MatcherList `yaml:"value,omitempty" json:"value,omitempty"`
 
@@ -295,9 +274,6 @@ type Op struct {
 	Filesystem string `yaml:"filesystem,omitempty" json:"filesystem,omitempty"`
 
 	Opts MatcherList `yaml:"opt,omitempty" json:"opt,omitempty"`
-
-	// --- addr ---
-	Reachable *bool `yaml:"reachable,omitempty" json:"reachable,omitempty"`
 
 	// --- cdp / wl / dbus / vnc / spice modifiers ---
 	Tab string `yaml:"tab,omitempty" json:"tab,omitempty"`

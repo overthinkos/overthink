@@ -67,10 +67,12 @@ valkey:
             - runtime
     valkey-step-5:
         check: the valkey port accepts a TCP connection from the host
-        addr: 127.0.0.1:${HOST_PORT:6379}
-        reachable: true
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:6379}
+            reachable: true
     valkey-step-6:
         check: a value written with SET can be read back with GET, proving the store really persists key-value pairs
         command: valkey-cli -h 127.0.0.1 -p 6379 set charly-check-key charly-check-val && valkey-cli -h 127.0.0.1 -p 6379 get charly-check-key

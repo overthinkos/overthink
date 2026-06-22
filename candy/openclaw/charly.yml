@@ -54,8 +54,10 @@ openclaw:
             - runtime
     openclaw-step-2:
         check: the running gateway accepts a TCP connection on its published port 18789
-        addr: 127.0.0.1:${HOST_PORT:18789}
-        reachable: true
         timeout: 5s
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:18789}
+            reachable: true

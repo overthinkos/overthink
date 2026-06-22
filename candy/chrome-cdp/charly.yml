@@ -144,15 +144,17 @@ chrome-cdp:
             - runtime
     chrome-cdp-step-19:
         check: Chrome's CDP /json/version endpoint answers HTTP 200 with a websocket debugger URL through the proxy
-        http: http://127.0.0.1:${HOST_PORT:9222}/json/version
-        status: 200
         timeout: 5s
         eventually: 90s
         retry_interval: 3s
-        body:
-            - contains: "webSocketDebuggerUrl"
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:9222}/json/version
+            status: 200
+            body:
+                - contains: "webSocketDebuggerUrl"
     browser-open-wrapper:
         check: file=${HOME}/.local/bin/browser-open
         id: browser-open-wrapper
@@ -166,8 +168,6 @@ chrome-cdp:
     chrome-cdp-port-2:
         check: addr=127.0.0.1:${HOST_PORT:9222}
         id: chrome-cdp-port
-        addr: 127.0.0.1:${HOST_PORT:9222}
-        reachable: true
         timeout: 5s
         # Readiness wait: the cdp-proxy comes up shortly after the container
         # starts; poll rather than fire once.
@@ -175,3 +175,7 @@ chrome-cdp:
         retry_interval: 2s
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:9222}
+            reachable: true

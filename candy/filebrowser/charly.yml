@@ -81,19 +81,23 @@ filebrowser:
             - runtime
     filebrowser-step-7:
         check: the web UI answers HTTP 200 on the published port
-        http: http://127.0.0.1:${HOST_PORT:8080}/
-        status: 200
         timeout: 5s
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:8080}/
+            status: 200
     filebrowser-port-2:
         check: addr=127.0.0.1:${HOST_PORT:8080}
         id: filebrowser-port
-        addr: 127.0.0.1:${HOST_PORT:8080}
-        reachable: true
         timeout: 5s
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:8080}
+            reachable: true
     filebrowser-volumes-exist:
         check: file=${VOLUME_CONTAINER_PATH:data}
         id: filebrowser-volumes-exist

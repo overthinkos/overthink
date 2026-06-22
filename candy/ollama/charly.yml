@@ -55,10 +55,12 @@ ollama:
         exists: true
     ollama-step-2:
         check: the running ollama service answers the model-tags API with HTTP 200 on port 11434
-        http: http://127.0.0.1:${HOST_PORT:11434}/api/tags
-        status: 200
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:11434}/api/tags
+            status: 200
     ollama-step-3:
         check: the ollama CLI reports an "ollama version" string
         command: ollama --version

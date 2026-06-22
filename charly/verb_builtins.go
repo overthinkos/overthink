@@ -25,13 +25,6 @@ func (commandVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runCommand(ctx, op)
 }
 
-type httpVerb struct{ builtinVerbBase }
-
-func (httpVerb) Reserved() string { return "http" }
-func (httpVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runHTTP(ctx, op)
-}
-
 type packageVerb struct{ builtinVerbBase }
 
 func (packageVerb) Reserved() string { return "package" }
@@ -60,13 +53,6 @@ func (unixGroupVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult
 	return r.runUnixGroup(ctx, op)
 }
 
-type interfaceVerb struct{ builtinVerbBase }
-
-func (interfaceVerb) Reserved() string { return "interface" }
-func (interfaceVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runInterface(ctx, op)
-}
-
 type kernelParamVerb struct{ builtinVerbBase }
 
 func (kernelParamVerb) Reserved() string { return "kernel-param" }
@@ -79,13 +65,6 @@ type mountVerb struct{ builtinVerbBase }
 func (mountVerb) Reserved() string { return "mount" }
 func (mountVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runMount(ctx, op)
-}
-
-type addrVerb struct{ builtinVerbBase }
-
-func (addrVerb) Reserved() string { return "addr" }
-func (addrVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runAddr(ctx, op)
 }
 
 type cdpVerb struct{ builtinVerbBase }

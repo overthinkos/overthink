@@ -107,7 +107,9 @@ unsloth-studio:
     unsloth-studio-ui-reachable:
         check: addr=127.0.0.1:${HOST_PORT:8888}
         id: unsloth-studio-ui-reachable
-        addr: 127.0.0.1:${HOST_PORT:8888}
-        reachable: true
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:8888}
+            reachable: true

@@ -241,12 +241,14 @@ selkies:
         filetype: directory
     selkies-step-19:
         check: the streaming endpoint serves the web UI over HTTPS on the published port
-        http: https://127.0.0.1:${HOST_PORT:3000}/
-        status: 200
-        allow_insecure: true
         timeout: 10s
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: https://127.0.0.1:${HOST_PORT:3000}/
+            status: 200
+            allow_insecure: true
     selkies-step-20:
         agent-check: a connected browser shows the live desktop rendering, not a black or frozen frame
     pixelflux-wayland-libs-resolvable:
@@ -287,11 +289,13 @@ selkies:
     selkies-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:3000}
         id: selkies-port-reachable
-        addr: 127.0.0.1:${HOST_PORT:3000}
-        reachable: true
         timeout: 5s
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:3000}
+            reachable: true
     selkies-vaapi-encode:
         check: |
             command=node="$DRINODE"

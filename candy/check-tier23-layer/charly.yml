@@ -61,13 +61,15 @@ check-tier23-layer:
             - tier3-ok
     check-tier23-layer-step-5:
         check: the tier2 HTTP server answers on port 8080 with a page containing "charly benchmark"
-        http: http://127.0.0.1:${HOST_PORT:8080}/
-        status: 200
-        body:
-            - contains:
-                - charly benchmark
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:8080}/
+            status: 200
+            body:
+                - contains:
+                    - charly benchmark
     tier23-version-file:
         check: file=/srv/bench/version.txt
         id: tier23-version-file
@@ -83,6 +85,8 @@ check-tier23-layer:
     tier23-port-open:
         check: addr=127.0.0.1:${HOST_PORT:8080}
         id: tier23-port-open
-        addr: 127.0.0.1:${HOST_PORT:8080}
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:8080}

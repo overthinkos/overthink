@@ -62,10 +62,12 @@ selkies-kde-desktop:
         in_container: true
     selkies-kde-desktop-step-7:
         check: the selkies web UI streams the live KDE Plasma desktop over HTTPS on port 3000
-        http: https://127.0.0.1:${HOST_PORT:3000}/
-        status: 200
-        allow_insecure: true
         timeout: 10s
+        plugin: http
+        plugin_input:
+            http: https://127.0.0.1:${HOST_PORT:3000}/
+            status: 200
+            allow_insecure: true
     selkies-kde-desktop-step-8:
         agent-check: the streamed frames show a real KWin-composited KDE Plasma desktop (panel + wallpaper), not a black frame and not the labwc flavor's waybar UI
     selkies-kde-desktop-plasma-session:
@@ -81,9 +83,11 @@ selkies-kde-desktop:
     selkies-kde-desktop-stream-https:
         check: http=https://127.0.0.1:${HOST_PORT:3000}/
         id: selkies-kde-desktop-stream-https
-        http: https://127.0.0.1:${HOST_PORT:3000}/
-        status: 200
-        allow_insecure: true
         timeout: 10s
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: https://127.0.0.1:${HOST_PORT:3000}/
+            status: 200
+            allow_insecure: true

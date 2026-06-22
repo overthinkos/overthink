@@ -99,16 +99,20 @@ comfyui:
     comfyui-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:8188}
         id: comfyui-port-reachable
-        addr: 127.0.0.1:${HOST_PORT:8188}
-        reachable: true
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:8188}
+            reachable: true
     comfyui-system-stats-api:
         check: http=http://127.0.0.1:${HOST_PORT:8188}/system_stats
         id: comfyui-system-stats-api
-        http: http://127.0.0.1:${HOST_PORT:8188}/system_stats
-        status: 200
-        body:
-            - contains: system
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:8188}/system_stats
+            status: 200
+            body:
+                - contains: system

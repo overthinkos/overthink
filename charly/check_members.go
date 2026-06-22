@@ -75,24 +75,32 @@ func applyHostVarsSteps(r *Runner, plan []Step, instance string) {
 func collectHostRefs(checks []Op) []string {
 	seen := map[string]bool{}
 	var out []string
-	for i := range checks {
-		for _, p := range checks[i].StringFields() {
-			if *p == "" {
+	add := func(s string) {
+		for _, key := range TestVarRefs(s) {
+			name := key
+			if before, _, ok := strings.Cut(key, ":"); ok {
+				name = before
+			}
+			if name != hostVar {
 				continue
 			}
-			for _, key := range TestVarRefs(*p) {
-				name := key
-				if before, _, ok := strings.Cut(key, ":"); ok {
-					name = before
-				}
-				if name != hostVar {
-					continue
-				}
-				if !seen[key] {
-					seen[key] = true
-					out = append(out, key)
-				}
+			if !seen[key] {
+				seen[key] = true
+				out = append(out, key)
 			}
+		}
+	}
+	for i := range checks {
+		for _, p := range checks[i].StringFields() {
+			if *p != "" {
+				add(*p)
+			}
+		}
+		// A plugin verb (http/addr/…) carries its authored fields in PluginInput, not
+		// StringFields, so ${HOST:…} cross-member refs there (an http URL targeting a
+		// sibling member) are collected here too — the map analogue of the StringFields scan.
+		for _, s := range collectAnyStrings(checks[i].PluginInput) {
+			add(s)
 		}
 	}
 	return out

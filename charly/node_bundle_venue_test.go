@@ -27,7 +27,7 @@ func TestFlattenBundleVenues_StampsAndHoists(t *testing.T) {
 			Target: "pod",
 			Image:  "web",
 			Plan: []Step{
-				{Check: "web serves marker", Op: Op{HTTP: "http://127.0.0.1:8080/"}},
+				{Check: "web serves marker", Op: Op{Plugin: "http", PluginInput: map[string]any{"http": "http://127.0.0.1:8080/"}}},
 			},
 			Children: map[string]*BundleNode{
 				"migrate": {

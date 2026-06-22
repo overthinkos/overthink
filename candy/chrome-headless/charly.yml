@@ -96,12 +96,14 @@ chrome-headless:
             - runtime
     chrome-headless-step-9:
         check: Chrome's CDP /json/version endpoint answers HTTP 200 with a websocket debugger URL through the proxy
-        http: http://127.0.0.1:${HOST_PORT:9222}/json/version
-        status: 200
         timeout: 5s
         eventually: 90s
         retry_interval: 3s
-        body:
-            - contains: "webSocketDebuggerUrl"
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:9222}/json/version
+            status: 200
+            body:
+                - contains: "webSocketDebuggerUrl"

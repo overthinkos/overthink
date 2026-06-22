@@ -878,15 +878,30 @@ func (r *Runner) runCommand(ctx context.Context, c *Op) CheckResult {
 // reachability). Under RunModeBox the request is issued from inside
 // the disposable container via curl (the container may have no network
 // reachability from the host, so host-side is wrong there).
-func (r *Runner) runHTTP(ctx context.Context, c *Op) CheckResult {
-	if r.Mode == RunModeBox {
-		return r.runHTTPInContainer(ctx, c)
-	}
-	return r.runHTTPFromHost(ctx, c)
+// httpCheck carries the http verb's plugin_input-decoded fields, passed from
+// httpVerb.RunVerb (plugin_http.go) since the http-exclusive fields left #Op when the
+// verb became a builtin plugin unit. The SHARED method/request_body modifiers (also read
+// by the live cdp/dbus/libvirt verbs) and the GENERAL timeout stay base #Op fields, so
+// the runner reads them off the step Op (c) directly.
+type httpCheck struct {
+	URL           string
+	Status        int
+	Body          MatcherList
+	Headers       MatcherList
+	AllowInsecure bool
+	NoFollowRedir bool
+	CAFile        string
 }
 
-func (r *Runner) runHTTPFromHost(ctx context.Context, c *Op) CheckResult {
-	client, err := httpClientFor(c, r.HTTPClient)
+func (r *Runner) runHTTP(ctx context.Context, c *Op, h httpCheck) CheckResult {
+	if r.Mode == RunModeBox {
+		return r.runHTTPInContainer(ctx, c, h)
+	}
+	return r.runHTTPFromHost(ctx, c, h)
+}
+
+func (r *Runner) runHTTPFromHost(ctx context.Context, c *Op, h httpCheck) CheckResult {
+	client, err := httpClientFor(c, h, r.HTTPClient)
 	if err != nil {
 		return failf(c, "http client: %v", err)
 	}
@@ -898,7 +913,7 @@ func (r *Runner) runHTTPFromHost(ctx context.Context, c *Op) CheckResult {
 	if c.RequestBody != "" {
 		body = strings.NewReader(c.RequestBody)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.HTTP, body)
+	req, err := http.NewRequestWithContext(ctx, method, h.URL, body)
 	if err != nil {
 		return failf(c, "building request: %v", err)
 	}
@@ -908,35 +923,35 @@ func (r *Runner) runHTTPFromHost(ctx context.Context, c *Op) CheckResult {
 	}
 	defer resp.Body.Close()
 
-	if c.Status != 0 && resp.StatusCode != c.Status {
-		return failf(c, "status=%d, want %d", resp.StatusCode, c.Status)
+	if h.Status != 0 && resp.StatusCode != h.Status {
+		return failf(c, "status=%d, want %d", resp.StatusCode, h.Status)
 	}
-	if len(c.Headers) > 0 {
+	if len(h.Headers) > 0 {
 		headerBlob := formatHeaders(resp.Header)
-		if err := sdk.MatchAll(headerBlob, c.Headers); err != nil {
+		if err := sdk.MatchAll(headerBlob, h.Headers); err != nil {
 			return failf(c, "headers: %v", err)
 		}
 	}
-	if len(c.Body) > 0 {
+	if len(h.Body) > 0 {
 		bodyBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
 			return failf(c, "reading body: %v", err)
 		}
-		if err := sdk.MatchAll(string(bodyBytes), c.Body); err != nil {
+		if err := sdk.MatchAll(string(bodyBytes), h.Body); err != nil {
 			return failf(c, "body: %v", err)
 		}
 	}
 	return passf(c, fmt.Sprintf("status=%d", resp.StatusCode))
 }
 
-func (r *Runner) runHTTPInContainer(ctx context.Context, c *Op) CheckResult {
+func (r *Runner) runHTTPInContainer(ctx context.Context, c *Op, h httpCheck) CheckResult {
 	// In-container HTTP via curl. We only check status/body here; full
 	// header-matching is implemented host-side. For Phase 3 this is
 	// sufficient for validating that the service inside the disposable
 	// container answers.
-	cmd := fmt.Sprintf("curl -sS -o /tmp/.charly-test-body -w '%%{http_code}' %s", shellSingleQuote(c.HTTP))
-	if c.AllowInsecure {
-		cmd = "curl -sSk -o /tmp/.charly-test-body -w '%{http_code}' " + shellSingleQuote(c.HTTP)
+	cmd := fmt.Sprintf("curl -sS -o /tmp/.charly-test-body -w '%%{http_code}' %s", shellSingleQuote(h.URL))
+	if h.AllowInsecure {
+		cmd = "curl -sSk -o /tmp/.charly-test-body -w '%{http_code}' " + shellSingleQuote(h.URL)
 	}
 	stdout, stderr, exit, err := r.Exec.RunCapture(ctx, cmd)
 	if err != nil || exit != 0 {
@@ -946,15 +961,15 @@ func (r *Runner) runHTTPInContainer(ctx context.Context, c *Op) CheckResult {
 	if convErr != nil {
 		return failf(c, "unexpected curl output: %q", stdout)
 	}
-	if c.Status != 0 && code != c.Status {
-		return failf(c, "status=%d, want %d", code, c.Status)
+	if h.Status != 0 && code != h.Status {
+		return failf(c, "status=%d, want %d", code, h.Status)
 	}
-	if len(c.Body) > 0 {
+	if len(h.Body) > 0 {
 		body, _, exit, err := r.Exec.RunCapture(ctx, "cat /tmp/.charly-test-body")
 		if err != nil || exit != 0 {
 			return failf(c, "reading body: exit=%d err=%v", exit, err)
 		}
-		if err := sdk.MatchAll(body, c.Body); err != nil {
+		if err := sdk.MatchAll(body, h.Body); err != nil {
 			return failf(c, "body: %v", err)
 		}
 	}
@@ -962,9 +977,10 @@ func (r *Runner) runHTTPInContainer(ctx context.Context, c *Op) CheckResult {
 }
 
 // httpClientFor builds a per-check http.Client honoring AllowInsecure,
-// NoFollowRedir, CAFile, and Timeout. Derives from the runner's base client
-// so concurrent checks don't share TLS state surprises.
-func httpClientFor(c *Op, base *http.Client) (*http.Client, error) {
+// NoFollowRedir, CAFile (from the http plugin_input, h) and Timeout (the general
+// #Op step modifier, off c). Derives from the runner's base client so concurrent
+// checks don't share TLS state surprises.
+func httpClientFor(c *Op, h httpCheck, base *http.Client) (*http.Client, error) {
 	client := &http.Client{Timeout: base.Timeout}
 	if c.Timeout != "" {
 		if d, err := time.ParseDuration(c.Timeout); err == nil {
@@ -972,17 +988,17 @@ func httpClientFor(c *Op, base *http.Client) (*http.Client, error) {
 		}
 	}
 	tr := &http.Transport{}
-	if c.AllowInsecure {
+	if h.AllowInsecure {
 		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-	if c.CAFile != "" {
-		pem, err := os.ReadFile(c.CAFile)
+	if h.CAFile != "" {
+		pem, err := os.ReadFile(h.CAFile)
 		if err != nil {
 			return nil, fmt.Errorf("reading CA file: %w", err)
 		}
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(pem) {
-			return nil, fmt.Errorf("no certs parsed from %s", c.CAFile)
+			return nil, fmt.Errorf("no certs parsed from %s", h.CAFile)
 		}
 		if tr.TLSClientConfig == nil {
 			tr.TLSClientConfig = &tls.Config{}
@@ -990,7 +1006,7 @@ func httpClientFor(c *Op, base *http.Client) (*http.Client, error) {
 		tr.TLSClientConfig.RootCAs = pool
 	}
 	client.Transport = tr
-	if c.NoFollowRedir {
+	if h.NoFollowRedir {
 		client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	}
 	return client, nil
@@ -1055,7 +1071,7 @@ func FormatResultsText(w io.Writer, results []CheckResult) int {
 			skips++
 		}
 		verb := r.Verb
-		subject := firstNonEmpty(r.Op.File, r.Op.HTTP, r.Op.Command, r.Op.Addr)
+		subject := firstNonEmpty(r.Op.File, pluginInputStr(r.Op, "http"), r.Op.Command, pluginInputStr(r.Op, "addr"))
 		fmt.Fprintf(w, "%s %s %s — %s\n", glyph, verb, subject, r.Message)
 		if r.Op.Origin != "" && r.Status == TestFail {
 			fmt.Fprintf(w, "  from %s\n", r.Op.Origin)
@@ -1087,7 +1103,7 @@ func FormatResultsJSON(w io.Writer, results []CheckResult) int {
 	out := make([]entry, 0, len(results))
 	fails := 0
 	for _, r := range results {
-		subject := firstNonEmpty(r.Op.File, r.Op.HTTP, r.Op.Command, r.Op.Addr)
+		subject := firstNonEmpty(r.Op.File, pluginInputStr(r.Op, "http"), r.Op.Command, pluginInputStr(r.Op, "addr"))
 		if r.Status == TestFail {
 			fails++
 		}
@@ -1110,7 +1126,7 @@ func FormatResultsTAP(w io.Writer, results []CheckResult) int {
 	fails := 0
 	fmt.Fprintf(w, "TAP version 13\n1..%d\n", len(results))
 	for i, r := range results {
-		subject := firstNonEmpty(r.Op.File, r.Op.HTTP, r.Op.Command, r.Op.Addr)
+		subject := firstNonEmpty(r.Op.File, pluginInputStr(r.Op, "http"), r.Op.Command, pluginInputStr(r.Op, "addr"))
 		label := fmt.Sprintf("%s %s - %s", r.Verb, subject, r.Message)
 		switch r.Status {
 		case TestPass:

@@ -814,21 +814,27 @@ func checkToProbe(c *Op) map[string]any {
 	if c == nil {
 		return nil
 	}
+	// http / addr are observe-only verbs extracted to builtin plugin units, so their
+	// discriminator now rides plugin_input (op.HTTP / op.Addr left #Op). Read it via
+	// pluginInputStr so a migrated `plugin: http` / `plugin: addr` check step still
+	// generates the httpGet / tcpSocket probe (else the probe would silently vanish).
+	httpURL := pluginInputStr(c, "http")
+	addrTarget := pluginInputStr(c, "addr")
 	switch {
-	case c.HTTP != "":
+	case httpURL != "":
 		probe := map[string]any{}
 		// HTTP url shape: scheme://host:port/path. We extract path+port
 		// best-effort; on parse failure we still emit httpGet with the
 		// raw string under "path" so the manifest is recognisable.
-		path, port, host := parseHTTPForProbe(c.HTTP)
+		path, port, host := parseHTTPForProbe(httpURL)
 		probe["path"] = path
 		probe["port"] = port
 		if host != "" {
 			probe["host"] = host
 		}
 		return map[string]any{"httpGet": probe}
-	case c.Addr != "":
-		host, port := parseAddrForProbe(c.Addr)
+	case addrTarget != "":
+		host, port := parseAddrForProbe(addrTarget)
 		probe := map[string]any{"port": port}
 		if host != "" {
 			probe["host"] = host

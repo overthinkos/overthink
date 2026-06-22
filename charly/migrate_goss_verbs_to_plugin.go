@@ -51,6 +51,16 @@ var gossVerbFields = []struct {
 	{"process", []string{"running"}},
 	{"port", []string{"listening", "ip", "reachable"}},
 	{"dns", []string{"resolvable", "addrs", "server"}},
+	// The remaining observe-only goss verbs (the second extraction wave). Only the
+	// verb-EXCLUSIVE companions move into plugin_input: `http`'s status/body/header/…/
+	// ca_file (its SHARED method/request_body and the GENERAL timeout stay step-level
+	// #Op modifiers, read off the step Op by the runner, so they are NOT listed here);
+	// `interface`'s mtu/addrs (`addrs` is now interface-only — dns already extracted);
+	// `addr`'s reachable (now addr-only — port already extracted). A step has at most
+	// one verb (Op.Kind), so a verb's own step is the only place its companions move.
+	{"http", []string{"status", "body", "header", "allow_insecure", "no_follow_redirects", "ca_file"}},
+	{"interface", []string{"mtu", "addrs"}},
+	{"addr", []string{"reachable"}},
 }
 
 // MigrateGossVerbsToPlugin rewrites every legacy observe-only goss-verb Op step to the

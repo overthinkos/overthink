@@ -18,11 +18,11 @@ func TestCheck_Kind(t *testing.T) {
 		wantErr string // substring
 	}{
 		{"file", Op{File: "/usr/bin/redis"}, "file", ""},
-		{"http", Op{HTTP: "http://x"}, "http", ""},
+		{"service", Op{Service: "redis"}, "service", ""},
 		{"command", Op{Command: "redis-cli ping"}, "command", ""},
 		{"plugin", Op{Plugin: "matching"}, "plugin", ""},
 		{"none", Op{}, "", "no verb"},
-		{"two", Op{File: "/x", HTTP: "http://x"}, "", "multiple verbs"},
+		{"two", Op{File: "/x", Service: "redis"}, "", "multiple verbs"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -56,10 +56,12 @@ func TestCheck_UnmarshalYAMLList(t *testing.T) {
     listening: true
 - command: redis-cli ping
   stdout: PONG
-- http: http://127.0.0.1:8888/api
-  status: 200
-  body:
-    - contains: "ready"
+- plugin: http
+  plugin_input:
+    http: http://127.0.0.1:8888/api
+    status: 200
+    body:
+      - contains: "ready"
 - id: redis-responds
   context: [deploy]
   command: redis-cli -h ${CONTAINER_IP} -p ${HOST_PORT:6379} ping
@@ -102,15 +104,16 @@ func TestCheck_UnmarshalYAMLList(t *testing.T) {
 		t.Errorf("stdout[0] = %+v, want {equals PONG}", got[2].Stdout)
 	}
 
-	// 3: http with body matcher
-	if got[3].HTTP != "http://127.0.0.1:8888/api" {
-		t.Errorf("http = %q", got[3].HTTP)
+	// 3: http with body matcher — now the `http` plugin verb (authored as plugin: http +
+	// plugin_input, validated against the http plugin's spliced #HttpInput schema).
+	if got[3].Plugin != "http" {
+		t.Errorf("plugin = %q, want http", got[3].Plugin)
 	}
-	if got[3].Status != 200 {
-		t.Errorf("status = %d, want 200", got[3].Status)
+	if got[3].PluginInput == nil || got[3].PluginInput["http"] != "http://127.0.0.1:8888/api" {
+		t.Errorf("plugin_input.http = %v, want the url", got[3].PluginInput)
 	}
-	if len(got[3].Body) != 1 || got[3].Body[0].Op != "contains" {
-		t.Errorf("body[0] = %+v, want {contains ready}", got[3].Body)
+	if got[3].PluginInput["body"] == nil {
+		t.Errorf("plugin_input.body missing: %v", got[3].PluginInput)
 	}
 
 	// 4: deploy-context command with runtime variable references
@@ -243,8 +246,12 @@ func TestCheck_ExpandVars(t *testing.T) {
 	c := Op{
 		File:    "${HOME}/.redis",
 		Command: "redis-cli -p ${HOST_PORT:6379}",
-		HTTP:    "http://${CONTAINER_IP}:8080/health",
-		Owner:   "${MISSING}",
+		// http is now a plugin verb; its URL rides plugin_input. opExpandVars walks the
+		// PluginInput map (expandAnyVars), so ${CONTAINER_IP} resolves there exactly as it
+		// did when http was a base #Op string field.
+		Plugin:      "http",
+		PluginInput: map[string]any{"http": "http://${CONTAINER_IP}:8080/health"},
+		Owner:       "${MISSING}",
 	}
 	env := map[string]string{
 		"HOME":           "/home/user",
@@ -259,8 +266,8 @@ func TestCheck_ExpandVars(t *testing.T) {
 	if c.Command != "redis-cli -p 16379" {
 		t.Errorf("Command = %q", c.Command)
 	}
-	if c.HTTP != "http://10.0.0.5:8080/health" {
-		t.Errorf("HTTP = %q", c.HTTP)
+	if got := c.PluginInput["http"]; got != "http://10.0.0.5:8080/health" {
+		t.Errorf("plugin_input.http = %q", got)
 	}
 	if c.Owner != "${MISSING}" {
 		t.Errorf("Owner should remain unresolved: %q", c.Owner)

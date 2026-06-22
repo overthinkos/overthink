@@ -83,10 +83,12 @@ traefik:
         filetype: directory
     traefik-step-9:
         check: the insecure API and dashboard answer with HTTP 200 on the API port
-        http: http://127.0.0.1:${HOST_PORT:8080}/api/version
-        status: 200
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:8080}/api/version
+            status: 200
     traefik-step-10:
         agent-check: a plain HTTP request to the web entrypoint is redirected to the TLS websecure entrypoint
     traefik-service-running:
@@ -99,14 +101,18 @@ traefik:
     traefik-web-port-open:
         check: addr=127.0.0.1:${HOST_PORT:8000}
         id: traefik-web-port-open
-        addr: 127.0.0.1:${HOST_PORT:8000}
-        reachable: true
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:8000}
+            reachable: true
     traefik-websecure-port-open:
         check: the websecure entrypoint binds on the rootless-safe :8443 port
         id: traefik-websecure-port-open
-        addr: 127.0.0.1:${HOST_PORT:8443}
-        reachable: true
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:8443}
+            reachable: true

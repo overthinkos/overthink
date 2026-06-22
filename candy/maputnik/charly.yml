@@ -148,11 +148,13 @@ maputnik:
             - runtime
     maputnik-step-6:
         check: the static SPA answers HTTP 200 at the container root on the published port
-        http: http://127.0.0.1:${HOST_PORT:8000}/
-        status: 200
         timeout: 10s
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:8000}/
+            status: 200
     maputnik-step-7:
         check: the served HTML carries no /maputnik/ asset prefix, so asset URLs resolve at the serve root
         command: |
@@ -166,8 +168,10 @@ maputnik:
     maputnik-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:8000}
         id: maputnik-port-reachable
-        addr: "127.0.0.1:${HOST_PORT:8000}"
-        reachable: true
         timeout: 10s
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: "127.0.0.1:${HOST_PORT:8000}"
+            reachable: true

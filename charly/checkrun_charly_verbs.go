@@ -651,9 +651,8 @@ func posDbusCall(c *Op) []string {
 func posDbusIntrospect(c *Op) []string { return []string{c.Dest, c.Path} }
 func posDbusNotify(c *Op) []string {
 	args := []string{c.Text} // text = title
-	// c.Body MatcherList is reserved for assertion; for the actual body arg,
-	// callers can use c.Description as an authoring convention, or omit for
-	// a title-only notification.
+	// For the actual notification body arg, callers use c.Description as an authoring
+	// convention, or omit it for a title-only notification.
 	if c.Description != "" {
 		args = append(args, c.Description)
 	}

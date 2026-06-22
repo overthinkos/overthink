@@ -26,7 +26,6 @@ func actScriptForTest(op *Op, verb string, distros []string) (string, bool) {
 }
 
 func TestRenderProvisionScript(t *testing.T) {
-	tr := true
 	cases := []struct {
 		name     string
 		op       Op
@@ -41,7 +40,9 @@ func TestRenderProvisionScript(t *testing.T) {
 		{"unix_group", Op{UnixGroup: "devs"}, "unix_group", true, "groupadd"},
 		{"kernel-param", Op{KernelParam: "vm.swappiness", Value: MatcherList{{Op: "equals", Value: "10"}}}, "kernel-param", true, "sysctl -w 'vm.swappiness'='10'"},
 		// An observe-only verb has no act form → ok=false (falls to the probe handler).
-		{"addr-observe", Op{Addr: "127.0.0.1:80", Reachable: &tr}, "addr", false, ""},
+		// addr is now a builtin plugin verb (authored plugin: addr + plugin_input); its
+		// provider is a CheckVerbProvider, not a ProvisionActor, so it still has no act form.
+		{"addr-observe", Op{Plugin: "addr", PluginInput: map[string]any{"addr": "127.0.0.1:80", "reachable": true}}, "addr", false, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -77,8 +78,9 @@ func TestRunProvisionActDispatch(t *testing.T) {
 		t.Fatalf("expected the rendered script to execute once; calls=%v", fe.calls)
 	}
 
-	// addr has no act form → ok=false (caller falls through to the probe handler).
-	if _, ok := r.runProvisionAct(ctx, &Op{Addr: "127.0.0.1:80"}, "addr"); ok {
+	// addr has no act form → ok=false (caller falls through to the probe handler). addr is
+	// now a builtin plugin verb; its CheckVerbProvider is not a ProvisionActor.
+	if _, ok := r.runProvisionAct(ctx, &Op{Plugin: "addr", PluginInput: map[string]any{"addr": "127.0.0.1:80"}}, "addr"); ok {
 		t.Fatalf("runProvisionAct(addr) ok=true, want false (no act form)")
 	}
 

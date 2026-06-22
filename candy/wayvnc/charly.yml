@@ -59,10 +59,12 @@ wayvnc:
             - runtime
     wayvnc-step-5:
         check: the VNC port accepts a TCP connection on the published host port
-        addr: 127.0.0.1:${HOST_PORT:5900}
-        reachable: true
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:5900}
+            reachable: true
     wayvnc-package:
         check: package=wayvnc
         id: wayvnc-package
@@ -71,8 +73,10 @@ wayvnc:
     wayvnc-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:5900}
         id: wayvnc-port-reachable
-        addr: 127.0.0.1:${HOST_PORT:5900}
-        reachable: true
         timeout: 5s
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:5900}
+            reachable: true

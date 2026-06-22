@@ -79,26 +79,17 @@ func (c *Op) VerbsSet() []string {
 	if c.Command != "" && !hasCharlyVerb {
 		set = append(set, "command")
 	}
-	if c.HTTP != "" {
-		set = append(set, "http")
-	}
 	if c.User != "" {
 		set = append(set, "user")
 	}
 	if c.UnixGroup != "" {
 		set = append(set, "unix_group")
 	}
-	if c.Interface != "" {
-		set = append(set, "interface")
-	}
 	if c.KernelParam != "" {
 		set = append(set, "kernel-param")
 	}
 	if c.Mount != "" {
 		set = append(set, "mount")
-	}
-	if c.Addr != "" {
-		set = append(set, "addr")
 	}
 	if c.Cdp != "" {
 		set = append(set, "cdp")
@@ -150,11 +141,11 @@ func (c *Op) VerbsSet() []string {
 func (c *Op) StringFields() []*string {
 	return []*string{
 		&c.File, &c.Package, &c.Service, &c.Command,
-		&c.HTTP, &c.User, &c.UnixGroup, &c.Interface,
-		&c.KernelParam, &c.Mount, &c.Addr,
+		&c.User, &c.UnixGroup,
+		&c.KernelParam, &c.Mount,
 		&c.ID, &c.Description, &c.Timeout,
 		&c.Mode, &c.Owner, &c.GroupOf, &c.Filetype, &c.Sha256,
-		&c.CAFile, &c.Method, &c.RequestBody,
+		&c.Method, &c.RequestBody,
 		&c.Home, &c.Shell,
 		&c.MountSource, &c.Filesystem,
 		// Test-mode live-container verb discriminators + modifiers.

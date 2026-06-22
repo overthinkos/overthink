@@ -48,11 +48,13 @@ jupyter-mcp:
             - contains: "jupyter_mcp"
     jupyter-mcp-step-6:
         check: the deployed JupyterLab routes /mcp to the MCP handler (an empty POST returns 400, not a 404)
-        http: http://127.0.0.1:${HOST_PORT:8888}/mcp
         method: POST
-        status: 400
         timeout: 5s
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:8888}/mcp
+            status: 400
     jupyter-mcp-step-7:
         agent-check: an agent can list the notebook_*/cell_*/room_list MCP tools and round-trip a cell edit through the live server

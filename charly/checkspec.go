@@ -137,12 +137,7 @@ func IsRuntimeOnlyVar(key string) bool {
 func opExpandVars(c *Op, env map[string]string) []string {
 	seen := map[string]bool{}
 	var missing []string
-	for _, p := range c.StringFields() {
-		if *p == "" {
-			continue
-		}
-		replaced, unresolved := ExpandTestVars(*p, env)
-		*p = replaced
+	record := func(unresolved []string) {
 		for _, k := range unresolved {
 			if !seen[k] {
 				seen[k] = true
@@ -150,8 +145,79 @@ func opExpandVars(c *Op, env map[string]string) []string {
 			}
 		}
 	}
+	for _, p := range c.StringFields() {
+		if *p == "" {
+			continue
+		}
+		replaced, unresolved := ExpandTestVars(*p, env)
+		*p = replaced
+		record(unresolved)
+	}
+	// A plugin verb (http/interface/addr/process/port/dns/…) carries its authored fields
+	// in the opaque PluginInput map, NOT in StringFields. Expand ${VAR} references in
+	// every string within it so an http URL's / addr's ${HOST_PORT:N} (and any other
+	// runtime var) resolves at runtime exactly as it did before the verb left #Op. The
+	// map analogue of the StringFields walk; ONE generic path for every plugin verb (R3).
+	if len(c.PluginInput) > 0 {
+		_, unresolved := expandAnyVars(c.PluginInput, env)
+		record(unresolved)
+	}
 	sort.Strings(missing)
 	return missing
+}
+
+// collectAnyStrings returns every string within a plugin_input value (scalar string /
+// nested map / list), depth-first. The READ-ONLY analogue of expandAnyVars: it lets the
+// ${HOST:…} cross-member scan (collectHostRefs) reach a plugin verb's authored fields,
+// which live in the opaque PluginInput map rather than StringFields.
+func collectAnyStrings(v any) []string {
+	switch x := v.(type) {
+	case string:
+		return []string{x}
+	case map[string]any:
+		var out []string
+		for _, e := range x {
+			out = append(out, collectAnyStrings(e)...)
+		}
+		return out
+	case []any:
+		var out []string
+		for _, e := range x {
+			out = append(out, collectAnyStrings(e)...)
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+// expandAnyVars expands ${VAR} references in every string within a plugin_input value
+// (scalar string / nested map / list), mutating maps and slices in place, and returns
+// the (possibly rewritten) value plus the unresolved var names. Non-string scalars pass
+// through untouched.
+func expandAnyVars(v any, env map[string]string) (any, []string) {
+	switch x := v.(type) {
+	case string:
+		return ExpandTestVars(x, env)
+	case map[string]any:
+		var missing []string
+		for k, e := range x {
+			ne, un := expandAnyVars(e, env)
+			x[k] = ne
+			missing = append(missing, un...)
+		}
+		return x, missing
+	case []any:
+		var missing []string
+		for i, e := range x {
+			ne, un := expandAnyVars(e, env)
+			x[i] = ne
+			missing = append(missing, un...)
+		}
+		return x, missing
+	default:
+		return v, nil
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -233,9 +299,9 @@ var VerbCatalog = map[string]VerbSpec{
 	"unix_group":   {ctxBuildDeployRuntime, DoAssert, true, ""},                      // act → groupadd (+ ReverseOpGroupRemove)
 	"kernel-param": {ctxBuildDeployRuntime, DoAssert, true, ""},                      // act → sysctl (+ ReverseOpSysctlRestore)
 	"mount":        {ctxDeployRuntime, DoAssert, true, ""},                           // act → mount (+ ReverseOpUmount)
-	"http":         {ctxDeployRuntime, DoAssert, false, ""},                          // act → request (no reverse)
-	"interface":    {ctxRuntimeOnly, DoAssert, false, ""},                            // observe-only
-	"addr":         {ctxDeployRuntime, DoAssert, false, ""},                          // observe-only
+	// http / interface / addr are observe-only goss verbs extracted to builtin plugin
+	// units (charly/plugin/builtins/{http,interface,addr}); they dispatch via the
+	// generic `plugin:` verb, so they have no VerbCatalog entry (mirrors process/port/dns).
 
 	// live-container — runtime only; act drives UI/config, reversed via plan
 	// teardown (never the ledger). kube also legal at deploy (apply manifest).

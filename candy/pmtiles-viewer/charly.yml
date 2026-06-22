@@ -146,19 +146,23 @@ pmtiles-viewer:
     pmtiles-viewer-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:8001}
         id: pmtiles-viewer-port-reachable
-        addr: "127.0.0.1:${HOST_PORT:8001}"
-        reachable: true
         timeout: 10s
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: "127.0.0.1:${HOST_PORT:8001}"
+            reachable: true
     pmtiles-viewer-http-up:
         check: http=http://127.0.0.1:${HOST_PORT:8001}/
         id: pmtiles-viewer-http-up
-        http: "http://127.0.0.1:${HOST_PORT:8001}/"
-        status: 200
         timeout: 10s
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: "http://127.0.0.1:${HOST_PORT:8001}/"
+            status: 200
     pmtiles-viewer-asset-base-not-prefixed:
         check: |
             command=! curl -fsS http://localhost:8001/ | grep -qE '"/(pmtiles|app)/'

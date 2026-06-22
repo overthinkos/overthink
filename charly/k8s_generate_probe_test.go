@@ -40,7 +40,7 @@ func TestCheckToProbe_HTTP(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := checkToProbe(&Op{HTTP: tt.http})
+			got := checkToProbe(&Op{Plugin: "http", PluginInput: map[string]any{"http": tt.http}})
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got %v, want %v", got, tt.want)
 			}
@@ -72,7 +72,7 @@ func TestCheckToProbe_Addr(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := checkToProbe(&Op{Addr: tt.addr})
+			got := checkToProbe(&Op{Plugin: "addr", PluginInput: map[string]any{"addr": tt.addr}})
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got %v, want %v", got, tt.want)
 			}
@@ -108,11 +108,11 @@ func TestCheckToProbe_NilAndEmpty(t *testing.T) {
 	}
 }
 
-// TestCheckToProbe_HTTPPriority documents the priority order: HTTP wins
-// over Addr/File/Command when multiple are set (no real check carries
+// TestCheckToProbe_HTTPPriority documents the priority order: HTTP (now read from
+// plugin_input) wins over Addr/File/Command when multiple are set (no real check carries
 // more than one verb after validation, but the function is robust).
 func TestCheckToProbe_HTTPPriority(t *testing.T) {
-	got := checkToProbe(&Op{HTTP: "http://example.com:80/health", File: "/etc/ready"})
+	got := checkToProbe(&Op{Plugin: "http", PluginInput: map[string]any{"http": "http://example.com:80/health"}, File: "/etc/ready"})
 	if _, ok := got["httpGet"]; !ok {
 		t.Errorf("expected httpGet to win over file, got %v", got)
 	}

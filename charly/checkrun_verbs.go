@@ -237,10 +237,14 @@ func (r *Runner) runUnixGroup(ctx context.Context, c *Op) CheckResult {
 	return passf(c, fmt.Sprintf("gid=%d", gid))
 }
 
-// runInterface: `ip -o addr show <name>` — verifies existence; Addrs + MTU
-// checks parse the ip output.
-func (r *Runner) runInterface(ctx context.Context, c *Op) CheckResult {
-	probe := fmt.Sprintf(`ip -o addr show %s 2>/dev/null`, shellSingleQuote(c.Interface))
+// runInterface: `ip -o addr show <name>` — verifies existence; addrs + mtu
+// checks parse the ip output. The interface name + mtu/addrs modifiers arrive from the
+// `interface` plugin's typed plugin_input (params.InterfaceInput, decoded by
+// interfaceVerb.RunVerb in plugin_interface.go) — the verb left the closed #Op, so they
+// no longer ride the (removed) Op.Interface/MTU/Addrs fields. c is retained for result
+// metadata + the shared r.Exec.
+func (r *Runner) runInterface(ctx context.Context, c *Op, iface string, mtu *int, addrs []string) CheckResult {
+	probe := fmt.Sprintf(`ip -o addr show %s 2>/dev/null`, shellSingleQuote(iface))
 	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
 		return failf(c, "probe: %v", err)
@@ -249,18 +253,18 @@ func (r *Runner) runInterface(ctx context.Context, c *Op) CheckResult {
 		return failf(c, "interface not found")
 	}
 	// MTU check via `ip link show`
-	if c.MTU != nil {
-		mtuOut, _, exit, err := r.Exec.RunCapture(ctx, fmt.Sprintf(`ip -o link show %s 2>/dev/null | awk '{for(i=1;i<=NF;i++)if($i=="mtu"){print $(i+1);exit}}'`, shellSingleQuote(c.Interface)))
+	if mtu != nil {
+		mtuOut, _, exit, err := r.Exec.RunCapture(ctx, fmt.Sprintf(`ip -o link show %s 2>/dev/null | awk '{for(i=1;i<=NF;i++)if($i=="mtu"){print $(i+1);exit}}'`, shellSingleQuote(iface)))
 		if err != nil || exit != 0 {
 			return failf(c, "mtu probe exit %d err %v", exit, err)
 		}
 		got, _ := strconv.Atoi(strings.TrimSpace(mtuOut))
-		if got != *c.MTU {
-			return failf(c, "mtu=%d, want %d", got, *c.MTU)
+		if got != *mtu {
+			return failf(c, "mtu=%d, want %d", got, *mtu)
 		}
 	}
-	if len(c.Addrs) > 0 {
-		for _, want := range c.Addrs {
+	if len(addrs) > 0 {
+		for _, want := range addrs {
 			if !strings.Contains(out, want) {
 				return failf(c, "missing address %s", want)
 			}
@@ -321,15 +325,18 @@ func (r *Runner) runMount(ctx context.Context, c *Op) CheckResult {
 	return passf(c, fmt.Sprintf("source=%s fstype=%s", source, fstype))
 }
 
-// runAddr: host-side TCP dial (under RunModeLive) or `nc -z`
-// (under RunModeBox).
-func (r *Runner) runAddr(ctx context.Context, c *Op) CheckResult {
+// runAddr: host-side TCP dial (under RunModeLive) or `nc -z` (under RunModeBox). The
+// host:port + reachable expectation arrive from the `addr` plugin's typed plugin_input
+// (params.AddrInput, decoded by addrVerb.RunVerb in plugin_addr.go) — the verb left the
+// closed #Op, so they no longer ride the (removed) Op.Addr/Reachable fields. c is
+// retained for result metadata + the shared r.Mode/r.Exec/r.DialTimeout.
+func (r *Runner) runAddr(ctx context.Context, c *Op, addrTarget string, reachableExpect *bool) CheckResult {
 	wantReachable := true
-	if c.Reachable != nil {
-		wantReachable = *c.Reachable
+	if reachableExpect != nil {
+		wantReachable = *reachableExpect
 	}
 	if r.Mode == RunModeBox {
-		host, port := splitHostPort(c.Addr)
+		host, port := splitHostPort(addrTarget)
 		probe := fmt.Sprintf(`nc -z -w %d %s %s 2>/dev/null`, 3, shellSingleQuote(host), shellSingleQuote(port))
 		_, _, exit, err := r.Exec.RunCapture(ctx, probe)
 		if err != nil {
@@ -341,7 +348,7 @@ func (r *Runner) runAddr(ctx context.Context, c *Op) CheckResult {
 		}
 		return passf(c, fmt.Sprintf("reachable=%v", reachable))
 	}
-	conn, err := net.DialTimeout("tcp", c.Addr, r.DialTimeout)
+	conn, err := net.DialTimeout("tcp", addrTarget, r.DialTimeout)
 	reachable := err == nil
 	if reachable {
 		_ = conn.Close()

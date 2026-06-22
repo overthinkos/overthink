@@ -99,10 +99,12 @@ kde-selkies:
             - runtime
     kde-selkies-step-9:
         check: the selkies web UI streams the live Plasma desktop over HTTPS on port 3000
-        http: https://127.0.0.1:${HOST_PORT:3000}/
-        status: 200
-        allow_insecure: true
         timeout: 10s
+        plugin: http
+        plugin_input:
+            http: https://127.0.0.1:${HOST_PORT:3000}/
+            status: 200
+            allow_insecure: true
     kde-selkies-step-10:
         agent-check: the streamed frames show a real KWin-composited KDE Plasma desktop (panel + wallpaper), not a black frame or a wlroots session
     kde-selkies-stable:
@@ -131,12 +133,14 @@ kde-selkies:
     kde-selkies-stream-https:
         check: http=https://127.0.0.1:${HOST_PORT:3000}/
         id: kde-selkies-stream-https
-        http: https://127.0.0.1:${HOST_PORT:3000}/
-        status: 200
-        allow_insecure: true
         timeout: 10s
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: https://127.0.0.1:${HOST_PORT:3000}/
+            status: 200
+            allow_insecure: true
     kde-wl-compositor-is-kwin:
         check: wl=status
         id: kde-wl-compositor-is-kwin

@@ -16,8 +16,8 @@
 // VerbCatalog entry (the registry bijection gate proves it). Keep in lockstep with
 // the `--- verb discriminators ---` group in #Op.
 #OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" |
-	"command" | "file" | "package" | "service" | "http" |
-	"user" | "unix_group" | "interface" | "kernel-param" | "mount" | "addr" |
+	"command" | "file" | "package" | "service" |
+	"user" | "unix_group" | "kernel-param" | "mount" |
 	"cdp" | "wl" | "dbus" | "vnc" | "mcp" | "record" | "spice" |
 	"libvirt" | "kube" | "adb" | "appium" | "summarize" | "kill" | "plugin") @go(-)
 
@@ -53,13 +53,10 @@
 	package?:        string
 	service?:        string
 	command?:        string
-	http?:           string @go(HTTP)
 	user?:           string
 	unix_group?:     string @go(UnixGroup)
-	interface?:      string
 	"kernel-param"?: string @go(KernelParam)
 	mount?:          string
-	addr?:           string
 	mkdir?:          string
 	copy?:           string
 	write?:          string
@@ -205,18 +202,12 @@
 	stderr?:      #MatcherList
 	from_host?:   bool @go(FromHost)
 
-	// --- http ---
-	status?:              int & >=100 & <600 @go(,type=int)
-	body?:                #MatcherList
-	header?:              #MatcherList @go(Headers)
-	allow_insecure?:      bool         @go(AllowInsecure)
-	no_follow_redirects?: bool         @go(NoFollowRedir)
-	ca_file?:             string       @go(CAFile)
-	method?:              string
-	request_body?:        string @go(RequestBody)
-
-	// --- addrs (shared: dns plugin hostname-resolve match + interface address list) ---
-	addrs?: [...string]
+	// --- shared request modifiers (the http plugin verb + the live cdp/dbus/libvirt
+	// verbs read these off the step Op; they are NOT carried in the http plugin's
+	// plugin_input — the http-exclusive request fields status/body/header/…/ca_file
+	// moved into #HttpInput, see charly/plugin/builtins/http) ---
+	method?:       string
+	request_body?: string @go(RequestBody)
 
 	// --- user / group ---
 	uid?:   int & >=0 @go(UID,type=*int)
@@ -225,17 +216,11 @@
 	shell?: string
 	groups?: [...string]
 
-	// --- interface ---
-	mtu?: int @go(MTU,type=*int)
-
 	// --- kernel-param / mount ---
 	value?:        #MatcherList
 	mount_source?: string @go(MountSource)
 	filesystem?:   string
 	opt?:          #MatcherList @go(Opts)
-
-	// --- addr ---
-	reachable?: bool @go(,type=*bool)
 
 	// --- cdp / wl / dbus / vnc / spice modifiers ---
 	tab?:        string

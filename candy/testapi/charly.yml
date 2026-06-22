@@ -46,16 +46,20 @@ testapi:
         exit_status: 0
     testapi-step-4:
         check: a GET request to /health on the running service returns HTTP 200
-        http: http://127.0.0.1:${HOST_PORT:9090}/health
-        status: 200
-        body:
-            - contains: healthy
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:9090}/health
+            status: 200
+            body:
+                - contains: healthy
     testapi-step-5:
         check: a GET request to / reports a JSON status of ok
-        http: http://127.0.0.1:${HOST_PORT:9090}/
-        status: 200
-        body:
-            - contains: ok
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:9090}/
+            status: 200
+            body:
+                - contains: ok
     testapi-uvicorn-binary:
         check: file=/home/user/.pixi/envs/default/bin/uvicorn
         id: testapi-uvicorn-binary
@@ -71,25 +75,31 @@ testapi:
     testapi-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:9090}
         id: testapi-port-reachable
-        addr: 127.0.0.1:${HOST_PORT:9090}
-        reachable: true
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:9090}
+            reachable: true
     testapi-root-responds:
         check: http=http://127.0.0.1:${HOST_PORT:9090}/
         id: testapi-root-responds
-        http: http://127.0.0.1:${HOST_PORT:9090}/
-        status: 200
-        body:
-            - contains: ok
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:9090}/
+            status: 200
+            body:
+                - contains: ok
     testapi-health-responds:
         check: http=http://127.0.0.1:${HOST_PORT:9090}/health
         id: testapi-health-responds
-        http: http://127.0.0.1:${HOST_PORT:9090}/health
-        status: 200
-        body:
-            - contains: healthy
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:9090}/health
+            status: 200
+            body:
+                - contains: healthy

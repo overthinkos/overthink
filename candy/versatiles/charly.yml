@@ -162,18 +162,22 @@ versatiles:
             - runtime
     versatiles-step-7:
         check: the serve port is reachable on the host loopback
-        addr: "127.0.0.1:${HOST_PORT:8090}"
-        reachable: true
         timeout: 10s
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: "127.0.0.1:${HOST_PORT:8090}"
+            reachable: true
     versatiles-step-8:
         check: a known OSM tile endpoint returns HTTP 200
-        http: "http://127.0.0.1:${HOST_PORT:8090}/tiles/osm/0/0/0.pbf"
-        status: 200
         timeout: 10s
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: "http://127.0.0.1:${HOST_PORT:8090}/tiles/osm/0/0/0.pbf"
+            status: 200
     versatiles-convert-roundtrip:
         check: |
             command=set -euo pipefail

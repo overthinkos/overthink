@@ -200,10 +200,12 @@ versatiles-frontend:
         exit_status: 0
     versatiles-frontend-step-9:
         check: the running versatiles-frontend service answers GET / with HTTP 200
-        http: "http://127.0.0.1:${HOST_PORT:8002}/"
-        status: 200
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: "http://127.0.0.1:${HOST_PORT:8002}/"
+            status: 200
     versatiles-frontend-step-10:
         check: every response carries an Access-Control-Allow-Origin header so browser map clients fetch the re-exported /style/, /fonts/ and /styler/ assets cross-origin
         command: |
@@ -222,19 +224,23 @@ versatiles-frontend:
     versatiles-frontend-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:8002}
         id: versatiles-frontend-port-reachable
-        addr: "127.0.0.1:${HOST_PORT:8002}"
-        reachable: true
         timeout: 10s
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: "127.0.0.1:${HOST_PORT:8002}"
+            reachable: true
     versatiles-frontend-http-up:
         check: http=http://127.0.0.1:${HOST_PORT:8002}/
         id: versatiles-frontend-http-up
-        http: "http://127.0.0.1:${HOST_PORT:8002}/"
-        status: 200
         timeout: 10s
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: "http://127.0.0.1:${HOST_PORT:8002}/"
+            status: 200
     versatiles-frontend-style-fetchable:
         check: |
             command=curl -fsS http://localhost:8002/style/ | grep -qi 'versatiles\|index\|<html'

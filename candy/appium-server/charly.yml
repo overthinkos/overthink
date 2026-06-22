@@ -121,11 +121,13 @@ appium-server:
             - runtime
     appium-server-step-9:
         check: the running Appium server answers a WebDriver status request with HTTP 200
-        http: http://127.0.0.1:${HOST_PORT:4723}/wd/hub/status
-        status: 200
         timeout: 10s
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:4723}/wd/hub/status
+            status: 200
     appium-server-step-10:
         check: the running server reports itself ready over the Appium status verb
         appium: status

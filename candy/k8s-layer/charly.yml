@@ -335,12 +335,14 @@ k8s-layer:
         mode: "0755"
     k8s-layer-step-3:
         check: a GET to /api/v1/nodes returns HTTP 200 carrying the Ready fixture node charly-fixture-k8s
-        http: http://127.0.0.1:${HOST_PORT:6443}/api/v1/nodes
-        status: 200
-        body:
-            - contains: charly-fixture-k8s
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:6443}/api/v1/nodes
+            status: 200
+            body:
+                - contains: charly-fixture-k8s
     k8s-layer-step-4:
         agent-check: the harness `charly check kube` wait-nodes and addon rollups exit 0 against the fixture (nodes, storageclasses, ingressclasses, and the traefik / local-path-provisioner / svclb-traefik addons all report Ready)
     harness-k8s-python3:
@@ -372,18 +374,22 @@ k8s-layer:
     harness-k8s-storageclass-endpoint:
         check: http=http://127.0.0.1:${HOST_PORT:6443}/apis/storage.k8s.io/v1/storageclasses
         id: harness-k8s-storageclass-endpoint
-        http: http://127.0.0.1:${HOST_PORT:6443}/apis/storage.k8s.io/v1/storageclasses
-        status: 200
-        body:
-            - contains: local-path
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:6443}/apis/storage.k8s.io/v1/storageclasses
+            status: 200
+            body:
+                - contains: local-path
     harness-k8s-version-endpoint:
         check: http=http://127.0.0.1:${HOST_PORT:6443}/version
         id: harness-k8s-version-endpoint
-        http: http://127.0.0.1:${HOST_PORT:6443}/version
-        status: 200
-        body:
-            - contains: v1.31.0-fake-fixture
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:6443}/version
+            status: 200
+            body:
+                - contains: v1.31.0-fake-fixture

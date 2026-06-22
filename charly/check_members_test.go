@@ -30,8 +30,11 @@ func TestCollectHostRefs(t *testing.T) {
 	checks := []Op{
 		{Cdp: "open", URL: "http://${HOST:web}:8080"},
 		{Command: "curl http://${HOST:web:8080}/health"},
-		{Addr: "127.0.0.1:${HOST_PORT:8080}"}, // NOT a cross-member ref
-		{HTTP: "http://${HOST:web}/"},         // duplicate HOST:web
+		// addr/http are plugin verbs now — their refs live in plugin_input (collectHostRefs
+		// scans it via collectAnyStrings). The addr HOST_PORT is NOT a cross-member ref; the
+		// http ${HOST:web} is a duplicate of the cdp one.
+		{Plugin: "addr", PluginInput: map[string]any{"addr": "127.0.0.1:${HOST_PORT:8080}"}},
+		{Plugin: "http", PluginInput: map[string]any{"http": "http://${HOST:web}/"}},
 	}
 	got := collectHostRefs(checks)
 	sort.Strings(got)

@@ -90,12 +90,14 @@ jupyter-ml:
             - runtime
     jupyter-ml-step-6:
         check: the JupyterLab REST API answers on the published port with a server version
-        http: http://127.0.0.1:${HOST_PORT:8888}/api
-        status: 200
-        body:
-            - contains: version
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:8888}/api
+            status: 200
+            body:
+                - contains: version
     jupyter-ml-step-7:
         check: the Jupyter CRDT MCP server responds to a protocol ping
         mcp: ping

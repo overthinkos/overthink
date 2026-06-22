@@ -125,11 +125,13 @@ openwebui:
             - runtime
     openwebui-step-4:
         check: the Open WebUI web interface answers HTTP 200 on the published port
-        http: http://127.0.0.1:${HOST_PORT:8080}/
-        status: 200
         timeout: 30s
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: http://127.0.0.1:${HOST_PORT:8080}/
+            status: 200
     openwebui-step-5:
         check: the mandatory admin email is injected into the running service environment
         command: printenv WEBUI_ADMIN_EMAIL
@@ -141,8 +143,10 @@ openwebui:
     openwebui-port-2:
         check: addr=127.0.0.1:${HOST_PORT:8080}
         id: openwebui-port
-        addr: 127.0.0.1:${HOST_PORT:8080}
-        reachable: true
         timeout: 5s
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:8080}
+            reachable: true

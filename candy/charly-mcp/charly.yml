@@ -84,11 +84,13 @@ charly-mcp:
     charly-mcp-port-2:
         check: addr=127.0.0.1:${HOST_PORT:18765}
         id: charly-mcp-port
-        addr: 127.0.0.1:${HOST_PORT:18765}
-        reachable: true
         timeout: 5s
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: 127.0.0.1:${HOST_PORT:18765}
+            reachable: true
     mcp-charly-ping:
         check: mcp=ping
         id: mcp-charly-ping

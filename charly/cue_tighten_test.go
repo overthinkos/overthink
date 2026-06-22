@@ -58,9 +58,11 @@ func TestCueTightening_RejectsAndAccepts(t *testing.T) {
 			candy(candyHead + "  plan:\n  - check: c\n    cdp: eval\n    tab: \"1\"\n    expression: \"1+1\"\n"), false},
 		{"candy cdp bogus method rejected", "candy",
 			candy(candyHead + "  plan:\n  - check: c\n    cdp: bogus-method\n"), true},
-		// --- http status is a plain int, not a matcher list ---
-		{"candy http status int accepted", "candy",
-			candy(candyHead + "  plan:\n  - check: c\n    http: http://x/\n    status: 200\n    context: [runtime]\n"), false},
+		// --- http is now a builtin plugin verb: the base #Op accepts the generic
+		//     plugin:/plugin_input envelope (the http-exclusive status/body/… are
+		//     validated at runtime against the http plugin's spliced #HttpInput, not here) ---
+		{"candy http plugin verb accepted", "candy",
+			candy(candyHead + "  plan:\n  - check: c\n    plugin: http\n    plugin_input:\n      http: http://x/\n      status: 200\n    context: [runtime]\n"), false},
 
 		// --- vm: the libvirt blanket {...} is now a CLOSED model ---
 		{"vm libvirt unknown field rejected", "vm",

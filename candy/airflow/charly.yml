@@ -224,11 +224,13 @@ airflow:
         mode: "0755"
     airflow-step-12:
         check: the running api-server answers /api/v2/version with HTTP 200
-        http: "http://127.0.0.1:${HOST_PORT:8080}/api/v2/version"
-        status: 200
         timeout: 30s
         context:
             - runtime
+        plugin: http
+        plugin_input:
+            http: "http://127.0.0.1:${HOST_PORT:8080}/api/v2/version"
+            status: 200
     airflow-step-13:
         check: posting the injected admin credentials to /auth/token returns a bearer access_token
         command: |
@@ -273,8 +275,10 @@ airflow:
     airflow-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:8080}
         id: airflow-port-reachable
-        addr: "127.0.0.1:${HOST_PORT:8080}"
-        reachable: true
         timeout: 10s
         context:
             - runtime
+        plugin: addr
+        plugin_input:
+            addr: "127.0.0.1:${HOST_PORT:8080}"
+            reachable: true

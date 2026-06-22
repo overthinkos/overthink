@@ -17,6 +17,7 @@ import (
 	"cuelang.org/go/cue/cuecontext"
 	"cuelang.org/go/cue/errors"
 	cueyaml "cuelang.org/go/encoding/yaml"
+	"gopkg.in/yaml.v3"
 
 	"github.com/overthinkos/overthink/charly/internal/schemaconcat"
 )
@@ -98,6 +99,50 @@ func validateEntityClosedCUE(kind, label string, entity cue.Value) error {
 	return nil
 }
 
+// assembleAndValidateEntitySteps folds an entity node's step children into a
+// plan: sequence and types EACH step against the closed #Step (which embeds the
+// closed #Op). This is the ONLY validation that sees plan-STEP Op fields: node-form
+// steps are sibling nodes, so the #NodeDoc whole-document gate accepts them as `_`,
+// and the post-decode struct has already dropped unknown keys. So an unknown Op
+// field or a bad enum on a step is a hard error here. We validate the STEPS, not the
+// whole entity against its #Kind: a deploy entity (a `vm:`/`pod:` block carrying
+// disposable/lifecycle/from/install_opts) mixes deploy-envelope fields the workload
+// #Kind does not model — those are gated by #NodeDoc's deploy arm, not here.
+// plugin_input:/matching: stay open (a plugin step's params are validated by the
+// plugin's own spliced schema, not base #Op).
+func assembleAndValidateEntitySteps(gn *genericNode, label string) error {
+	body, err := assembleEntityBody(gn)
+	if err != nil {
+		return fmt.Errorf("%s: assemble: %w", label, err)
+	}
+	b, err := yaml.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("%s: marshal: %w", label, err)
+	}
+	v, err := cueDocFromYAML(label, b)
+	if err != nil {
+		return err
+	}
+	plan := v.LookupPath(cue.ParsePath("plan"))
+	if !plan.Exists() {
+		return nil // no steps to type
+	}
+	stepDef := sharedCueSchema.LookupPath(cue.ParsePath("#Step"))
+	if stepDef.Err() != nil {
+		return fmt.Errorf("%s: #Step schema not found: %w", label, stepDef.Err())
+	}
+	iter, lerr := plan.List()
+	if lerr != nil {
+		return nil // plan not a sequence — structure is gated by #NodeDoc
+	}
+	for i := 0; iter.Next(); i++ {
+		if verr := iter.Value().Unify(stepDef).Validate(); verr != nil {
+			return fmt.Errorf("%s: plan step %d: %s", label, i, errors.Details(verr, nil))
+		}
+	}
+	return nil
+}
+
 // validateCandyManifestCUE validates a candy manifest. A legacy kind-keyed
 // manifest (`candy: {…}`) validates its entity against #Candy; a unified node-form
 // manifest (`<name>: {candy: …, <children>}`) validates the WHOLE document against
@@ -116,6 +161,47 @@ func validateCandyManifestCUE(path string, data []byte) error {
 	}
 	if verr := doc.Unify(def).Validate(cue.Concrete(true)); verr != nil {
 		return fmt.Errorf("%s: %s", path, errors.Details(verr, nil))
+	}
+	// #NodeDoc gates the node-form STRUCTURE but accepts each entity's step/data
+	// children as `_`; validateNodeFormSteps types every entity's ASSEMBLED plan
+	// steps against the closed #Step/#Op (the step-typo gate).
+	return validateNodeFormSteps(path, data)
+}
+
+// validateNodeFormSteps parses a node-form document and validates EVERY entity's
+// (and nested sub-entity's) assembled body against its closed per-kind def — the
+// step-typo gate for candies, boxes, pods, deploys, and check beds alike. Shared by
+// validateCandyManifestCUE and validateProjectCUESchemas (R3).
+func validateNodeFormSteps(path string, data []byte) error {
+	var ydoc yaml.Node
+	if err := yaml.Unmarshal(data, &ydoc); err != nil {
+		return fmt.Errorf("%s: yaml: %w", path, err)
+	}
+	_, nodes, err := parseNodeTree(&ydoc)
+	if err != nil {
+		return fmt.Errorf("%s: parse: %w", path, err)
+	}
+	for _, gn := range nodes {
+		if verr := validateEntityNodeRec(gn, path); verr != nil {
+			return verr
+		}
+	}
+	return nil
+}
+
+// validateEntityNodeRec assemble-validates one entity node (when its kind is
+// CUE-registered) and recurses into its sub-entity children (bundle members,
+// nested deploys), which carry their own steps.
+func validateEntityNodeRec(gn *genericNode, path string) error {
+	if err := assembleAndValidateEntitySteps(gn, fmt.Sprintf("%s: %s", path, gn.name)); err != nil {
+		return err
+	}
+	for _, ch := range gn.children {
+		if ch.discClass == "entity" {
+			if err := validateEntityNodeRec(ch, path); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

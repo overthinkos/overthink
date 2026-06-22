@@ -90,14 +90,15 @@ _reservedNode: "^(candy|pod|vm|k8s|local|android|distro|builder|init|resource|si
 // Per-kind ARMS. Each arm pins its one discriminator to a CLOSED per-kind VALUE
 // (so a typo'd field / wrong value type in the kind value is a hard error). CHILD
 // nodes are accepted structurally (`_`) at this document gate; their strictness is
-// LAYERED in the loader: node_parse.go classifies each child and HARD-ERRORS a
-// typo'd discriminator ("no discriminator"), a two-discriminator node, and a
-// wrong-kind child (a resource/unknown child under a non-deployable kind), and the
-// per-entity decode (decodeAndValidateEntityCUE) types every folded data/step child
-// against the COMPLETE #Candy/#Deploy/#Step. A pure-CUE per-child kind-disjunction
-// here is BOTH an O(entities×kinds×children) blow-up AND ambiguous (a data key like
-// `env` also exists on #Step, so #DataChild|#StepChild never resolves) — the layered
-// loader checks are exact and fast.
+// LAYERED: node_parse.go classifies each child and HARD-ERRORS a typo'd
+// discriminator ("no discriminator"), a two-discriminator node, and a wrong-kind
+// child (a resource/unknown child under a non-deployable kind). The step-CHILD Op
+// fields are typed against the closed #Step/#Op by the VALIDATE entrypoint (charly
+// box validate → validateNodeFormSteps, cue_schema.go) — NOT at this document gate
+// and NOT at decode (decodeEntityViaCUE decodes leniently). A pure-CUE per-child
+// kind-disjunction here is BOTH an O(entities×kinds×children) blow-up AND ambiguous
+// (a data key like `env` also exists on #Step, so #DataChild|#StepChild never
+// resolves) — the layered loader + validate checks are exact and fast.
 // ---------------------------------------------------------------------------
 #CandyArm: close({candy: #CandyValue, {[!~_reservedNode]: _}})
 #PodArm: close({pod: #PodValue, {[!~_reservedNode]: _}})

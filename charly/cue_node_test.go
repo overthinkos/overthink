@@ -21,6 +21,21 @@ func TestNodeDoc_AgentOutputFormat_RejectedByCUE(t *testing.T) {
 	}
 }
 
+// TestNodeFormSteps_RejectsStepTypo proves E1's plan-step typo gate: a node-form
+// entity whose plan step carries an unknown Op field is rejected. Before E1 this
+// passed silently — node-form steps are SIBLING nodes never typed against the closed
+// #Step/#Op (validateNodeFormSteps, run at the validate entrypoint, closes that gap).
+func TestNodeFormSteps_RejectsStepTypo(t *testing.T) {
+	clean := "c:\n  candy:\n    version: \"2026.150.0000\"\n    description: x\n  s:\n    run: fetch the binary\n    download: \"http://example/x\"\n    extract: tar.gz\n"
+	if err := validateNodeFormSteps("t", []byte(clean)); err != nil {
+		t.Fatalf("clean candy plan step rejected: %v", err)
+	}
+	bad := "c:\n  candy:\n    version: \"2026.150.0000\"\n    description: x\n  s:\n    run: fetch the binary\n    download: \"http://example/x\"\n    extract: tar.gz\n    zz_bad_op_field: 1\n"
+	if err := validateNodeFormSteps("t", []byte(bad)); err == nil {
+		t.Fatal("a plan step with unknown Op field zz_bad_op_field was NOT rejected — the step-typo gate (E1) is broken")
+	}
+}
+
 // nodeFormRejected reports whether the layered node-form strictness gates reject a
 // document — the CUE document gate (closed kind VALUES + two-discriminator /
 // reserved-key closedness) OR the Go parser (a typo'd discriminator, a wrong-kind /

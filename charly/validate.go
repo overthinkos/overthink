@@ -118,6 +118,12 @@ func validateProjectCUESchemas(cfg *Config, dir string, opts ResolveOpts, errs *
 		// files are validated at load (validateNodeDocCUE) and via the resolved
 		// cfg.Box path above, so skip them here.
 		if isNodeFormFile(data) {
+			// node-form STRUCTURE is gated at load (validateNodeDocCUE); add the
+			// step-typo gate here — every entity's ASSEMBLED plan steps against the
+			// closed #Step/#Op (the validate entrypoint catches what load leaves lenient).
+			if verr := validateNodeFormSteps(f, data); verr != nil {
+				errs.Add("%v", verr)
+			}
 			continue
 		}
 		doc, derr := cueDocFromYAML(f, data)

@@ -12,6 +12,12 @@ import (
 
 // CLI defines the command-line interface structure
 type CLI struct {
+	// Plugins holds the subcommands contributed by COMMAND-class providers — the 6th
+	// provider seam. Populated from collectCommandPlugins() before kong.Parse (below)
+	// and embedded into the grammar by Kong (anonymous kong.Plugins embed). Empty
+	// today; non-machinery commands migrate into command providers in Phase 1-4.
+	kong.Plugins
+
 	// Host enables "run this command on a remote machine" semantics.
 	// When set, charly re-execs itself over SSH on the target host:
 	//
@@ -769,6 +775,7 @@ func main() {
 	}
 
 	var cli CLI
+	cli.Plugins = collectCommandPlugins() // 6th seam: subcommands contributed by command providers
 	ctx := kong.Parse(&cli,
 		kong.Name("charly"),
 		kong.Description("OpenCharly - the container management experience for you and your agents"),

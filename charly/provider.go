@@ -45,12 +45,13 @@ const (
 	ClassDeployTarget ProviderClass = "deploy"
 	ClassStep         ProviderClass = "step"
 	ClassBuilder      ProviderClass = "builder"
+	ClassCommand      ProviderClass = "command"
 )
 
 // providerClasses is the closed set, used by the loader to validate a plugin's
 // `provides:` entries and by the bijection gate.
 var providerClasses = map[ProviderClass]bool{
-	ClassKind: true, ClassVerb: true, ClassDeployTarget: true, ClassStep: true, ClassBuilder: true,
+	ClassKind: true, ClassVerb: true, ClassDeployTarget: true, ClassStep: true, ClassBuilder: true, ClassCommand: true,
 }
 
 // splitCapability parses a "<class>:<word>" capability string as authored in a

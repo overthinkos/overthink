@@ -40,16 +40,16 @@ var builtinProviderInstances = []Provider{
 	standaloneKind{word: "k8s", def: "#K8s"},
 	standaloneKind{word: "local", def: "#Local"},
 	standaloneKind{word: "android", def: "#Android"},
-	// deploy targets (ClassDeployTarget) — `local` self-registers from
-	// plugin_deploy_local.go (the externalizable dedicated-provider pattern).
-	vmTarget{}, podTarget{}, k8sTarget{}, androidTarget{},
+	// deploy targets (ClassDeployTarget) — ALL self-register from their dedicated
+	// plugin_deploy_<name>.go files (the externalizable dedicated-provider pattern):
+	// local, pod, vm, k8s, android.
 	// steps (ClassStep) — `Reboot` self-registers from plugin_step_reboot.go.
 	systemPackagesStepProvider{}, builderStepProvider{}, opStepProvider{}, fileStepProvider{},
 	servicePackagedStepProvider{}, serviceCustomStepProvider{}, shellHookStepProvider{},
 	shellSnippetStepProvider{}, repoChangeStepProvider{}, apkInstallStepProvider{},
 	localPkgInstallStepProvider{},
-	// builders (ClassBuilder) — `cargo` self-registers from plugin_builder_cargo.go.
-	aurBuilder{}, pixiBuilder{}, npmBuilder{},
+	// builders (ClassBuilder) — ALL self-register from their dedicated
+	// plugin_builder_<name>.go files: aur, pixi, cargo, npm.
 }
 
 // registerDedicatedBuiltin self-registers a built-in Provider that lives in its OWN

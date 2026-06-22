@@ -89,3 +89,85 @@ func TestDedicatedProviders_ResolveAndDispatch(t *testing.T) {
 		}
 	}
 }
+
+// TestDedicatedProviders_BulkResolveAndAbsent proves the Phase 3 BULK extraction: every
+// remaining deploy-target (pod/vm/k8s/android) and builder (pixi/npm/aur) now lives in
+// its OWN dedicated plugin_<class>_<name>.go file, self-registers via
+// registerDedicatedBuiltin, and is INTENTIONALLY absent from both
+// builtinProviderInstances and the `providers:` manifest — yet still resolves through
+// the SAME providerRegistry and dispatches identically (the deploy-target bijection gate
+// still sees them registered; builders have no gate, so the resolve IS the wiring proof).
+func TestDedicatedProviders_BulkResolveAndAbsent(t *testing.T) {
+	byKey := builtinInstanceMap()
+	manifest := parseEmbeddedProviderManifest()
+	inManifest := func(class ProviderClass, word string) bool {
+		for _, w := range manifest[string(class)] {
+			if w == word {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Deploy targets: each resolves to a DeployTargetProvider that constructs the
+	// expected UnifiedDeployTarget (behavior-preserving), and is absent from slice+manifest.
+	wantTarget := map[string]func(UnifiedDeployTarget) bool{
+		"pod":     func(t UnifiedDeployTarget) bool { _, ok := t.(*PodUnifiedTarget); return ok },
+		"vm":      func(t UnifiedDeployTarget) bool { _, ok := t.(*VmUnifiedTarget); return ok },
+		"k8s":     func(t UnifiedDeployTarget) bool { _, ok := t.(*K8sUnifiedTarget); return ok },
+		"android": func(t UnifiedDeployTarget) bool { _, ok := t.(*AndroidUnifiedTarget); return ok },
+	}
+	for _, word := range []string{"pod", "vm", "k8s", "android"} {
+		dp, ok := providerRegistry.ResolveDeploy(word)
+		if !ok {
+			t.Fatalf("ResolveDeploy(%q) not registered — dedicated self-registration regressed", word)
+		}
+		dtp, ok := dp.(DeployTargetProvider)
+		if !ok {
+			t.Fatalf("deploy:%s resolved but is not a DeployTargetProvider (got %T)", word, dp)
+		}
+		tgt, err := dtp.ResolveTarget(&BundleNode{}, "demo")
+		if err != nil {
+			t.Fatalf("deploy:%s ResolveTarget: %v", word, err)
+		}
+		if !wantTarget[word](tgt) {
+			t.Fatalf("deploy:%s ResolveTarget = %T, unexpected UnifiedDeployTarget type", word, tgt)
+		}
+		if _, in := byKey[provKey(ClassDeployTarget, word)]; in {
+			t.Fatalf("deploy:%s is still in builtinProviderInstances — must self-register from its dedicated file", word)
+		}
+		if inManifest(ClassDeployTarget, word) {
+			t.Fatalf("deploy:%s is still in the providers: manifest — a dedicated provider must not be listed there", word)
+		}
+	}
+
+	// Builders: each resolves to a BuilderProvider and is absent from slice+manifest.
+	for _, word := range []string{"pixi", "npm", "aur"} {
+		bp, ok := builderProviderFor(word)
+		if !ok {
+			t.Fatalf("builderProviderFor(%q) not resolved — dedicated self-registration regressed", word)
+		}
+		if bp.Reserved() != word {
+			t.Fatalf("builder:%s Reserved() = %q, want %q", word, bp.Reserved(), word)
+		}
+		if bp.Class() != ClassBuilder {
+			t.Fatalf("builder:%s Class() = %q, want %q", word, bp.Class(), ClassBuilder)
+		}
+		if _, in := byKey[provKey(ClassBuilder, word)]; in {
+			t.Fatalf("builder:%s is still in builtinProviderInstances — must self-register from its dedicated file", word)
+		}
+		if inManifest(ClassBuilder, word) {
+			t.Fatalf("builder:%s is still in the providers: manifest — a dedicated provider must not be listed there", word)
+		}
+	}
+
+	// aur additionally carries the optional BuilderStager half (host staging dir) — all
+	// of its methods moved with it.
+	st, ok := builderStagerFor("aur")
+	if !ok {
+		t.Fatal("builderStagerFor(\"aur\") not resolved — aur must still implement BuilderStager")
+	}
+	if st.StagingMount() != "/tmp/aur-pkgs" {
+		t.Fatalf("aur StagingMount() = %q, want %q", st.StagingMount(), "/tmp/aur-pkgs")
+	}
+}

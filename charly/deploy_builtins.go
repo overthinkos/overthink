@@ -4,35 +4,18 @@ package main
 // UnifiedDeployTarget unchanged — the migration is behavior-preserving; the
 // ResolveTarget dispatch switch is replaced by providerRegistry.ResolveDeploy.
 
-// localTarget (the `local` deploy target) lives in its own dedicated file
-// (plugin_deploy_local.go) as the externalizable dedicated-provider pattern.
+// Every built-in deploy target now lives in its OWN dedicated file as the
+// externalizable dedicated-provider pattern (Phase 3); each self-registers via
+// registerDedicatedBuiltin and is therefore absent from both the
+// builtinProviderInstances slice and the `providers:` manifest:
 
-type vmTarget struct{ builtinDeployBase }
+// localTarget (the `local` deploy target) lives in plugin_deploy_local.go.
 
-func (vmTarget) Reserved() string { return "vm" }
-func (vmTarget) ResolveTarget(_ *BundleNode, name string) (UnifiedDeployTarget, error) {
-	return &VmUnifiedTarget{NodeName: name}, nil
-}
+// vmTarget (the `vm` deploy target) lives in plugin_deploy_vm.go.
 
-type podTarget struct{ builtinDeployBase }
+// podTarget (the `pod` deploy target) lives in plugin_deploy_pod.go.
 
-func (podTarget) Reserved() string { return "pod" }
-func (podTarget) ResolveTarget(node *BundleNode, name string) (UnifiedDeployTarget, error) {
-	// BaseImageRef is the image the rebuild's build/check steps target; node.Image is
-	// the charly.yml `box:` field (Rebuild falls back to NodeName when empty).
-	return &PodUnifiedTarget{NodeName: name, BaseImageRef: node.Image}, nil
-}
+// k8sTarget (the `k8s` deploy target) lives in plugin_deploy_k8s.go.
 
-type k8sTarget struct{ builtinDeployBase }
-
-func (k8sTarget) Reserved() string { return "k8s" }
-func (k8sTarget) ResolveTarget(_ *BundleNode, name string) (UnifiedDeployTarget, error) {
-	return &K8sUnifiedTarget{NodeName: name}, nil
-}
-
-type androidTarget struct{ builtinDeployBase }
-
-func (androidTarget) Reserved() string { return "android" }
-func (androidTarget) ResolveTarget(_ *BundleNode, name string) (UnifiedDeployTarget, error) {
-	return &AndroidUnifiedTarget{NodeName: name}, nil
-}
+// androidTarget (the `android` deploy target) lives in plugin_deploy_android_reg.go
+// (the `_reg` suffix dodges the implicit GOOS=android build constraint).

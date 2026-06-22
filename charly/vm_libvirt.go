@@ -163,24 +163,37 @@ func (c *libvirtConn) destroyDomain(dom libvirt.Domain) error {
 // image that fails `podman run` with `…/storage/overlay/<hash>: no such file`.
 // No-op when the domain is already stopped or absent.
 func (c *libvirtConn) gracefulStopDomain(dom libvirt.Domain) {
-	if state, err := c.domainState(dom); err != nil || state != domainStateRunning {
-		return
+	state, err := c.domainState(dom)
+	if err != nil || state == libvirt.DomainShutoff {
+		return // unreadable (treat as absent) or already off
 	}
-	if err := c.shutdownDomain(dom); err != nil {
-		// ACPI/agent request rejected (no acpid, no guest agent) — force now.
+	// Graceful ACPI poweroff is only meaningful for a RUNNING guest (it lets the
+	// guest flush its filesystems, incl. the in-guest podman overlay store, before
+	// power-off). For any other ACTIVE state (paused/blocked/crashed/pmsuspended)
+	// there is nothing to flush — skip straight to the force below.
+	if state == domainStateRunning {
+		if err := c.shutdownDomain(dom); err == nil {
+			// StopGate (poll.go): wait up to the config StopGrace for the domain to
+			// reach SHUTOFF. Poll for SHUTOFF specifically, NOT merely "not running":
+			// a transient shutdown-in-progress / paused state, or a transient
+			// domainState RPC error, satisfies "not running" and would return EARLY,
+			// leaving the domain still active so the caller's undefine turns it into a
+			// lingering TRANSIENT running domain (the "destroy reports success but the
+			// VM keeps running" bug).
+			cfg := loadedReadiness().StopGate("graceful-stop domain")
+			_ = pollUntil(context.Background(), cfg, func(context.Context) (bool, float64, error) {
+				s, serr := c.domainState(dom)
+				return serr == nil && s == libvirt.DomainShutoff, 0, nil
+			})
+		}
+	}
+	// Guarantee the domain is actually OFF before the caller undefines it: force-
+	// destroy unless it reached SHUTOFF (covers ACPI-ignored/rejected, slow, wedged,
+	// paused, or a guest that reboots on shutdown). DomainDestroy is the hard kill
+	// proven to drive a running/active domain to SHUTOFF; a no-op error on an
+	// already-off domain is harmless and ignored.
+	if s, serr := c.domainState(dom); serr == nil && s != libvirt.DomainShutoff {
 		_ = c.destroyDomain(dom)
-		return
-	}
-	// StopGate (poll.go): wait up to the config StopGrace for the domain to
-	// power off, polling its state — replaces the fixed 60s magic deadline the
-	// census flagged as marginal under 8+ concurrent destroys (a forced destroy
-	// of a still-flushing guest can tear the in-guest podman overlay store).
-	cfg := loadedReadiness().StopGate("graceful-stop domain")
-	if err := pollUntil(context.Background(), cfg, func(context.Context) (bool, float64, error) {
-		state, serr := c.domainState(dom)
-		return serr != nil || state != domainStateRunning, 0, nil
-	}); err != nil {
-		_ = c.destroyDomain(dom) // did not power off within StopGrace — force
 	}
 }
 

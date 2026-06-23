@@ -36,12 +36,14 @@ defaults:
 	if err != nil {
 		t.Fatalf("LoadUnified: %v", err)
 	}
+	// distro/builder are plugin kinds now; read the vocab back via the accessors.
+	distros, builders := uf.Distros(), uf.Builders()
 	for _, d := range []string{"fedora", "arch"} {
-		if uf.Distro[d] == nil {
+		if distros[d] == nil {
 			t.Errorf("embedded distro %q missing with no build.yml import", d)
 		}
 	}
-	if uf.Builder["pixi"] == nil {
+	if builders["pixi"] == nil {
 		t.Error("embedded builder pixi missing with no build.yml import")
 	}
 }
@@ -68,18 +70,20 @@ mydistro:
 	if err != nil {
 		t.Fatalf("LoadUnified: %v", err)
 	}
+	// distro is a plugin kind now; read the vocab back via the Distros() accessor.
+	distros := uf.Distros()
 	// Override: the project's fedora (version "99") WINS over the embedded fedora
 	// (version "43"). The marker is a valid #Distro.version (numeric per the schema
 	// regex) — the legacy "marker99" was rejected by the node-form load gate.
-	if uf.Distro["fedora"] == nil || uf.Distro["fedora"].Version != "99" {
-		t.Errorf("project fedora override lost (embed wrongly won); got %+v", uf.Distro["fedora"])
+	if distros["fedora"] == nil || distros["fedora"].Version != "99" {
+		t.Errorf("project fedora override lost (embed wrongly won); got %+v", distros["fedora"])
 	}
 	// Extend: the project's new distro coexists with the embedded ones.
-	if uf.Distro["mydistro"] == nil {
+	if distros["mydistro"] == nil {
 		t.Error("project-added distro mydistro missing")
 	}
 	// Untouched: an embedded distro the project didn't mention is still present.
-	if uf.Distro["arch"] == nil {
+	if distros["arch"] == nil {
 		t.Error("embedded distro arch missing (embed not applied as base)")
 	}
 }
@@ -96,16 +100,18 @@ func TestEmbeddedDefaults_SameLoaderPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("embeddedDefaults: %v", err)
 	}
-	// Build vocabulary view.
+	// Build vocabulary view — distro/builder/resource are plugin kinds now, read back
+	// via the accessors (over def.PluginKinds) from the SAME parse.
+	distros := def.Distros()
 	for _, d := range []string{"fedora", "arch"} {
-		if def.Distro[d] == nil {
+		if distros[d] == nil {
 			t.Errorf("embedded distro %q missing from unified parse", d)
 		}
 	}
-	if def.Builder["pixi"] == nil {
+	if def.Builders()["pixi"] == nil {
 		t.Error("embedded builder pixi missing from unified parse")
 	}
-	if def.Resource["nvidia-gpu"] == nil {
+	if def.Resources()["nvidia-gpu"] == nil {
 		t.Error("embedded resource nvidia-gpu missing from unified parse")
 	}
 	// Sidecar-template view — sidecar is a plugin kind now (plugin_sidecar.go), so the
@@ -184,37 +190,40 @@ amd-gpu:
 		t.Fatalf("LoadUnified: %v", err)
 	}
 
+	// builder/init/resource are plugin kinds now; read each vocab back via its accessor.
+	builders, inits, resources := uf.Builders(), uf.Inits(), uf.Resources()
+
 	// builder: override wins WHOLESALE (gap-fill replaces, never deep-merges), a
 	// new entry coexists, an untouched embedded entry survives.
-	if b := uf.Builder["pixi"]; b == nil || b.DetectConfig != "marker99" {
-		t.Errorf("builder pixi override lost (embed wrongly won); got %+v", uf.Builder["pixi"])
+	if b := builders["pixi"]; b == nil || b.DetectConfig != "marker99" {
+		t.Errorf("builder pixi override lost (embed wrongly won); got %+v", builders["pixi"])
 	}
-	if b := uf.Builder["pixi"]; b != nil && len(b.DetectFiles) != 0 {
+	if b := builders["pixi"]; b != nil && len(b.DetectFiles) != 0 {
 		t.Errorf("builder pixi override must replace wholesale (embed DetectFiles must be gone); got %+v", b.DetectFiles)
 	}
-	if uf.Builder["mybuilder"] == nil {
+	if builders["mybuilder"] == nil {
 		t.Error("project-added builder mybuilder missing")
 	}
-	if uf.Builder["cargo"] == nil {
+	if builders["cargo"] == nil {
 		t.Error("embedded builder cargo missing (embed not applied as base)")
 	}
 
 	// init
-	if i := uf.Init["systemd"]; i == nil || i.Model != "file_copy" {
-		t.Errorf("init systemd override lost; got %+v", uf.Init["systemd"])
+	if i := inits["systemd"]; i == nil || i.Model != "file_copy" {
+		t.Errorf("init systemd override lost; got %+v", inits["systemd"])
 	}
-	if uf.Init["myinit"] == nil {
+	if inits["myinit"] == nil {
 		t.Error("project-added init myinit missing")
 	}
-	if uf.Init["supervisord"] == nil {
+	if inits["supervisord"] == nil {
 		t.Error("embedded init supervisord missing")
 	}
 
 	// resource
-	if r := uf.Resource["nvidia-gpu"]; r == nil || r.Gpu == nil || r.Gpu.Vendor != "marker-vendor" {
-		t.Errorf("resource nvidia-gpu override lost; got %+v", uf.Resource["nvidia-gpu"])
+	if r := resources["nvidia-gpu"]; r == nil || r.Gpu == nil || r.Gpu.Vendor != "marker-vendor" {
+		t.Errorf("resource nvidia-gpu override lost; got %+v", resources["nvidia-gpu"])
 	}
-	if uf.Resource["amd-gpu"] == nil {
+	if resources["amd-gpu"] == nil {
 		t.Error("project-added resource amd-gpu missing")
 	}
 }

@@ -79,12 +79,19 @@ type UnifiedFile struct {
 	// same-repo file splits + shared build vocabulary) or a single-key
 	// map `alias: ref` (a namespaced child import — cross-repo entity
 	// cherry-pick, referenced qualified as `alias.entry`). See ImportList.
-	Import   ImportList             `yaml:"import,omitempty" json:"import,omitempty"`
-	Discover DiscoverConfig         `yaml:"discover,omitempty" json:"discover,omitempty"`
-	Distro   map[string]*DistroDef  `yaml:"distro,omitempty" json:"distro,omitempty"`
-	Builder  map[string]*BuilderDef `yaml:"builder,omitempty" json:"builder,omitempty"`
-	Init     map[string]*InitDef    `yaml:"init,omitempty" json:"init,omitempty"`
-	Defaults BoxConfig              `yaml:"defaults,omitempty" json:"defaults,omitempty"`
+	Import   ImportList     `yaml:"import,omitempty" json:"import,omitempty"`
+	Discover DiscoverConfig `yaml:"discover,omitempty" json:"discover,omitempty"`
+	// The build-vocabulary kinds (distro/builder/init) are no longer typed core maps:
+	// each was extracted into a dedicated plugin kind (plugin_distro.go /
+	// plugin_builder_kind.go / plugin_init.go), so a `distro:`/`builder:`/`init:` node
+	// (incl. the binary-embedded build vocabulary) lands in PluginKinds. The name-keyed
+	// map[string]*XDef the generator/format code consumes is reconstructed on demand by
+	// the Distros() / Builders() / Inits() accessors (decoding the canonical bodies back
+	// into DistroDef = spec.Distro, …) and projected via ProjectDistroConfig /
+	// ProjectBuilderConfig / ProjectInitConfig. The binary-embedded default vocabulary
+	// merges UNDER a project's own entries via the generic root-wins mergePluginKindsMap
+	// (applyEmbeddedDefaults). See unified.go Distros()/Builders()/Inits().
+	Defaults BoxConfig `yaml:"defaults,omitempty" json:"defaults,omitempty"`
 	// Field-singular cutover (2026-05): legacy plural `Images yaml:"images"`
 	// deleted; the singular `Box yaml:"box"` is the canonical surface.
 	Box   map[string]BoxConfig    `yaml:"box,omitempty" json:"box,omitempty"`
@@ -135,20 +142,21 @@ type UnifiedFile struct {
 	// the R10 bed set from those disposable bundles. `charly check run <bed>`
 	// drives the full R10 sequence.
 
-	// Calamares-aligned kinds. `target:` ↔ Calamares settings.conf install target.
-	// The Calamares netinstall package group (`package-group:`) and the Calamares
-	// installer module (`module:`) are no longer core typed maps — each was extracted
-	// into a dedicated plugin kind (plugin_package_group.go / plugin_module.go), so
-	// such an entity lands in PluginKinds, not here. Importers/emitters are deferred
-	// to a follow-up additive PR; this cutover lands the schema.
-	Target map[string]*TargetSpec `yaml:"target,omitempty" json:"target,omitempty"`
+	// Calamares-aligned kinds. The Calamares install `target:` (settings.conf), the
+	// netinstall package group (`package-group:`), and the installer module (`module:`)
+	// are no longer core typed maps — each was extracted into a dedicated plugin kind
+	// (plugin_target.go / plugin_package_group.go / plugin_module.go), so such an entity
+	// lands in PluginKinds, not here. Calamares has zero core readers yet
+	// (importers/emitters deferred), so — like module/package-group — `target` has no
+	// accessor; the canonical body sits in PluginKinds for a future importer.
 
-	// Resource (kind:resource) — exclusive host-resource definitions: a token
-	// name (matching requires_exclusive: / preemptible.holds:) → an optional
-	// hardware selector (e.g. gpu.vendor) that drives GPU auto-allocation at
-	// `charly vm create`. Build-vocab VALUE map; the binary-embedded default
-	// set lives in the embedded charly.yml (embed_defaults.go).
-	Resource map[string]*ResourceDef `yaml:"resource,omitempty" json:"resource,omitempty"`
+	// Resource (kind:resource) — exclusive host-resource definitions (a token name →
+	// an optional gpu.vendor selector that drives GPU auto-allocation at `charly vm
+	// create`) — is no longer a typed core map either: it was extracted into a dedicated
+	// plugin kind (plugin_resource.go), so a `resource:` node lands in PluginKinds. The
+	// name-keyed map[string]*ResourceDef the GPU-arbitration code consumes is
+	// reconstructed on demand by the Resources() accessor; the binary-embedded default
+	// set merges UNDER a project's own entries via the generic mergePluginKindsMap.
 
 	// Sidecar — the reusable sidecar-container template library — is no longer a
 	// typed core map: it was extracted into a dedicated plugin kind
@@ -1369,9 +1377,6 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	if len(src.Discover) > 0 {
 		dst.Discover = append(dst.Discover, anchorScanSpecs(src.Discover, srcDir)...)
 	}
-	mergeDistroMap(&dst.Distro, src.Distro)
-	mergeBuilderMap(&dst.Builder, src.Builder)
-	mergeInitMap(&dst.Init, src.Init)
 	mergeBoxMap(&dst.Box, src.Box)
 	mergeCandyMap(&dst.Candy, src.Candy)
 	mergeVmMap(&dst.VM, src.VM)
@@ -1379,9 +1384,12 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeK8sMap(&dst.K8s, src.K8s)
 	mergeLocalMap(&dst.Local, src.Local)
 	mergeAndroidMap(&dst.Android, src.Android)
+	// PluginKinds carries every plugin-extracted kind — the build vocabulary
+	// (distro/builder/init/resource), the Calamares target, and sidecar/agent/module/
+	// package-group — merged once here (root-wins, name-keyed override). The former
+	// mergeDistroMap/mergeBuilderMap/mergeInitMap/mergeResourceMap/mergeTargetMap calls
+	// are subsumed by this one generic merge.
 	mergePluginKindsMap(&dst.PluginKinds, src.PluginKinds)
-	mergeTargetMap(&dst.Target, src.Target)
-	mergeResourceMap(&dst.Resource, src.Resource)
 	mergeDeployMaps(&dst.Bundle, src.Bundle)
 	if dst.Provides == nil && src.Provides != nil {
 		dst.Provides = src.Provides
@@ -1406,64 +1414,6 @@ func anchorScanSpecs(specs []ScanSpec, srcDir string) []ScanSpec {
 		}
 	}
 	return out
-}
-
-func mergeDistroMap(dst *map[string]*DistroDef, src map[string]*DistroDef) {
-	if len(src) == 0 {
-		return
-	}
-	if *dst == nil {
-		*dst = make(map[string]*DistroDef)
-	}
-	for k, v := range src {
-		if _, exists := (*dst)[k]; !exists {
-			(*dst)[k] = v
-		}
-	}
-}
-
-func mergeBuilderMap(dst *map[string]*BuilderDef, src map[string]*BuilderDef) {
-	if len(src) == 0 {
-		return
-	}
-	if *dst == nil {
-		*dst = make(map[string]*BuilderDef)
-	}
-	for k, v := range src {
-		if _, exists := (*dst)[k]; !exists {
-			(*dst)[k] = v
-		}
-	}
-}
-
-func mergeInitMap(dst *map[string]*InitDef, src map[string]*InitDef) {
-	if len(src) == 0 {
-		return
-	}
-	if *dst == nil {
-		*dst = make(map[string]*InitDef)
-	}
-	for k, v := range src {
-		if _, exists := (*dst)[k]; !exists {
-			(*dst)[k] = v
-		}
-	}
-}
-
-// mergeResourceMap merges exclusive host-resource definitions (kind:resource).
-// Root-wins, like the other build-vocab maps.
-func mergeResourceMap(dst *map[string]*ResourceDef, src map[string]*ResourceDef) {
-	if len(src) == 0 {
-		return
-	}
-	if *dst == nil {
-		*dst = make(map[string]*ResourceDef)
-	}
-	for k, v := range src {
-		if _, exists := (*dst)[k]; !exists {
-			(*dst)[k] = v
-		}
-	}
 }
 
 func mergeBoxMap(dst *map[string]BoxConfig, src map[string]BoxConfig) {
@@ -1594,21 +1544,6 @@ func mergePluginKindsMap(dst *map[string]map[string]json.RawMessage, src map[str
 			if _, exists := d[name]; !exists {
 				d[name] = body
 			}
-		}
-	}
-}
-
-// Calamares-aligned merge helpers (root-wins, same shape as the rest).
-func mergeTargetMap(dst *map[string]*TargetSpec, src map[string]*TargetSpec) {
-	if len(src) == 0 {
-		return
-	}
-	if *dst == nil {
-		*dst = make(map[string]*TargetSpec)
-	}
-	for k, v := range src {
-		if _, exists := (*dst)[k]; !exists {
-			(*dst)[k] = v
 		}
 	}
 }
@@ -2050,28 +1985,94 @@ func (uf *UnifiedFile) projectConfigCached(cache map[*UnifiedFile]*Config) *Conf
 	return c
 }
 
-// ProjectDistroConfig returns the *DistroConfig equivalent (distro: section).
+// Distros reconstructs the name-keyed per-distro build vocabulary from uf.PluginKinds.
+// The `distro` kind is a plugin kind (plugin_distro.go) — a `distro:` node (incl. the
+// binary-embedded vocabulary) lands in uf.PluginKinds["distro"][<name>] as canonical
+// spec.Distro JSON (produced by the plugin's Invoke). This accessor decodes each body
+// back into a *DistroDef (= *spec.Distro), yielding the SAME map[string]*DistroDef shape
+// the generator/format code consumed when distro was a typed core map (the former
+// uf.Distro). Recomputed per call; returns nil when no distros are configured. A decode
+// error is impossible in practice — the body is canonical JSON the plugin Marshalled from
+// spec.Distro — but a bad entry is skipped rather than poisoning the whole vocabulary.
+func (uf *UnifiedFile) Distros() map[string]*DistroDef {
+	return decodePluginKindMap[DistroDef](uf, "distro")
+}
+
+// Builders reconstructs the name-keyed multi-stage builder vocabulary from
+// uf.PluginKinds["builder"] (the `builder` plugin kind, plugin_builder_kind.go) into the
+// map[string]*BuilderDef shape the generator consumed when builder was a typed core map.
+func (uf *UnifiedFile) Builders() map[string]*BuilderDef {
+	return decodePluginKindMap[BuilderDef](uf, "builder")
+}
+
+// Inits reconstructs the name-keyed init-system vocabulary from uf.PluginKinds["init"]
+// (the `init` plugin kind, plugin_init.go) into the map[string]*InitDef shape the
+// generator consumed when init was a typed core map.
+func (uf *UnifiedFile) Inits() map[string]*InitDef {
+	return decodePluginKindMap[InitDef](uf, "init")
+}
+
+// Resources reconstructs the name-keyed exclusive-host-resource vocabulary from
+// uf.PluginKinds["resource"] (the `resource` plugin kind, plugin_resource.go) into the
+// map[string]*ResourceDef shape the GPU-arbitration code consumed when resource was a
+// typed core map.
+func (uf *UnifiedFile) Resources() map[string]*ResourceDef {
+	return decodePluginKindMap[ResourceDef](uf, "resource")
+}
+
+// decodePluginKindMap reconstructs the typed name-keyed map[string]*T for a plugin kind
+// from uf.PluginKinds[kind] (each body the canonical spec.T JSON the kind plugin's Invoke
+// produced). Shared by the build-vocabulary accessors (Distros/Builders/Inits/Resources)
+// — the build-vocab analogue of Agents()/Sidecars(); a bad entry is skipped rather than
+// poisoning the whole vocabulary. Returns nil when the kind has no entities.
+func decodePluginKindMap[T any](uf *UnifiedFile, kind string) map[string]*T {
+	if uf == nil {
+		return nil
+	}
+	bodies := uf.PluginKinds[kind]
+	if len(bodies) == 0 {
+		return nil
+	}
+	out := make(map[string]*T, len(bodies))
+	for name, body := range bodies {
+		var v T
+		if err := json.Unmarshal(body, &v); err != nil {
+			continue
+		}
+		out[name] = &v
+	}
+	return out
+}
+
+// ProjectDistroConfig returns the *DistroConfig equivalent (distro: section), decoding
+// the build vocabulary from the distro plugin kind (uf.PluginKinds via Distros()).
 func (uf *UnifiedFile) ProjectDistroConfig() *DistroConfig {
-	if len(uf.Distro) == 0 {
+	distros := uf.Distros()
+	if len(distros) == 0 {
 		return nil
 	}
-	return &DistroConfig{Distro: uf.Distro}
+	return &DistroConfig{Distro: distros}
 }
 
-// ProjectBuilderConfig returns the *BuilderConfig equivalent (builders: section).
+// ProjectBuilderConfig returns the *BuilderConfig equivalent (builders: section),
+// decoding the build vocabulary from the builder plugin kind (uf.PluginKinds via
+// Builders()).
 func (uf *UnifiedFile) ProjectBuilderConfig() *BuilderConfig {
-	if len(uf.Builder) == 0 {
+	builders := uf.Builders()
+	if len(builders) == 0 {
 		return nil
 	}
-	return &BuilderConfig{Builder: uf.Builder}
+	return &BuilderConfig{Builder: builders}
 }
 
-// ProjectInitConfig returns the *InitConfig equivalent (inits: section).
+// ProjectInitConfig returns the *InitConfig equivalent (inits: section), decoding the
+// build vocabulary from the init plugin kind (uf.PluginKinds via Inits()).
 func (uf *UnifiedFile) ProjectInitConfig() *InitConfig {
-	if len(uf.Init) == 0 {
+	inits := uf.Inits()
+	if len(inits) == 0 {
 		return nil
 	}
-	return &InitConfig{Init: uf.Init}
+	return &InitConfig{Init: inits}
 }
 
 // ProjectBundleConfig returns the *BundleConfig equivalent (deployments: section

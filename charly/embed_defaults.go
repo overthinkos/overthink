@@ -33,29 +33,23 @@ func embeddedDefaults() (*UnifiedFile, error) {
 // applyEmbeddedDefaults merges the binary-embedded build vocabulary AND sidecar
 // templates UNDER a project's own entries — the project always wins.
 //
-// The embedded set is the BASE; the project's entries are the overlay that
-// wins. Implemented via the gap-filling per-key maps (mergeDistroMap /
-// mergeBuilderMap / mergeInitMap / mergeResourceMap) plus the generic name-keyed
-// mergePluginKindsMap (for the sidecar template library, now a plugin kind), which
-// copy a key only when it is ABSENT. So calling this AFTER all project sources
-// are merged fills only what the project did not define — project-wins is
-// structural, not order-dependent. Called at the depth-0 boundary of
-// loadUnifiedInto for the root AND every namespace child, so each
-// project/namespace inherits the default vocabulary + sidecar templates.
+// The embedded set is the BASE; the project's entries are the overlay that wins.
+// The build vocabulary (distro/builder/init/resource) AND the sidecar template library
+// are ALL plugin kinds now (plugin_distro.go / plugin_builder_kind.go / plugin_init.go /
+// plugin_resource.go / plugin_sidecar.go): the embedded entries land in
+// def.PluginKinds, merged UNDER the project's own entries by the generic name-keyed
+// root-wins mergePluginKindsMap (copy a name only when ABSENT). So a project's
+// `distro: fedora` / `sidecar: tailscale` overrides the embedded one. Calling this AFTER
+// all project sources are merged fills only what the project did not define —
+// project-wins is structural, not order-dependent. Called at the depth-0 boundary of
+// loadUnifiedInto for the root AND every namespace child, so each project/namespace
+// inherits the default vocabulary + sidecar templates. (Replaces the former explicit
+// mergeDistroMap/mergeBuilderMap/mergeInitMap/mergeResourceMap/mergeSidecarMap calls.)
 func applyEmbeddedDefaults(uf *UnifiedFile) error {
 	def, err := embeddedDefaults()
 	if err != nil {
 		return err
 	}
-	mergeDistroMap(&uf.Distro, def.Distro)
-	mergeBuilderMap(&uf.Builder, def.Builder)
-	mergeInitMap(&uf.Init, def.Init)
-	mergeResourceMap(&uf.Resource, def.Resource)
-	// sidecar is a plugin kind now (plugin_sidecar.go): the embedded `tailscale`
-	// template lands in def.PluginKinds["sidecar"], merged UNDER the project's own
-	// entries by the generic root-wins mergePluginKindsMap — so a project's
-	// `sidecar: tailscale` overrides the embedded one (the exact override Cutover A's
-	// name-keyed merge exists for). Replaces the former explicit mergeSidecarMap.
 	mergePluginKindsMap(&uf.PluginKinds, def.PluginKinds)
 	return nil
 }

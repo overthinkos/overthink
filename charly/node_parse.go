@@ -59,15 +59,23 @@ func classifyDisc(k string, asChild bool) string {
 		return "entity"
 	case stepKeywordSet[k]:
 		return "step"
-	case dataKeySet[k]:
-		return "data"
 	}
 	// A plugin-contributed kind: a registered ClassKind provider whose word is NOT a
 	// core kind keyword (kindWordSet). Recognized dynamically so an external kind node
 	// parses and routes to runPluginKind (E3 — every kind is a plugin, builtin or
-	// external). Only reached for non-core discriminators, so the hot path is untouched.
+	// external). Checked BEFORE dataKeySet because a plugin-extracted build-vocabulary
+	// kind can COLLIDE with a data-key name (`distro:` is both the build-vocab kind AND
+	// a candy package-surface data field): at the TOP LEVEL a node is an ENTITY, so the
+	// registered kind wins; the data sense only applies as a CHILD (asChild branch
+	// above, which has no kind check). This restores the pre-extraction classification
+	// (when `distro` was a kindWord → "entity") and keeps the loader's "a non-deployable
+	// kind rejects a sub-entity child" gate live for the build-vocab kinds. Only reached
+	// for non-core discriminators, so the hot path is untouched.
 	if _, ok := providerRegistry.ResolveKind(k); ok {
 		return "entity"
+	}
+	if dataKeySet[k] {
+		return "data"
 	}
 	return ""
 }

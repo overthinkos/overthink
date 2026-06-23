@@ -359,7 +359,7 @@ func (c *VmCreateCmd) Run() error {
 		if uf.VM != nil {
 			spec = uf.VM[c.Box]
 		}
-		resources = uf.Resource
+		resources = uf.Resources()
 	}
 	backend, err := resolveVmBackend(vmConfiguredBackend(c.Box, rt.VmBackend))
 	if err != nil {

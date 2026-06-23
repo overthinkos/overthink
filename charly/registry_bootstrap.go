@@ -38,12 +38,15 @@ var builtinProviderInstances = []Provider{
 	cdpVerb{}, wlVerb{}, dbusVerb{}, vncVerb{},
 	mcpVerb{}, recordVerb{}, spiceVerb{}, libvirtVerb{}, kubeVerb{}, adbVerb{}, appiumVerb{},
 	summarizeVerb{}, killVerb{}, pluginVerb{},
-	// kinds (ClassKind) — agent + module + sidecar + package-group are NOT here: each
-	// is a dedicated plugin UNIT (plugin_agent.go / plugin_module.go / plugin_sidecar.go /
-	// plugin_package_group.go) that self-registers via RegisterBuiltinPluginUnit, absent
-	// from both this slice and the providers: manifest (the kind→plugin extraction).
-	candyKind{}, distroKind{}, builderKind{}, initKind{}, resourceKind{},
-	groupKind{}, targetKind{},
+	// kinds (ClassKind) — agent + module + sidecar + package-group + distro + builder +
+	// init + resource + target are NOT here: each is a dedicated plugin UNIT
+	// (plugin_agent.go / plugin_module.go / plugin_sidecar.go / plugin_package_group.go /
+	// plugin_distro.go / plugin_builder_kind.go / plugin_init.go / plugin_resource.go /
+	// plugin_target.go) that self-registers via RegisterBuiltinPluginUnit, absent from
+	// both this slice and the providers: manifest (the kind→plugin extraction). Only the
+	// loader-entangled kinds remain typed builtins: candy (the box⊻layer factory arm),
+	// group (the targetless bundle), and the 5 standalone resource substrates.
+	candyKind{}, groupKind{},
 	standaloneKind{word: "pod", def: "#Pod"},
 	standaloneKind{word: "vm", def: "#Vm"},
 	standaloneKind{word: "k8s", def: "#K8s"},

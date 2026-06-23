@@ -11,7 +11,7 @@ version: 2026.174.1100
 # target (local/pod/vm/k8s/android) and every builder (aur/pixi/cargo/npm) is now
 # externalized this way, so those two lists are empty by design.
 providers:
-    kind: [android, builder, candy, distro, group, init, k8s, local, pod, resource, target, vm]
+    kind: [android, candy, group, k8s, local, pod, vm]
     verb: [adb, appium, cdp, dbus, kill, kube, libvirt, mcp, plugin, record, spice, summarize, vnc, wl]
     deploy: []
     step: []

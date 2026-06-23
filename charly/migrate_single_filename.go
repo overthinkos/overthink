@@ -366,10 +366,12 @@ func localBuildMatchesEmbeddedVocab(data []byte) bool {
 	if err != nil {
 		return false
 	}
-	return reflect.DeepEqual(local.Distro, def.Distro) &&
-		reflect.DeepEqual(local.Builder, def.Builder) &&
-		reflect.DeepEqual(local.Init, def.Init) &&
-		reflect.DeepEqual(local.Resource, def.Resource)
+	// distro/builder/init/resource are plugin kinds now (uf.PluginKinds); the accessors
+	// decode them back into the typed name-keyed maps this default-vocab comparison needs.
+	return reflect.DeepEqual(local.Distros(), def.Distros()) &&
+		reflect.DeepEqual(local.Builders(), def.Builders()) &&
+		reflect.DeepEqual(local.Inits(), def.Inits()) &&
+		reflect.DeepEqual(local.Resources(), def.Resources())
 }
 
 // rewriteFoldedImports removes the per-kind file entries from import: (box.yml /

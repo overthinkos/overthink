@@ -75,7 +75,7 @@ image:
 	if _, ok := uf.Box["fedora"]; !ok {
 		t.Error("LoadUnified lost the fedora box after migration")
 	}
-	if _, ok := uf.Distro["fedora"]; !ok {
+	if _, ok := uf.Distros()["fedora"]; !ok {
 		t.Error("LoadUnified lost the fedora distro after migration")
 	}
 	if _, ok := uf.Candy["chrome"]; !ok {

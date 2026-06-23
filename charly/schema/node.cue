@@ -17,9 +17,12 @@
 // kind. A typo'd discriminator, an unknown value field, a wrong-kind child, and two
 // discriminators all FAIL closedness.
 
-// Reserved discriminators = the kind keywords. Negated regex so a child's NAME
-// cannot shadow a kind keyword.
-_reservedNode: "^(candy|pod|vm|k8s|local|android|distro|builder|init|resource|group|target)$"
+// Reserved discriminators = the CORE kind keywords (the kinds with a #Node arm).
+// Negated regex so a child's NAME cannot shadow a kind keyword. The plugin-extracted
+// kinds (agent/module/sidecar/package-group + distro/builder/init/resource/target) are
+// NOT here — they have no arm and are recognized dynamically by the loader via a
+// registered ClassKind provider (classifyDisc → providerRegistry.ResolveKind).
+_reservedNode: "^(candy|pod|vm|k8s|local|android|group)$"
 
 // #ResourceKind — the DEPLOYABLE subset of the kind keywords: the kinds whose
 // #Node arm admits a sub-ENTITY (resource) child (a deploy-into / alongside
@@ -64,23 +67,19 @@ _reservedNode: "^(candy|pod|vm|k8s|local|android|distro|builder|init|resource|gr
 #VmValue:      (#Vm | #DeployValue) @go(-)
 #K8sValue:     (#K8s | #DeployValue) @go(-)
 #AndroidValue: (#Android | #DeployValue) @go(-)
-#DistroValue:  #Distro
-#BuilderValue:  #Builder
-#InitValue:     #Init
-#ResourceValue: #Resource
 // group: is a TARGETLESS deploy group (#Deploy with members, no own workload — the
 // former targetless `bundle:`). @go(-): the Go type is BundleNode via the loader. The
-// Calamares package group (`package-group:`), the AI-CLI grader catalog (`agent:`), the
-// Calamares installer module (`module:`), and the sidecar-template library (`sidecar:`)
-// are no longer core kinds — each was extracted into a dedicated plugin unit, so none
-// has a #Node arm; such a node passes #NodeDoc as a registered non-core discriminator
-// and is validated by the plugin's served #*Input schema (runPluginKind). The core
-// #Agent / #Module / #Sidecar defs (schema/agent.cue, schema/module.cue,
-// schema/sidecar.cue) are KEPT — they still generate spec.Agent / spec.Module /
-// spec.Sidecar (the canonical types the plugins' Invoke decodes into), exactly as
+// build-vocabulary kinds (`distro:`/`builder:`/`init:`/`resource:`), the Calamares
+// install `target:`, the Calamares package group (`package-group:`), the AI-CLI grader
+// catalog (`agent:`), the Calamares installer module (`module:`), and the
+// sidecar-template library (`sidecar:`) are no longer core kinds — each was extracted
+// into a dedicated plugin unit, so none has a #Node arm; such a node passes #NodeDoc as
+// a registered non-core discriminator and is validated by the plugin's served #*Input
+// schema (runPluginKind). The core #Distro / #Builder / #Init / #Resource / #Target /
+// #Agent / #Module / #Sidecar defs (schema/distro.cue, …) are KEPT — they still generate
+// spec.Distro / … (the canonical types the plugins' Invoke decodes into), exactly as
 // #Group stays core.
-#GroupValue:  #DeployValue @go(-)
-#TargetValue: #Target
+#GroupValue: #DeployValue @go(-)
 
 // #DeployValue — the AUTHORED deploy shape (the disjunct under each substrate arm):
 // the COMPLETE #Deploy minus the structural nested/peer maps + the derived target —
@@ -109,17 +108,11 @@ _reservedNode: "^(candy|pod|vm|k8s|local|android|distro|builder|init|resource|gr
 #K8sArm: close({k8s: #K8sValue, {[!~_reservedNode]: _}})
 #LocalArm: close({local: #LocalValue, {[!~_reservedNode]: _}})
 #AndroidArm: close({android: #AndroidValue, {[!~_reservedNode]: _}})
-#DistroArm: close({distro: #DistroValue, {[!~_reservedNode]: _}})
-#BuilderArm: close({builder: #BuilderValue, {[!~_reservedNode]: _}})
-#InitArm: close({init: #InitValue, {[!~_reservedNode]: _}})
-#ResourceArm: close({resource: #ResourceValue, {[!~_reservedNode]: _}})
 #GroupArm: close({group: #GroupValue, {[!~_reservedNode]: _}})
-#TargetArm: close({target: #TargetValue, {[!~_reservedNode]: _}})
 
 // The unified node — a disjunction of the closed per-kind arms.
 #Node: #CandyArm | #PodArm | #VmArm | #K8sArm | #LocalArm |
-	#AndroidArm | #DistroArm | #BuilderArm | #InitArm | #ResourceArm |
-	#GroupArm | #TargetArm
+	#AndroidArm | #GroupArm
 
 // #NodeDoc — a whole charly.yml document in unified node-form: the reserved DOCUMENT
 // directives plus a flat map of name-first entity nodes. Validating a document

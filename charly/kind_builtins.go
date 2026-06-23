@@ -61,38 +61,19 @@ func candyIsImage(gn *genericNode) bool {
 // UnifiedFile.Sidecars() reads it back into the name-keyed map[string]SidecarDef the
 // deploy/quadlet code consumes.
 
-// The pointer-into-map kinds (decodePtrInto into a typed uf.<X> map).
-type distroKind struct{ builtinKindBase }
-
-func (distroKind) Reserved() string   { return "distro" }
-func (distroKind) CueDefPath() string { return "#Distro" }
-func (distroKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
-	return decodePtrInto(gn, &uf.Distro)
-}
-
-type builderKind struct{ builtinKindBase }
-
-func (builderKind) Reserved() string   { return "builder" }
-func (builderKind) CueDefPath() string { return "#Builder" }
-func (builderKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
-	return decodePtrInto(gn, &uf.Builder)
-}
-
-type initKind struct{ builtinKindBase }
-
-func (initKind) Reserved() string   { return "init" }
-func (initKind) CueDefPath() string { return "#Init" }
-func (initKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
-	return decodePtrInto(gn, &uf.Init)
-}
-
-type resourceKind struct{ builtinKindBase }
-
-func (resourceKind) Reserved() string   { return "resource" }
-func (resourceKind) CueDefPath() string { return "#Resource" }
-func (resourceKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
-	return decodePtrInto(gn, &uf.Resource)
-}
+// The build-vocabulary kinds (distro / builder / init / resource) and the Calamares
+// install `target` kind are no longer core builtin kinds — each was extracted into a
+// dedicated plugin UNIT (plugin_distro.go + plugin/builtins/distro, plugin_builder_kind.go
+// + plugin/builtins/builder, plugin_init.go + plugin/builtins/init, plugin_resource.go +
+// plugin/builtins/resource, plugin_target.go + plugin/builtins/target), mirroring the
+// sidecar/agent/module kind→plugin extractions. Such a node now routes through
+// runPluginKind (Invoke/OpLoad) into uf.PluginKinds["<kind>"], validated against the
+// plugin's served #<Kind>Input schema; the build-vocab accessors UnifiedFile.Distros() /
+// .Builders() / .Inits() / .Resources() read those bodies back into the typed name-keyed
+// maps the generator/format/GPU-arbitration code consumes (target has zero core readers,
+// so — like module/package-group — no accessor). The binary-embedded build vocabulary
+// (authored `distro:`/`builder:`/`init:`/`resource:` nodes in charly/charly.yml) flows
+// through the SAME plugin path and merges root-wins via the generic mergePluginKindsMap.
 
 // The `agent` KIND (the AI-CLI grader catalog) is no longer a core builtin kind — it
 // was extracted into a dedicated plugin UNIT (plugin_agent.go + plugin/builtins/agent),
@@ -119,14 +100,6 @@ func (groupKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
 // plugin/builtins/package-group), the first kind→plugin extraction. A
 // `package-group:` node now routes through runPluginKind (Invoke/OpLoad) into
 // uf.PluginKinds, validated against the plugin's served #PackageGroupInput schema.
-
-type targetKind struct{ builtinKindBase }
-
-func (targetKind) Reserved() string   { return "target" }
-func (targetKind) CueDefPath() string { return "#Target" }
-func (targetKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
-	return decodePtrInto(gn, &uf.Target)
-}
 
 // The `module` KIND (the Calamares installer module) is no longer a core builtin kind
 // — it was extracted into a dedicated plugin UNIT (plugin_module.go +

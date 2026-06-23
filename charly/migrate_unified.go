@@ -224,45 +224,67 @@ func readRepoRootDeployYaml(dir string) (*BundleConfig, error) {
 // Emitters.
 // -----------------------------------------------------------------------------
 
+// migrateEmitDoc is the `unified` migration step's YAML EMISSION shape — the legacy
+// 2026.112-era top-level kind-keyed build vocabulary (distro:/builder:/init:) plus the
+// image + deploy sections, which the LATER migration steps transform forward (the
+// node-form migration eventually folds these into node-form charly.yml). The runtime
+// UnifiedFile no longer carries the build-vocabulary kinds as typed fields — each is a
+// plugin kind stored in PluginKinds (yaml:"-", never marshaled) — so this migration-local
+// doc is the emission vehicle. Its yaml tags are byte-identical to the former UnifiedFile
+// fields, so the produced intermediate is unchanged. Frozen-format by design: a
+// migration's output should pin to the era it produced, decoupled from the live model.
+type migrateEmitDoc struct {
+	Version  string                 `yaml:"version,omitempty"`
+	Import   ImportList             `yaml:"import,omitempty"`
+	Discover DiscoverConfig         `yaml:"discover,omitempty"`
+	Distro   map[string]*DistroDef  `yaml:"distro,omitempty"`
+	Builder  map[string]*BuilderDef `yaml:"builder,omitempty"`
+	Init     map[string]*InitDef    `yaml:"init,omitempty"`
+	Defaults BoxConfig              `yaml:"defaults,omitempty"`
+	Box      map[string]BoxConfig   `yaml:"box,omitempty"`
+	Bundle   map[string]BundleNode  `yaml:"deploy,omitempty"`
+	Provides *ProvidesConfig        `yaml:"provides,omitempty"`
+}
+
 func emitMonolithic(dir string, bs *buildSections, is *imageSections, ds *BundleConfig, dryRun bool) (string, error) {
-	uf := &UnifiedFile{Version: LatestSchemaVersion().String()}
+	doc := &migrateEmitDoc{Version: LatestSchemaVersion().String()}
 	if bs != nil {
-		uf.Distro = bs.Distros
-		uf.Builder = bs.Builders
-		uf.Init = bs.Inits
+		doc.Distro = bs.Distros
+		doc.Builder = bs.Builders
+		doc.Init = bs.Inits
 	}
 	if is != nil {
-		uf.Defaults = is.Defaults
-		uf.Box = is.Images
+		doc.Defaults = is.Defaults
+		doc.Box = is.Images
 	}
 	if ds != nil {
-		uf.Bundle = ds.Bundle
-		uf.Provides = ds.Provides
+		doc.Bundle = ds.Bundle
+		doc.Provides = ds.Provides
 	}
 	// Auto-discover layers/ if present (the legacy dir; later rename steps move
 	// it to candy/ + the manifest to candy.yml).
 	if dirExists(filepath.Join(dir, "layers")) {
-		uf.Discover = DiscoverConfig{{Path: "layers", Recursive: true}}
+		doc.Discover = DiscoverConfig{{Path: "layers", Recursive: true}}
 	}
-	return writeUnifiedFile(filepath.Join(dir, "overthink.yml"), uf, dryRun)
+	return writeMigrateDoc(filepath.Join(dir, "overthink.yml"), doc, dryRun)
 }
 
 func emitWithIncludes(dir string, bs *buildSections, is *imageSections, ds *BundleConfig, dryRun bool) ([]string, error) {
 	var written []string
 
-	root := &UnifiedFile{Version: LatestSchemaVersion().String()}
+	root := &migrateEmitDoc{Version: LatestSchemaVersion().String()}
 	includes := []string{}
 
 	// build.yml → unified plural keys. Write when we have data to migrate; on
 	// re-run (post-migration) reference the existing file if it's on disk.
 	buildPath := filepath.Join(dir, "build.yml")
 	if bs != nil && (len(bs.Distros) > 0 || len(bs.Builders) > 0 || len(bs.Inits) > 0) {
-		buildOut := &UnifiedFile{
+		buildOut := &migrateEmitDoc{
 			Distro:  bs.Distros,
 			Builder: bs.Builders,
 			Init:    bs.Inits,
 		}
-		p, err := writeUnifiedFile(buildPath, buildOut, dryRun)
+		p, err := writeMigrateDoc(buildPath, buildOut, dryRun)
 		if err != nil {
 			return written, err
 		}
@@ -275,11 +297,11 @@ func emitWithIncludes(dir string, bs *buildSections, is *imageSections, ds *Bund
 	// image.yml → images.yml (new name keeps meaning clear; supports forward-migration).
 	imagesPath := filepath.Join(dir, "images.yml")
 	if is != nil && (len(is.Images) > 0 || !isZeroBoxConfig(is.Defaults)) {
-		imgOut := &UnifiedFile{
+		imgOut := &migrateEmitDoc{
 			Defaults: is.Defaults,
 			Box:      is.Images,
 		}
-		p, err := writeUnifiedFile(imagesPath, imgOut, dryRun)
+		p, err := writeMigrateDoc(imagesPath, imgOut, dryRun)
 		if err != nil {
 			return written, err
 		}
@@ -292,11 +314,11 @@ func emitWithIncludes(dir string, bs *buildSections, is *imageSections, ds *Bund
 	// deploy.yml → deployments block.
 	deployPath := filepath.Join(dir, "deploy.yml")
 	if ds != nil && (len(ds.Bundle) > 0 || ds.Provides != nil) {
-		depOut := &UnifiedFile{
+		depOut := &migrateEmitDoc{
 			Bundle:   ds.Bundle,
 			Provides: ds.Provides,
 		}
-		p, err := writeUnifiedFile(deployPath, depOut, dryRun)
+		p, err := writeMigrateDoc(deployPath, depOut, dryRun)
 		if err != nil {
 			return written, err
 		}
@@ -316,7 +338,7 @@ func emitWithIncludes(dir string, bs *buildSections, is *imageSections, ds *Bund
 	if dirExists(filepath.Join(dir, "layers")) {
 		root.Discover = DiscoverConfig{{Path: "layers", Recursive: true}}
 	}
-	p, err := writeUnifiedFile(filepath.Join(dir, "overthink.yml"), root, dryRun)
+	p, err := writeMigrateDoc(filepath.Join(dir, "overthink.yml"), root, dryRun)
 	if err != nil {
 		return written, err
 	}
@@ -447,8 +469,11 @@ func isZeroBoxConfig(ic BoxConfig) bool {
 		len(ic.Distro) == 0 && len(ic.Build) == 0 && len(ic.Candy) == 0
 }
 
-func writeUnifiedFile(path string, uf *UnifiedFile, dryRun bool) (string, error) {
-	data, err := yaml.Marshal(uf)
+// writeMigrateDoc marshals the `unified` step's emission doc to YAML and writes it
+// (the renamed writeUnifiedFile — the migration emits a migrateEmitDoc now that the
+// build-vocabulary kinds left UnifiedFile for the plugin path).
+func writeMigrateDoc(path string, doc *migrateEmitDoc, dryRun bool) (string, error) {
+	data, err := yaml.Marshal(doc)
 	if err != nil {
 		return path, fmt.Errorf("marshaling %s: %w", path, err)
 	}

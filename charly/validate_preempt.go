@@ -101,7 +101,9 @@ func validatePreemptibleUnified(uf *UnifiedFile) error {
 //     on its VM entity — a PCI <hostdev> does not render under the qemu backend,
 //     so auto-allocation would silently fail at create time.
 func validateResourceDefs(uf *UnifiedFile, errs *ValidationError) {
-	for name, rdef := range uf.Resource {
+	// resource is a plugin kind now (plugin_resource.go); decode the name-keyed vocab once.
+	resources := uf.Resources()
+	for name, rdef := range resources {
 		if rdef == nil {
 			continue
 		}
@@ -109,14 +111,14 @@ func validateResourceDefs(uf *UnifiedFile, errs *ValidationError) {
 			errs.Add("resource %q: `gpu.vendor` is required (e.g. \"0x10de\" for NVIDIA) — it is the PCI vendor auto-allocation matches", name)
 		}
 	}
-	if len(uf.Resource) == 0 {
+	if len(resources) == 0 {
 		return
 	}
 	for name, node := range uf.Bundle {
 		if node.Target != "vm" {
 			continue
 		}
-		if _, _, ok := requiredGPUResource(&node, uf.Resource); !ok {
+		if _, _, ok := requiredGPUResource(&node, resources); !ok {
 			continue
 		}
 		vmName := node.From

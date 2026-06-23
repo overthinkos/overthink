@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"gopkg.in/yaml.v3"
 )
 
 // nvidiaReport builds a synthetic VFIOReport with one NVIDIA GPU (vendor
@@ -187,40 +185,45 @@ func TestAutoAllocate_QemuBackendRejected(t *testing.T) {
 	}
 }
 
-// TestResourceKind_Loads verifies the resource: kind parses into
-// UnifiedFile.Resource (root-shape collection-map form, as authored in build.yml).
+// TestResourceKind_Loads verifies a node-form resource: kind loads through the plugin
+// path (runPluginKind → uf.PluginKinds["resource"], validated against the served
+// #ResourceInput) and is read back into the typed map[string]*ResourceDef by the
+// Resources() accessor — resource is a plugin kind now (plugin_resource.go), no longer a
+// typed core map (the former uf.Resource).
 func TestResourceKind_Loads(t *testing.T) {
-	var uf UnifiedFile
-	doc := "resource:\n  nvidia-gpu:\n    gpu:\n      vendor: \"0x10de\"\n  some-lock: {}\n"
-	if err := yaml.Unmarshal([]byte(doc), &uf); err != nil {
-		t.Fatalf("unmarshal resource doc: %v", err)
+	dir := t.TempDir()
+	doc := `version: "` + LatestSchemaVersion().String() + `"
+nvidia-gpu:
+  resource:
+    gpu:
+      vendor: "0x10de"
+some-lock:
+  resource: {}
+`
+	if err := os.WriteFile(filepath.Join(dir, UnifiedFileName), []byte(doc), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	if uf.Resource["nvidia-gpu"] == nil || uf.Resource["nvidia-gpu"].Gpu == nil ||
-		uf.Resource["nvidia-gpu"].Gpu.Vendor != "0x10de" {
-		t.Fatalf("resource nvidia-gpu did not parse: %#v", uf.Resource["nvidia-gpu"])
+	uf, _, err := LoadUnified(dir)
+	if err != nil {
+		t.Fatalf("LoadUnified resource plugin kind: %v", err)
 	}
-	if !uf.Resource["nvidia-gpu"].HasSelector() {
+	resources := uf.Resources()
+	if resources["nvidia-gpu"] == nil || resources["nvidia-gpu"].Gpu == nil ||
+		resources["nvidia-gpu"].Gpu.Vendor != "0x10de" {
+		t.Fatalf("resource nvidia-gpu did not parse: %#v", resources["nvidia-gpu"])
+	}
+	if !resources["nvidia-gpu"].HasSelector() {
 		t.Error("nvidia-gpu should report HasSelector")
 	}
-	if uf.Resource["some-lock"].HasSelector() {
+	if resources["some-lock"] == nil || resources["some-lock"].HasSelector() {
 		t.Error("selector-less some-lock should not report HasSelector")
 	}
 }
 
-func TestMergeResourceMap_RootWins(t *testing.T) {
-	dst := map[string]*ResourceDef{"nvidia-gpu": {Gpu: &GpuSelector{Vendor: "0x10de"}}}
-	src := map[string]*ResourceDef{
-		"nvidia-gpu": {Gpu: &GpuSelector{Vendor: "0xDEAD"}}, // must NOT overwrite root
-		"amd-gpu":    {Gpu: &GpuSelector{Vendor: "0x1002"}}, // new key added
-	}
-	mergeResourceMap(&dst, src)
-	if dst["nvidia-gpu"].Gpu.Vendor != "0x10de" {
-		t.Errorf("root-wins violated: nvidia-gpu vendor = %q", dst["nvidia-gpu"].Gpu.Vendor)
-	}
-	if dst["amd-gpu"] == nil {
-		t.Error("new src key amd-gpu should be added")
-	}
-}
+// (The former TestMergeResourceMap_RootWins was removed with mergeResourceMap: resource
+// is a plugin kind now, so the root-wins name-keyed merge is mergePluginKindsMap —
+// covered by TestMergePluginKindsMap_NameKeyedOverride + the resource arm of
+// TestEmbeddedDefaults_AllVocabKindsOverridable.)
 
 // instance.yml round-trip helper sanity: writeInstanceOverrideHostdevs preserves
 // disposable/lifecycle alongside the auto-written hostdevs.

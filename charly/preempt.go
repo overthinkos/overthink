@@ -1053,7 +1053,7 @@ func sortedHolderKeys(m map[string]BundleNode) []string {
 // deploy nodes — from the project charly.yml. nil when none / unreadable.
 func gatherResources() map[string]*ResourceDef {
 	if uf, ok, err := LoadUnified("."); err == nil && ok && uf != nil {
-		return uf.Resource
+		return uf.Resources()
 	}
 	return nil
 }

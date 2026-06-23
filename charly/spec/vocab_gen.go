@@ -9,16 +9,11 @@ package spec
 // KindWords is the reserved kind keywords (the #Node disjunction discriminators).
 var KindWords = []string{
 	"android",
-	"builder",
 	"candy",
-	"distro",
 	"group",
-	"init",
 	"k8s",
 	"local",
 	"pod",
-	"resource",
-	"target",
 	"vm",
 }
 

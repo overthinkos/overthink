@@ -130,7 +130,7 @@ fedora:
 	if len(uf.Defaults.Build) != 1 || uf.Defaults.Build[0] != "rpm" {
 		t.Errorf("Defaults.Build = %v, want [rpm]", uf.Defaults.Build)
 	}
-	if uf.Distro["fedora"] == nil {
+	if uf.Distros()["fedora"] == nil {
 		t.Error("Distros.fedora missing")
 	}
 	if _, ok := uf.Box["fedora"]; !ok {

@@ -1,8 +1,10 @@
 package main
 
 // SSH local-forward helper built on golang.org/x/crypto/ssh. Used by
-// `charly check spice|libvirt|vnc --uri qemu+ssh://…` auto-tunneling and
-// by the user-facing `charly ssh tunnel` command (charly/ssh.go).
+// `charly check libvirt|vnc --uri qemu+ssh://…` auto-tunneling, by the `spice:`
+// check verb's host-side endpoint pre-resolution (spice_preresolve.go, which forwards
+// a remote VM's SPICE socket/TCP to a local address for the out-of-process plugin),
+// and by the user-facing `charly ssh tunnel` command (charly/ssh.go).
 //
 // Two forward modes:
 //   - ForwardTCP  — local TCP listener on 127.0.0.1:0 → remote TCP

@@ -12,7 +12,7 @@ import (
 // Test plan for the validate_ai_artifacts narrowed-allowlist + freshness-mtime gate
 // behaviour added in 2026-04-27.
 //
-// The seven verb/method pairs in artifactValidatableMethods are the
+// The five verb/method pairs in artifactValidatableMethods are the
 // ONLY ones validate_ai_artifacts touches. ALL other probes always
 // re-run via the harness's own subprocess — the harness remains
 // authoritative for non-state-dependent probes.
@@ -46,13 +46,13 @@ func TestArtifactValidatableMethods_MatchesArtifactProducingMethodSpecs(t *testi
 		"wl":      wlMethods,
 		"vnc":     vncMethods,
 		"libvirt": libvirtMethods,
-		"spice":   spiceMethods,
 		"record":  recordMethods,
 		"dbus":    dbusMethods,
 		"mcp":     mcpMethods,
-		// kube/adb/appium are NOT here — each is an EXTERNAL-CHARLY-VERB
-		// (candy/plugin-kube / candy/plugin-adb / candy/plugin-appium) with no in-proc
-		// method table; its artifact-method validation runs inside the plugin.
+		// kube/adb/appium/spice are NOT here — each is an EXTERNAL-CHARLY-VERB
+		// (candy/plugin-kube / candy/plugin-adb / candy/plugin-appium / candy/plugin-spice)
+		// with no in-proc method table; its artifact-method validation runs inside the
+		// plugin (sdk.RunArtifactValidators).
 	} {
 		for method, spec := range table {
 			if spec.artifact {

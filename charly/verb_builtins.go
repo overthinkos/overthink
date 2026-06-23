@@ -8,14 +8,14 @@ import "context"
 // live-container verb remains here — the dep-shedders kube/adb/appium have all
 // been extracted as external-charly-verbs.
 //
-// cdp/vnc/wl/dbus/mcp/record/spice/libvirt are NOT here — each is a live-container verb
+// cdp/vnc/wl/dbus/mcp/record/libvirt are NOT here — each is a live-container verb
 // extracted into its OWN dedicated file (plugin_verb_<verb>.go) carrying its provider +
 // LiveVerbProvider method contract + its <verb>Methods map + its runX dispatcher,
 // self-registering via registerDedicatedBuiltin (the schema-less dedicated-provider
 // path — no plugin_input, no served schema, since their modifiers stay on the closed
 // base #Op), absent from both builtinProviderInstances and the `providers:` manifest.
-// They dispatch identically through providerRegistry. (kube/adb/appium are extracted as
-// external-charly-verbs.)
+// They dispatch identically through providerRegistry. (kube/adb/appium/spice are
+// extracted as external-charly-verbs.)
 //
 // The do-mode (act) half of the state-provision verbs is a ProvisionActor method
 // per provider (checkrun_act.go) — runProvisionAct resolves + type-asserts it (C1b).
@@ -56,6 +56,15 @@ import "context"
 // keeps its `appium:` discriminator + modifiers on core #Op (authoring unchanged) but is
 // NOT a CheckVerbProvider, so it dispatches via invokeVerbProvider (the else-branch in
 // runOne) once the loader registers its grpcProvider — never through this in-proc set.
+
+// spice is NOT a built-in verb — it is an EXTERNAL-CHARLY-VERB served out-of-process by
+// candy/plugin-spice (the fourth dep-shed: the upstream SPICE wire client library + its
+// cgo opus/portaudio audio transitives left charly's core go.mod). It keeps its `spice:`
+// discriminator + modifiers on core #Op (authoring unchanged) but is NOT a
+// CheckVerbProvider, so it dispatches via invokeVerbProvider (the else-branch in runOne)
+// once the loader registers its grpcProvider — never through this in-proc set. The host
+// pre-resolves the VM's live SPICE endpoint to a dialable address (preresolveSpiceEndpoint)
+// before marshaling, so the plugin needs no go-libvirt.
 
 type summarizeVerb struct{ builtinVerbBase }
 

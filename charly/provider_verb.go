@@ -19,15 +19,18 @@ type CheckVerbProvider interface {
 	RunVerb(ctx context.Context, rt *Runner, op *Op) CheckResult
 }
 
-// LiveVerbProvider is the self-describing form of a LIVE-CONTAINER verb provider
-// (cdp/wl/dbus/vnc/mcp/record/spice/libvirt/kube/adb/appium): beyond running the
-// probe (CheckVerbProvider), it OWNS its method contract — the method allowlist
-// (each method's required-modifier + artifact spec + posArgs dispatch) and the
-// accessor for its method-selector field on *Op. The host's generic verb validation
-// (validateCharlyVerb) and the method-allowlist bijection gate read the contract
-// FROM the provider; the central per-verb validateCharlyVerb switch and the
-// liveVerbDispatch registry are gone (E4). A goss verb (file/port/…) has no method
-// contract and does NOT implement this.
+// LiveVerbProvider is the self-describing form of an IN-PROC LIVE-CONTAINER verb
+// provider (cdp/wl/dbus/vnc/mcp/record/libvirt): beyond running the probe
+// (CheckVerbProvider), it OWNS its method contract — the method allowlist (each
+// method's required-modifier + artifact spec + posArgs dispatch) and the accessor for
+// its method-selector field on *Op. The host's generic verb validation
+// (validateCharlyVerb) and the method-allowlist bijection gate read the contract FROM
+// the provider; the central per-verb validateCharlyVerb switch and the liveVerbDispatch
+// registry are gone (E4). A goss verb (file/port/…) has no method contract and does NOT
+// implement this. The EXTERNAL-CHARLY-VERBS kube/adb/appium/spice are live-container
+// verbs too but are served OUT-OF-PROCESS (candy/plugin-*); they do NOT implement this
+// in-proc contract — their method allowlist + required-modifier checks live in the
+// plugin, and their method-name enum is enforced by CUE on core #Op.
 type LiveVerbProvider interface {
 	CheckVerbProvider
 	// Methods is the verb's method allowlist: method name → its spec (required

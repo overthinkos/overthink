@@ -27,9 +27,12 @@ import (
 // The justification for each entry is "re-running this probe a few
 // seconds later against the same logically-correct state can yield
 // different bytes" — chrome paints at vsync, wayland frame timing,
-// VNC/RFB framebuffer at re-capture moment, libvirt/SPICE display
+// VNC/RFB framebuffer at re-capture moment, libvirt display
 // surfaces, terminal recordings (asciinema cast files become final
-// once `record stop` finalizes them).
+// once `record stop` finalizes them). The `spice` capture methods
+// (screenshot/cursor) left this allowlist with the verb when it became
+// an EXTERNAL-CHARLY-VERB (candy/plugin-spice) — the out-of-process
+// plugin always re-runs and self-validates via sdk.RunArtifactValidators.
 //
 // Anti-deception properties around this allowlist:
 //
@@ -50,8 +53,6 @@ var artifactValidatableMethods = map[string]bool{
 	"wl/screenshot":      true,
 	"vnc/screenshot":     true,
 	"libvirt/screenshot": true,
-	"spice/screenshot":   true,
-	"spice/cursor":       true,
 	"record/stop":        true,
 }
 
@@ -63,9 +64,10 @@ var artifactValidatableMethods = map[string]bool{
 // captures stdout/stderr/exit, and feeds the output through the existing matcher pipeline
 // (Stdout/Stderr/ExitStatus + artifact size via ArtifactMinBytes). The per-verb providers
 // + their <verb>Methods allowlists + run<Verb> dispatchers live in dedicated
-// plugin_verb_<verb>.go files (cdp/vnc/wl/dbus/mcp/record/spice/libvirt); only the
-// dep-shedder kube keeps its method map + dispatcher HERE until its later extraction
-// (adb + appium are already extracted as external-charly-verbs).
+// plugin_verb_<verb>.go files (cdp/vnc/wl/dbus/mcp/record/libvirt). NO dep-shedder
+// remains here — kube/adb/appium/spice are all extracted as external-charly-verbs
+// (candy/plugin-kube, candy/plugin-adb, candy/plugin-appium, candy/plugin-spice),
+// dispatching via invokeVerbProvider, never through this subprocess library.
 //
 // Architectural notes:
 //   - Host-side only: the test runner invokes the host `charly` binary, which
@@ -102,7 +104,7 @@ type methodSpec struct {
 	skipBox bool
 }
 
-// The live-container verbs cdp/vnc/wl/dbus/mcp/record/spice/libvirt each live in their
+// The live-container verbs cdp/vnc/wl/dbus/mcp/record/libvirt each live in their
 // OWN dedicated plugin_verb_<verb>.go file (Phase 1 live-container-verb relocation),
 // carrying that verb's provider + LiveVerbProvider method contract + its <verb>Methods
 // allowlist + its run<Verb> dispatcher. The shared posArgs builder library those verbs
@@ -110,8 +112,9 @@ type methodSpec struct {
 // posAtspi/posClipboard/posOverlayShow/posDbusCall/posMcpCommon/posRecordStart/
 // posKeyNameSplit/posLibvirtQmp/posCommandFields/…), the methodSpec type, and the
 // artifactValidatableMethods allowlist STAY here — reused across every live verb (R3).
-// NO dep-shedder remains here: kube/adb/appium have all been extracted as
-// external-charly-verbs (candy/plugin-kube, candy/plugin-adb, candy/plugin-appium).
+// NO dep-shedder remains here: kube/adb/appium/spice have all been extracted as
+// external-charly-verbs (candy/plugin-kube, candy/plugin-adb, candy/plugin-appium,
+// candy/plugin-spice).
 
 // The kube method allowlist + its positional-arg builders + the shared cluster-arg
 // renderer were removed in the kube → external-plugin dep-shed (the THIRD dep-shedder:
@@ -360,7 +363,7 @@ func posLibvirtQmp(c *Op) []string {
 // plus posApkFlag/posArtifactFlag/posLogcatTail/posWaitForDevice below) were removed in the
 // adb → external-plugin dep-shed: adb no longer dispatches via runCharlyVerb (there is no
 // `charly check adb` subprocess), so its argv builders have no caller. The ADB method
-// dispatch now lives in candy/plugin-adb. (posKeyName stays — it is shared by wl/vnc/spice.)
+// dispatch now lives in candy/plugin-adb. (posKeyName stays — it is shared by wl/vnc.)
 
 // resolveCheckApk resolves a relative committed-APK path (the external adb / appium plugin's
 // install / install-app `apk: ./tests/data/...`) against the AUTHORING candy's
@@ -404,30 +407,37 @@ func (r *Runner) resolveCheckApk(apk, origin string) (string, error) {
 // Verb dispatchers
 // ---------------------------------------------------------------------------
 
-// run<Verb> for cdp/vnc/wl/dbus/mcp/record/spice/libvirt lives in each verb's dedicated
+// run<Verb> for cdp/vnc/wl/dbus/mcp/record/libvirt lives in each verb's dedicated
 // plugin_verb_<verb>.go file (Phase 1 live-container-verb relocation) — alongside its
 // provider + method allowlist. NO dep-shedder dispatcher remains here.
 
-// The kube + adb + appium runCharlyVerb dispatchers were removed in their external-plugin
-// dep-sheds — none dispatches through a `charly check <verb>` subprocess anymore; each
-// grpcProvider (candy/plugin-kube, candy/plugin-adb, candy/plugin-appium) is invoked via
-// invokeVerbProvider with the full #Op.
+// The kube + adb + appium + spice runCharlyVerb dispatchers were removed in their
+// external-plugin dep-sheds — none dispatches through a `charly check <verb>` subprocess
+// anymore; each grpcProvider (candy/plugin-kube, candy/plugin-adb, candy/plugin-appium,
+// candy/plugin-spice) is invoked via invokeVerbProvider with the full #Op.
 
 // runCharlyVerb is the shared dispatch path: skip checks, method lookup,
 // argv building, subprocess exec, matcher pipeline, optional artifact size
 // assertion. Returns the CheckResult directly.
-// vmDisplayDeviceAbsent reports whether a VM-display verb (spice/vnc) failed
-// because the target VM declares no such display device — a legitimate N/A
-// SKIP, NOT a check failure. The cachyos-gpu operator drops SPICE (the
-// passed-through RTX heads ARE the display), so the SHARED
-// cachyos-gpu-desktop-check SPICE checks skip on the operator while still
-// asserting on the disposable check bed (which keeps a virtio/SPICE head) — one
-// shared candy, no operator/bed split (R3). The signal is the VM-target
-// resolver's own "VM <name> has no SPICE graphics device declared in vm.yml"
-// error (charly/vm_target.go), surfaced on the verb subprocess's stderr.
+// noVmDisplayDeviceErr is the substring the VM-target resolver (charly/vm_target.go)
+// emits when a VM declares no graphics device of the requested kind ("VM <name> has
+// no SPICE/VNC graphics device declared in vm.yml") — the signal for a legitimate N/A
+// SKIP, not a check failure. Shared by the in-proc vnc verb (vmDisplayDeviceAbsent
+// below) AND the host-side spice endpoint pre-resolver (preresolveSpiceEndpoint), so
+// the skip wording is anchored to ONE string (R3).
+const noVmDisplayDeviceErr = "graphics device declared in vm.yml"
+
+// vmDisplayDeviceAbsent reports whether the in-proc `vnc` VM-display verb failed
+// because the target VM declares no VNC display device — a legitimate N/A SKIP, NOT a
+// check failure. The cachyos-gpu operator drops the virtio display head (the
+// passed-through RTX heads ARE the display), so a SHARED desktop check skips on the
+// operator while still asserting on the disposable check bed (which keeps a virtio
+// head) — one shared candy, no operator/bed split (R3). `spice` enforces the SAME rule
+// HOST-side now (it is an EXTERNAL-CHARLY-VERB — candy/plugin-spice): the host's
+// preresolveSpiceEndpoint detects the no-SPICE-device resolver error and returns the
+// skip before dispatch, so spice no longer flows through this subprocess path.
 func vmDisplayDeviceAbsent(verb, stderr string) bool {
-	return (verb == "spice" || verb == "vnc") &&
-		strings.Contains(stderr, "graphics device declared in vm.yml")
+	return verb == "vnc" && strings.Contains(stderr, noVmDisplayDeviceErr)
 }
 
 //nolint:gocyclo // verb dispatch with bifurcated artifact validation (ai-artifact vs exec mode) sharing post-validation; cohesive
@@ -822,8 +832,6 @@ func isZeroField(c *Op, name string) bool {
 		return c.Record == ""
 	case "RecordName":
 		return c.RecordName == ""
-	case "Spice":
-		return c.Spice == ""
 	case "Libvirt":
 		return c.Libvirt == ""
 		// The kube required-field cases (Kube/Name/Namespace/Label/Cluster/Manifest/Kind/
@@ -833,6 +841,9 @@ func isZeroField(c *Op, name string) bool {
 		// in-proc verb's required: list names them. The adb required-field cases
 		// (Args/Apk/Property/AppId, plus the "Adb" discriminator) left the SAME way
 		// (candy/plugin-adb), as did the appium required-field cases (candy/plugin-appium).
+		// The spice "Spice" discriminator case left the SAME way (candy/plugin-spice); its
+		// X/Y/Text/KeyName/Artifact modifier cases STAY — shared with the in-proc
+		// vnc/wl/libvirt verbs.
 	}
 	// Unknown field name is a programming error: treat as "not zero" so
 	// authoring errors surface elsewhere instead of spurious skips.

@@ -1,7 +1,8 @@
 package main
 
 // `charly check vnc vm <name> <verb>` — RFB/VNC verbs targeting a VM
-// declared in vm.yml, mirroring the shape of `charly check spice`.
+// declared in vm.yml (the VNC counterpart of the SPICE endpoint resolution in
+// vm_target.go; SPICE itself is now the out-of-process candy/plugin-spice verb).
 //
 // For VMs whose <graphics type='vnc'> listens on a UNIX socket,
 // we dial the socket directly (local) or tunnel it over SSH (remote);

@@ -57,8 +57,10 @@ func (e *CheckFailedError) Error() string {
 //
 // The mode is explicit; there is no autodetect or implicit fallback.
 //
-// Live-container probe verbs (cdp/wl/dbus/vnc/mcp/record/spice/libvirt/k8s)
-// share the same "live" semantic: each requires a running target.
+// Live-container probe verbs (cdp/wl/dbus/vnc/mcp/record/libvirt) share the
+// same "live" semantic: each requires a running target. (kube/adb/appium/spice
+// are declarative check verbs dep-shed to out-of-process plugins — they have NO
+// in-core sub-Cmd here; they dispatch via the provider registry.)
 //
 // Check-run management subcommands (list-ai, list, sync-credential,
 // report, scope, last-tag, note, run-local, self-evaluate) are the
@@ -76,7 +78,6 @@ type CheckCmd struct {
 	Libvirt LibvirtCmd `cmd:"" help:"VM management via libvirt API (info, screenshot, send-key, QMP, guest-agent, snapshots, events)"`
 	Mcp     McpCmd     `cmd:"" help:"Probe MCP servers declared via mcp_provides"`
 	Record  RecordCmd  `cmd:"" help:"Record terminal sessions or desktop video inside running containers"`
-	Spice   SpiceCmd   `cmd:"" help:"VM SPICE display (handshake, inputs, native screenshot)"`
 	Vnc     VncCmd     `cmd:"" help:"Control VNC desktop in running containers"`
 	Wl      WlCmd      `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
 	// `kube` is NOT a CLI subcommand here — the Kubernetes cluster-probe implementation (+ the
@@ -93,6 +94,12 @@ type CheckCmd struct {
 	// tebeka/selenium dependency) was dep-shed into the out-of-tree candy/plugin-appium
 	// module. The `appium:` DECLARATIVE check verb dispatches to that external plugin via
 	// the provider registry (invokeVerbProvider); there is no host `charly check appium`.
+	// `spice` is NOT a CLI subcommand here — the SPICE-wire implementation (+ the upstream
+	// SPICE wire client library and its cgo opus/portaudio audio transitives) was dep-shed
+	// into the out-of-tree candy/plugin-spice module. The `spice:` DECLARATIVE check verb
+	// dispatches to that external plugin via the provider registry (invokeVerbProvider,
+	// after the host pre-resolves the VM's live SPICE endpoint to a dialable address);
+	// there is no host `charly check spice`.
 
 	// Check-run management (was `charly check *`)
 	ListAgent CheckListAgentCmd `cmd:"" name:"list-agent" help:"List configured agents from check.yml"`
@@ -689,7 +696,13 @@ func attachCheckRunnerContext(runner *Runner, box, instance string, distros []st
 	// scan feeds BOTH consumers (R3). A box that vendors all its candies via @github
 	// (every box/<distro>) has no project-local Candy map, so the plugin set MUST
 	// come from this scan — never from LoadUnified.
-	candyMap, scanErr := ScanAllCandyWithConfig(dir, cfg)
+	//
+	// ExtraCandyRefs adds the BED's own `add_candy:` candies to the collection: the
+	// image-closure walk never reaches them, so a bed that add_candy's a host-side
+	// PLUGIN candy (e.g. plugin-spice for the `spice:` check verb authored INLINE in
+	// the bed plan, with no candy in the image closure requiring it) would otherwise
+	// leave the plugin unloaded and the `spice:` step failing as an unknown verb.
+	candyMap, scanErr := ScanAllCandyWithConfigOpts(dir, cfg, ResolveOpts{ExtraCandyRefs: deployAddCandyRefs(dir, box)})
 	if scanErr != nil {
 		runner.CandyScanErr = fmt.Errorf("scanning candy source dirs: %w", scanErr)
 		return
@@ -703,6 +716,27 @@ func attachCheckRunnerContext(runner *Runner, box, instance string, distros []st
 	if err := loadProjectPlugins(context.Background(), candyMap); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: plugin load: %v\n", err)
 	}
+}
+
+// deployAddCandyRefs returns the `add_candy:` refs declared on the deploy node named
+// `name` in the project at `dir` (best-effort: nil on any load failure or unknown
+// name). The project candy scan (ScanAllCandyWithConfig) only collects IMAGE-closure
+// candies (CollectRemoteRefs walks base/builder/require edges); a deploy's add_candy
+// candies are NOT in that set, so the check runner (attachCheckRunnerContext) and the
+// deploy path (BundleAddCmd) feed them to ScanAllCandyWithConfigOpts' ExtraCandyRefs
+// to build + connect their out-of-process plugins (R3 — one helper, both paths).
+// resolveTreeRoot is the SAME project-bundle loader the deploy walker uses, so the
+// add_candy child nodes are already folded into BundleNode.AddCandy.
+func deployAddCandyRefs(dir, name string) []string {
+	tree, err := resolveTreeRoot(dir)
+	if err != nil || tree == nil {
+		return nil
+	}
+	node, ok := tree[name]
+	if !ok {
+		return nil
+	}
+	return node.AddCandy
 }
 
 // isLocalTarget returns true when c.Box names a `target: local` deployment

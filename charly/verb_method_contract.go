@@ -8,7 +8,7 @@ package main
 // method contract here anymore — the dep-shedders kube/adb/appium have all been extracted.
 // The cross-field required-modifier/artifact rules now live on each verb's plugin.
 //
-// cdp/vnc/wl/dbus/mcp/record/spice/libvirt have already been relocated: each owns its
+// cdp/vnc/wl/dbus/mcp/record/libvirt have already been relocated: each owns its
 // Methods()/MethodField() contract alongside its provider + <verb>Methods map in its
 // dedicated plugin_verb_<verb>.go file.
 
@@ -28,3 +28,9 @@ package main
 // (candy/plugin-appium). Its #AppiumMethod method-name allowlist is enforced by the CUE
 // enum on core #Op; its cross-field required-modifier checks run inside the plugin at
 // dispatch (the in-proc LiveVerbProvider validateCharlyVerb path no longer applies).
+
+// spice has NO in-proc method contract here — it is an EXTERNAL-CHARLY-VERB
+// (candy/plugin-spice). Its #SpiceMethod method-name allowlist is enforced by the CUE enum
+// on core #Op; its cross-field required-modifier checks run inside the plugin at dispatch
+// (methods.go's checkRequiredModifiers) — the in-proc LiveVerbProvider validateCharlyVerb
+// path no longer applies.

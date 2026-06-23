@@ -172,12 +172,13 @@ func writeConcat(dir, out, pkg string) error {
 // its method allowlist (an exact mirror of the Go maps in checkrun_charly_verbs.go /
 // the dedicated plugin_verb_<verb>.go files — now derived from the SAME CUE source),
 // projected as spec.LiveVerbMethods + gated against each verb's in-proc LiveVerbProvider
-// by checkMethodAllowlists. `kube`, `adb`, and `appium` are NOT here: each is an
+// by checkMethodAllowlists. `kube`, `adb`, `appium`, and `spice` are NOT here: each is an
 // EXTERNAL-CHARLY-VERB served out-of-process (candy/plugin-kube, candy/plugin-adb,
-// candy/plugin-appium — no in-proc LiveVerbProvider to gate), so each left this list with
-// #OpVerb/VerbCatalog. Their #KubeMethod / #AdbMethod / #AppiumMethod enums stay in the
-// schema (they still validate `kube: <method>` / `adb: <method>` / `appium: <method>` on
-// core #Op) but are no longer LiveVerbMethods entries.
+// candy/plugin-appium, candy/plugin-spice — no in-proc LiveVerbProvider to gate), so each
+// left this list with #OpVerb/VerbCatalog. Their #KubeMethod / #AdbMethod / #AppiumMethod /
+// #SpiceMethod enums stay in the schema (they still validate `kube: <method>` /
+// `adb: <method>` / `appium: <method>` / `spice: <method>` on core #Op) but are no longer
+// LiveVerbMethods entries.
 var liveVerbs = []struct{ verb, def string }{
 	{"cdp", "#CdpMethod"},
 	{"wl", "#WlMethod"},
@@ -185,7 +186,6 @@ var liveVerbs = []struct{ verb, def string }{
 	{"vnc", "#VncMethod"},
 	{"mcp", "#McpMethod"},
 	{"record", "#RecordMethod"},
-	{"spice", "#SpiceMethod"},
 	{"libvirt", "#LibvirtMethod"},
 }
 

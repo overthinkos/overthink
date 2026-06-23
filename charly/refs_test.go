@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -325,6 +326,52 @@ func TestCollectRemoteRefs(t *testing.T) {
 	}
 	if found["github.com/myorg/service-layers"] != "v2.0.0" {
 		t.Errorf("service-layers version = %q, want %q", found["github.com/myorg/service-layers"], "v2.0.0")
+	}
+}
+
+// TestCollectRemoteRefsOptsExtraCandyRefs proves a deploy's add_candy: candy ref
+// (passed via ResolveOpts.ExtraCandyRefs) is collected EVEN WHEN no image references
+// it — the regression guard for the bed-composition enabler: box/arch's check-arch-vm
+// add_candy's the out-of-tree plugin-spice candy with NO candy in the image closure
+// requiring it, so without ExtraCandyRefs the plugin would never enter the candy scan
+// and the bed's `spice:` checks would fail as an unknown verb. A PINNED ref is used so
+// no default-branch git query (network) runs.
+func TestCollectRemoteRefsOptsExtraCandyRefs(t *testing.T) {
+	// An image config that references NOTHING remote — proves the add_candy ref is
+	// collected via ExtraCandyRefs, not via any image-closure edge.
+	cfg := &Config{Box: map[string]BoxConfig{"arch": {Candy: []string{"pixi"}}}}
+	layers := map[string]*Candy{"pixi": {Name: "pixi", Require: toCandyRefs([]string{})}}
+
+	pluginRef := "@github.com/overthinkos/overthink/candy/plugin-spice:v2026.174.0425"
+	opts := ResolveOpts{ExtraCandyRefs: []string{pluginRef}}
+	downloads, err := CollectRemoteRefsOpts(cfg, layers, opts)
+	if err != nil {
+		t.Fatalf("CollectRemoteRefsOpts() error = %v", err)
+	}
+	var got *RemoteDownload
+	for i := range downloads {
+		if downloads[i].RepoPath == "github.com/overthinkos/overthink" {
+			got = &downloads[i]
+		}
+	}
+	if got == nil {
+		t.Fatalf("ExtraCandyRefs add_candy plugin ref was NOT collected; downloads=%+v", downloads)
+	}
+	if got.Version != "v2026.174.0425" {
+		t.Errorf("plugin-spice download version = %q, want %q", got.Version, "v2026.174.0425")
+	}
+	if !slices.Contains(got.Refs, BareRef(pluginRef)) {
+		t.Errorf("plugin-spice download refs = %v, want to contain %q", got.Refs, BareRef(pluginRef))
+	}
+
+	// A LOCAL ExtraCandyRef is a no-op (already covered by ScanCandy): collecting it
+	// adds no remote download.
+	localOnly, err := CollectRemoteRefsOpts(cfg, layers, ResolveOpts{ExtraCandyRefs: []string{"plugin-spice"}})
+	if err != nil {
+		t.Fatalf("CollectRemoteRefsOpts(local extra) error = %v", err)
+	}
+	if len(localOnly) != 0 {
+		t.Errorf("local ExtraCandyRef produced %d downloads, want 0", len(localOnly))
 	}
 }
 

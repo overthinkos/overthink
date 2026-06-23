@@ -201,6 +201,16 @@ type ResolveOpts struct {
 	// namespaced image can be an on-demand build target, not only a transitive
 	// base. Bare names are ignored here (they resolve through the root loop).
 	RequestedBoxes []string
+	// ExtraCandyRefs are candy refs to collect IN ADDITION to the image/builder/
+	// kind:local-template closure — specifically a DEPLOY's `add_candy:` candies.
+	// The image-closure walk (collectBox) never reaches them (a deploy's add_candy
+	// is not a base/builder/require edge of any image), so a bed that add_candy's a
+	// host-side PLUGIN candy (e.g. plugin-spice for the `spice:` check verb) must
+	// pass its add_candy refs here, or the plugin never enters the candy scan and
+	// loadProjectPlugins can't build/connect it. Remote refs are fetched through the
+	// SAME pipeline (per-entity-version arbitration + SourceDir population); a local
+	// add_candy ref is already covered by ScanCandy and is a no-op here.
+	ExtraCandyRefs []string
 }
 
 // shouldIncludeDisabled reports whether name's disabled gate should be

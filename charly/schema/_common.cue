@@ -16,7 +16,7 @@
 // VerbCatalog entry (the registry bijection gate proves it). Keep in lockstep with
 // the `--- verb discriminators ---` group in #Op.
 #OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" |
-	"cdp" | "wl" | "dbus" | "vnc" | "mcp" | "record" | "spice" |
+	"cdp" | "wl" | "dbus" | "vnc" | "mcp" | "record" |
 	"libvirt" | "summarize" | "kill" | "plugin") @go(-)
 
 // ---------------------------------------------------------------------------
@@ -60,6 +60,18 @@
 	vnc?:            #VncMethod
 	mcp?:            #McpMethod
 	record?:         #RecordMethod
+	// `spice` is an EXTERNAL-CHARLY-VERB: its SPICE-wire implementation (+ the upstream
+	// SPICE wire client library and its cgo opus/portaudio audio transitives, vendored
+	// under candy/plugin-spice/third_party) lives in the out-of-tree candy/plugin-spice
+	// module, served OUT-OF-PROCESS. Like cdp/vnc (and unlike file/package/service/command, which
+	// left #Op entirely, re-authored as `plugin: <verb>`), spice KEEPS its `spice:`
+	// discriminator + every modifier on this closed #Op — authoring is unchanged
+	// (`spice: status`, not `plugin: spice`). It therefore left
+	// #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc CheckVerbProvider to gate) BUT keeps
+	// this field + #SpiceMethod here, so `spice: status` still validates against the
+	// method enum and VerbsSet still classifies the op (then dispatch resolves the
+	// registered external provider, after the host pre-resolves the VM's live SPICE
+	// endpoint to a dialable address — the plugin needs no go-libvirt).
 	spice?:          #SpiceMethod
 	libvirt?:        #LibvirtMethod
 	// `kube` is an EXTERNAL-CHARLY-VERB: its implementation (+ the heavy

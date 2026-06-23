@@ -600,10 +600,12 @@ getprop`, `appium: click`, …):
   screenshot.
 - `charly check mcp` — Model Context Protocol clients (list-tools,
   list-resources, read-resource, call-tool).
-- `charly check spice` — SPICE display protocol with guest-agent socket.
 - `charly check libvirt` — libvirt API (VM info, screenshot, send-key,
   QMP, snapshots, event stream).
 - `charly check record` — terminal asciinema or desktop ffmpeg.
+- `spice:` — SPICE wire-level display-protocol declarative check verb
+  (status, screenshot, cursor, click, mouse, type, key) — out-of-process
+  plugin (`candy/plugin-spice`), no host CLI subcommand. VM-only.
 - `kube:` — Kubernetes cluster-probe declarative check verb (nodes, pods,
   ingress, wait-ready, storageclass, addons, apply/delete, raw resource
   GETs) — out-of-process plugin (`candy/plugin-kube`), no host CLI

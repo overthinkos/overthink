@@ -317,7 +317,6 @@ var VerbCatalog = map[string]VerbSpec{
 	"vnc":     {ctxRuntimeOnly, DoAssert, false},
 	"mcp":     {ctxRuntimeOnly, DoAssert, false},
 	"record":  {ctxRuntimeOnly, DoAssert, false},
-	"spice":   {ctxRuntimeOnly, DoAssert, false},
 	"libvirt": {ctxRuntimeOnly, DoAssert, false},
 	// `kube` is NOT here — it is an EXTERNAL-CHARLY-VERB served out-of-process by
 	// candy/plugin-kube. It left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc
@@ -337,6 +336,13 @@ var VerbCatalog = map[string]VerbSpec{
 	// CheckVerbProvider) but keeps its `appium:` discriminator + modifiers + the
 	// #AppiumMethod enum on core #Op (authoring unchanged); the registered external
 	// provider resolves at dispatch. Its runtime-context legality now lives on the
+	// authored `context:` + the plugin's own box-mode skip, not this table.
+	// `spice` is NOT here — it is an EXTERNAL-CHARLY-VERB served out-of-process by
+	// candy/plugin-spice. It left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc
+	// CheckVerbProvider) but keeps its `spice:` discriminator + modifiers + the
+	// #SpiceMethod enum on core #Op (authoring unchanged); the registered external
+	// provider resolves at dispatch (the host pre-resolves the VM's live SPICE endpoint
+	// to a dialable address first). Its runtime-context legality now lives on the
 	// authored `context:` + the plugin's own box-mode skip, not this table.
 
 	// meta.

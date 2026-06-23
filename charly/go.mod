@@ -4,7 +4,6 @@ go 1.26.0
 
 require (
 	cuelang.org/go v0.16.1
-	github.com/Shells-com/spice v0.0.6
 	github.com/alecthomas/kong v1.14.0
 	github.com/digitalocean/go-libvirt v0.0.0-20260217163227-273eaa321819
 	github.com/godbus/dbus/v5 v5.2.2
@@ -37,10 +36,8 @@ require (
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/gordonklaus/portaudio v0.0.0-20200911161147-bb74aa485641 // indirect
 	github.com/hashicorp/go-hclog v1.6.3 // indirect
 	github.com/hashicorp/yamux v0.1.2 // indirect
-	github.com/hraban/opus v0.0.0-20210415224706-ab1467d63813 // indirect
 	github.com/klauspost/compress v1.18.1 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.17 // indirect
@@ -62,5 +59,3 @@ require (
 	golang.org/x/text v0.35.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231106174013-bbf56f31fb17 // indirect
 )
-
-replace github.com/Shells-com/spice => ./third_party/spice

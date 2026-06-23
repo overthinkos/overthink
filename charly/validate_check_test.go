@@ -173,25 +173,15 @@ func TestValidateOps_RecordClean(t *testing.T) {
 	}
 }
 
-func TestValidateOps_SpiceRejectedInBuildContext(t *testing.T) {
-	layers := map[string]*Candy{
-		"vm": opsCandy("vm", Op{Spice: "status", Context: []string{"build"}}),
-	}
-	got := runValidateOps(t, &Config{Box: map[string]BoxConfig{}}, layers)
-	if !strings.Contains(got, "spice:") || !strings.Contains(got, "runtime-context only") {
-		t.Errorf("expected runtime-context-only error for spice: %s", got)
-	}
-}
-
-func TestValidateOps_SpiceTypeRequiresText(t *testing.T) {
-	layers := map[string]*Candy{
-		"vm": opsCandy("vm", Op{Spice: "type"}),
-	}
-	got := runValidateOps(t, &Config{Box: map[string]BoxConfig{}}, layers)
-	if !strings.Contains(got, "spice") || !strings.Contains(got, "text") {
-		t.Errorf("expected spice: type text-required error: %s", got)
-	}
-}
+// The former TestValidateOps_SpiceRejectedInBuildContext and
+// TestValidateOps_SpiceTypeRequiresText were DELETED when spice became an
+// EXTERNAL-CHARLY-VERB (candy/plugin-spice): spice left VerbCatalog, so the host
+// validateOps no longer enforces its runtime-only context (legality now rides the
+// authored `context:` + the plugin's own box-mode skip) and its required-modifier
+// checks (`spice: type` needs text) moved into the plugin at dispatch
+// (methods.go's checkRequiredModifiers). The method-name enum is still enforced
+// declaratively by CUE (#SpiceMethod) — see cue_tighten_test.go's "candy check spice
+// bogus method rejected". libvirt (still in-core) keeps its rejection tests below.
 
 func TestValidateOps_SpiceClean(t *testing.T) {
 	layers := map[string]*Candy{

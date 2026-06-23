@@ -597,6 +597,18 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Candy, opts ResolveOp
 		}
 	}
 
+	// A deploy's add_candy: candies (opts.ExtraCandyRefs) are NOT reachable from the
+	// image-closure walk above (add_candy is not a base/builder/require edge), so a
+	// bed that add_candy's a host-side PLUGIN candy must collect them here — else the
+	// plugin never enters the scan and loadProjectPlugins can't build it. A local ref
+	// is a no-op (addRef gates on IsRemoteCandyRef; ScanCandy already has it); a
+	// remote ref joins the same fetch + per-entity-version arbitration as any other.
+	for _, ref := range opts.ExtraCandyRefs {
+		if err := addRef(ref, "deploy add_candy"); err != nil {
+			return nil, err
+		}
+	}
+
 	// Emit one RemoteDownload per distinct (repo, git-tag). A bare ref pinned at
 	// two git tags yields two downloads (both fetched); the post-fetch
 	// arbitration keeps one materialization per bare ref.

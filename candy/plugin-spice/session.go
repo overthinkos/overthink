@@ -1,19 +1,24 @@
 package main
 
-// Thin wrapper over github.com/Shells-com/spice for `charly check spice`.
+// Thin wrapper over github.com/Shells-com/spice — ported verbatim from charly's
+// former in-tree charly/spice_session.go, MINUS the SSH-tunnel field. The host
+// pre-resolves the VM's live SPICE endpoint (go-libvirt, vm_target.go) and opens any
+// qemu+ssh:// side tunnel itself, then hands this plugin a plain DIALABLE address
+// (TCP host:port or a forwarded UNIX socket) via the check env — so the connection
+// here is unconditionally local and needs no libvirt / SSH machinery.
 //
 // The upstream library needs:
-//   - A Connector (we dial a TCP connection to the resolved SPICE host:port).
+//   - A Connector (we dial the resolved SPICE endpoint).
 //   - A Driver (we capture display + cursor updates into fields we expose).
-//   - A password (empty for AUTH_NONE).
+//   - A password (empty for AUTH_NONE; non-empty for SPICE_TICKET).
 //
-// It spins up goroutines for each SPICE channel (main, display, inputs,
-// cursor, playback, record, webdav). Our Driver is a stub that doesn't
-// render — it just stashes the latest framebuffer into a field the
-// CLI can read back.
+// It spins up goroutines for each SPICE channel (main, display, inputs, cursor,
+// playback, record, webdav). Our Driver is a stub that doesn't render — it just
+// stashes the latest framebuffer/cursor into mutex-guarded fields the methods read
+// back. Audio channels are present but never exercised; the binary is built WITHOUT
+// `-tags spice_audio`, so the cgo opus/portaudio decoders are not linked.
 
 import (
-	"context"
 	"fmt"
 	"image"
 	"net"
@@ -23,11 +28,10 @@ import (
 	spice "github.com/Shells-com/spice"
 )
 
-// spiceConnector satisfies spice.Connector by dialing a fixed SPICE
-// endpoint. The endpoint can be a TCP host:port (classic) or a UNIX
-// socket path (modern default for charly-managed VMs after the hard
-// cutover — see vm.yml arch). Compress is passed through
-// as a hint to the library.
+// spiceConnector satisfies spice.Connector by dialing a fixed SPICE endpoint. The
+// endpoint can be a TCP host:port (classic) or a UNIX socket path (the modern
+// default for charly-managed VMs after the socket-listen cutover). Compress is
+// passed through as a hint to the library.
 type spiceConnector struct {
 	network string // "tcp" | "unix"
 	addr    string
@@ -38,8 +42,8 @@ func (c *spiceConnector) SpiceConnect(compress bool) (net.Conn, error) {
 	return net.DialTimeout(c.network, c.addr, 10*time.Second)
 }
 
-// spiceDriver captures display/cursor updates into concurrent-safe
-// fields. The CLI reads them back for screenshot/cursor verbs.
+// spiceDriver captures display/cursor updates into concurrent-safe fields. The
+// methods read them back for the screenshot/cursor verbs.
 type spiceDriver struct {
 	mu         sync.Mutex
 	displayImg image.Image
@@ -64,7 +68,7 @@ func (d *spiceDriver) DisplayInit(img image.Image) {
 }
 
 func (d *spiceDriver) DisplayRefresh() {
-	// No-op: we snapshot the image on demand via Screenshot().
+	// No-op: we snapshot the image on demand via the screenshot method.
 }
 
 func (d *spiceDriver) SetEventsTarget(in *spice.ChInputs) {
@@ -87,8 +91,7 @@ func (d *spiceDriver) SetCursor(img image.Image, x, y uint16) {
 	d.cursorY = y
 }
 
-// Clipboard — minimal stubs. The agent-channel verbs use the main
-// channel's clipboard methods directly via d.mainRef.
+// Clipboard — minimal stubs. The CLI never wraps the agent-channel clipboard ops.
 func (d *spiceDriver) ClipboardGrabbed(sel spice.SpiceClipboardSelection, types []spice.SpiceClipboardFormat) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -103,23 +106,16 @@ func (d *spiceDriver) ClipboardRelease(sel spice.SpiceClipboardSelection) {
 	delete(d.clipWanted, sel)
 }
 
-// SpiceSession holds an open SPICE connection and provides the
-// high-level verbs the CLI uses. When the session was established
-// through an auto-opened SSH tunnel, `tunnel` is non-nil and Close()
-// tears it down.
+// SpiceSession holds an open SPICE connection and provides the high-level verbs the
+// methods use.
 type SpiceSession struct {
 	client *spice.Client
 	driver *spiceDriver
 	addr   string
-
-	// tunnel is the optional SSH tunnel under the connection. nil
-	// for local sessions (no forward needed).
-	tunnel *SSHTunnel
 }
 
-// DialSpiceTCP opens a SPICE connection over TCP. Password empty =
-// AUTH_NONE; non-empty = SPICE_TICKET. Blocks on main-channel
-// handshake + auth.
+// DialSpiceTCP opens a SPICE connection over TCP. Password empty = AUTH_NONE;
+// non-empty = SPICE_TICKET. Blocks on the main-channel handshake + auth.
 func DialSpiceTCP(host string, port int, passwd string) (*SpiceSession, error) {
 	addr := fmt.Sprintf("%s:%d", host, port)
 	conn := &spiceConnector{network: "tcp", addr: addr}
@@ -131,9 +127,8 @@ func DialSpiceTCP(host string, port int, passwd string) (*SpiceSession, error) {
 	return &SpiceSession{client: cli, driver: drv, addr: addr}, nil
 }
 
-// DialSpiceUnix opens a SPICE connection over a UNIX socket. This is
-// the default for charly-managed VMs after the socket-listen cutover;
-// virt-manager and remote-viewer auto-forward these over qemu+ssh://.
+// DialSpiceUnix opens a SPICE connection over a UNIX socket — the default for
+// charly-managed VMs after the socket-listen cutover.
 func DialSpiceUnix(path, passwd string) (*SpiceSession, error) {
 	conn := &spiceConnector{network: "unix", addr: path}
 	drv := newSpiceDriver()
@@ -144,20 +139,7 @@ func DialSpiceUnix(path, passwd string) (*SpiceSession, error) {
 	return &SpiceSession{client: cli, driver: drv, addr: "unix://" + path}, nil
 }
 
-// Close tears down any auto-opened SSH tunnel. Shells-com/spice has
-// no explicit Close for its channels; they rely on GC.
-func (s *SpiceSession) Close() error {
-	if s == nil {
-		return nil
-	}
-	if s.tunnel != nil {
-		return s.tunnel.Close()
-	}
-	return nil
-}
-
-// Display returns the latest framebuffer image, or nil if none
-// received yet.
+// Display returns the latest framebuffer image, or nil if none received yet.
 func (s *SpiceSession) Display() image.Image {
 	s.driver.mu.Lock()
 	defer s.driver.mu.Unlock()
@@ -171,37 +153,44 @@ func (s *SpiceSession) Cursor() (image.Image, uint16, uint16) {
 	return s.driver.cursorImg, s.driver.cursorX, s.driver.cursorY
 }
 
-// Inputs returns the inputs channel handle (may be nil if not yet set
-// up). Methods on ChInputs: OnKeyDown, OnKeyUp, MouseDown, MouseUp,
-// MousePosition.
+// Inputs returns the inputs channel handle (may be nil if not yet set up).
 func (s *SpiceSession) Inputs() *spice.ChInputs {
 	s.driver.mu.Lock()
 	defer s.driver.mu.Unlock()
 	return s.driver.inputsRef
 }
 
-// WaitForDisplay blocks (with timeout) until a framebuffer has been
-// delivered. Useful to let screenshots wait for the first render
-// after connect.
+// pollUntil polls fn every 100ms until it returns true or the timeout elapses.
+// The Shells-com/spice library populates the display/inputs fields ASYNCHRONOUSLY
+// from per-channel goroutines with no readiness callback, so a bounded poll is the
+// only synchronization the upstream API exposes — this is readiness polling on an
+// async channel, not a flake-hiding retry (it mirrors the pollUntil the former
+// in-tree session used).
+func pollUntil(fn func() bool, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if fn() {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+// WaitForDisplay blocks (with timeout) until a framebuffer has been delivered.
 func (s *SpiceSession) WaitForDisplay(timeout time.Duration) error {
-	// CALLER cap (poll.go WaitCapped, NoProgress disabled): the caller's timeout
-	// is a per-call contract (a screenshot waits a few seconds), preserved exactly.
-	cfg := loadedReadiness().WaitCapped("spice-display", PollLocal, timeout)
-	if err := pollUntil(context.Background(), cfg, func(context.Context) (bool, float64, error) {
-		return s.Display() != nil, 0, nil
-	}); err != nil {
-		return fmt.Errorf("no display frame within %s: %w", timeout, err)
+	if !pollUntil(func() bool { return s.Display() != nil }, timeout) {
+		return fmt.Errorf("no display frame within %s", timeout)
 	}
 	return nil
 }
 
 // WaitForInputs blocks until the inputs channel is ready.
 func (s *SpiceSession) WaitForInputs(timeout time.Duration) error {
-	cfg := loadedReadiness().WaitCapped("spice-inputs", PollLocal, timeout)
-	if err := pollUntil(context.Background(), cfg, func(context.Context) (bool, float64, error) {
-		return s.Inputs() != nil, 0, nil
-	}); err != nil {
-		return fmt.Errorf("inputs channel not ready within %s: %w", timeout, err)
+	if !pollUntil(func() bool { return s.Inputs() != nil }, timeout) {
+		return fmt.Errorf("inputs channel not ready within %s", timeout)
 	}
 	return nil
 }

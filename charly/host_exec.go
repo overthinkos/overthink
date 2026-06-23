@@ -27,7 +27,7 @@ import (
 //     installation and must not be re-execed.
 //
 // `cmdPath` is the space-separated path reported by Kong (e.g.
-// "settings get", "test spice status").
+// "settings get", "check libvirt status").
 func shouldReexecForHost(cli *CLI, cmdPath string) bool {
 	if cli.Host == "" {
 		return false

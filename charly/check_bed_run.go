@@ -492,8 +492,8 @@ func runCheckBed(exe, name string, node BundleNode, opts bedRunOpts) (*bedRunRes
 	switch {
 	case isVM:
 		// VM beds need libvirt's user-session daemon for the check probes
-		// (`charly check libvirt …`, `charly check spice …`) AND for the
-		// `backend: libvirt` resolver. Best-effort start before any VM step;
+		// (`charly check libvirt …`, and the `spice:` verb's host-side endpoint
+		// resolution) AND for the `backend: libvirt` resolver. Best-effort start before any VM step;
 		// the downstream gate surfaces a missing daemon as a clear error.
 		startLibvirtUserSession()
 		// Best-effort destroy first to clear any lingering libvirt domain

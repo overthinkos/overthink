@@ -25,6 +25,11 @@ type CheckEnv struct {
 	Distros       []string `json:"distros"`
 	Venue         string   `json:"venue"`      // r.Exec.Venue()
 	VenueKind     string   `json:"venue_kind"` // r.Exec.Kind()
+	// Spice carries the host-resolved, dialable SPICE endpoint for a `spice:` verb
+	// (the out-of-process candy/plugin-spice provider owns no go-libvirt). nil for
+	// every non-spice verb and for a spice op with no resolved VM endpoint. Set by
+	// invokeVerbProvider from preresolveSpiceEndpoint (spice_preresolve.go).
+	Spice *SpiceEnv `json:"spice,omitempty"`
 }
 
 func runModeName(m RunMode) string {
@@ -176,13 +181,24 @@ func (r *Runner) invokeVerbProvider(ctx context.Context, prov Provider, word str
 	// (findK8sSpec) to map a ClusterProfile name to a context. Copy-on-write, like the
 	// apk path above; a no-op for every non-kube verb.
 	c = preresolveKubeCluster(c)
+	// Pre-resolve a `spice:` op's VM (r.Box) to a dialable SPICE endpoint host-side — an
+	// out-of-process spice verb owns no go-libvirt. A no-op for every non-spice verb;
+	// for a spice op it may short-circuit with a SKIP (no SPICE device) / FAIL
+	// (resolution error). The cleanup tears down any opened SSH tunnel AFTER Invoke.
+	spiceEnv, spiceCleanup, spiceEarly := r.preresolveSpiceEndpoint(c)
+	defer spiceCleanup()
+	if spiceEarly != nil {
+		return *spiceEarly
+	}
 	params, err := marshalJSON(c)
 	if err != nil {
 		res.Status = TestFail
 		res.Message = fmt.Sprintf("verb %q: marshal op: %v", word, err)
 		return res
 	}
-	env, err := marshalJSON(snapshotCheckEnv(r, c))
+	ce := snapshotCheckEnv(r, c)
+	ce.Spice = spiceEnv
+	env, err := marshalJSON(ce)
 	if err != nil {
 		res.Status = TestFail
 		res.Message = fmt.Sprintf("verb %q: marshal env: %v", word, err)

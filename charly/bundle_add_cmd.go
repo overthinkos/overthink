@@ -123,8 +123,14 @@ func (c *BundleAddCmd) Run() error {
 	// loads its composed external plugins (R3). A build/connect failure is a warning; the
 	// dispatch then fails loudly via invokeAdbPlugin's "plugin not loaded" / runPluginVerb's
 	// unresolved-verb path rather than silently mis-deploying.
+	// ExtraCandyRefs adds THIS deploy's add_candy: candies (the node's `add_candy:` +
+	// any CLI --add-candy) to the collection: the image-closure scan never reaches
+	// them, so a deploy that add_candy's an out-of-tree plugin candy (e.g. plugin-spice)
+	// would otherwise leave its grpcProvider unloaded. The SAME deployAddCandyRefs the
+	// check runner uses (R3).
 	if cfg, cerr := LoadConfig(dir); cerr == nil {
-		if candyMap, scanErr := ScanAllCandyWithConfig(dir, cfg); scanErr == nil && candyMap != nil {
+		extra := append(append([]string(nil), c.AddCandy...), deployAddCandyRefs(dir, c.Name)...)
+		if candyMap, scanErr := ScanAllCandyWithConfigOpts(dir, cfg, ResolveOpts{ExtraCandyRefs: extra}); scanErr == nil && candyMap != nil {
 			if perr := loadProjectPlugins(context.Background(), candyMap); perr != nil {
 				fmt.Fprintf(os.Stderr, "warning: plugin load: %v\n", perr)
 			}

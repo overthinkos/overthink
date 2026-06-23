@@ -256,7 +256,6 @@ var OpVerbs = []string{
 	"vnc",
 	"mcp",
 	"record",
-	"spice",
 	"libvirt",
 	"summarize",
 	"kill",
@@ -400,6 +399,5 @@ var LiveVerbMethods = map[string][]string{
 	"vnc":     {"status", "screenshot", "click", "mouse", "type", "key", "rfb", "passwd"},
 	"mcp":     {"ping", "servers", "list-tools", "list-resources", "list-prompts", "call", "read"},
 	"record":  {"list", "start", "stop", "cmd"},
-	"spice":   {"status", "screenshot", "cursor", "click", "mouse", "type", "key"},
 	"libvirt": {"list", "info", "screenshot", "send-key", "passwd", "qmp", "domain-xml", "console", "events", "guest/ping", "guest/info", "guest/os-info", "guest/time", "guest/hostname", "guest/users", "guest/interfaces", "guest/disks", "guest/fsinfo", "guest/vcpus", "guest/exec", "guest/fstrim", "snapshot/list", "snapshot/create", "snapshot/info", "snapshot/revert", "snapshot/delete"},
 }

@@ -1,9 +1,9 @@
 package main
 
 // Shared "`-` means stdout" convention for file-output args across
-// charly verbs. Used by `charly check spice screenshot`, `charly check libvirt
-// screenshot`, `charly check vnc vm screenshot`, `charly check cdp screenshot`,
-// and anything else that writes a binary artifact.
+// charly verbs. Used by `charly check libvirt screenshot`, `charly check vnc vm
+// screenshot`, `charly check cdp screenshot`, and anything else that writes a
+// binary artifact.
 //
 // Guidelines for callers:
 //   - Human-readable status messages (byte counts, dimensions) go to

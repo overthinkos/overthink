@@ -42,6 +42,16 @@ type Op struct {
 
 	Kube KubeMethod `yaml:"kube,omitempty" json:"kube,omitempty"`
 
+	// `adb` is an EXTERNAL-CHARLY-VERB: its implementation (+ the heavy goadb
+	// ADB-wire dependency) lives in the out-of-tree candy/plugin-adb module,
+	// served OUT-OF-PROCESS. Like cdp/vnc (and unlike
+	// file/package/service/command, which left #Op entirely, re-authored as
+	// `plugin: <verb>`), adb KEEPS its `adb:` discriminator + every modifier on
+	// this closed #Op — authoring is unchanged (`adb: devices`, not `plugin: adb`).
+	// It therefore left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc CheckVerbProvider
+	// to gate) BUT keeps this field + #AdbMethod here, so `adb: devices` still
+	// validates against the method enum and VerbsSet still classifies the op (then
+	// dispatch resolves the registered external provider).
 	Adb AdbMethod `yaml:"adb,omitempty" json:"adb,omitempty"`
 
 	// `appium` is an EXTERNAL-CHARLY-VERB: its implementation (+ the heavy

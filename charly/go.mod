@@ -12,7 +12,6 @@ require (
 	github.com/hashicorp/go-plugin v1.8.0
 	github.com/kata-containers/govmm v0.0.0-20220119175834-88960a15dacd
 	github.com/modelcontextprotocol/go-sdk v1.5.0
-	github.com/zach-klippenstein/goadb v0.0.0-20201208042340-620e0e950ed7
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.49.0
 	golang.org/x/net v0.52.0

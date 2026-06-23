@@ -259,7 +259,6 @@ var OpVerbs = []string{
 	"spice",
 	"libvirt",
 	"kube",
-	"adb",
 	"summarize",
 	"kill",
 	"plugin",
@@ -405,5 +404,4 @@ var LiveVerbMethods = map[string][]string{
 	"spice":   {"status", "screenshot", "cursor", "click", "mouse", "type", "key"},
 	"libvirt": {"list", "info", "screenshot", "send-key", "passwd", "qmp", "domain-xml", "console", "events", "guest/ping", "guest/info", "guest/os-info", "guest/time", "guest/hostname", "guest/users", "guest/interfaces", "guest/disks", "guest/fsinfo", "guest/vcpus", "guest/exec", "guest/fstrim", "snapshot/list", "snapshot/create", "snapshot/info", "snapshot/revert", "snapshot/delete"},
 	"kube":    {"nodes", "wait-nodes", "pods", "wait-ready", "ingress", "ingressclass", "storageclass", "service", "lb-external-ip", "addons", "apply", "delete", "raw"},
-	"adb":     {"devices", "shell", "install", "install-app", "uninstall", "getprop", "screencap", "logcat-tail", "wait-for-device", "wait-ui-settled", "current-focus", "keyevent"},
 }

@@ -115,6 +115,22 @@ func (c *BundleAddCmd) Run() error {
 		return fmt.Errorf("getwd: %w", err)
 	}
 
+	// Connect + register every OUT-OF-TREE plugin candy the deploy composes BEFORE any
+	// target.Add/Emit dispatches — so a target whose deploy path drives an external verb
+	// (e.g. the android target → the adb plugin's install / wait-for-device device ops via
+	// invokeAdbPlugin) resolves its grpcProvider out-of-process. The SAME candy scan +
+	// loadProjectPlugins the check runner uses (attachCheckRunnerContext) — every deploy
+	// loads its composed external plugins (R3). A build/connect failure is a warning; the
+	// dispatch then fails loudly via invokeAdbPlugin's "plugin not loaded" / runPluginVerb's
+	// unresolved-verb path rather than silently mis-deploying.
+	if cfg, cerr := LoadConfig(dir); cerr == nil {
+		if candyMap, scanErr := ScanAllCandyWithConfig(dir, cfg); scanErr == nil && candyMap != nil {
+			if perr := loadProjectPlugins(context.Background(), candyMap); perr != nil {
+				fmt.Fprintf(os.Stderr, "warning: plugin load: %v\n", perr)
+			}
+		}
+	}
+
 	// Resolve the named root + any dotted-path subtree the user
 	// targeted. Supports three call shapes:
 	//

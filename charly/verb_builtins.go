@@ -5,9 +5,9 @@ import "context"
 // The built-in check verbs as CheckVerbProviders. Each wraps its existing
 // r.runX handler unchanged — the migration is behavior-preserving; only the
 // runOne dispatch switch is replaced by providerRegistry.ResolveVerb. The
-// live-container verbs remaining here (kube/adb/appium) still funnel through
+// live-container verb remaining here (kube) still funnels through
 // runCharlyVerb + the method-allowlist maps (checkrun_charly_verbs.go) inside
-// their handler.
+// its handler.
 //
 // cdp/vnc/wl/dbus/mcp/record/spice/libvirt are NOT here — each is a live-container verb
 // extracted into its OWN dedicated file (plugin_verb_<verb>.go) carrying its provider +
@@ -15,8 +15,8 @@ import "context"
 // self-registering via registerDedicatedBuiltin (the schema-less dedicated-provider
 // path — no plugin_input, no served schema, since their modifiers stay on the closed
 // base #Op), absent from both builtinProviderInstances and the `providers:` manifest.
-// They dispatch identically through providerRegistry. (The dep-shedders adb/appium/kube
-// stay here until their later, dep-shedding extraction.)
+// They dispatch identically through providerRegistry. (adb/appium are already extracted as
+// external-charly-verbs; only the dep-shedder kube stays here until its later extraction.)
 //
 // The do-mode (act) half of the state-provision verbs is a ProvisionActor method
 // per provider (checkrun_act.go) — runProvisionAct resolves + type-asserts it (C1b).
@@ -42,12 +42,13 @@ func (kubeVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runKube(ctx, op)
 }
 
-type adbVerb struct{ builtinVerbBase }
-
-func (adbVerb) Reserved() string { return "adb" }
-func (adbVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runAdb(ctx, op)
-}
+// adb is NOT a built-in verb — it is an EXTERNAL-CHARLY-VERB served out-of-process by
+// candy/plugin-adb (the second dep-shed: the goadb ADB-wire dependency left charly's
+// core go.mod). It keeps its `adb:` discriminator + modifiers on core #Op (authoring
+// unchanged) but is NOT a CheckVerbProvider, so it dispatches via invokeVerbProvider (the
+// else-branch in runOne) once the loader registers its grpcProvider — never through this
+// in-proc set. Its goadb-backed deploy/status device ops also route through the SAME
+// provider via android_plugin.go's invokeAdbPlugin (out-of-core goadb).
 
 // appium is NOT a built-in verb — it is an EXTERNAL-CHARLY-VERB served out-of-process by
 // candy/plugin-appium (the first dep-shed: tebeka/selenium left charly's core go.mod). It

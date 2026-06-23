@@ -4,8 +4,6 @@ import (
 	"context"
 	"sort"
 	"testing"
-
-	adb "github.com/zach-klippenstein/goadb"
 )
 
 // androidBedUnified builds a synthetic UnifiedFile mirroring the
@@ -118,28 +116,12 @@ func TestCollectAndroidDeployNodes_DeployYamlWinsPerKey(t *testing.T) {
 	}
 }
 
-func TestAdbStatusLabel(t *testing.T) {
-	cases := []struct {
-		state adb.DeviceState
-		want  string
-	}{
-		{adb.StateOnline, "online"},
-		{adb.StateOffline, "offline"},
-		{adb.StateUnauthorized, "unauthorized"},
-		{adb.StateDisconnected, "disconnected"},
-	}
-	for _, c := range cases {
-		if got := adbStatusLabel(c.state); got != c.want {
-			t.Errorf("adbStatusLabel(%v) = %q, want %q", c.state, got, c.want)
-		}
-	}
-}
-
-// collectOne against an endpoint device whose adb server is unreachable must
-// degrade to an "absent" row carrying the deploy path + venue note — never an
-// error, never a panic. This is the graceful-degradation contract; it runs
-// fully hermetically because the dial to 127.0.0.1:1 just fails.
-func TestAndroidCollector_CollectOneAbsentWhenEndpointUnreachable(t *testing.T) {
+// collectOne against a (resolvable) endpoint device reports "declared": with the
+// goadb device-state probe gone from core (the adb → external-plugin dep-shed), an
+// endpoint's live state is only assertable via the `adb:` check verb, so the status
+// collector enumerates it as declared rather than probing it. Row fields (path, serial,
+// venue note, run mode) are still populated. Runs fully hermetically — no live adb.
+func TestAndroidCollector_CollectOneEndpointDeclared(t *testing.T) {
 	a := &AndroidCollector{}
 	dn := androidDeployNode{
 		path: "phone",
@@ -163,8 +145,8 @@ func TestAndroidCollector_CollectOneAbsentWhenEndpointUnreachable(t *testing.T) 
 	if row.Image != "phone" {
 		t.Errorf("Image (path) = %q, want phone", row.Image)
 	}
-	if row.Status != "absent" {
-		t.Errorf("Status = %q, want absent (endpoint unreachable)", row.Status)
+	if row.Status != "declared" {
+		t.Errorf("Status = %q, want declared (endpoint, no in-core probe)", row.Status)
 	}
 	if row.Container != "emulator-5554" {
 		t.Errorf("Container (serial) = %q, want emulator-5554", row.Container)
@@ -191,9 +173,11 @@ func TestAndroidCollector_CollectOneUndeclaredDevice(t *testing.T) {
 	}
 }
 
-// Collect over the bed unified produces one absent row per nested device (both
-// devices are unreachable in the test environment — no live emulator).
-func TestAndroidCollector_CollectBedAllAbsent(t *testing.T) {
+// Collect over the bed unified produces one row per nested device, status derived
+// host-side WITHOUT goadb: the in-pod device is "absent" (its emulator pod isn't running
+// in the test environment, so resolveAndroidDevice degrades), and the endpoint device is
+// "declared" (an endpoint's live state is only assertable via the `adb:` check verb).
+func TestAndroidCollector_CollectBed(t *testing.T) {
 	a := &AndroidCollector{}
 	rows, err := a.Collect(context.Background(), CollectOpts{Unified: androidBedUnified()})
 	if err != nil {
@@ -202,12 +186,21 @@ func TestAndroidCollector_CollectBedAllAbsent(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("Collect() = %d rows, want 2", len(rows))
 	}
+	wantStatus := map[string]string{
+		"check-android-emulator-pod.device":     "absent",   // in-pod, pod not running
+		"check-android-emulator-pod.device-net": "declared", // endpoint, no in-core probe
+	}
 	for _, r := range rows {
 		if r.Kind != SubstrateAndroid || r.Source != "adb" {
 			t.Errorf("row kind/source = %q/%q, want android/adb", r.Kind, r.Source)
 		}
-		if r.Status != "absent" {
-			t.Errorf("row %q Status = %q, want absent (no live emulator)", r.Image, r.Status)
+		want, ok := wantStatus[r.Image]
+		if !ok {
+			t.Errorf("unexpected row path %q", r.Image)
+			continue
+		}
+		if r.Status != want {
+			t.Errorf("row %q Status = %q, want %q", r.Image, r.Status, want)
 		}
 	}
 }

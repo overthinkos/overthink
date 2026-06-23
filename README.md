@@ -606,10 +606,12 @@ getprop`, `appium: click`, …):
 - `charly check record` — terminal asciinema or desktop ffmpeg.
 - `charly check kube` — Kubernetes probes (nodes, pods, ingress,
   wait-ready, storageclass, addons, raw kubectl).
-- `charly check adb` — Android Debug Bridge (devices, shell, install,
-  getprop, screencap, logcat, wait-for-device).
-- `charly check appium` — W3C WebDriver session lifecycle, find, click,
-  send-keys, screenshot.
+- `adb:` — Android Debug Bridge declarative check verb (devices, shell,
+  install, getprop, screencap, logcat, wait-for-device) — out-of-process
+  plugin, no host CLI subcommand.
+- `appium:` — W3C WebDriver declarative check verb (session lifecycle, find,
+  click, send-keys, screenshot) — out-of-process plugin, no host CLI
+  subcommand.
 
 `charly feature {list, pending, validate}` enumerates and validates the
 `plan:` steps on the same entries (`pending` lists the agent-graded

@@ -4,11 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"image"
-	_ "image/jpeg" // register JPEG decoder for image.DecodeConfig / image.Decode
-	_ "image/png"  // register PNG decoder for image.DecodeConfig / image.Decode
-	"os"
-	"strconv"
 	"strings"
 
 	pb "github.com/overthinkos/overthink/charly/plugin/proto"
@@ -103,9 +98,11 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	}
 
 	// Artifact validators run for the one artifact-producing method (screenshot) —
-	// mirrors runCharlyVerb's spec.artifact branch.
+	// mirrors runCharlyVerb's spec.artifact branch. The validators are the SHARED
+	// SDK implementation (sdk.RunArtifactValidators), the ONE copy every artifact-
+	// producing verb plugin reuses (R3).
 	if method == "screenshot" {
-		if err := runArtifactValidators(&op); err != nil {
+		if err := sdk.RunArtifactValidators(&op); err != nil {
 			return resultJSON("fail", fmt.Sprintf("appium: %s: %v", method, err))
 		}
 	}
@@ -128,94 +125,4 @@ func preview(s string) string {
 		return s[:max] + "…"
 	}
 	return s
-}
-
-// runArtifactValidators is the shared post-validator pipeline (min_bytes /
-// min_dimensions / not_uniform), ported from charly/checkrun_charly_verbs.go so an
-// out-of-process screenshot check enforces the same artifact-reality guarantees.
-func runArtifactValidators(op *spec.Op) error {
-	if op.ArtifactMinBytes > 0 {
-		info, err := os.Stat(op.Artifact)
-		if err != nil {
-			return fmt.Errorf("artifact %q not found: %w", op.Artifact, err)
-		}
-		if info.Size() < int64(op.ArtifactMinBytes) {
-			return fmt.Errorf("artifact %q size %d < required min_bytes %d", op.Artifact, info.Size(), op.ArtifactMinBytes)
-		}
-	}
-	if op.ArtifactMinDimensions != "" {
-		if err := assertArtifactMinDimensions(op.Artifact, op.ArtifactMinDimensions); err != nil {
-			return err
-		}
-	}
-	if op.ArtifactNotUniform {
-		if err := assertArtifactNotUniform(op.Artifact); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func assertArtifactMinDimensions(path, wxh string) error {
-	parts := strings.SplitN(wxh, "x", 2)
-	if len(parts) != 2 {
-		return fmt.Errorf("artifact_min_dimensions: bad format %q (want WxH)", wxh)
-	}
-	wantW, err := strconv.Atoi(parts[0])
-	if err != nil || wantW <= 0 {
-		return fmt.Errorf("artifact_min_dimensions: bad width %q", parts[0])
-	}
-	wantH, err := strconv.Atoi(parts[1])
-	if err != nil || wantH <= 0 {
-		return fmt.Errorf("artifact_min_dimensions: bad height %q", parts[1])
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("artifact %q open: %w", path, err)
-	}
-	defer f.Close()
-	cfg, _, err := image.DecodeConfig(f)
-	if err != nil {
-		return fmt.Errorf("artifact %q decode-config: %w", path, err)
-	}
-	if cfg.Width < wantW || cfg.Height < wantH {
-		return fmt.Errorf("artifact %q dimensions %dx%d < required min %dx%d", path, cfg.Width, cfg.Height, wantW, wantH)
-	}
-	return nil
-}
-
-func assertArtifactNotUniform(path string) error {
-	f, err := os.Open(path)
-	if err != nil {
-		return fmt.Errorf("artifact %q open: %w", path, err)
-	}
-	defer f.Close()
-	img, _, err := image.Decode(f)
-	if err != nil {
-		return fmt.Errorf("artifact %q decode: %w", path, err)
-	}
-	bounds := img.Bounds()
-	w, h := bounds.Dx(), bounds.Dy()
-	if w <= 0 || h <= 0 {
-		return fmt.Errorf("artifact %q has zero-size bounds %dx%d", path, w, h)
-	}
-	stepX := max(w/10, 1)
-	stepY := max(h/10, 1)
-	var firstR, firstG, firstB, firstA uint32
-	first := true
-	for py := bounds.Min.Y; py < bounds.Max.Y; py += stepY {
-		for px := bounds.Min.X; px < bounds.Max.X; px += stepX {
-			r, g, b, a := img.At(px, py).RGBA()
-			if first {
-				firstR, firstG, firstB, firstA = r, g, b, a
-				first = false
-				continue
-			}
-			if r != firstR || g != firstG || b != firstB || a != firstA {
-				return nil
-			}
-		}
-	}
-	return fmt.Errorf("artifact %q is uniformly one color (RGBA=%d,%d,%d,%d) — likely a blank/black/white screenshot",
-		path, firstR>>8, firstG>>8, firstB>>8, firstA>>8)
 }

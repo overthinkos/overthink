@@ -172,10 +172,11 @@ func writeConcat(dir, out, pkg string) error {
 // its method allowlist (an exact mirror of the Go maps in checkrun_charly_verbs.go /
 // the dedicated plugin_verb_<verb>.go files — now derived from the SAME CUE source),
 // projected as spec.LiveVerbMethods + gated against each verb's in-proc LiveVerbProvider
-// by checkMethodAllowlists. `appium` is NOT here: it is an EXTERNAL-CHARLY-VERB served
-// out-of-process by candy/plugin-appium (no in-proc LiveVerbProvider to gate), so it left
-// this list with #OpVerb/VerbCatalog. Its #AppiumMethod enum stays in the schema (it
-// still validates `appium: <method>` on core #Op) but is no longer a LiveVerbMethods entry.
+// by checkMethodAllowlists. `adb` and `appium` are NOT here: each is an EXTERNAL-CHARLY-VERB
+// served out-of-process (candy/plugin-adb, candy/plugin-appium — no in-proc LiveVerbProvider
+// to gate), so each left this list with #OpVerb/VerbCatalog. Their #AdbMethod / #AppiumMethod
+// enums stay in the schema (they still validate `adb: <method>` / `appium: <method>` on core
+// #Op) but are no longer LiveVerbMethods entries.
 var liveVerbs = []struct{ verb, def string }{
 	{"cdp", "#CdpMethod"},
 	{"wl", "#WlMethod"},
@@ -186,7 +187,6 @@ var liveVerbs = []struct{ verb, def string }{
 	{"spice", "#SpiceMethod"},
 	{"libvirt", "#LibvirtMethod"},
 	{"kube", "#KubeMethod"},
-	{"adb", "#AdbMethod"},
 }
 
 func writeVocab(dir, out string) error {

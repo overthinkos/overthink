@@ -8,6 +8,11 @@
 *.so
 *.dylib
 
+# Built external-plugin provider binaries (candy/plugin-<name>/plugin-<name>) — the host
+# go-builds these on demand from each plugin candy's module; the binary is an artifact,
+# never committed (the binary name matches its dir name).
+candy/plugin-*/plugin-*
+
 # Test binary, built with `go test -c`
 *.test
 

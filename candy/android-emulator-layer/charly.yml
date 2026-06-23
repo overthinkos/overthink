@@ -28,6 +28,15 @@ android-emulator-layer:
             # the deliberate cross-repo lag; the R10 bed loads the LOCAL candy via the
             # superproject override.)
             - plugin-appium
+            # plugin-adb is the OUT-OF-TREE plugin that serves the `adb:` check verb AND the
+            # goadb-backed `target: android` deploy / `charly status` device ops (the
+            # github.com/zach-klippenstein/goadb dep lives there, not in charly's core).
+            # Requiring it puts it in this image's scanned candy set, so loadProjectPlugins
+            # (in the bed runner AND in `charly bundle add`) builds + connects it before the
+            # bed's `adb:` checks and the android deploy's install / wait-for-device ops
+            # dispatch. (Same deliberate cross-repo lag as plugin-appium; the R10 bed loads
+            # the LOCAL candy via the superproject override.)
+            - plugin-adb
     android-emulator-layer-env:
         env:
             EMULATOR_NAME: "charly_avd_36"

@@ -3,28 +3,27 @@ package main
 import (
 	"context"
 	"sort"
-	"strings"
-
-	adb "github.com/zach-klippenstein/goadb"
 )
 
 // AndroidCollector is the kind:android SubstrateCollector. It enumerates every
 // declared `target: android` deploy node (top-level AND nested under a pod) from
 // the merged deploy set (charly.yml's folded kind:check beds + ~/.config/charly/
-// charly.yml), resolves each to a live AndroidDevice via resolveAndroidDevice,
-// and probes the backing adb server's host:devices for online / offline. A node
-// whose device can't be resolved (emulator pod down, endpoint unreachable) is
-// reported as absent rather than aborting the command (graceful degradation —
-// the SubstrateCollector contract).
+// charly.yml) and resolves each to an AndroidDevice via resolveAndroidDevice. A
+// node whose device can't be resolved (emulator pod down, endpoint unreachable) is
+// reported as absent rather than aborting the command (graceful degradation — the
+// SubstrateCollector contract).
+//
+// Status is derived host-side WITHOUT goadb (the goadb device-state probe left core
+// in the adb → external-plugin dep-shed): an in-pod device is "running" when its pod
+// container is up (containerRunning), else "absent"; an endpoint device is "declared"
+// (its liveness is only assertable via the `adb:` check verb, which composes the adb
+// plugin). The enumeration (which devices exist + the deploy tree) is the
+// collector's job; live device state belongs to `charly check adb`.
 //
 // Every row is stamped Kind=SubstrateAndroid, Source="adb". Container carries
-// the device serial (or the in-pod container name when the serial is empty),
+// the device serial (or the undeclared device ref when the spec is missing),
 // and the Network cell notes the venue: "in-pod (<container>)" for a box
 // device, "endpoint <host:port>" for a remote adb endpoint.
-//
-// Under opts.Nested the collector additionally polls sys.boot_completed on a
-// reachable device so the table distinguishes "adb online but still booting"
-// from "fully booted" — the same readiness condition the android Add gates on.
 type AndroidCollector struct {
 	c *Collector
 }
@@ -43,9 +42,9 @@ func (a *AndroidCollector) Available(opts CollectOpts) bool {
 	return len(collectAndroidDeployNodes(opts)) > 0
 }
 
-// Collect resolves and probes every declared android device. The work is
-// sequential — there are at most a handful of android devices and each probe is
-// a single cheap adb round-trip — so no worker pool is warranted.
+// Collect resolves every declared android device and derives its status host-side.
+// The work is sequential — there are at most a handful of android devices and each
+// status check is a single cheap engine inspect — so no worker pool is warranted.
 func (a *AndroidCollector) Collect(ctx context.Context, opts CollectOpts) ([]DeploymentStatus, error) {
 	nodes := collectAndroidDeployNodes(opts)
 	rows := make([]DeploymentStatus, 0, len(nodes))
@@ -109,9 +108,10 @@ func sortedDeployKeys(m map[string]BundleNode) []string {
 }
 
 // collectOne builds the status row for one declared android device node. It
-// resolves the kind:android spec, resolves the live device handle, and probes
-// the adb server state. Resolution / probe failures degrade to an "absent" row
-// — never an error that would drop the whole substrate.
+// resolves the kind:android spec + the device handle, then derives status host-side
+// (containerRunning for an in-pod device, "declared" for an endpoint — no goadb).
+// Resolution failures degrade to an "absent" row — never an error that would drop
+// the whole substrate.
 func (a *AndroidCollector) collectOne(opts CollectOpts, dn androidDeployNode) DeploymentStatus {
 	row := DeploymentStatus{
 		Kind:    SubstrateAndroid,
@@ -141,32 +141,18 @@ func (a *AndroidCollector) collectOne(opts CollectOpts, dn androidDeployNode) De
 		// correct, graceful answer.
 		return row
 	}
+
+	// Derive status host-side, WITHOUT goadb (the device-state probe left core in
+	// the adb → external-plugin dep-shed). An in-pod device is "running" when its
+	// pod container is up; an endpoint device is "declared" (its live device state
+	// is only assertable via the `adb:` check verb, which composes the adb plugin).
 	if dev.Engine != "" && dev.Container != "" {
 		row.Network = "in-pod (" + dev.Container + ")"
-	}
-
-	// Probe the adb server for this device's state (online / offline / …).
-	d, err := adbDeviceForAddr(dev.AdbAddr, dev.serial())
-	if err != nil {
-		return row
-	}
-	state, err := d.State()
-	if err != nil {
-		// adb reachable but the device isn't enumerated by host:devices.
-		return row
-	}
-	row.Status = adbStatusLabel(state)
-
-	// --nested: poll the kernel boot flag so a freshly-started emulator that
-	// has attached to adb but is still booting is distinguishable from one
-	// that has reached steady state. Same readiness condition the android Add
-	// gates on; a single non-blocking getprop, never a sleep loop.
-	if opts.Nested && state == adb.StateOnline {
-		if out, err := d.RunCommand("getprop", "sys.boot_completed"); err == nil && strings.TrimSpace(out) == "1" {
-			row.Uptime = "boot_completed"
-		} else {
-			row.Uptime = "booting"
+		if containerRunning(dev.Engine, dev.Container) {
+			row.Status = "running"
 		}
+	} else {
+		row.Status = "declared"
 	}
 	return row
 }
@@ -178,18 +164,4 @@ func lookupAndroidSpec(uf *UnifiedFile, name string) *AndroidSpec {
 		return nil
 	}
 	return uf.Android[name]
-}
-
-// adbStatusLabel renders a goadb DeviceState for the unified status table. It
-// reuses adbStateString's vocabulary for every non-online state (offline /
-// unauthorized / disconnected / …) and only overrides the online case: the
-// `adb devices` CLI prints the literal "device" for an online device, but the
-// status table's online/offline/absent vocabulary wants "online". Keeping the
-// shared adbStateString switch and overriding the single divergent case avoids
-// a parallel state map.
-func adbStatusLabel(state adb.DeviceState) string {
-	if state == adb.StateOnline {
-		return "online"
-	}
-	return adbStateString(state)
 }

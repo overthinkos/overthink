@@ -42,8 +42,8 @@ Consult this table BEFORE the first tool call of every task; when several rows m
 | `charly check *` (ANY check verb, incl. `charly check box`) / `charly check run <bed>` (the disposable-deploy R10 bed) / authoring `disposable: true` check beds / `charly check live` / the probe verbs (cdp/wl/dbus/vnc/mcp/record/spice/libvirt) / `iterate:` AI-agent scoring / `plan:` step authoring / `charlycheck/*` branches | `/charly-check:check` |
 | Agent Driven Evaluation (ADE) / `charly box feature run` / `charly check feature run` / `charly feature list/pending/validate` / authoring a candy's `plan:` + `description:` string / the agent grader for `agent-check:` steps | `/charly-check:check` + `/charly-internals:strict-policy` |
 | `charly check kube <verb>` / cluster probes | `/charly-kubernetes:check-k8s` |
-| `charly check adb <method>` / Android Debug Bridge from host (devices, shell, install, getprop, screencap, logcat, wait-for-device) | `/charly-check:adb` + `/charly-check:check` |
-| `charly check appium <method>` / Android UI automation / W3C WebDriver sessions, element introspection, the gesture/app/key/device sugar groups, the generic `execute`/`raw` escape hatch | `/charly-check:appium` + `/charly-check:check` |
+| the `adb:` check verb / Android Debug Bridge probing from a candy/box plan (out-of-process plugin; devices, shell, install, getprop, screencap, logcat, wait-for-device) | `/charly-check:adb` + `/charly-check:check` |
+| the `appium:` check verb / Android UI automation (out-of-process plugin) / W3C WebDriver sessions, element introspection, the gesture/app/key/device sugar groups, the generic `execute`/`raw` escape hatch | `/charly-check:appium` + `/charly-check:check` |
 | Verify a cutover by running the R10 beds (drive `charly check run <bed>`) | `/charly-internals:agents` + `/charly-check:check` (agent `check-bed-runner`, workflow `/verify-beds`) |
 | Evaluate/audit a deployment config (image or deploy, yours) | `/charly-internals:agents` + `/charly-check:check` (agent `deploy-verifier`, workflow `/audit-deploy-configs`) |
 | **— Git & landing —** | |

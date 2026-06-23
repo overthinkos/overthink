@@ -63,8 +63,9 @@ var artifactValidatableMethods = map[string]bool{
 // captures stdout/stderr/exit, and feeds the output through the existing matcher pipeline
 // (Stdout/Stderr/ExitStatus + artifact size via ArtifactMinBytes). The per-verb providers
 // + their <verb>Methods allowlists + run<Verb> dispatchers live in dedicated
-// plugin_verb_<verb>.go files (cdp/vnc/wl/dbus/mcp/record/spice/libvirt); the dep-shedders
-// kube/adb/appium keep their method maps + dispatchers HERE until their later extraction.
+// plugin_verb_<verb>.go files (cdp/vnc/wl/dbus/mcp/record/spice/libvirt); only the
+// dep-shedder kube keeps its method map + dispatcher HERE until its later extraction
+// (adb + appium are already extracted as external-charly-verbs).
 //
 // Architectural notes:
 //   - Host-side only: the test runner invokes the host `charly` binary, which
@@ -109,8 +110,8 @@ type methodSpec struct {
 // posAtspi/posClipboard/posOverlayShow/posDbusCall/posMcpCommon/posRecordStart/
 // posKeyNameSplit/posLibvirtQmp/posCommandFields/…), the methodSpec type, and the
 // artifactValidatableMethods allowlist STAY here — reused across every live verb (R3).
-// The dep-shedders kube/adb/appium keep their method maps below until their later,
-// dep-shedding extraction.
+// Only the dep-shedder kube keeps its method map below until its later, dep-shedding
+// extraction (adb + appium are already extracted as external-charly-verbs).
 
 // ---------------------------------------------------------------------------
 // kube methods — `charly check kube <method>` probes a Kubernetes cluster via the
@@ -120,34 +121,20 @@ type methodSpec struct {
 // a k3s-server candy).
 // ---------------------------------------------------------------------------
 
-// ---------------------------------------------------------------------------
-// adb methods — `charly check adb <method>` speaks the ADB wire protocol to the
-// container's host-mapped adb-server port (5037 → host's HOST_PORT:5037).
-// Deploy-scope only; the runner shells out to `charly check adb <method> <image>
-// [args]` via runCharlyVerb. Implementation lives in charly/adb.go.
-// ---------------------------------------------------------------------------
-
-var adbMethods = map[string]methodSpec{
-	"devices":         {path: []string{"adb", "devices"}},
-	"shell":           {path: []string{"adb", "shell"}, required: []string{"Args"}, posArgs: posShellArgs},
-	"install":         {path: []string{"adb", "install"}, required: []string{"Apk"}, posArgs: posApkFlag},
-	"install-app":     {path: []string{"adb", "install-app"}, required: []string{"AppId"}, posArgs: posInstallApp},
-	"uninstall":       {path: []string{"adb", "uninstall"}, required: []string{"Args"}, posArgs: posPackageArg},
-	"getprop":         {path: []string{"adb", "getprop"}, required: []string{"Property"}, posArgs: posPropertyArg},
-	"screencap":       {path: []string{"adb", "screencap"}, required: []string{"Artifact"}, posArgs: posArtifactFlag, artifact: true},
-	"logcat-tail":     {path: []string{"adb", "logcat-tail"}, posArgs: posLogcatTail},
-	"wait-for-device": {path: []string{"adb", "wait-for-device"}, posArgs: posWaitForDevice},
-	"wait-ui-settled": {path: []string{"adb", "wait-ui-settled"}, posArgs: posWaitForDevice},
-	"current-focus":   {path: []string{"adb", "current-focus"}},
-	"keyevent":        {path: []string{"adb", "keyevent"}, required: []string{"KeyName"}, posArgs: posKeyName},
-}
+// The adb method allowlist + its positional-arg builders were removed in the adb →
+// external-plugin dep-shed (the SECOND dep-shedder: the goadb ADB-wire dependency left
+// charly's core go.mod). adb is now an EXTERNAL-CHARLY-VERB served out-of-process by
+// candy/plugin-adb: it keeps its `adb:` discriminator + modifiers + #AdbMethod on core #Op
+// (authoring unchanged) but dispatches via invokeVerbProvider, NOT runCharlyVerb, so it has
+// no in-proc method map here. The same plugin's goadb-backed deploy/status device ops route
+// through it via android_plugin.go's invokeAdbPlugin.
 
 // The appium method allowlist + its positional-arg builders were removed in the appium →
 // external-plugin dep-shed (the FIRST dep-shedder: github.com/tebeka/selenium left charly's
 // core go.mod). appium is now an EXTERNAL-CHARLY-VERB served out-of-process by
 // candy/plugin-appium: it keeps its `appium:` discriminator + modifiers + #AppiumMethod on
 // core #Op (authoring unchanged) but dispatches via invokeVerbProvider, NOT runCharlyVerb,
-// so it has no in-proc method map here. adb/kube remain (dep-shedders extracted later).
+// so it has no in-proc method map here. Only kube remains (the last dep-shedder, extracted later).
 
 // kube methods all run against a cluster, not an image/container, so
 // skipBox=true across the board.
@@ -505,48 +492,14 @@ func posLibvirtQmp(c *Op) []string {
 	return args
 }
 
-// adb positional builders. Flag-form (--apk, --artifact, --selector, …) so the CLI
-// subcommand structs in adb.go can use Kong's flag parser directly without positional
-// ordering surprises. (The appium builders were removed in the appium → external-plugin
-// dep-shed; appium no longer dispatches via a `charly check appium` subprocess.)
+// The adb positional-arg builders (posShellArgs/posPackageArg/posPropertyArg/posInstallApp,
+// plus posApkFlag/posArtifactFlag/posLogcatTail/posWaitForDevice below) were removed in the
+// adb → external-plugin dep-shed: adb no longer dispatches via runCharlyVerb (there is no
+// `charly check adb` subprocess), so its argv builders have no caller. The ADB method
+// dispatch now lives in candy/plugin-adb. (posKeyName stays — it is shared by wl/vnc/spice.)
 
-// posShellArgs prefixes "--" so kong doesn't interpret `-l` / `-p` / etc.
-// shell args as flags of the outer `charly check adb shell` invocation.
-func posShellArgs(c *Op) []string {
-	return append([]string{"--"}, c.Args...)
-}
-
-// posPackageArg takes the package id from Args[0] for `adb uninstall`. The
-// Args:[0] convention (vs. a dedicated Package modifier) keeps the modifier
-// surface flat and avoids overloading c.Property.
-func posPackageArg(c *Op) []string {
-	if len(c.Args) == 0 {
-		return nil
-	}
-	return []string{c.Args[0]}
-}
-
-func posPropertyArg(c *Op) []string { return []string{c.Property} }
-
-// posInstallApp builds the flags for `adb install-app` from the install-app
-// modifiers. Source/Arch/AppVersion are passed only when set so the CLI
-// defaults (apk-pure / x86_64) apply otherwise.
-func posInstallApp(c *Op) []string {
-	args := []string{"--package", c.AppId}
-	if c.Source != "" {
-		args = append(args, "--source", c.Source)
-	}
-	if c.Arch != "" {
-		args = append(args, "--arch", c.Arch)
-	}
-	if c.AppVersion != "" {
-		args = append(args, "--app-version", c.AppVersion)
-	}
-	return args
-}
-
-// resolveCheckApk resolves a relative committed-APK path (adb: install /
-// appium: install-app, apk: ./tests/data/...) against the AUTHORING candy's
+// resolveCheckApk resolves a relative committed-APK path (the external adb / appium plugin's
+// install / install-app `apk: ./tests/data/...`) against the AUTHORING candy's
 // source tree, so a check resolves its fixture whether the candy is local OR
 // fetched via @github (the SAME walk-up the deploy path uses, R3). The check's
 // Origin is "candy:<key>" where <key> is the candy MAP KEY (a bare name for a
@@ -577,35 +530,11 @@ func (r *Runner) resolveCheckApk(apk, origin string) (string, error) {
 	return resolveApkPath(apk, dir)
 }
 
-func posApkFlag(c *Op) []string      { return []string{"--apk", c.Apk} }
-func posArtifactFlag(c *Op) []string { return []string{"--artifact", c.Artifact} }
-
 // The appium positional-arg builders (the caps/selector/session/gesture/execute/raw
 // flag-form argv helpers) were removed in the appium → external-plugin dep-shed: appium
 // no longer dispatches via runCharlyVerb (there is no `charly check appium` subprocess),
 // so its argv builders have no caller. The W3C method dispatch now lives in
-// candy/plugin-appium. adb keeps posApkFlag/posArtifactFlag above (adb: install/screencap).
-
-// posLogcatTail emits --lines / --filter optionals only when set; the CLI
-// defaults handle the unset case.
-func posLogcatTail(c *Op) []string {
-	var args []string
-	if c.Amount > 0 {
-		args = append(args, "--lines", strconv.Itoa(c.Amount))
-	}
-	if c.Query != "" {
-		args = append(args, "--filter", c.Query)
-	}
-	return args
-}
-
-// posWaitForDevice emits --timeout when set; default lives subprocess-side.
-func posWaitForDevice(c *Op) []string {
-	if c.Timeout == "" {
-		return nil
-	}
-	return []string{"--timeout", c.Timeout}
-}
+// candy/plugin-appium. The adb argv builders left the SAME way (adb → candy/plugin-adb).
 
 // ---------------------------------------------------------------------------
 // Verb dispatchers
@@ -613,20 +542,16 @@ func posWaitForDevice(c *Op) []string {
 
 // run<Verb> for cdp/vnc/wl/dbus/mcp/record/spice/libvirt lives in each verb's dedicated
 // plugin_verb_<verb>.go file (Phase 1 live-container-verb relocation) — alongside its
-// provider + method allowlist. The dep-shedders kube/adb/appium keep their dispatchers
-// here until their later, dep-shedding extraction.
+// provider + method allowlist. Only the dep-shedder kube keeps its dispatcher here until
+// its later, dep-shedding extraction.
 
 func (r *Runner) runKube(ctx context.Context, c *Op) CheckResult {
 	return r.runCharlyVerb(ctx, c, "kube", c.Kube, kubeMethods)
 }
 
-func (r *Runner) runAdb(ctx context.Context, c *Op) CheckResult {
-	return r.runCharlyVerb(ctx, c, "adb", c.Adb, adbMethods)
-}
-
-// The appium runCharlyVerb dispatcher was removed in the appium → external-plugin dep-shed
-// — appium no longer dispatches through a `charly check appium` subprocess; its grpcProvider
-// (candy/plugin-appium) is invoked via invokeVerbProvider with the full #Op.
+// The adb + appium runCharlyVerb dispatchers were removed in their external-plugin dep-sheds
+// — neither dispatches through a `charly check <verb>` subprocess anymore; each grpcProvider
+// (candy/plugin-adb, candy/plugin-appium) is invoked via invokeVerbProvider with the full #Op.
 
 // runCharlyVerb is the shared dispatch path: skip checks, method lookup,
 // argv building, subprocess exec, matcher pipeline, optional artifact size
@@ -1072,21 +997,11 @@ func isZeroField(c *Op, name string) bool {
 		return c.KubeGroup == ""
 	case "KubeVersion":
 		return c.KubeVersion == ""
-	case "Args":
-		return len(c.Args) == 0
-	case "Apk":
-		return c.Apk == ""
-	case "Property":
-		return c.Property == ""
-	case "Adb":
-		return c.Adb == ""
-	case "AppId":
-		// AppId is still required by adb: install-app. The appium-only required-field
-		// cases (Caps/Strategy/Session/Activity/Attribute/Percent/Keycode/Params, plus
-		// the "Appium" discriminator) were DELETED in the appium → external-plugin
-		// dep-shed: appium's required-modifier checks now run inside candy/plugin-appium
-		// (dispatch.go), so no remaining in-proc verb's required: list names them.
-		return c.AppId == ""
+		// The adb required-field cases (Args/Apk/Property/AppId, plus the "Adb"
+		// discriminator) were DELETED in the adb → external-plugin dep-shed: adb's
+		// required-modifier checks now run inside candy/plugin-adb (methods.go's
+		// checkRequiredModifiers), so no remaining in-proc verb's required: list names
+		// them. The appium required-field cases left the SAME way (candy/plugin-appium).
 	}
 	// Unknown field name is a programming error: treat as "not zero" so
 	// authoring errors surface elsewhere instead of spurious skips.

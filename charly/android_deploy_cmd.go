@@ -23,6 +23,59 @@ import (
 // emulator (cold boot of an API-36 Play-Store image is the worst case).
 const androidBootDeadline = 5 * time.Minute
 
+// adbServerPort is the in-container adb-server port the emulator publishes
+// (container :5037 → the host's HOST_PORT:5037). The host resolves the mapped
+// host port via engine inspect; the goadb wire talk itself lives out-of-core in
+// candy/plugin-adb.
+const adbServerPort = 5037
+
+// adbAddrForContainer resolves the "127.0.0.1:<host-port>" adb-server address for
+// an already-known running container (its published 5037). Relocated from the
+// deleted charly/adb.go (the adb → external-plugin dep-shed): it is host-side only
+// (engine inspect, no goadb), so it stays in core to build the AdbDeviceEnv the adb
+// plugin consumes. Used by resolveAndroidDevice for the in-pod / nested device.
+func adbAddrForContainer(engine, containerName string) (string, error) {
+	insp, err := InspectContainer(engine, containerName)
+	if err != nil {
+		return "", fmt.Errorf("inspect %s: %w", containerName, err)
+	}
+	if insp == nil {
+		return "", fmt.Errorf("inspect %s: nil result", containerName)
+	}
+	port, err := findHostPort(insp, adbServerPort)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("127.0.0.1:%d", port), nil
+}
+
+// findHostPort returns the first host-side port number bound to the given
+// container port. Looks for both "5037" and "5037/tcp" keys because podman inspect
+// emits the protocol-suffixed form. Relocated from the deleted charly/adb.go — it
+// is pure engine-inspect arithmetic (no goadb), shared by adbAddrForContainer and
+// resolveAndroidHostPortRef's nested ${HOST_PORT:N} resolution (R3).
+func findHostPort(insp *ContainerInspection, containerPort int) (int, error) {
+	// Host-networked containers expose the container port AS the host port.
+	if insp.IsHostNetworked() {
+		return containerPort, nil
+	}
+	keys := []string{
+		fmt.Sprintf("%d/tcp", containerPort),
+		fmt.Sprintf("%d", containerPort),
+	}
+	for _, k := range keys {
+		binds, ok := insp.NetworkSettings.Ports[k]
+		if !ok || len(binds) == 0 {
+			continue
+		}
+		var port int
+		if _, err := fmt.Sscanf(binds[0].HostPort, "%d", &port); err == nil && port > 0 {
+			return port, nil
+		}
+	}
+	return 0, fmt.Errorf("container port %d not published on host (NetworkSettings.Ports has no binding); declare `port: [%d]` on the image or publish via charly.yml `port:`", containerPort, containerPort)
+}
+
 // findAndroidSpec resolves a kind:android device by name from the unified
 // config (sibling of findK8sSpec).
 func findAndroidSpec(dir, name string) *AndroidSpec {
@@ -196,18 +249,13 @@ func resolveAndroidGoogleCreds(ga *AndroidGoogleAccount) (email, token string) {
 	return email, token
 }
 
-// waitAndroidReady polls sys.boot_completed on the device until it returns
-// "1" or the deadline elapses. The check IS the readiness condition — never a
-// fixed sleep.
+// waitAndroidReady blocks until the device reports sys.boot_completed=1 or the
+// deadline elapses, via the adb plugin's `wait-for-device` method (which polls the
+// kernel boot flag — the check IS the readiness condition, never a fixed sleep). The
+// goadb poll itself runs out-of-core in candy/plugin-adb.
 func waitAndroidReady(dev AndroidDevice, timeout time.Duration) error {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if d, err := adbDeviceForAddr(dev.AdbAddr, dev.Serial); err == nil {
-			if out, err := d.RunCommand("getprop", "sys.boot_completed"); err == nil && strings.TrimSpace(out) == "1" {
-				return nil
-			}
-		}
-		time.Sleep(2 * time.Second)
+	if _, err := invokeAdbPlugin(&Op{Adb: "wait-for-device", Timeout: timeout.String()}, dev.toEnv()); err != nil {
+		return fmt.Errorf("android device (%s): %w", dev.AdbAddr, err)
 	}
-	return fmt.Errorf("android device (%s): sys.boot_completed != 1 after %s", dev.AdbAddr, timeout)
+	return nil
 }

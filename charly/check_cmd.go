@@ -80,7 +80,11 @@ type CheckCmd struct {
 	Vnc     VncCmd     `cmd:"" help:"Control VNC desktop in running containers"`
 	Wl      WlCmd      `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
 	Kube    KubeCmd    `cmd:"" name:"kube" help:"Kubernetes cluster probes (nodes, wait-nodes, pods, ingress, storageclass, addons, apply, delete, raw)"`
-	Adb     AdbCmd     `cmd:"" help:"Android Debug Bridge — devices, shell, install, uninstall, getprop, screencap, logcat-tail, wait-for-device"`
+	// `adb` is NOT a CLI subcommand here — the Android Debug Bridge implementation (+ the
+	// goadb ADB-wire dependency) was dep-shed into the out-of-tree
+	// candy/plugin-adb module. `adb` is now a DECLARATIVE check VERB that dispatches to that
+	// external plugin via the provider registry (invokeVerbProvider); there is no host
+	// `charly check adb`.
 	// `appium` is NOT a CLI subcommand here — the Appium WebDriver implementation (+ the
 	// tebeka/selenium dependency) was dep-shed into the out-of-tree candy/plugin-appium
 	// module. The `appium:` DECLARATIVE check verb dispatches to that external plugin via

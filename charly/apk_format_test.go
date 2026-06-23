@@ -221,6 +221,19 @@ func TestResolveCheckApk(t *testing.T) {
 	}
 }
 
+// stubAdbExternalVerb is an out-of-process-style `adb` verb Provider (NOT a
+// CheckVerbProvider) — the shape adb takes after the adb → external-plugin dep-shed.
+// runOne dispatches it via the else-branch (invokeVerbProvider), where the committed-APK
+// Origin is consumed by resolveCheckApk host-side BEFORE the wire Invoke (which the stub
+// never reaches here, because resolveCheckApk errors first).
+type stubAdbExternalVerb struct{}
+
+func (stubAdbExternalVerb) Reserved() string     { return "adb" }
+func (stubAdbExternalVerb) Class() ProviderClass { return ClassVerb }
+func (stubAdbExternalVerb) Invoke(context.Context, *Operation) (*Result, error) {
+	return &Result{JSON: []byte(`{"status":"pass","message":"stub"}`)}, nil
+}
+
 // TestRunPlan_StampsStepOrigin is the regression guard for the per-step Origin
 // propagation (description_run.go: op.Origin = fs.origin). The candy-group
 // Origin lives ONCE on the LabeledDescription and is NOT baked per-step in the
@@ -228,12 +241,29 @@ func TestResolveCheckApk(t *testing.T) {
 // committed-APK check sees an empty c.Origin and cannot anchor its fixture —
 // the live android-emulator-pod "no such file" bug.
 //
-// We drive an `adb: install` apk check whose CandyDirs is empty with a sentinel
-// CandyScanErr set. WITH the origin stamped, resolveCheckApk reaches the
-// CandyDirs-miss branch and reports the SCAN ERROR; WITHOUT it, c.Origin is
-// empty and resolveCheckApk fails with "not a candy origin" instead. Asserting
-// the sentinel appears in the step result proves the origin reached the Op.
+// adb is now an EXTERNAL-CHARLY-VERB, so the committed-APK anchoring (resolveCheckApk)
+// runs inside invokeVerbProvider (the out-of-process dispatch path): we register a stub
+// adb provider so runOne reaches it, and author the explicit runtime `context:` a real
+// external-verb step carries (the VerbCatalog default-context left core with the verb).
+// We then drive an `adb: install` apk check whose CandyDirs is empty with a sentinel
+// CandyScanErr set. WITH the origin stamped, resolveCheckApk reaches the CandyDirs-miss
+// branch and reports the SCAN ERROR; WITHOUT it, c.Origin is empty and resolveCheckApk
+// fails with "not a candy origin" instead. Asserting the sentinel appears in the step
+// result proves the origin reached the Op.
 func TestRunPlan_StampsStepOrigin(t *testing.T) {
+	// Register the stub external adb provider for the duration of this test (adb is no
+	// longer a builtin, so the global registry slot is free), removing it on cleanup.
+	if err := providerRegistry.register(stubAdbExternalVerb{}, "test:stub-adb"); err != nil {
+		t.Fatalf("register stub adb provider: %v", err)
+	}
+	t.Cleanup(func() {
+		k := provKey(ClassVerb, "adb")
+		providerRegistry.mu.Lock()
+		delete(providerRegistry.byKey, k)
+		delete(providerRegistry.origins, k)
+		providerRegistry.mu.Unlock()
+	})
+
 	r := NewRunner(nil, nil, RunModeLive) // resolveCheckApk errors before any subprocess
 	r.Box = "android-emulator"            // satisfy the image-context guard
 	r.CandyScanErr = errors.New("scan-sentinel-boom")
@@ -242,7 +272,7 @@ func TestRunPlan_StampsStepOrigin(t *testing.T) {
 			Origin:      "candy:github.com/owner/repo/candy/android-emulator-layer",
 			Description: "android apps install",
 			Plan: []Step{{
-				Op: Op{ID: "adb-install-apidemos", Adb: "install", Apk: "./tests/data/ApiDemos-debug.apk"},
+				Op: Op{ID: "adb-install-apidemos", Adb: "install", Apk: "./tests/data/ApiDemos-debug.apk", Context: []string{"runtime"}},
 			}},
 		}},
 	}

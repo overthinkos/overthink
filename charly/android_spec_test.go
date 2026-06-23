@@ -1,9 +1,6 @@
 package main
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
 func TestAndroidSpec_IsEndpoint(t *testing.T) {
 	img := &AndroidSpec{Box: "android-emulator"}
@@ -66,36 +63,6 @@ func TestValidateCandyApk(t *testing.T) {
 	}
 }
 
-func TestSplitAdbAddr(t *testing.T) {
-	host, port, err := splitAdbAddr("127.0.0.1:35002")
-	if err != nil || host != "127.0.0.1" || port != 35002 {
-		t.Errorf("splitAdbAddr = (%q,%d,%v), want (127.0.0.1,35002,nil)", host, port, err)
-	}
-	if _, _, err := splitAdbAddr(""); err == nil {
-		t.Error("empty addr should error")
-	}
-	if _, _, err := splitAdbAddr("nohostport"); err == nil {
-		t.Error("missing port should error")
-	}
-}
-
-func TestAndroidDeviceVenue_AdbPrefix(t *testing.T) {
-	// In-pod device uses the baked platform-tools adb against the local serial.
-	inpod := AndroidDevice{Engine: "podman", Container: "charly-bed", Serial: "emulator-5554"}
-	prefix, err := inpod.adbScriptPrefix()
-	if err != nil {
-		t.Fatalf("in-pod adbScriptPrefix err: %v", err)
-	}
-	if !strings.Contains(prefix, "/opt/android-sdk/platform-tools/adb") || !strings.Contains(prefix, "emulator-5554") {
-		t.Errorf("in-pod adb prefix = %q", prefix)
-	}
-	// Endpoint device uses host adb pointed at the remote adb server.
-	ep := AndroidDevice{AdbAddr: "127.0.0.1:35002", Serial: "emulator-5554"}
-	prefix, err = ep.adbScriptPrefix()
-	if err != nil {
-		t.Fatalf("endpoint adbScriptPrefix err: %v", err)
-	}
-	if !strings.Contains(prefix, "adb -H 127.0.0.1 -P 35002") {
-		t.Errorf("endpoint adb prefix = %q, want `adb -H 127.0.0.1 -P 35002 ...`", prefix)
-	}
-}
+// The adb-address parsing (splitAdbAddr) + the per-venue adb-prefix selection
+// (adbScriptPrefix) moved out of core with the goadb-backed install path in the adb →
+// external-plugin dep-shed; their unit coverage now lives in candy/plugin-adb.

@@ -17,7 +17,7 @@
 // the `--- verb discriminators ---` group in #Op.
 #OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" |
 	"cdp" | "wl" | "dbus" | "vnc" | "mcp" | "record" | "spice" |
-	"libvirt" | "kube" | "adb" | "summarize" | "kill" | "plugin") @go(-)
+	"libvirt" | "kube" | "summarize" | "kill" | "plugin") @go(-)
 
 // ---------------------------------------------------------------------------
 // Plan steps: the unified run/check/agent-run/agent-check/include vocabulary.
@@ -63,6 +63,16 @@
 	spice?:          #SpiceMethod
 	libvirt?:        #LibvirtMethod
 	kube?:           #KubeMethod
+	// `adb` is an EXTERNAL-CHARLY-VERB: its implementation (+ the heavy goadb
+	// ADB-wire dependency) lives in the out-of-tree candy/plugin-adb module,
+	// served OUT-OF-PROCESS. Like cdp/vnc (and unlike
+	// file/package/service/command, which left #Op entirely, re-authored as
+	// `plugin: <verb>`), adb KEEPS its `adb:` discriminator + every modifier on
+	// this closed #Op — authoring is unchanged (`adb: devices`, not `plugin: adb`).
+	// It therefore left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc CheckVerbProvider
+	// to gate) BUT keeps this field + #AdbMethod here, so `adb: devices` still
+	// validates against the method enum and VerbsSet still classifies the op (then
+	// dispatch resolves the registered external provider).
 	adb?:            #AdbMethod
 	// `appium` is an EXTERNAL-CHARLY-VERB: its implementation (+ the heavy
 	// github.com/tebeka/selenium dependency) lives in the out-of-tree

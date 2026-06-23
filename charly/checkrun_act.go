@@ -115,20 +115,16 @@ func (packageVerb) RenderProvisionScript(c *Op, distros []string) (string, bool)
 		`else echo "no supported package manager" >&2; exit 1; fi`, name), true
 }
 
-func (serviceVerb) RenderProvisionScript(c *Op, _ []string) (string, bool) {
-	// Enable + start the unit under whichever init the target runs.
-	svc := shellSingleQuote(c.Service)
-	return fmt.Sprintf(`if command -v systemctl >/dev/null 2>&1; then systemctl enable --now %[1]s; `+
-		`elif command -v supervisorctl >/dev/null 2>&1; then supervisorctl start %[1]s; `+
-		`else echo "no service manager" >&2; exit 1; fi`, svc), true
-}
-
-// user / unix_group / kernel-param / mount RenderProvisionScript (the do:act halves) live
-// with their dedicated plugin units (plugin_user.go / plugin_unix_group.go /
-// plugin_kernel_param.go / plugin_mount.go) — each decodes plugin_input rather than the
-// removed Op.User/UID/Home/Shell / Op.UnixGroup/GID / Op.KernelParam/Value /
-// Op.Mount/MountSource/Filesystem/Opts fields. They still reuse the package-level
-// firstMatcherScalar (below) + shellSingleQuote via the shared decodeMatcherList codec.
+// service / user / unix_group / kernel-param / mount RenderProvisionScript (the do:act
+// halves) live with their dedicated plugin units (plugin_verb_service.go / plugin_user.go /
+// plugin_unix_group.go / plugin_kernel_param.go / plugin_mount.go) — each decodes
+// plugin_input rather than the removed Op.Service/Running/Enabled / Op.User/UID/Home/Shell
+// / Op.UnixGroup/GID / Op.KernelParam/Value / Op.Mount/MountSource/Filesystem/Opts fields.
+// `service`'s RenderProvisionScript is the RUNTIME live-act path ONLY (a `run: {plugin:
+// service}` step the check Runner executes) — its build/deploy install timeline lowers
+// into a TYPED ServicePackagedStep via the TypedStepProvider (compileActOp), NOT this
+// shell. They still reuse the package-level firstMatcherScalar (below) + shellSingleQuote
+// via the shared decodeMatcherList codec.
 
 // firstMatcherScalar returns the first matcher's value rendered as a string,
 // used by the act renderers to read a desired scalar (sysctl value, mount

@@ -101,7 +101,9 @@ check-stack-layer:
     check-service-running:
         check: service=check-sleep
         id: check-service-running
-        service: check-sleep
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: check-sleep
+            running: true

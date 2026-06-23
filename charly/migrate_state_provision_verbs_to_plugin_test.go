@@ -59,7 +59,11 @@ func TestMigrateStateProvisionVerbsToPlugin(t *testing.T) {
 		"          exit_status: 0\n" +
 		"        - check: \"the guest reports its kernel\"\n" +
 		"          libvirt: \"guest/exec\"\n" +
-		"          command: \"uname -r\"\n"
+		"          command: \"uname -r\"\n" +
+		"        - check: \"the sleep service is running\"\n" +
+		"          service: \"check-sleep\"\n" +
+		"          running: true\n" +
+		"          enabled: true\n"
 	rootPath := filepath.Join(dir, "charly.yml")
 	if err := os.WriteFile(rootPath, []byte(rootYML), 0o644); err != nil {
 		t.Fatal(err)
@@ -83,7 +87,7 @@ func TestMigrateStateProvisionVerbsToPlugin(t *testing.T) {
 		t.Fatalf("re-parse migrated YAML: %v", err)
 	}
 	plan, ok := doc["sample"].(map[string]any)["plan"].([]any)
-	if !ok || len(plan) != 9 {
+	if !ok || len(plan) != 10 {
 		t.Fatalf("plan shape wrong (len=%d): %v", len(plan), doc["sample"])
 	}
 
@@ -231,6 +235,22 @@ func TestMigrateStateProvisionVerbsToPlugin(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "field-split: matchers stay") {
 		t.Errorf("comment on the command check step was lost:\n%s", out)
+	}
+
+	// (j) a check: service step CONVERTS — the TYPED-STEP-OUTLIER verb migrates like the
+	//     others; its companions running/enabled BOTH move into plugin_input.
+	svcStep := plan[9].(map[string]any)
+	if svcStep["plugin"] != "service" {
+		t.Errorf("step 9: plugin: service not added, got %v: %v", svcStep["plugin"], svcStep)
+	}
+	for _, k := range []string{"service", "running", "enabled"} {
+		if _, has := svcStep[k]; has {
+			t.Errorf("step 9: bare %s: not removed (must move into plugin_input): %v", k, svcStep)
+		}
+	}
+	svcPI := svcStep["plugin_input"].(map[string]any)
+	if svcPI["service"] != "check-sleep" || svcPI["running"] != true || svcPI["enabled"] != true {
+		t.Errorf("step 9: plugin_input = %v, want {service: check-sleep, running: true, enabled: true}", svcPI)
 	}
 
 	// (h) idempotent — a second pass changes nothing (the nested plugin_input keys are not

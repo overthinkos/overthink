@@ -68,9 +68,9 @@ func (c *Op) VerbsSet() []string {
 	if c.Package != "" {
 		set = append(set, "package")
 	}
-	if c.Service != "" {
-		set = append(set, "service")
-	}
+	// `service` is NO LONGER a verb — it left #OpVerb in the service→plugin extraction
+	// (a service check/run is now `plugin: service` + #ServiceInput, running/enabled moved
+	// into plugin_input). Op no longer carries a Service field, so it contributes no verb.
 	// `command` is NO LONGER a verb — it left #OpVerb in the command→plugin extraction
 	// (a command check/run is now `plugin: command` + #CommandInput). It stays an #Op
 	// modifier ONLY: the live-container verbs wl/libvirt read it as their argv, and the
@@ -125,7 +125,7 @@ func (c *Op) VerbsSet() []string {
 // in-place ${VAR} expansion driven by ExpandVars (free function in main).
 func (c *Op) StringFields() []*string {
 	return []*string{
-		&c.File, &c.Package, &c.Service, &c.Command,
+		&c.File, &c.Package, &c.Command,
 		&c.ID, &c.Description, &c.Timeout,
 		&c.Mode, &c.Owner, &c.GroupOf, &c.Filetype, &c.Sha256,
 		&c.Method, &c.RequestBody,

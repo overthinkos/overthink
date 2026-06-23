@@ -94,10 +94,12 @@ comfyui:
     comfyui-service-running:
         check: service=comfyui
         id: comfyui-service-running
-        service: comfyui
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: comfyui
+            running: true
     comfyui-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:8188}
         id: comfyui-port-reachable

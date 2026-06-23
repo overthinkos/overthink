@@ -61,7 +61,9 @@ os-layer:
     os-bash-service-running:
         check: service=os-bash
         id: os-bash-service-running
-        service: os-bash
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: os-bash
+            running: true

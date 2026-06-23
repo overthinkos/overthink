@@ -14,8 +14,6 @@ type Op struct {
 
 	Package string `yaml:"package,omitempty" json:"package,omitempty"`
 
-	Service string `yaml:"service,omitempty" json:"service,omitempty"`
-
 	Mkdir string `yaml:"mkdir,omitempty" json:"mkdir,omitempty"`
 
 	Copy string `yaml:"copy,omitempty" json:"copy,omitempty"`
@@ -228,11 +226,6 @@ type Op struct {
 	PackageMap map[string]string `yaml:"package_map,omitempty" json:"package_map,omitempty"`
 
 	ExcludeDistros []string `yaml:"exclude_distro,omitempty" json:"exclude_distro,omitempty"`
-
-	// --- service ---
-	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
-
-	Running *bool `yaml:"running,omitempty" json:"running,omitempty"`
 
 	// --- command-verb matchers (SHARED via matchAll: the `command` plugin verb +
 	// the 11 live-container verbs assert exit_status/stdout/stderr off the step Op,

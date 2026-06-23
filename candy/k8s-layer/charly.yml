@@ -358,10 +358,12 @@ k8s-layer:
     harness-k8s-service-running:
         check: service=harness-k8s-fixture
         id: harness-k8s-service-running
-        service: harness-k8s-fixture
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: harness-k8s-fixture
+            running: true
     harness-k8s-port-listening:
         check: port=6443
         id: harness-k8s-port-listening

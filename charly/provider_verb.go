@@ -43,10 +43,28 @@ type LiveVerbProvider interface {
 // shell that performs a state-provision verb's side-effect on the live target
 // (ok=false for a verb with no act form — an action verb whose handler already
 // acts, or a pure observe verb). Only the state-provision verbs (file/package/
-// service/user/group/kernel-param/mount) implement it; runProvisionAct resolves
-// the verb and type-asserts ProvisionActor — the per-verb act switch is gone (C1b).
+// user/group/kernel-param/mount, plus the runtime live-act path of `service`)
+// implement it; runProvisionAct resolves the verb and type-asserts ProvisionActor —
+// the per-verb act switch is gone (C1b).
 type ProvisionActor interface {
 	RenderProvisionScript(op *Op, distros []string) (string, bool)
+}
+
+// TypedStepProvider is the do:act half of a verb provider whose build/deploy install
+// timeline lowers into a TYPED InstallStep — NOT a RenderProvisionScript shell string.
+// The ONE current member is `service`: its act constructs a ServicePackagedStep whose
+// Reverse() records the LOAD-BEARING reversals (ReverseOpServiceDisable / RestoreEnabled
+// / RemoveDropin) a shell string would drop. compileActOp resolves a `plugin:` verb's
+// provider and, when it implements this, returns ConstructStep (the typed step flows
+// through the SAME ServicePackagedStep.Emit{OCI,Local,VM} + Reverse() as before) instead
+// of falling through to a generic OpStep. LowersTo names the step kind (the former
+// VerbCatalog.LowersTo entry, now owned by the provider); ConstructStep builds the step
+// from the op's plugin_input. A TypedStepProvider therefore also "acts in build/deploy"
+// (opActsInBuildDeploy) even though it is not a ProvisionActor.
+type TypedStepProvider interface {
+	Provider
+	LowersTo() StepKind
+	ConstructStep(op *Op, layer *Candy, img *ResolvedBox) InstallStep
 }
 
 // builtinVerbBase supplies the in-proc-only Provider half (Class + a stub Invoke)

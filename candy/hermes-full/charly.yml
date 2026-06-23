@@ -80,10 +80,12 @@ hermes-full:
             command: /usr/bin/jq --version
     hermes-full-step-12:
         check: the supervised hermes agent service is running on the live deployment
-        service: hermes
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: hermes
+            running: true
     hermes-full-step-13:
         agent-check: an operator can open a shell in the deployed box and launch the hermes agent together with any bundled AI CLI (claude/codex/gemini/forge) and developer tool from that one session
     hermes-full-neovim-package:

@@ -47,9 +47,11 @@ redis-client-layer:
         exists: true
     redis-client-layer-step-5:
         check: the keep-alive supervised service is running in the deployed pod
-        service: keep-alive
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: keep-alive
+            running: true
     redis-client-layer-step-6:
         agent-check: the keep-alive service keeps the client pod alive, auto-restarting (restart=always) if it exits, so the harness can keep issuing cross-pod redis-cli probes against a separate redis pod

@@ -18,7 +18,10 @@ func TestCheck_Kind(t *testing.T) {
 		wantErr string // substring
 	}{
 		{"file", Op{File: "/usr/bin/redis"}, "file", ""},
-		{"service", Op{Service: "redis"}, "service", ""},
+		// `service` is NO LONGER a verb — it left #OpVerb in the service→plugin
+		// extraction and is now `plugin: service` + #ServiceInput. A bare Op has no
+		// Service field, so the service CHECK is the generic plugin verb.
+		{"service-as-plugin", Op{Plugin: "service", PluginInput: map[string]any{"service": "redis"}}, "plugin", ""},
 		// `command` is NO LONGER a verb — it left #OpVerb in the command→plugin
 		// extraction and is now a shared #Op modifier (wl/libvirt argv). A bare
 		// Op.Command therefore yields NO verb; the command CHECK is `plugin: command`.
@@ -26,7 +29,7 @@ func TestCheck_Kind(t *testing.T) {
 		{"command-as-plugin", Op{Plugin: "command", PluginInput: map[string]any{"command": "redis-cli ping"}}, "plugin", ""},
 		{"plugin", Op{Plugin: "matching"}, "plugin", ""},
 		{"none", Op{}, "", "no verb"},
-		{"two", Op{File: "/x", Service: "redis"}, "", "multiple verbs"},
+		{"two", Op{File: "/x", Package: "redis"}, "", "multiple verbs"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

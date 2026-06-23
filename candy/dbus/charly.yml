@@ -63,9 +63,11 @@ dbus:
             command: printenv DBUS_SESSION_BUS_ADDRESS
     dbus-step-3:
         check: the supervised dbus session-bus service is running
-        service: dbus
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: dbus
+            running: true
     dbus-step-4:
         agent-check: the supervised dbus service keeps the session bus reachable, restarting automatically (restart=always) if the dbus-daemon process exits

@@ -124,10 +124,12 @@ sshd:
     sshd-service-running:
         check: service=sshd
         id: sshd-service-running
-        service: sshd
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: sshd
+            running: true
     sshd-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:2222}
         id: sshd-port-reachable

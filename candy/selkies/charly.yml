@@ -267,10 +267,12 @@ selkies:
     selkies-service-running:
         check: service=selkies
         id: selkies-service-running
-        service: selkies
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: selkies
+            running: true
     pixelflux-wayland-socket:
         check: |
             command=d="$XDG_RUNTIME_DIR"; [ -n "$d" ] || d=/tmp
@@ -290,10 +292,12 @@ selkies:
     traefik-service-running:
         check: service=traefik
         id: traefik-service-running
-        service: traefik
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: traefik
+            running: true
     selkies-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:3000}
         id: selkies-port-reachable

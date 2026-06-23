@@ -90,10 +90,12 @@ jupyter-ml:
             - runtime
     jupyter-ml-step-5:
         check: the JupyterLab service is running under supervisord
-        service: jupyter-ml
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: jupyter-ml
+            running: true
     jupyter-ml-step-6:
         check: the JupyterLab REST API answers on the published port with a server version
         context:

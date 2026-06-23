@@ -107,7 +107,9 @@ kde-desktop:
             command: systemctl get-default
     kde-desktop-step-8:
         check: the packaged sddm.service is enabled to start at boot
-        service: sddm
-        enabled: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: sddm
+            enabled: true

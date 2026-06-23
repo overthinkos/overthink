@@ -75,10 +75,12 @@ filebrowser:
             - matches: "port: 8080"
     filebrowser-step-6:
         check: the filebrowser service is running under the init system
-        service: filebrowser
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: filebrowser
+            running: true
     filebrowser-step-7:
         check: the web UI answers HTTP 200 on the published port
         timeout: 5s

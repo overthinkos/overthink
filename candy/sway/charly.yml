@@ -102,7 +102,9 @@ sway:
         exists: true
     sway-step-10:
         check: the sway compositor service is running under supervisord
-        service: sway
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: sway
+            running: true

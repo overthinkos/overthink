@@ -16,7 +16,7 @@
 // VerbCatalog entry (the registry bijection gate proves it). Keep in lockstep with
 // the `--- verb discriminators ---` group in #Op.
 #OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" |
-	"file" | "package" | "service" |
+	"file" | "package" |
 	"cdp" | "wl" | "dbus" | "vnc" | "mcp" | "record" | "spice" |
 	"libvirt" | "kube" | "adb" | "appium" | "summarize" | "kill" | "plugin") @go(-)
 
@@ -50,7 +50,6 @@
 	// --- verb discriminators (exactly one set; Go Kind() enforces) ---
 	file?:           string
 	package?:        string
-	service?:        string
 	mkdir?:          string
 	copy?:           string
 	write?:          string
@@ -193,9 +192,12 @@
 	package_map?: {[string]: string} @go(PackageMap)
 	exclude_distro?: [...string] @go(ExcludeDistros)
 
-	// --- service ---
-	enabled?: bool @go(,type=*bool)
-	running?: bool @go(,type=*bool)
+	// `service`/`running`/`enabled` are NOT here — `service` is an extracted plugin
+	// verb (plugin: service + #ServiceInput, charly/plugin/builtins/service). It left
+	// #OpVerb/spec.OpVerbs, and `running`/`enabled` (read ONLY by the service verb off
+	// the step Op) MOVED into #ServiceInput with it. `running` was reproduced standalone
+	// in #ProcessInput when `process` extracted (process reads its own plugin_input, not
+	// #Op), so removing it here leaves process untouched.
 
 	// --- command-verb matchers (SHARED via matchAll: the `command` plugin verb +
 	// the 11 live-container verbs assert exit_status/stdout/stderr off the step Op,

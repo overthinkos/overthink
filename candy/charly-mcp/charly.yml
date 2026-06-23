@@ -66,10 +66,12 @@ charly-mcp:
         filetype: directory
     charly-mcp-step-3:
         check: the supervised charly-mcp service is running
-        service: charly-mcp
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: charly-mcp
+            running: true
     charly-mcp-step-4:
         check: the MCP endpoint enumerates charly CLI tools over Streamable HTTP
         mcp: list-tools

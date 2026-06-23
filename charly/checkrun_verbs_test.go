@@ -47,14 +47,19 @@ func TestRunner_Package(t *testing.T) {
 	})
 }
 
-// Service verb — running true/false and enabled attribute.
+// service plugin verb — running true/false. Now an extracted state-provision verb, a
+// dedicated builtin plugin unit dispatched IN-PROCESS via the CheckVerbProvider RunVerb
+// path (TestMain loads its schema); authored as plugin: service + plugin_input (service +
+// running/enabled). The service/running/enabled fields left the closed #Op.
 func TestRunner_Service(t *testing.T) {
 	t.Run("running true via supervisorctl", func(t *testing.T) {
 		r, fake := newFakeRunner(t, RunModeLive)
 		fake.responses = []fakeResponse{
 			{matchPrefix: "supervisorctl status 'jupyter'", exit: 0},
 		}
-		res := r.Run(context.Background(), []Op{{Service: "jupyter", Running: new(true)}})
+		res := r.Run(context.Background(), []Op{
+			{Plugin: "service", PluginInput: map[string]any{"service": "jupyter", "running": true}},
+		})
 		if res[0].Status != TestPass {
 			t.Errorf("expected pass, got %+v", res[0])
 		}
@@ -65,7 +70,9 @@ func TestRunner_Service(t *testing.T) {
 		fake.responses = []fakeResponse{
 			{matchPrefix: "supervisorctl status 'jupyter'", exit: 1},
 		}
-		res := r.Run(context.Background(), []Op{{Service: "jupyter", Running: new(true)}})
+		res := r.Run(context.Background(), []Op{
+			{Plugin: "service", PluginInput: map[string]any{"service": "jupyter", "running": true}},
+		})
 		if res[0].Status != TestFail {
 			t.Errorf("expected fail, got %+v", res[0])
 		}

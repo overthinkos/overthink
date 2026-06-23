@@ -83,12 +83,16 @@ func (r *Runner) runPackage(ctx context.Context, c *Op) CheckResult {
 	return passf(c, "installed")
 }
 
-// runService: asks supervisorctl then systemctl. Matches `running` and
-// `enabled` attributes when set.
-func (r *Runner) runService(ctx context.Context, c *Op) CheckResult {
-	svc := shellSingleQuote(c.Service)
+// runService: asks supervisorctl then systemctl. Matches `running` and `enabled`
+// attributes when set. The service unit + the running/enabled expectations arrive from
+// the `service` plugin's typed plugin_input (params.ServiceInput, decoded by
+// serviceVerb.RunVerb in plugin_verb_service.go) — the verb left the closed #Op, so they
+// no longer ride the (removed) Op.Service/Op.Running/Op.Enabled fields. c is retained
+// only for result metadata (id/description via failf/passf).
+func (r *Runner) runService(ctx context.Context, c *Op, service string, running, enabled *bool) CheckResult {
+	svc := shellSingleQuote(service)
 	// Running check
-	if c.Running != nil {
+	if running != nil {
 		probe := fmt.Sprintf(
 			`supervisorctl status %[1]s 2>/dev/null | grep -q RUNNING || systemctl is-active --quiet %[1]s`,
 			svc)
@@ -96,21 +100,21 @@ func (r *Runner) runService(ctx context.Context, c *Op) CheckResult {
 		if err != nil {
 			return failf(c, "running probe: %v", err)
 		}
-		running := exit == 0
-		if running != *c.Running {
-			return failf(c, "running=%v, want %v", running, *c.Running)
+		isRunning := exit == 0
+		if isRunning != *running {
+			return failf(c, "running=%v, want %v", isRunning, *running)
 		}
 	}
 	// Enabled check (systemd concept; supervisord services are always enabled
 	// while supervisord is up — treat supervisorctl presence as enabled).
-	if c.Enabled != nil {
+	if enabled != nil {
 		probe := fmt.Sprintf(
 			`supervisorctl status %[1]s 2>/dev/null | grep -qE '(RUNNING|STARTING|STOPPED)' || systemctl is-enabled --quiet %[1]s`,
 			svc)
 		_, _, exit, _ := r.Exec.RunCapture(ctx, probe)
-		enabled := exit == 0
-		if enabled != *c.Enabled {
-			return failf(c, "enabled=%v, want %v", enabled, *c.Enabled)
+		isEnabled := exit == 0
+		if isEnabled != *enabled {
+			return failf(c, "enabled=%v, want %v", isEnabled, *enabled)
 		}
 	}
 	return passf(c, "ok")

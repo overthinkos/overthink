@@ -229,10 +229,12 @@ versatiles-frontend:
     versatiles-frontend-running:
         check: service=versatiles-frontend
         id: versatiles-frontend-running
-        service: versatiles-frontend
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: versatiles-frontend
+            running: true
     versatiles-frontend-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:8002}
         id: versatiles-frontend-port-reachable

@@ -162,10 +162,12 @@ versatiles:
         mode: "0755"
     versatiles-step-6:
         check: the versatiles service is running under the init system
-        service: versatiles
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: versatiles
+            running: true
     versatiles-step-7:
         check: the serve port is reachable on the host loopback
         timeout: 10s

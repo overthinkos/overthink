@@ -90,10 +90,12 @@ chrome-headless:
         exists: true
     chrome-headless-step-8:
         check: the chrome-headless service is running under the init system
-        service: chrome-headless
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: chrome-headless
+            running: true
     chrome-headless-step-9:
         check: Chrome's CDP /json/version endpoint answers HTTP 200 with a websocket debugger URL through the proxy
         timeout: 5s

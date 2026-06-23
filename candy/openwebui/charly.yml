@@ -119,10 +119,12 @@ openwebui:
         mode: "0755"
     openwebui-step-3:
         check: the openwebui service is running under the init system
-        service: openwebui
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: openwebui
+            running: true
     openwebui-step-4:
         check: the Open WebUI web interface answers HTTP 200 on the published port
         timeout: 30s

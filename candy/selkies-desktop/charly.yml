@@ -69,14 +69,18 @@ selkies-desktop:
     selkies-desktop-panel-running:
         check: service=waybar
         id: selkies-desktop-panel-running
-        service: waybar
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: waybar
+            running: true
     selkies-desktop-notifier-running:
         check: service=swaync
         id: selkies-desktop-notifier-running
-        service: swaync
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: swaync
+            running: true

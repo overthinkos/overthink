@@ -69,9 +69,11 @@ pipewire:
         exists: true
     pipewire-step-7:
         check: the pipewire service is running under the init system
-        service: pipewire
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: pipewire
+            running: true
     pipewire-step-8:
         agent-check: the running PipeWire graph exposes a working core that audio clients can query

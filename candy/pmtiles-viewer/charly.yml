@@ -143,10 +143,12 @@ pmtiles-viewer:
     pmtiles-viewer-running:
         check: service=pmtiles-viewer
         id: pmtiles-viewer-running
-        service: pmtiles-viewer
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: pmtiles-viewer
+            running: true
     pmtiles-viewer-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:8001}
         id: pmtiles-viewer-port-reachable

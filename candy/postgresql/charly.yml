@@ -204,7 +204,9 @@ postgresql:
     postgresql-service-running:
         check: service=postgresql
         id: postgresql-service-running
-        service: postgresql
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: postgresql
+            running: true

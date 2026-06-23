@@ -132,7 +132,9 @@ hermes:
     hermes-service-running:
         check: service=hermes
         id: hermes-service-running
-        service: hermes
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: hermes
+            running: true

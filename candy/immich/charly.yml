@@ -355,10 +355,12 @@ immich:
     immich-server-running:
         check: service=immich-server
         id: immich-server-running
-        service: immich-server
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: immich-server
+            running: true
     immich-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:2283}
         id: immich-port-reachable

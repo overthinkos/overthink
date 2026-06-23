@@ -146,10 +146,12 @@ maputnik:
             command: node --version
     maputnik-step-5:
         check: the maputnik service is running under the init system
-        service: maputnik
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: maputnik
+            running: true
     maputnik-step-6:
         check: the static SPA answers HTTP 200 at the container root on the published port
         timeout: 10s

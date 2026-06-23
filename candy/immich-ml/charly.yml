@@ -101,10 +101,12 @@ immich-ml:
         filetype: directory
     immich-ml-step-9:
         check: the supervised immich-ml service is running
-        service: immich-ml
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: immich-ml
+            running: true
     immich-ml-step-10:
         check: the ML inference API answers its health probe on port 3003 with pong
         exit_status: 0
@@ -119,10 +121,12 @@ immich-ml:
     immich-ml-service-running:
         check: service=immich-ml
         id: immich-ml-service-running
-        service: immich-ml
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: immich-ml
+            running: true
     immich-ml-internal-port:
         check: command=curl -fsS -o /dev/null -w "%{http_code}" http://127.0.0.1:3003/ping
         id: immich-ml-internal-port

@@ -16,17 +16,20 @@
 // the load-gate compile) AND splices onto the base — the base ++ plugin splice
 // exists to detect a def-name collision with the base, not to resolve base refs.
 //
-// `running` is a SHARED base #Op field (the `service` verb also reads it), so it
-// STAYS in #Op; this plugin reproduces its `bool` shape standalone here (a bare
-// primitive, NO def reference, so there is no collision when base ++ plugin
-// compiles). Its provider is a CheckVerbProvider — it dispatches IN-PROCESS via
-// RunVerb and so keeps the live *Runner the pgrep probe needs (mirrors
-// examplerunverb), the property this extraction preserves.
+// `running` is reproduced here standalone (a bare primitive, NO def reference, so there
+// is no collision when base ++ plugin compiles) because every plugin schema must be
+// self-contained. It is NO LONGER a base #Op field: when `process` extracted, `running`
+// stayed in #Op only because the `service` verb still read it off the step Op; the later
+// service→plugin extraction moved `running` (and `enabled`) into #ServiceInput and removed
+// all three from #Op, so process now reads its OWN plugin_input.running and #Op carries no
+// `running` at all. Its provider is a CheckVerbProvider — it dispatches IN-PROCESS via
+// RunVerb and so keeps the live *Runner the pgrep probe needs (mirrors examplerunverb),
+// the property this extraction preserves.
 #ProcessInput: {
 	// process — the exact process name pgrep -x matches against.
 	process: string @go(Process)
 	// running — whether the process is expected to be running (default true). A
-	// tri-state pointer so an absent key means "expected running", matching the base
-	// #Op.running semantics the verb had before extraction.
+	// tri-state pointer so an absent key means "expected running"; this is the verb's
+	// own plugin_input field (the base #Op no longer carries `running`).
 	running?: bool @go(Running,type=*bool)
 }

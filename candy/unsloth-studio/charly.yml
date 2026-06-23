@@ -106,10 +106,12 @@ unsloth-studio:
     unsloth-studio-service-running:
         check: service=unsloth-studio
         id: unsloth-studio-service-running
-        service: unsloth-studio
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: unsloth-studio
+            running: true
     unsloth-studio-ui-reachable:
         check: addr=127.0.0.1:${HOST_PORT:8888}
         id: unsloth-studio-ui-reachable

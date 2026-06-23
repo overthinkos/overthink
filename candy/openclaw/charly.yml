@@ -48,10 +48,12 @@ openclaw:
         exists: true
     openclaw-step-1:
         check: the openclaw gateway runs as a supervised service
-        service: openclaw
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: openclaw
+            running: true
     openclaw-step-2:
         check: the running gateway accepts a TCP connection on its published port 18789
         timeout: 5s

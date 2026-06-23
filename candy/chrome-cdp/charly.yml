@@ -138,10 +138,12 @@ chrome-cdp:
         exists: true
     chrome-cdp-step-18:
         check: the cdp-proxy service is running under the init system
-        service: cdp-proxy
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: cdp-proxy
+            running: true
     chrome-cdp-step-19:
         check: Chrome's CDP /json/version endpoint answers HTTP 200 with a websocket debugger URL through the proxy
         timeout: 5s

@@ -74,10 +74,12 @@ testapi:
     testapi-service-running:
         check: service=testapi
         id: testapi-service-running
-        service: testapi
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: testapi
+            running: true
     testapi-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:9090}
         id: testapi-port-reachable

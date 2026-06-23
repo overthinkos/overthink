@@ -34,7 +34,10 @@ func TestRenderProvisionScript(t *testing.T) {
 		contains string
 	}{
 		{"package", Op{Package: "redis"}, "package", true, "install"},
-		{"service", Op{Service: "sshd"}, "service", true, "enable --now"},
+		// service is an extracted state-provision verb. Its build/deploy install timeline
+		// lowers into a typed ServicePackagedStep (compileActOp), but it ALSO keeps a
+		// ProvisionActor for the runtime live-act path, which decodes plugin_input.
+		{"service", Op{Plugin: "service", PluginInput: map[string]any{"service": "sshd"}}, "service", true, "enable --now"},
 		{"file-content", Op{File: "/etc/x.conf", Content: "hi\n", Mode: "0644"}, "file", true, "chmod '0644'"},
 		// unix_group / user / kernel-param / mount are extracted state-provision verbs:
 		// builtin plugin units whose providers are ProvisionActors reading plugin_input (not

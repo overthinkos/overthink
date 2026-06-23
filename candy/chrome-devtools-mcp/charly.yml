@@ -60,10 +60,12 @@ chrome-devtools-mcp:
     chrome-devtools-mcp-service-2:
         check: service=chrome-devtools-mcp
         id: chrome-devtools-mcp-service
-        service: chrome-devtools-mcp
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: chrome-devtools-mcp
+            running: true
     chrome-devtools-mcp-port-2:
         check: addr=127.0.0.1:${HOST_PORT:9224}
         id: chrome-devtools-mcp-port

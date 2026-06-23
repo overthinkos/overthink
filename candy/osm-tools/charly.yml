@@ -210,10 +210,12 @@ osm-tools:
         mode: "0755"
     osm-tools-step-11:
         check: the martin supervisord program is running
-        service: martin
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: martin
+            running: true
     osm-tools-step-12:
         check: the martin port accepts a TCP connection from the host
         timeout: 10s

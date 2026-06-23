@@ -1,4 +1,4 @@
-version: 2026.174.0500
+version: 2026.174.0700
 import:
     - build.yml
     - images.yml

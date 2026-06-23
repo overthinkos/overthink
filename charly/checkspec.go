@@ -296,13 +296,16 @@ var VerbCatalog = map[string]VerbSpec{
 	// lowers into existing reversible InstallPlan step kinds.
 	"file":    {ctxBuildDeployRuntime, DoAssert, true, ""}, // probe; file-creation is the write/copy verbs (act → runtime executor)
 	"package": {ctxBuildDeployRuntime, DoAssert, true, StepKindSystemPackages},
-	"service": {ctxBuildDeployRuntime, DoAssert, true, StepKindServicePackaged}, // act → enable the named packaged unit
-	// unix_group / user / kernel-param / mount are extracted STATE-PROVISION verbs — each
-	// BOTH a check AND an act. They left #Op/spec.OpVerbs for their builtin plugin units
-	// (charly/plugin/builtins/{unix_group,user,kernel_param,mount}) and dispatch via the
-	// generic `plugin:` verb, so they have no VerbCatalog entry; each act renders at install
-	// emit via the act-emit enabler (resolveProvisionScript). http / interface / addr are
-	// observe-only goss verbs likewise extracted (charly/plugin/builtins/{http,interface,addr}).
+	// service / unix_group / user / kernel-param / mount are extracted STATE-PROVISION
+	// verbs — each BOTH a check AND an act. They left #Op/spec.OpVerbs for their builtin
+	// plugin units (charly/plugin/builtins/{service,unix_group,user,kernel_param,mount}) and
+	// dispatch via the generic `plugin:` verb, so they have no VerbCatalog entry. `service`
+	// is the TYPED-STEP outlier: its act lowers into a ServicePackagedStep via the
+	// TypedStepProvider (its former StepKindServicePackaged LowersTo now lives on the
+	// provider, NOT this catalog) so the load-bearing reversals survive; the other four
+	// render at install emit via the act-emit enabler (resolveProvisionScript). http /
+	// interface / addr are observe-only goss verbs likewise extracted
+	// (charly/plugin/builtins/{http,interface,addr}).
 
 	// live-container — runtime only; act drives UI/config, reversed via plan
 	// teardown (never the ledger). kube also legal at deploy (apply manifest).
@@ -369,8 +372,13 @@ func opActsInBuildDeploy(c *Op, verb string) bool {
 		if !ok {
 			return false
 		}
-		_, isActor := prov.(ProvisionActor)
-		return isActor
+		// A ProvisionActor renders an install shell; a TypedStepProvider (service)
+		// lowers into a typed install step. Either is a real build/deploy act path.
+		if _, isActor := prov.(ProvisionActor); isActor {
+			return true
+		}
+		_, isTyped := prov.(TypedStepProvider)
+		return isTyped
 	}
 	return ActsInBuildDeploy(verb)
 }

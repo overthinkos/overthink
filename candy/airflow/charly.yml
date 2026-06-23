@@ -258,24 +258,30 @@ airflow:
     airflow-scheduler-running:
         check: service=airflow-scheduler
         id: airflow-scheduler-running
-        service: airflow-scheduler
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: airflow-scheduler
+            running: true
     airflow-dag-processor-running:
         check: service=airflow-dag-processor
         id: airflow-dag-processor-running
-        service: airflow-dag-processor
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: airflow-dag-processor
+            running: true
     airflow-webserver-running:
         check: service=airflow-webserver
         id: airflow-webserver-running
-        service: airflow-webserver
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: airflow-webserver
+            running: true
     airflow-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:8080}
         id: airflow-port-reachable

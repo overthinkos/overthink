@@ -30,18 +30,72 @@ func TestCompileRunStep_PackageLowersToSystemPackages(t *testing.T) {
 	}
 }
 
-// A run: service step lowers into a ServicePackagedStep (enable the unit).
-func TestCompileRunStep_ServiceLowersToServicePackaged(t *testing.T) {
-	layer := &Candy{Name: "x", plan: []Step{{Run: "enable sshd", Op: Op{Service: "sshd"}}}}
+// The REVERSAL-PRESERVATION GATE for the service→plugin extraction: a
+// run: {plugin: service} step is the TYPED-STEP OUTLIER — compileActOp MUST construct a
+// *ServicePackagedStep (NOT a generic OpStep), so its Reverse() records the LOAD-BEARING
+// reversals (ReverseOpServiceDisable / RestoreEnabled / RemoveDropin). A shell-string
+// OpStep (the path the other extracted state-provision verbs take) would DROP them — that
+// is exactly what this verb's TypedStepProvider exists to prevent.
+func TestCompileRunStep_ServicePluginLowersToServicePackagedWithReversals(t *testing.T) {
+	layer := &Candy{Name: "x", plan: []Step{{Run: "enable sshd", Op: Op{
+		Plugin:      "service",
+		PluginInput: map[string]any{"service": "sshd"},
+	}}}}
 	steps := compileOpSteps(layer, testResolvedBox())
-	var found bool
+
+	var sp *ServicePackagedStep
 	for _, s := range steps {
-		if v, ok := s.(*ServicePackagedStep); ok && v.Unit == "sshd" && v.Enable {
-			found = true
+		if _, isOp := s.(*OpStep); isOp {
+			t.Fatalf("plugin: service run step lowered to a generic OpStep — the load-bearing reversals would be DROPPED; got %#v", s)
+		}
+		if v, ok := s.(*ServicePackagedStep); ok {
+			sp = v
 		}
 	}
-	if !found {
-		t.Fatalf("service run: step did not lower to an enabling ServicePackagedStep; got %#v", steps)
+	if sp == nil {
+		t.Fatalf("plugin: service run step did not lower to a *ServicePackagedStep; got %#v", steps)
+	}
+	if sp.Unit != "sshd" || !sp.Enable {
+		t.Fatalf("ServicePackagedStep = %+v, want Unit=sshd Enable=true", sp)
+	}
+
+	// The constructed step enables the unit → Reverse() disables it. Populate the
+	// teardown-restore + drop-in fields the same way the use_packaged service path does,
+	// and assert ALL THREE load-bearing reverse ops are produced — the property a generic
+	// OpStep cannot express.
+	sp.PriorEnabled = true
+	sp.OverridesText = "[Service]\nEnvironment=X=1\n"
+	sp.OverridesPath = "/etc/systemd/system/sshd.service.d/charly-x.conf"
+	got := map[ReverseOpKind]bool{}
+	for _, op := range sp.Reverse() {
+		got[op.Kind] = true
+	}
+	for _, want := range []ReverseOpKind{ReverseOpServiceDisable, ReverseOpRestoreEnabled, ReverseOpRemoveDropin} {
+		if !got[want] {
+			t.Errorf("ServicePackagedStep.Reverse() missing %q; got %v", want, got)
+		}
+	}
+}
+
+// The service act renders into the box build: a build-context run: {plugin: service}
+// step compiles to a ServicePackagedStep (via the TypedStepProvider) AND emits the enable
+// directive into the OCI Containerfile — proving the full box-build path the extraction
+// preserves end-to-end (compileActOp → ServicePackagedStep → emitServicePackaged).
+func TestServicePluginActEmitsIntoBoxBuild(t *testing.T) {
+	layer := &Candy{Name: "x", plan: []Step{{Run: "enable sshd", Op: Op{
+		Plugin:      "service",
+		PluginInput: map[string]any{"service": "sshd"},
+		Context:     []string{"build"},
+	}}}}
+	steps := compileOpSteps(layer, testResolvedBox())
+	tgt := &OCITarget{}
+	plan := &InstallPlan{Candy: "x", Steps: steps}
+	if err := tgt.Emit([]*InstallPlan{plan}, EmitOpts{}); err != nil {
+		t.Fatalf("Emit: %v", err)
+	}
+	got := tgt.String()
+	if !strings.Contains(got, "enable packaged unit sshd") {
+		t.Errorf("service act did not render the enable directive into the box build:\n%s", got)
 	}
 }
 

@@ -112,10 +112,12 @@ labwc:
     labwc-service-running:
         check: service=labwc
         id: labwc-service-running
-        service: labwc
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: labwc
+            running: true
     labwc-wayland-socket:
         check: command=test -e /tmp/wayland-0
         id: labwc-wayland-socket

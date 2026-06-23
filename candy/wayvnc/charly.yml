@@ -53,10 +53,12 @@ wayvnc:
         mode: "0755"
     wayvnc-step-4:
         check: the supervised wayvnc service is running
-        service: wayvnc
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: wayvnc
+            running: true
     wayvnc-step-5:
         check: the VNC port accepts a TCP connection on the published host port
         context:

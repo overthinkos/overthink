@@ -67,10 +67,12 @@ redis-server-layer:
     harness-redis-service-running:
         check: service=redis-server
         id: harness-redis-service-running
-        service: redis-server
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: redis-server
+            running: true
     harness-redis-port-listening:
         check: port=6379
         id: harness-redis-port-listening

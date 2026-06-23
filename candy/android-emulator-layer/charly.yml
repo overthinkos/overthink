@@ -177,10 +177,12 @@ android-emulator-layer:
         filetype: directory
     android-emulator-layer-step-8:
         check: the emulator supervisord service is running
-        service: emulator
-        running: true
         context:
             - runtime
+        plugin: service
+        plugin_input:
+            service: emulator
+            running: true
     android-emulator-layer-step-9:
         check: the adb server port is reachable on the host
         timeout: 5s

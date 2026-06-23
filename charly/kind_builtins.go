@@ -1,60 +1,21 @@
 package main
 
-import "gopkg.in/yaml.v3"
+// kind_builtins.go — Phase 2 COMPLETION MARKER (every KIND is now a dedicated
+// provider; this file holds NO code, only the navigation tombstone map below: which
+// kind went where and how). The former per-kind decode switch and the last typed
+// builtin (`candy`) have all been extracted into their own dedicated files. A built-in
+// KindProvider decodes via DecodeNode (no JSON) — normalizeNodeInto resolves the node's
+// discriminator through providerRegistry.ResolveKind and calls it; CueDefPath carries the
+// former reservedKindHandlers value (the CUE def the node value validates against).
 
-// kind_builtins.go now hosts only `candy` — the lone remaining manifest-listed builtin
-// KindProvider, the box⊻layer factory arm whose DecodeNode routes to two different core
-// maps (uf.Box vs uf.Candy). Every OTHER kind has been extracted into its own dedicated
-// file (the tombstone comments below are the navigation map: which kind went where and
-// how). A built-in KindProvider decodes via DecodeNode (no JSON) — normalizeNodeInto
-// resolves the node's discriminator through providerRegistry.ResolveKind and calls it;
-// CueDefPath carries the former reservedKindHandlers value (the CUE def the node value
-// validates against).
-
-// candy — the special factory arm (buildCandy returns name + InlineCandy).
-type candyKind struct{ builtinKindBase }
-
-func (candyKind) Reserved() string   { return "candy" }
-func (candyKind) CueDefPath() string { return "#Candy" }
-
-// DecodeNode — EDGE-INHERIT cutover D: `box:` merged INTO `candy:`. A `candy:` node
-// that carries the box base⊻from MARKER (base: or from:) is a full IMAGE (the former
-// box:) → decode as BoxConfig into uf.Box; otherwise it is a LAYER fragment → uf.Candy.
-func (candyKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
-	if candyIsImage(gn) {
-		var b BoxConfig
-		if err := decodeNodeValue(gn, &b); err != nil {
-			return err
-		}
-		ensureMap(&uf.Box)
-		uf.Box[gn.name] = b
-		return nil
-	}
-	name, ic, err := buildCandy(gn)
-	if err != nil {
-		return err
-	}
-	ensureMap(&uf.Candy)
-	uf.Candy[name] = ic
-	return nil
-}
-
-// candyIsImage reports whether a candy: node is a full IMAGE (the former box:): it
-// carries the box base⊻from marker — `base:` (an external base) or `from:` (a builder
-// ref). A LAYER fragment has neither (no layer-candy uses `from:` in the corpus).
-func candyIsImage(gn *genericNode) bool {
-	dv := gn.discValue
-	if dv == nil || dv.Kind != yaml.MappingNode {
-		return false
-	}
-	for i := 0; i+1 < len(dv.Content); i += 2 {
-		switch dv.Content[i].Value {
-		case "base", "from":
-			return true
-		}
-	}
-	return false
-}
+// candy — the box⊻layer factory arm (the LAST kind extracted, completing Phase 2): a
+// `candy:` node carrying the box base⊻from marker is a full IMAGE → uf.Box, otherwise a
+// LAYER fragment → uf.Candy. It is now a dedicated-builtin KindProvider in plugin_candy.go
+// (self-registering via registerDedicatedBuiltin, absent from builtinProviderInstances +
+// the `providers:` manifest like the deploy-shape kinds), calling the CORE box⊻layer
+// routing helpers (candyIsImage + buildCandy, node_candy.go) in-proc; checkKindProviderBijection
+// still proves it is registered. The authored body is validated by the closed core
+// #Candy/#Box (#NodeDoc) gate (registerCueKind("candy", "#Candy"), cue_kind_candy.go).
 
 // The `sidecar` KIND (the sidecar-container template library) is no longer a core
 // builtin kind — it was extracted into a dedicated plugin UNIT (plugin_sidecar.go +

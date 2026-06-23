@@ -17,7 +17,10 @@ import "fmt"
 // the per-kind decode switch is gone (C2). Bundle/resource kinds carrying nested
 // members route to the bundle builder (node_bundle.go); a bare standalone resource
 // (pod/vm/k8s/local/android with no member children) decodes directly into its own
-// spec map. Each kind's decode lives on its provider (kind_builtins.go).
+// spec map. Each kind's decode lives on its own dedicated provider file (every kind
+// is now a dedicated provider — plugin_candy.go / plugin_group.go / plugin_substrate.go
+// for the in-proc KindProviders, the per-kind plugin units for the tier-1 kinds;
+// kind_builtins.go is the navigation-only Phase 2 completion marker).
 func normalizeNodeInto(gn *genericNode, uf *UnifiedFile) error {
 	prov, ok := providerRegistry.ResolveKind(gn.disc)
 	if !ok {

@@ -87,9 +87,10 @@ var rootShapeKeySet = func() map[string]bool {
 // ---------------------------------------------------------------------------
 
 // The kind decode dispatch + the kind⇄def bijection now live on the KindProviders
-// (kind_builtins.go) — folded onto the providers in C2 (R3), replacing the former
-// hand-maintained handler map + its bijection gate. checkKindProviderBijection runs
-// in kind_builtins.go's init().
+// (each in its own dedicated provider file) — folded onto the providers in C2 (R3),
+// replacing the former hand-maintained handler map + its bijection gate.
+// checkKindProviderBijection runs in registry_bootstrap.go's init() (the ONE built-in
+// registration site), after all provider registration.
 
 // checkVerbBijection verifies the package-main VerbCatalog dispatch table and the
 // CUE verb vocabulary (spec.OpVerbs) are in exact bijection, and that every verb is

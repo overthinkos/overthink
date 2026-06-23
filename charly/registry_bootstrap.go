@@ -22,15 +22,16 @@ import (
 // manifest, yet dispatching identically through providerRegistry. Two sub-cases share the
 // mechanism: (1) a schema-LESS IR provider (a deploy-target / step / builder — derived from
 // cross-refs or candy-internal, never user-authored, so no authored input to validate); and
-// (2) a deploy-shape KIND provider (group + pod/vm/k8s/local/android — plugin_group.go /
-// plugin_substrate.go), which IS user-authored but is validated by the CLOSED CORE
-// #Pod/#Vm/#K8s/#Local/#Android/#Deploy (#NodeDoc) gate rather than a served plugin schema,
-// and which recurses over the genericNode member tree into the typed core deploy maps (so it
-// cannot use the schema-carrying RegisterBuiltinPluginUnit / runPluginKind path the tier-1
-// kinds use). The per-class bijection gates below still prove every such provider is
-// registered (deploy/step have a gate, kinds have checkKindProviderBijection; builders have
+// (2) a deploy-shape OR factory KIND provider (group + pod/vm/k8s/local/android — plugin_group.go /
+// plugin_substrate.go — plus candy, the box⊻layer factory arm — plugin_candy.go), which IS
+// user-authored but is validated by the CLOSED CORE #Pod/#Vm/#K8s/#Local/#Android/#Deploy/#Candy/#Box
+// (#NodeDoc) gate rather than a served plugin schema, and which decodes into the typed core maps
+// (the deploy-shapes recurse over the genericNode member tree into uf.Bundle/uf.Pod/…; candy routes
+// box⊻layer into uf.Box/uf.Candy) — so it cannot use the schema-carrying RegisterBuiltinPluginUnit /
+// runPluginKind path the tier-1 kinds use. The per-class bijection gates below still prove every such
+// provider is registered (deploy/step have a gate, kinds have checkKindProviderBijection; builders have
 // none). See plugin_deploy_local.go, plugin_step_reboot.go, plugin_builder_cargo.go,
-// plugin_group.go, plugin_substrate.go.
+// plugin_group.go, plugin_substrate.go, plugin_candy.go.
 var builtinProviderInstances = []Provider{
 	// verbs (ClassVerb) — file/package/command/service/http/interface/addr/unix_group/user/
 	// kernel-param/mount are NOT here: each is a dedicated plugin UNIT (plugin_verb_file.go /
@@ -44,18 +45,18 @@ var builtinProviderInstances = []Provider{
 	cdpVerb{}, wlVerb{}, dbusVerb{}, vncVerb{},
 	mcpVerb{}, recordVerb{}, spiceVerb{}, libvirtVerb{}, kubeVerb{}, adbVerb{}, appiumVerb{},
 	summarizeVerb{}, killVerb{}, pluginVerb{},
-	// kinds (ClassKind) — only `candy` (the box⊻layer factory arm) remains a manifest-listed
-	// typed builtin here. Every OTHER kind is extracted into a dedicated file: the tier-1
-	// kinds (agent/module/sidecar/package-group/distro/builder/init/resource/target) became
-	// schema-carrying RegisterBuiltinPluginUnit plugins routed through runPluginKind, and the
-	// 6 deploy-shape kinds (group + pod/vm/k8s/local/android) became dedicated-builtin
-	// KindProviders (plugin_group.go / plugin_substrate.go) self-registering via
-	// registerDedicatedBuiltin — they stay in-proc KindProviders (typed DecodeNode → the core
-	// buildBundleNodeInto / buildStandaloneResource recursion helpers) because they recurse
-	// over the genericNode member tree and land in the typed core deploy maps. All of those
-	// are absent from BOTH this slice and the providers: manifest; checkKindProviderBijection
-	// still proves each spec.KindWords entry has a registered KindProvider.
-	candyKind{},
+	// kinds (ClassKind) — NONE remain here: Phase 2 is COMPLETE, every kind is now a
+	// dedicated provider file. The tier-1 kinds (agent/module/sidecar/package-group/distro/
+	// builder/init/resource/target) became schema-carrying RegisterBuiltinPluginUnit plugins
+	// routed through runPluginKind; the 7 dedicated-builtin KindProviders — the 6 deploy-shape
+	// kinds (group + pod/vm/k8s/local/android, plugin_group.go / plugin_substrate.go) plus
+	// candy (the box⊻layer factory arm, plugin_candy.go) — self-register via
+	// registerDedicatedBuiltin, staying in-proc KindProviders (typed DecodeNode → the core
+	// buildBundleNodeInto / buildStandaloneResource recursion helpers for the deploy-shapes,
+	// candyIsImage + buildCandy for candy) because they decode into the typed core maps. All
+	// of those are absent from BOTH this slice and the providers: manifest;
+	// checkKindProviderBijection still proves each spec.KindWords entry has a registered
+	// KindProvider.
 	// deploy targets (ClassDeployTarget) — ALL self-register from their dedicated
 	// plugin_deploy_<name>.go files (the externalizable dedicated-provider pattern):
 	// local, pod, vm, k8s, android.

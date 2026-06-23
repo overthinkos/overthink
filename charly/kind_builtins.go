@@ -2,11 +2,14 @@ package main
 
 import "gopkg.in/yaml.v3"
 
-// The built-in kinds as KindProviders. Each wraps its existing decode logic
-// unchanged — the migration is behavior-preserving; only the normalizeNodeInto
-// dispatch switch is replaced by providerRegistry.ResolveKind. CueDefPath carries
-// the former reservedKindHandlers value (the CUE def the node value validates
-// against).
+// kind_builtins.go now hosts only `candy` — the lone remaining manifest-listed builtin
+// KindProvider, the box⊻layer factory arm whose DecodeNode routes to two different core
+// maps (uf.Box vs uf.Candy). Every OTHER kind has been extracted into its own dedicated
+// file (the tombstone comments below are the navigation map: which kind went where and
+// how). A built-in KindProvider decodes via DecodeNode (no JSON) — normalizeNodeInto
+// resolves the node's discriminator through providerRegistry.ResolveKind and calls it;
+// CueDefPath carries the former reservedKindHandlers value (the CUE def the node value
+// validates against).
 
 // candy — the special factory arm (buildCandy returns name + InlineCandy).
 type candyKind struct{ builtinKindBase }
@@ -82,18 +85,13 @@ func candyIsImage(gn *genericNode) bool {
 // the plugin's served #AgentInput schema; UnifiedFile.Agents() reads it back into the
 // name-keyed map[string]*AgentConfig the harness consumes.
 
-type groupKind struct{ builtinKindBase }
-
-func (groupKind) Reserved() string   { return "group" }
-func (groupKind) CueDefPath() string { return "#Deploy" }
-
-// DecodeNode — EDGE-INHERIT cutover C: group: is UNAMBIGUOUSLY a TARGETLESS deploy
-// group (resource members, no own workload — the former targetless `bundle:`). The
-// Calamares package group moved to its own `package-group:` kind, so the former
-// shape-routing is gone.
-func (groupKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
-	return buildBundleNodeInto(gn, uf)
-}
+// The `group` deploy-shape KIND (the targetless deploy group) is no longer a builtin
+// kind decoded HERE — it was extracted into its OWN dedicated-builtin KindProvider file
+// (plugin_group.go), mirroring the deploy-target/step/builder dedicated-provider pattern.
+// It stays an in-proc KindProvider (typed DecodeNode → the core buildBundleNodeInto
+// recursion helper, node_bundle.go) because it recurses over the genericNode member tree
+// and lands in the typed core uf.Bundle map; it is absent from builtinProviderInstances +
+// the `providers:` manifest and self-registers via registerDedicatedBuiltin.
 
 // The Calamares package group (`package-group:`) is no longer a core builtin kind —
 // it was extracted into a dedicated plugin UNIT (plugin_package_group.go +
@@ -107,46 +105,12 @@ func (groupKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
 // `module:` node now routes through runPluginKind (Invoke/OpLoad) into
 // uf.PluginKinds["module"], validated against the plugin's served #ModuleInput schema.
 
-// standaloneKind — the 5 resource-deploy kinds (pod/vm/k8s/local/android). A
-// standalone entity unless it carries resource children, in which case it is a
-// bundle-shaped node → the bundle builder. Parameterized by word + def.
-type standaloneKind struct {
-	builtinKindBase
-	word string
-	def  string
-}
-
-func (k standaloneKind) Reserved() string   { return k.word }
-func (k standaloneKind) CueDefPath() string { return k.def }
-func (k standaloneKind) DecodeNode(gn *genericNode, uf *UnifiedFile) error {
-	// EDGE-INHERIT cutover B: a substrate kind is BOTH the template entity AND the
-	// deploy. A node is a DEPLOY when it carries a cross-ref (`from:`/`image:`, or a
-	// scalar disc value like `vm: pg-vm`) or resource members; otherwise it is a
-	// standalone TEMPLATE (e.g. `vm: {source: …}`). The per-substrate from⊻image /
-	// source⊻from validity is Go-enforced downstream.
-	if isDeployShape(gn) || len(resourceChildren(gn)) > 0 {
-		return buildBundleNodeInto(gn, uf)
-	}
-	return buildStandaloneResource(gn, uf)
-}
-
-// isDeployShape reports whether a substrate node is a DEPLOY (vs a standalone
-// template): a scalar discriminator value (`vm: pg-vm` / `pod: img`) is a cross-ref
-// deploy, and a mapping value carrying `from:` or `image:` is a deploy.
-func isDeployShape(gn *genericNode) bool {
-	dv := gn.discValue
-	if dv == nil {
-		return false
-	}
-	if dv.Kind == yaml.ScalarNode {
-		return dv.Value != ""
-	}
-	if dv.Kind == yaml.MappingNode {
-		for i := 0; i+1 < len(dv.Content); i += 2 {
-			if k := dv.Content[i].Value; k == "from" || k == "image" {
-				return true
-			}
-		}
-	}
-	return false
-}
+// The 5 resource-substrate deploy-shape KINDS (pod/vm/k8s/local/android) are no longer
+// builtin kinds decoded HERE — they were extracted into the parameterized dedicated-builtin
+// KindProvider standaloneKind (plugin_substrate.go), mirroring the group extraction
+// (plugin_group.go) and the deploy-target/step/builder dedicated-provider pattern. Each stays
+// an in-proc KindProvider (typed DecodeNode → the core buildBundleNodeInto /
+// buildStandaloneResource helpers) because it recurses over the genericNode member tree and
+// lands in the typed core maps (uf.Bundle for a deploy, uf.Pod/uf.VM/uf.K8s/uf.Local/
+// uf.Android for a bare template); the 5 instances are absent from builtinProviderInstances +
+// the `providers:` manifest and self-register via registerDedicatedBuiltin.

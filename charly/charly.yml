@@ -9,9 +9,12 @@ version: 2026.174.1100
 # dedicated-provider pattern — e.g. deploy:local, builder:cargo, step:Reboot)
 # self-registers from that file and is intentionally NOT listed here. Every deploy
 # target (local/pod/vm/k8s/android) and every builder (aur/pixi/cargo/npm) is now
-# externalized this way, so those two lists are empty by design.
+# externalized this way, so those two lists are empty by design. Every KIND except
+# `candy` is likewise dedicated-file-registered (the tier-1 build-vocab/calamares kinds
+# as schema-carrying plugin units; the 6 deploy-shape kinds group/pod/vm/k8s/local/android
+# as in-proc dedicated-builtin KindProviders), so only `candy` remains listed here.
 providers:
-    kind: [android, candy, group, k8s, local, pod, vm]
+    kind: [candy]
     verb: [adb, appium, cdp, dbus, kill, kube, libvirt, mcp, plugin, record, spice, summarize, vnc, wl]
     deploy: []
     step: []

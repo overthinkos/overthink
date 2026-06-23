@@ -5,7 +5,7 @@ import "github.com/alecthomas/kong"
 // checkCommandHolder is the Kong grammar holder for the extracted `charly check`
 // command tree. Unlike the other dedicated command providers (which return an
 // ANONYMOUS holder struct from KongCommand), check needs a NAMED holder for ONE
-// reason: the out-of-process NESTED command plugins — `charly check kube/adb/appium`,
+// reason: the out-of-process NESTED command plugins — `charly check kube/adb`,
 // each a NestedCommandProvider with CommandParent()=="check" — must be injected
 // into CheckCmd's embedded kong.Plugins AFTER collectExternalCommandPlugins() runs
 // in main(). A named type lets main() find this holder in cli.Plugins by a single
@@ -38,7 +38,7 @@ var _ = registerDedicatedBuiltin(checkCommand{})
 
 // attachNestedCheckPlugins injects the nested external command plugins (the
 // NestedCommandProvider set whose CommandParent()=="check": `charly check
-// kube/adb/appium`) into the extracted check command's CheckCmd.Plugins embed. It
+// kube/adb`) into the extracted check command's CheckCmd.Plugins embed. It
 // finds the *checkCommandHolder that collectCommandPlugins() placed into the CLI
 // grammar and mutates it in place; nested is the collectExternalCommandPlugins()
 // nestedByParent["check"] slice. A no-op when nested is empty or the holder is

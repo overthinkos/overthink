@@ -20,5 +20,7 @@ func (kubeVerb) MethodField(c *Op) string       { return c.Kube }
 func (adbVerb) Methods() map[string]methodSpec { return adbMethods }
 func (adbVerb) MethodField(c *Op) string       { return c.Adb }
 
-func (appiumVerb) Methods() map[string]methodSpec { return appiumMethods }
-func (appiumVerb) MethodField(c *Op) string       { return c.Appium }
+// appium has NO in-proc method contract here — it is an EXTERNAL-CHARLY-VERB
+// (candy/plugin-appium). Its #AppiumMethod method-name allowlist is enforced by the CUE
+// enum on core #Op; its cross-field required-modifier checks run inside the plugin at
+// dispatch (the in-proc LiveVerbProvider validateCharlyVerb path no longer applies).

@@ -321,7 +321,12 @@ var VerbCatalog = map[string]VerbSpec{
 	"libvirt": {ctxRuntimeOnly, DoAssert, false},
 	"kube":    {ctxDeployRuntime, DoAssert, false},
 	"adb":     {ctxRuntimeOnly, DoAssert, false},
-	"appium":  {ctxRuntimeOnly, DoAssert, false},
+	// `appium` is NOT here — it is an EXTERNAL-CHARLY-VERB served out-of-process by
+	// candy/plugin-appium. It left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc
+	// CheckVerbProvider) but keeps its `appium:` discriminator + modifiers + the
+	// #AppiumMethod enum on core #Op (authoring unchanged); the registered external
+	// provider resolves at dispatch. Its runtime-context legality now lives on the
+	// authored `context:` + the plugin's own box-mode skip, not this table.
 
 	// meta.
 	"summarize": {ctxRuntimeOnly, DoAssert, false},

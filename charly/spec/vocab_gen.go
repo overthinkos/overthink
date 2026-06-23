@@ -260,7 +260,6 @@ var OpVerbs = []string{
 	"libvirt",
 	"kube",
 	"adb",
-	"appium",
 	"summarize",
 	"kill",
 	"plugin",
@@ -407,5 +406,4 @@ var LiveVerbMethods = map[string][]string{
 	"libvirt": {"list", "info", "screenshot", "send-key", "passwd", "qmp", "domain-xml", "console", "events", "guest/ping", "guest/info", "guest/os-info", "guest/time", "guest/hostname", "guest/users", "guest/interfaces", "guest/disks", "guest/fsinfo", "guest/vcpus", "guest/exec", "guest/fstrim", "snapshot/list", "snapshot/create", "snapshot/info", "snapshot/revert", "snapshot/delete"},
 	"kube":    {"nodes", "wait-nodes", "pods", "wait-ready", "ingress", "ingressclass", "storageclass", "service", "lb-external-ip", "addons", "apply", "delete", "raw"},
 	"adb":     {"devices", "shell", "install", "install-app", "uninstall", "getprop", "screencap", "logcat-tail", "wait-for-device", "wait-ui-settled", "current-focus", "keyevent"},
-	"appium":  {"status", "session-create", "session-delete", "install-app", "find", "click", "send-keys", "screenshot", "get-text", "get-attribute", "clear", "find-all", "source", "back", "gesture-tap", "gesture-double-tap", "gesture-long-press", "gesture-drag", "gesture-swipe", "gesture-scroll", "gesture-fling", "gesture-pinch-open", "gesture-pinch-close", "app-start-activity", "app-activate", "app-terminate", "app-remove", "app-clear", "app-is-installed", "app-state", "app-current-activity", "app-current-package", "key-press", "key-hide", "key-shown", "device-info", "device-battery", "device-time", "device-orientation", "device-set-orientation", "device-notifications", "device-get-clipboard", "device-set-clipboard", "device-contexts", "device-context", "execute", "raw"},
 }

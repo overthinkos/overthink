@@ -142,76 +142,12 @@ var adbMethods = map[string]methodSpec{
 	"keyevent":        {path: []string{"adb", "keyevent"}, required: []string{"KeyName"}, posArgs: posKeyName},
 }
 
-// ---------------------------------------------------------------------------
-// appium methods — `charly check appium <method>` drives Appium WebDriver via the
-// tebeka/selenium SDK against the container's host-mapped 4723 port. Session
-// lifecycle (create / delete) persists to ~/.cache/charly/appium/sessions/
-// <image>[_<instance>].json so multi-step tests share a session efficiently.
-// Implementation in charly/appium.go + charly/appium_session.go.
-// ---------------------------------------------------------------------------
-
-var appiumMethods = map[string]methodSpec{
-	// lifecycle + element basics (existing)
-	"status":         {path: []string{"appium", "status"}},
-	"session-create": {path: []string{"appium", "session-create"}, required: []string{"Caps"}, posArgs: posCapsFlag},
-	"session-delete": {path: []string{"appium", "session-delete"}},
-	"install-app":    {path: []string{"appium", "install-app"}, required: []string{"Apk"}, posArgs: posApkFlag},
-	"find":           {path: []string{"appium", "find"}, required: []string{"Selector"}, posArgs: posSelectorStrategy},
-	"click":          {path: []string{"appium", "click"}, required: []string{"Selector"}, posArgs: posSelectorStrategy},
-	"send-keys":      {path: []string{"appium", "send-keys"}, required: []string{"Selector", "Text"}, posArgs: posSelectorTextStrategy},
-	"screenshot":     {path: []string{"appium", "screenshot"}, required: []string{"Artifact"}, posArgs: posArtifactFlag, artifact: true},
-
-	// Tier 1 — typed element introspection / navigation
-	"get-text":      {path: []string{"appium", "get-text"}, required: []string{"Selector"}, posArgs: posSelectorStrategy},
-	"get-attribute": {path: []string{"appium", "get-attribute"}, required: []string{"Selector", "Attribute"}, posArgs: posSelectorAttribute},
-	"clear":         {path: []string{"appium", "clear"}, required: []string{"Selector"}, posArgs: posSelectorStrategy},
-	"find-all":      {path: []string{"appium", "find-all"}, required: []string{"Selector"}, posArgs: posSelectorStrategy},
-	"source":        {path: []string{"appium", "source"}, posArgs: posSessionOnly},
-	"back":          {path: []string{"appium", "back"}, posArgs: posSessionOnly},
-
-	// Tier 2 — gesture group (wl sway-style flat names → `charly check appium gesture <op>`)
-	"gesture-tap":         {path: []string{"appium", "gesture", "tap"}, posArgs: posElemOrXY},
-	"gesture-double-tap":  {path: []string{"appium", "gesture", "double-tap"}, posArgs: posElemOrXY},
-	"gesture-long-press":  {path: []string{"appium", "gesture", "long-press"}, posArgs: posElemOrXY},
-	"gesture-drag":        {path: []string{"appium", "gesture", "drag"}, posArgs: posElemOrXY},
-	"gesture-swipe":       {path: []string{"appium", "gesture", "swipe"}, required: []string{"Direction"}, posArgs: posGesture},
-	"gesture-scroll":      {path: []string{"appium", "gesture", "scroll"}, required: []string{"Direction"}, posArgs: posGesture},
-	"gesture-fling":       {path: []string{"appium", "gesture", "fling"}, required: []string{"Direction"}, posArgs: posGesture},
-	"gesture-pinch-open":  {path: []string{"appium", "gesture", "pinch-open"}, posArgs: posGesture},
-	"gesture-pinch-close": {path: []string{"appium", "gesture", "pinch-close"}, posArgs: posGesture},
-
-	// Tier 2 — app lifecycle + activity group
-	"app-start-activity":   {path: []string{"appium", "app", "start-activity"}, required: []string{"Activity"}, posArgs: posActivity},
-	"app-activate":         {path: []string{"appium", "app", "activate"}, required: []string{"AppId"}, posArgs: posAppId},
-	"app-terminate":        {path: []string{"appium", "app", "terminate"}, required: []string{"AppId"}, posArgs: posAppId},
-	"app-remove":           {path: []string{"appium", "app", "remove"}, required: []string{"AppId"}, posArgs: posAppId},
-	"app-clear":            {path: []string{"appium", "app", "clear"}, required: []string{"AppId"}, posArgs: posAppId},
-	"app-is-installed":     {path: []string{"appium", "app", "is-installed"}, required: []string{"AppId"}, posArgs: posAppId},
-	"app-state":            {path: []string{"appium", "app", "state"}, required: []string{"AppId"}, posArgs: posAppId},
-	"app-current-activity": {path: []string{"appium", "app", "current-activity"}, posArgs: posSessionOnly},
-	"app-current-package":  {path: []string{"appium", "app", "current-package"}, posArgs: posSessionOnly},
-
-	// Tier 2 — keys + keyboard group
-	"key-press": {path: []string{"appium", "key", "press"}, required: []string{"Keycode"}, posArgs: posKeycode},
-	"key-hide":  {path: []string{"appium", "key", "hide"}, posArgs: posSessionOnly},
-	"key-shown": {path: []string{"appium", "key", "shown"}, posArgs: posSessionOnly},
-
-	// Tier 2 — device / system + WebView context group
-	"device-info":            {path: []string{"appium", "device", "info"}, posArgs: posSessionOnly},
-	"device-battery":         {path: []string{"appium", "device", "battery"}, posArgs: posSessionOnly},
-	"device-time":            {path: []string{"appium", "device", "time"}, posArgs: posSessionOnly},
-	"device-orientation":     {path: []string{"appium", "device", "orientation"}, posArgs: posParamsOnly},
-	"device-set-orientation": {path: []string{"appium", "device", "set-orientation"}, required: []string{"Params"}, posArgs: posParamsOnly},
-	"device-notifications":   {path: []string{"appium", "device", "notifications"}, posArgs: posSessionOnly},
-	"device-get-clipboard":   {path: []string{"appium", "device", "get-clipboard"}, posArgs: posSessionOnly},
-	"device-set-clipboard":   {path: []string{"appium", "device", "set-clipboard"}, required: []string{"Params"}, posArgs: posParamsOnly},
-	"device-contexts":        {path: []string{"appium", "device", "contexts"}, posArgs: posSessionOnly},
-	"device-context":         {path: []string{"appium", "device", "context"}, posArgs: posParamsOnly},
-
-	// Tier 3 — generic escape hatch (cdp raw / check equivalents)
-	"execute": {path: []string{"appium", "execute"}, required: []string{"Expression"}, posArgs: posAppiumExecute},
-	"raw":     {path: []string{"appium", "raw"}, required: []string{"Method", "Path"}, posArgs: posAppiumRaw},
-}
+// The appium method allowlist + its positional-arg builders were removed in the appium →
+// external-plugin dep-shed (the FIRST dep-shedder: github.com/tebeka/selenium left charly's
+// core go.mod). appium is now an EXTERNAL-CHARLY-VERB served out-of-process by
+// candy/plugin-appium: it keeps its `appium:` discriminator + modifiers + #AppiumMethod on
+// core #Op (authoring unchanged) but dispatches via invokeVerbProvider, NOT runCharlyVerb,
+// so it has no in-proc method map here. adb/kube remain (dep-shedders extracted later).
 
 // kube methods all run against a cluster, not an image/container, so
 // skipBox=true across the board.
@@ -569,9 +505,10 @@ func posLibvirtQmp(c *Op) []string {
 	return args
 }
 
-// adb / appium positional builders. All flag-form (--apk, --caps, --selector,
-// --strategy, --text) so the CLI subcommand structs in adb.go / appium.go
-// can use Kong's flag parser directly without positional ordering surprises.
+// adb positional builders. Flag-form (--apk, --artifact, --selector, …) so the CLI
+// subcommand structs in adb.go can use Kong's flag parser directly without positional
+// ordering surprises. (The appium builders were removed in the appium → external-plugin
+// dep-shed; appium no longer dispatches via a `charly check appium` subprocess.)
 
 // posShellArgs prefixes "--" so kong doesn't interpret `-l` / `-p` / etc.
 // shell args as flags of the outer `charly check adb shell` invocation.
@@ -642,142 +579,12 @@ func (r *Runner) resolveCheckApk(apk, origin string) (string, error) {
 
 func posApkFlag(c *Op) []string      { return []string{"--apk", c.Apk} }
 func posArtifactFlag(c *Op) []string { return []string{"--artifact", c.Artifact} }
-func posCapsFlag(c *Op) []string     { return []string{"--caps", c.Caps} }
 
-// appendSession appends --session <id> when an explicit session override is
-// set. Shared by every appium builder (R3: one session-flag rule).
-func appendSession(args []string, c *Op) []string {
-	if c.Session != "" {
-		return append(args, "--session", c.Session)
-	}
-	return args
-}
-
-// appendSelector appends --selector + optional --strategy. Shared prefix for
-// element-targeted appium builders.
-func appendSelector(args []string, c *Op) []string {
-	args = append(args, "--selector", c.Selector)
-	if c.Strategy != "" {
-		args = append(args, "--strategy", c.Strategy)
-	}
-	return args
-}
-
-// appendOptSelector appends --selector(+--strategy) only when a selector is set
-// (used by execute/raw, where the element is optional and substituted via the
-// {element} token).
-func appendOptSelector(args []string, c *Op) []string {
-	if c.Selector == "" {
-		return args
-	}
-	return appendSelector(args, c)
-}
-
-// appendElemOrXY appends either --selector(+--strategy) or --x/--y. The CLI
-// gesture leaves require exactly one of the two targeting modes.
-func appendElemOrXY(args []string, c *Op) []string {
-	if c.Selector != "" {
-		return appendSelector(args, c)
-	}
-	return append(args, "--x", strconv.Itoa(c.X), "--y", strconv.Itoa(c.Y))
-}
-
-// posSelectorStrategy emits --selector + optional --strategy + session. Used by
-// appium find / click / get-text / clear / find-all. Default strategy (xpath)
-// is applied subprocess-side when --strategy is omitted.
-func posSelectorStrategy(c *Op) []string {
-	return appendSession(appendSelector(nil, c), c)
-}
-
-// posSelectorTextStrategy adds --text for send-keys.
-func posSelectorTextStrategy(c *Op) []string {
-	return appendSession(append(appendSelector(nil, c), "--text", c.Text), c)
-}
-
-// posSelectorAttribute adds --attribute for get-attribute.
-func posSelectorAttribute(c *Op) []string {
-	return appendSession(append(appendSelector(nil, c), "--attribute", c.Attribute), c)
-}
-
-// posSessionOnly emits only --session when set (source/back/contexts/info/...).
-func posSessionOnly(c *Op) []string { return appendSession(nil, c) }
-
-// posAppId emits --app-id for the app-lifecycle group.
-func posAppId(c *Op) []string { return appendSession([]string{"--app-id", c.AppId}, c) }
-
-// posActivity emits --activity (+ optional --params) for app-start-activity.
-func posActivity(c *Op) []string {
-	args := []string{"--activity", c.Activity}
-	if c.Params != "" {
-		args = append(args, "--params", c.Params)
-	}
-	return appendSession(args, c)
-}
-
-// posKeycode emits --keycode (+ optional --params) for key-press.
-func posKeycode(c *Op) []string {
-	args := []string{"--keycode", strconv.Itoa(c.Keycode)}
-	if c.Params != "" {
-		args = append(args, "--params", c.Params)
-	}
-	return appendSession(args, c)
-}
-
-// posParamsOnly emits optional --params (+ session). device-* get/set ops:
-// empty params = get, non-empty = the value/JSON to apply.
-func posParamsOnly(c *Op) []string {
-	var args []string
-	if c.Params != "" {
-		args = append(args, "--params", c.Params)
-	}
-	return appendSession(args, c)
-}
-
-// posElemOrXY: element-or-coordinate target (+ optional --params + session).
-// Used by gesture-tap/double-tap/long-press/drag.
-func posElemOrXY(c *Op) []string {
-	args := appendElemOrXY(nil, c)
-	if c.Params != "" {
-		args = append(args, "--params", c.Params)
-	}
-	return appendSession(args, c)
-}
-
-// posGesture: element-or-coordinate + optional --direction/--percent (+ --params
-// + session). Used by gesture-swipe/scroll/fling/pinch-open/pinch-close.
-func posGesture(c *Op) []string {
-	args := appendElemOrXY(nil, c)
-	if c.Direction != "" {
-		args = append(args, "--direction", c.Direction)
-	}
-	if c.Percent != "" {
-		args = append(args, "--percent", c.Percent)
-	}
-	if c.Params != "" {
-		args = append(args, "--params", c.Params)
-	}
-	return appendSession(args, c)
-}
-
-// posAppiumExecute: --expression (+ optional --request-body + optional selector
-// for {element} substitution + session). The mobile:/execute-script escape hatch.
-func posAppiumExecute(c *Op) []string {
-	args := []string{"--expression", c.Expression}
-	if c.RequestBody != "" {
-		args = append(args, "--request-body", c.RequestBody)
-	}
-	return appendSession(appendOptSelector(args, c), c)
-}
-
-// posAppiumRaw: --method + --path (+ optional --request-body + optional selector
-// + session). The full W3C WebDriver HTTP escape hatch.
-func posAppiumRaw(c *Op) []string {
-	args := []string{"--method", c.Method, "--path", c.Path}
-	if c.RequestBody != "" {
-		args = append(args, "--request-body", c.RequestBody)
-	}
-	return appendSession(appendOptSelector(args, c), c)
-}
+// The appium positional-arg builders (the caps/selector/session/gesture/execute/raw
+// flag-form argv helpers) were removed in the appium → external-plugin dep-shed: appium
+// no longer dispatches via runCharlyVerb (there is no `charly check appium` subprocess),
+// so its argv builders have no caller. The W3C method dispatch now lives in
+// candy/plugin-appium. adb keeps posApkFlag/posArtifactFlag above (adb: install/screencap).
 
 // posLogcatTail emits --lines / --filter optionals only when set; the CLI
 // defaults handle the unset case.
@@ -817,9 +624,9 @@ func (r *Runner) runAdb(ctx context.Context, c *Op) CheckResult {
 	return r.runCharlyVerb(ctx, c, "adb", c.Adb, adbMethods)
 }
 
-func (r *Runner) runAppium(ctx context.Context, c *Op) CheckResult {
-	return r.runCharlyVerb(ctx, c, "appium", c.Appium, appiumMethods)
-}
+// The appium runCharlyVerb dispatcher was removed in the appium → external-plugin dep-shed
+// — appium no longer dispatches through a `charly check appium` subprocess; its grpcProvider
+// (candy/plugin-appium) is invoked via invokeVerbProvider with the full #Op.
 
 // runCharlyVerb is the shared dispatch path: skip checks, method lookup,
 // argv building, subprocess exec, matcher pipeline, optional artifact size
@@ -1271,28 +1078,15 @@ func isZeroField(c *Op, name string) bool {
 		return c.Apk == ""
 	case "Property":
 		return c.Property == ""
-	case "Caps":
-		return c.Caps == ""
-	case "Strategy":
-		return c.Strategy == ""
-	case "Session":
-		return c.Session == ""
 	case "Adb":
 		return c.Adb == ""
-	case "Appium":
-		return c.Appium == ""
 	case "AppId":
+		// AppId is still required by adb: install-app. The appium-only required-field
+		// cases (Caps/Strategy/Session/Activity/Attribute/Percent/Keycode/Params, plus
+		// the "Appium" discriminator) were DELETED in the appium → external-plugin
+		// dep-shed: appium's required-modifier checks now run inside candy/plugin-appium
+		// (dispatch.go), so no remaining in-proc verb's required: list names them.
 		return c.AppId == ""
-	case "Activity":
-		return c.Activity == ""
-	case "Attribute":
-		return c.Attribute == ""
-	case "Percent":
-		return c.Percent == ""
-	case "Keycode":
-		return c.Keycode == 0
-	case "Params":
-		return c.Params == ""
 	}
 	// Unknown field name is a programming error: treat as "not zero" so
 	// authoring errors surface elsewhere instead of spurious skips.

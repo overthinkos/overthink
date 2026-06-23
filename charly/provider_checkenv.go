@@ -13,12 +13,18 @@ import (
 // host-side Runner internals (http/port-reachable/kill) stay in-process and are
 // never routed to an out-of-proc provider.
 type CheckEnv struct {
-	Box       string   `json:"box"`
-	Instance  string   `json:"instance"`
-	Mode      string   `json:"mode"` // "live" | "box"
-	Distros   []string `json:"distros"`
-	Venue     string   `json:"venue"`      // r.Exec.Venue()
-	VenueKind string   `json:"venue_kind"` // r.Exec.Kind()
+	Box      string `json:"box"`
+	Instance string `json:"instance"`
+	Mode     string `json:"mode"` // "live" | "box"
+	// ContainerName is the HOST-AUTHORITATIVE container name for the deployment under
+	// test (charly-<box>[_<instance>], with registry-ref stripping) — computed by the
+	// host so an out-of-process verb (e.g. the external appium plugin) reaches the
+	// running container's engine inspect / cp without re-deriving charly's naming
+	// convention. Empty for an image-context (box-mode) run or a venue with no box.
+	ContainerName string   `json:"container_name"`
+	Distros       []string `json:"distros"`
+	Venue         string   `json:"venue"`      // r.Exec.Venue()
+	VenueKind     string   `json:"venue_kind"` // r.Exec.Kind()
 }
 
 func runModeName(m RunMode) string {
@@ -34,6 +40,11 @@ func runModeName(m RunMode) string {
 // provider call.
 func snapshotCheckEnv(r *Runner, _ *Op) *CheckEnv {
 	ce := &CheckEnv{Box: r.Box, Instance: r.Instance, Distros: r.Distros, Mode: runModeName(r.Mode)}
+	// The container name is meaningful only for a live (non-box) run with a real box —
+	// the same condition under which a live-container verb runs at all.
+	if r.Mode != RunModeBox && r.Box != "" && r.Box != "." {
+		ce.ContainerName = containerNameInstance(resolveBoxName(r.Box), r.Instance)
+	}
 	if r.Exec != nil {
 		ce.Venue = r.Exec.Venue()
 		ce.VenueKind = r.Exec.Kind()
@@ -142,6 +153,24 @@ func (r *Runner) runPluginVerb(ctx context.Context, c *Op) CheckResult {
 // when its implementation moves out-of-tree. The caller sets res.Verb.
 func (r *Runner) invokeVerbProvider(ctx context.Context, prov Provider, word string, c *Op) CheckResult {
 	res := CheckResult{}
+	// Resolve a relative committed-APK path (appium: install-app, `apk: ./tests/data/…`)
+	// against the ORIGINATING candy's source tree HOST-side, BEFORE marshaling — an
+	// out-of-process verb has no Runner.CandyDirs, so it cannot anchor the fixture itself.
+	// Same walk-up the in-proc adb verb uses in runCharlyVerb (R3); the plugin then sees
+	// an absolute, candy-anchored path.
+	if c.Apk != "" {
+		resolved, err := r.resolveCheckApk(c.Apk, c.Origin)
+		if err != nil {
+			res.Status = TestFail
+			res.Message = fmt.Sprintf("verb %q: %v", word, err)
+			return res
+		}
+		if resolved != c.Apk {
+			cc := *c
+			cc.Apk = resolved
+			c = &cc
+		}
+	}
 	params, err := marshalJSON(c)
 	if err != nil {
 		res.Status = TestFail

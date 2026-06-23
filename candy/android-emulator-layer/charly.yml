@@ -1,6 +1,6 @@
 android-emulator-layer:
     candy:
-        version: 2026.152.1445
+        version: 2026.174.0700
         description: |
             Compose selkies + android-sdk + appium into a booting Android 16 emulator.
             Composite glue layer that turns the underlying selkies-desktop +
@@ -20,6 +20,14 @@ android-emulator-layer:
             - android-sdk
             - appium-server
             - supervisord
+            # plugin-appium is the OUT-OF-TREE plugin that serves the `appium:` check
+            # verb (the heavy github.com/tebeka/selenium dep lives there, not in charly's
+            # core). Requiring it puts it in this image's scanned candy set, so
+            # loadProjectPlugins builds + connects it before the bed's `appium:` checks
+            # dispatch. (box/cachyos adopts the matching @github pin via reconcile later —
+            # the deliberate cross-repo lag; the R10 bed loads the LOCAL candy via the
+            # superproject override.)
+            - plugin-appium
     android-emulator-layer-env:
         env:
             EMULATOR_NAME: "charly_avd_36"

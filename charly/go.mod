@@ -9,9 +9,9 @@ require (
 	github.com/digitalocean/go-libvirt v0.0.0-20260217163227-273eaa321819
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/google/go-containerregistry v0.20.7
+	github.com/hashicorp/go-plugin v1.8.0
 	github.com/kata-containers/govmm v0.0.0-20220119175834-88960a15dacd
 	github.com/modelcontextprotocol/go-sdk v1.5.0
-	github.com/tebeka/selenium v0.9.9
 	github.com/zach-klippenstein/goadb v0.0.0-20201208042340-620e0e950ed7
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.49.0
@@ -28,7 +28,6 @@ require (
 )
 
 require (
-	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/cockroachdb/apd/v3 v3.2.1 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.18.1 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
@@ -45,7 +44,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gordonklaus/portaudio v0.0.0-20200911161147-bb74aa485641 // indirect
 	github.com/hashicorp/go-hclog v1.6.3 // indirect
-	github.com/hashicorp/go-plugin v1.8.0 // indirect
 	github.com/hashicorp/yamux v0.1.2 // indirect
 	github.com/hraban/opus v0.0.0-20210415224706-ab1467d63813 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect

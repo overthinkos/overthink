@@ -81,7 +81,10 @@ type CheckCmd struct {
 	Wl      WlCmd      `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
 	Kube    KubeCmd    `cmd:"" name:"kube" help:"Kubernetes cluster probes (nodes, wait-nodes, pods, ingress, storageclass, addons, apply, delete, raw)"`
 	Adb     AdbCmd     `cmd:"" help:"Android Debug Bridge — devices, shell, install, uninstall, getprop, screencap, logcat-tail, wait-for-device"`
-	Appium  AppiumCmd  `cmd:"" help:"Appium WebDriver — status, session-create/delete, install-app, find, click, send-keys, screenshot"`
+	// `appium` is NOT a CLI subcommand here — the Appium WebDriver implementation (+ the
+	// tebeka/selenium dependency) was dep-shed into the out-of-tree candy/plugin-appium
+	// module. The `appium:` DECLARATIVE check verb dispatches to that external plugin via
+	// the provider registry (invokeVerbProvider); there is no host `charly check appium`.
 
 	// Check-run management (was `charly check *`)
 	ListAgent CheckListAgentCmd `cmd:"" name:"list-agent" help:"List configured agents from check.yml"`

@@ -46,9 +46,12 @@ var builtinProviderInstances = []Provider{
 	// verb extracted into its OWN dedicated file (plugin_verb_<verb>.go), self-registering
 	// via registerDedicatedBuiltin (the schema-less dedicated-provider path, since their
 	// modifiers stay on the closed base #Op — no plugin_input, no served schema), absent
-	// from both this slice and the providers: manifest. The dep-shedders adb/appium/kube
-	// stay here (manifest-listed) until their later, dep-shedding extraction.
-	kubeVerb{}, adbVerb{}, appiumVerb{},
+	// from both this slice and the providers: manifest. `appium` is the FIRST dep-shedder
+	// EXTRACTED: it is an external-charly-verb (candy/plugin-appium, source github.com/…)
+	// served out-of-process — NOT a compiled-in instance, absent from this slice AND the
+	// providers: manifest; its grpcProvider registers at loadProjectPlugins time. The
+	// dep-shedders adb/kube stay here (manifest-listed) until their later extraction.
+	kubeVerb{}, adbVerb{},
 	summarizeVerb{}, killVerb{}, pluginVerb{},
 	// kinds (ClassKind) — NONE remain here: Phase 2 is COMPLETE, every kind is now a
 	// dedicated provider file. The tier-1 kinds (agent/module/sidecar/package-group/distro/

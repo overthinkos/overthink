@@ -49,12 +49,11 @@ func (adbVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runAdb(ctx, op)
 }
 
-type appiumVerb struct{ builtinVerbBase }
-
-func (appiumVerb) Reserved() string { return "appium" }
-func (appiumVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runAppium(ctx, op)
-}
+// appium is NOT a built-in verb — it is an EXTERNAL-CHARLY-VERB served out-of-process by
+// candy/plugin-appium (the first dep-shed: tebeka/selenium left charly's core go.mod). It
+// keeps its `appium:` discriminator + modifiers on core #Op (authoring unchanged) but is
+// NOT a CheckVerbProvider, so it dispatches via invokeVerbProvider (the else-branch in
+// runOne) once the loader registers its grpcProvider — never through this in-proc set.
 
 type summarizeVerb struct{ builtinVerbBase }
 

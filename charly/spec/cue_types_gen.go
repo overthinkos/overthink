@@ -44,6 +44,15 @@ type Op struct {
 
 	Adb AdbMethod `yaml:"adb,omitempty" json:"adb,omitempty"`
 
+	// `appium` is an EXTERNAL-CHARLY-VERB: its implementation (+ the heavy
+	// github.com/tebeka/selenium dependency) lives in the out-of-tree
+	// candy/plugin-appium module, served OUT-OF-PROCESS. Unlike file/package/
+	// service/command (which left #Op entirely, re-authored as `plugin: <verb>`),
+	// appium KEEPS its `appium:` discriminator + every modifier on this closed #Op —
+	// authoring is unchanged. It therefore left #OpVerb/spec.OpVerbs/VerbCatalog (no
+	// in-proc CheckVerbProvider to gate) BUT keeps this field + #AppiumMethod here, so
+	// `appium: status` still validates against the method enum and VerbsSet still
+	// classifies the op (then dispatch resolves the registered external provider).
 	Appium AppiumMethod `yaml:"appium,omitempty" json:"appium,omitempty"`
 
 	Summarize string `yaml:"summarize,omitempty" json:"summarize,omitempty"`

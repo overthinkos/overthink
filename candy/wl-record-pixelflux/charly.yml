@@ -23,6 +23,8 @@ wl-record-pixelflux:
         run_as: "${USER}"
     wl-record-pixelflux-step-2:
         check: the pixelflux-record wrapper is installed and executable
-        file: ${HOME}/.local/bin/pixelflux-record
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/pixelflux-record
+            exists: true
+            mode: "0755"

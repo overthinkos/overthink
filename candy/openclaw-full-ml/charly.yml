@@ -24,23 +24,33 @@ openclaw-full-ml:
             - sherpa-onnx
     openclaw-full-ml-step-0:
         check: the OpenClaw gateway binary is installed (provided by openclaw-full)
-        file: ${HOME}/.npm-global/bin/openclaw
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/bin/openclaw
+            exists: true
     openclaw-full-ml-step-1:
         check: ffmpeg (whisper's audio decoder, from openclaw-full) is installed at /usr/bin/ffmpeg
-        file: /usr/bin/ffmpeg
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/ffmpeg
+            exists: true
     openclaw-full-ml-step-2:
         check: the ripgrep search binary (from openclaw-full) is installed at /usr/bin/rg
-        file: /usr/bin/rg
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/rg
+            exists: true
     openclaw-full-ml-step-3:
         check: the whisper speech-to-text console script is installed in the default pixi environment
-        file: ${HOME}/.pixi/envs/default/bin/whisper
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.pixi/envs/default/bin/whisper
+            exists: true
     openclaw-full-ml-step-4:
         check: the sherpa-onnx offline TTS voice-model directory is extracted under the user data dir
-        file: ${HOME}/.local/share/sherpa-onnx/models/vits-piper-en_US-lessac-high
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/share/sherpa-onnx/models/vits-piper-en_US-lessac-high
+            filetype: directory
     openclaw-full-ml-step-5:
         agent-check: the running OpenClaw gateway can transcribe audio through whisper and synthesize speech through sherpa-onnx end to end

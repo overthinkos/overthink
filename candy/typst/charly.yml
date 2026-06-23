@@ -31,8 +31,10 @@ typst:
                 rm -rf /tmp/typst.tar.xz /tmp/typst-*
     typst-step-1:
         check: the typst binary is installed at /usr/local/bin/typst
-        file: /usr/local/bin/typst
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/typst
+            exists: true
     typst-step-2:
         check: typst reports a parseable version on stdout
         exit_status: 0

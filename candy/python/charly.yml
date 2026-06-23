@@ -13,8 +13,10 @@ python:
             - pixi
     python-step-0:
         check: the pixi-managed CPython interpreter exists at the default environment bin path
-        file: ${HOME}/.pixi/envs/default/bin/python
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.pixi/envs/default/bin/python
+            exists: true
     python-step-1:
         check: the interpreter reports a CPython 3.13 version
         exit_status: 0

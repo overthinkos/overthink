@@ -74,12 +74,16 @@ chrome:
             command: BROWSER= xdg-settings set default-web-browser google-chrome.desktop || true
     chrome-step-1:
         check: the google-chrome-stable binary is present at its canonical path
-        file: /usr/bin/google-chrome-stable
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/google-chrome-stable
+            exists: true
     chrome-step-2:
         check: the google-chrome.desktop entry the default-browser task references is installed
-        file: /usr/share/applications/google-chrome.desktop
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/share/applications/google-chrome.desktop
+            exists: true
     chrome-package-installed:
         check: package=google-chrome-stable
         id: chrome-package-installed

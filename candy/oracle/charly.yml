@@ -13,8 +13,10 @@ oracle:
             - nodejs
     oracle-step-0:
         check: the oracle executable is installed at ${HOME}/.npm-global/bin/oracle
-        file: ${HOME}/.npm-global/bin/oracle
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/bin/oracle
+            exists: true
     oracle-step-1:
         check: running oracle --version exits cleanly
         exit_status: 0

@@ -197,17 +197,23 @@ osm-tools:
             command: pmtiles version
     osm-tools-step-8:
         check: the gpq-tiles GeoParquet→PMTiles converter is installed at /usr/local/bin/gpq-tiles
-        file: /usr/local/bin/gpq-tiles
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/gpq-tiles
+            exists: true
     osm-tools-step-9:
         check: the martin (musl) tile-server binary is installed at /usr/local/bin/martin
-        file: /usr/local/bin/martin
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/martin
+            exists: true
     osm-tools-step-10:
         check: the martin start wrapper is present and executable (0755)
-        file: /usr/local/bin/martin-wrapper.sh
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/martin-wrapper.sh
+            exists: true
+            mode: "0755"
     osm-tools-step-11:
         check: the martin supervisord program is running
         context:

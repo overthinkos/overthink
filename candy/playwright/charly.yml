@@ -16,12 +16,16 @@ playwright:
             - nodejs
     playwright-step-0:
         check: the playwright binary is installed into the npm global bin directory
-        file: ${HOME}/.npm-global/bin/playwright
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/bin/playwright
+            exists: true
     playwright-step-1:
         check: the playwright package is unpacked under the npm global lib directory
-        file: ${HOME}/.npm-global/lib/node_modules/playwright/package.json
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/lib/node_modules/playwright/package.json
+            exists: true
     playwright-step-2:
         check: running playwright --version exits cleanly and prints a semantic version
         exit_status: 0

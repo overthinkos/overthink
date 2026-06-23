@@ -51,8 +51,10 @@ ollama:
         run_as: root
     ollama-step-1:
         check: the ollama binary is installed at /usr/bin/ollama
-        file: /usr/bin/ollama
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/ollama
+            exists: true
     ollama-step-2:
         check: the running ollama service answers the model-tags API with HTTP 200 on port 11434
         context:

@@ -50,8 +50,10 @@ workspace-mount:
                 systemctl start workspace.mount || true
     workspace-mount-step-3:
         check: the systemd .mount unit is installed and declares the virtiofs type
-        file: /etc/systemd/system/workspace.mount
-        contains: "Type=virtiofs"
+        plugin: file
+        plugin_input:
+            file: /etc/systemd/system/workspace.mount
+            contains: "Type=virtiofs"
     workspace-mount-step-4:
         agent-check: when a workspace share is attached, /workspace is a writable virtiofs mount
     workspace-virtiofs-rw:

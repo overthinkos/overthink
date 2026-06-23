@@ -34,10 +34,12 @@ notebook-graph:
               dest: notebooks
     notebook-graph-step-0:
         check: the notebooks subdirectory is provisioned in the workspace
-        file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks
-        filetype: directory
         context:
             - runtime
+        plugin: file
+        plugin_input:
+            file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks
+            filetype: directory
     notebook-graph-step-1:
         check: the gpu-libraries-demo notebook is present
         exit_status: 0
@@ -51,7 +53,9 @@ notebook-graph:
     notebook-graph-demo-present:
         check: file=${VOLUME_CONTAINER_PATH:workspace}/notebooks/gpu-libraries-demo.py
         id: notebook-graph-demo-present
-        file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks/gpu-libraries-demo.py
-        exists: true
         context:
             - runtime
+        plugin: file
+        plugin_input:
+            file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks/gpu-libraries-demo.py
+            exists: true

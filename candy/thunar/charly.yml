@@ -28,8 +28,10 @@ thunar:
         run_as: "${USER}"
     thunar-step-2:
         check: the thunar file manager binary is installed at /usr/bin/thunar
-        file: /usr/bin/thunar
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/thunar
+            exists: true
     thunar-step-3:
         check: the thunar package is present in the package database
         plugin: package
@@ -40,10 +42,14 @@ thunar:
             installed: true
     thunar-step-4:
         check: a Sway config.d drop-in is installed for thunar
-        file: ${HOME}/.config/sway/config.d/thunar.conf
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.config/sway/config.d/thunar.conf
+            exists: true
     thunar-step-5:
         check: the drop-in binds $mod+e to launch thunar
-        file: ${HOME}/.config/sway/config.d/thunar.conf
-        contains:
-            - contains: "bindsym $mod+e exec thunar"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.config/sway/config.d/thunar.conf
+            contains:
+                - contains: "bindsym $mod+e exec thunar"

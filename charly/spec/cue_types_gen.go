@@ -10,8 +10,6 @@ package spec
 // never authored and intentionally absent.
 type Op struct {
 	// --- verb discriminators (exactly one set; Go Kind() enforces) ---
-	File string `yaml:"file,omitempty" json:"file,omitempty"`
-
 	Mkdir string `yaml:"mkdir,omitempty" json:"mkdir,omitempty"`
 
 	Copy string `yaml:"copy,omitempty" json:"copy,omitempty"`
@@ -201,20 +199,16 @@ type Op struct {
 
 	IntentDo string `yaml:"intent_do,omitempty" json:"intent_do,omitempty"`
 
-	// --- file ---
-	Exists *bool `yaml:"exists,omitempty" json:"exists,omitempty"`
-
+	// --- file/copy/write SHARED modifier ---
+	// `mode` is the SHARED octal-permission modifier: the copy/write install verbs read
+	// Op.Mode at deploy (deploy_target_local.go / deploy_target_vm.go via parseTaskMode),
+	// so it STAYS in #Op. The file-EXCLUSIVE fields (file/exists/owner/group_of/filetype/
+	// contains/sha256) LEFT #Op — they are read ONLY by the `file` plugin verb and now live
+	// in its #FileInput (charly/plugin/builtins/file, with the contains-default semantic
+	// reproduced via decodeContainsList). The state-provision migrator MOVES `mode` into a
+	// file step's plugin_input while LEAVING it here for copy/write (the shared-companion
+	// pattern, like gid between unix_group and user).
 	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
-
-	Owner string `yaml:"owner,omitempty" json:"owner,omitempty"`
-
-	GroupOf string `yaml:"group_of,omitempty" json:"group_of,omitempty"`
-
-	Filetype string `yaml:"filetype,omitempty" json:"filetype,omitempty"`
-
-	Contains ContainsList `yaml:"contains,omitempty" json:"contains,omitempty"`
-
-	Sha256 string `yaml:"sha256,omitempty" json:"sha256,omitempty"`
 
 	// exclude_distro — a SHARED step-level skip filter read by the generic runOne for
 	// EVERY verb (skip the step when any image distro tag intersects the list), NOT a
@@ -346,8 +340,10 @@ type StrVal any /* CUE disjunction: (bool|string|number) */
 
 // Matcher operators (validMatcherOps, validate_check.go). A matcher is a scalar
 // (implicit equals), or a single-operator map; #MatcherList accepts a single
-// matcher OR a list. #ContainsList shares the shape (bare scalars mean contains
-// at decode, but the validated SHAPE is identical).
+// matcher OR a list. (The base no longer carries a contains-default list def — that
+// shape left with the `file` verb's `contains` field and is now reproduced standalone
+// in the file plugin's #FileContains, decoded with the substring default via
+// decodeContainsList; no base #Op field uses it anymore.)
 type MatchOpMap map[string]any
 
 // A BuildKit cache mount. dst is the absolute in-builder cache path; sharing is

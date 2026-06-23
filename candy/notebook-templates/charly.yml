@@ -15,10 +15,12 @@ notebook-templates:
               volume: workspace
     notebook-templates-step-0:
         check: workspace volume is mounted as a directory at the canonical path
-        file: ${VOLUME_CONTAINER_PATH:workspace}
-        filetype: directory
         context:
             - runtime
+        plugin: file
+        plugin_input:
+            file: ${VOLUME_CONTAINER_PATH:workspace}
+            filetype: directory
     notebook-templates-step-1:
         check: at least one .ipynb starter template is present in that workspace
         exit_status: 0

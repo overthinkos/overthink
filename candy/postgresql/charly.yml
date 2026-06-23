@@ -153,25 +153,35 @@ postgresql:
             exec /usr/bin/postgres "${POSTGRES_ARGS[@]}"
     postgresql-step-2:
         check: the PostgreSQL server binary is installed
-        file: /usr/bin/postgres
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/postgres
+            exists: true
     postgresql-step-3:
         check: the psql client binary is installed
-        file: /usr/bin/psql
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/psql
+            exists: true
     postgresql-step-4:
         check: the initdb cluster-bootstrap tool is installed
-        file: /usr/bin/initdb
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/initdb
+            exists: true
     postgresql-step-5:
         check: the pg_isready readiness probe is installed
-        file: /usr/bin/pg_isready
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/pg_isready
+            exists: true
     postgresql-step-6:
         check: the Docker-compatible entrypoint wrapper is present and executable
-        file: /usr/local/bin/postgresql-entrypoint.sh
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/postgresql-entrypoint.sh
+            exists: true
+            mode: "0755"
     postgresql-step-7:
         check: the pgvector similarity-search extension package is installed
         plugin: package

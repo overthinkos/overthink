@@ -31,8 +31,10 @@ pixi:
         run_as: root
     pixi-step-1:
         check: the pixi binary is installed at /usr/local/bin/pixi
-        file: /usr/local/bin/pixi
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/pixi
+            exists: true
     pixi-step-2:
         check: running pixi --version reports the pinned v0.70.2 release
         exit_status: 0

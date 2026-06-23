@@ -48,8 +48,10 @@ gh:
             command: /usr/bin/git-lfs install --system --skip-repo 2>/dev/null || true
     gh-step-1:
         check: the GitHub CLI binary is installed at /usr/bin/gh for driving GitHub (PRs, issues, releases) from the shell
-        file: /usr/bin/gh
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/gh
+            exists: true
     gh-step-2:
         check: gh reports its version without error
         exit_status: 0
@@ -60,8 +62,10 @@ gh:
             command: /usr/bin/gh --version
     gh-step-3:
         check: the git binary is installed at /usr/bin/git
-        file: /usr/bin/git
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/git
+            exists: true
     gh-step-4:
         check: git reports its version without error
         exit_status: 0
@@ -72,8 +76,10 @@ gh:
             command: /usr/bin/git --version
     gh-step-5:
         check: the git-lfs binary is installed at /usr/bin/git-lfs for transparent large-file storage
-        file: /usr/bin/git-lfs
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/git-lfs
+            exists: true
     gh-step-6:
         check: git-lfs reports its version without error
         exit_status: 0

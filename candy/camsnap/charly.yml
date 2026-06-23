@@ -29,8 +29,10 @@ camsnap:
                 go clean -cache
     camsnap-step-1:
         check: the camsnap binary is installed in the user's GOPATH bin
-        file: ${HOME}/go/bin/camsnap
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/go/bin/camsnap
+            exists: true
     camsnap-step-2:
         check: the installed camsnap binary is executable
         exit_status: 0

@@ -22,8 +22,10 @@ ffmpeg:
                       gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
     ffmpeg-step-0:
         check: the ffmpeg transcoder binary is installed at /usr/bin/ffmpeg
-        file: /usr/bin/ffmpeg
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/ffmpeg
+            exists: true
     ffmpeg-step-1:
         check: ffmpeg prints its version banner to stdout
         exit_status: 0
@@ -34,8 +36,10 @@ ffmpeg:
             command: ffmpeg -version
     ffmpeg-step-2:
         check: the ffprobe media inspector binary is installed at /usr/bin/ffprobe
-        file: /usr/bin/ffprobe
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/ffprobe
+            exists: true
     ffmpeg-step-3:
         check: ffprobe prints its version banner to stdout
         exit_status: 0

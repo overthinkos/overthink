@@ -61,8 +61,10 @@ docker-ce:
             command: mkdir -p /etc/modules-load.d && echo "iptable_nat" >> /etc/modules-load.d/ip_tables.conf
     docker-ce-step-1:
         check: the docker CLI binary is installed at /usr/bin/docker
-        file: /usr/bin/docker
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/docker
+            exists: true
     docker-ce-step-2:
         check: the docker CLI reports its version and exits cleanly
         exit_status: 0
@@ -71,8 +73,10 @@ docker-ce:
             command: /usr/bin/docker --version
     docker-ce-step-3:
         check: the containerd runtime binary is installed at /usr/bin/containerd
-        file: /usr/bin/containerd
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/containerd
+            exists: true
     docker-ce-step-4:
         check: the containerd runtime reports its version and exits cleanly
         exit_status: 0
@@ -87,8 +91,10 @@ docker-ce:
             command: /usr/bin/docker compose version
     docker-ce-step-6:
         check: the iptable_nat module is queued for load at boot so the docker bridge can NAT
-        file: /etc/modules-load.d/ip_tables.conf
-        contains: iptable_nat
+        plugin: file
+        plugin_input:
+            file: /etc/modules-load.d/ip_tables.conf
+            contains: iptable_nat
     docker-ce-package:
         check: package=docker-ce
         id: docker-ce-package

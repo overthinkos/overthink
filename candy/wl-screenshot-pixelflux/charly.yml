@@ -21,6 +21,8 @@ wl-screenshot-pixelflux:
         run_as: "${USER}"
     wl-screenshot-pixelflux-step-2:
         check: the pixelflux-screenshot wrapper is installed and executable at the expected path
-        file: ${HOME}/.local/bin/pixelflux-screenshot
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/pixelflux-screenshot
+            exists: true
+            mode: "0755"

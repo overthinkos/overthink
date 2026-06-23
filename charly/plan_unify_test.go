@@ -238,7 +238,7 @@ func TestPlanUnify_IncludeSplicesCandyPlan(t *testing.T) {
 	layers := map[string]*Candy{
 		"redis": {Name: "redis", plan: []Step{
 			{Check: "redis answers ping", Op: Op{Plugin: "command", PluginInput: map[string]any{"command": "redis-cli ping"}, Stdout: MatcherList{{Op: "equals", Value: "PONG"}}}},
-			{Check: "redis binary present", Op: Op{File: "/usr/bin/redis-server"}},
+			{Check: "redis binary present", Op: Op{Plugin: "file", PluginInput: map[string]any{"file": "/usr/bin/redis-server"}}},
 		}},
 	}
 	plan := []Step{{Include: "candy:redis"}}

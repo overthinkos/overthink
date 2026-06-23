@@ -26,16 +26,22 @@ ssh-client:
                     - openssh-client
     ssh-client-step-0:
         check: the ssh client binary is installed at /usr/bin/ssh so in-container git and ssh can connect out
-        file: /usr/bin/ssh
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/ssh
+            exists: true
     ssh-client-step-1:
         check: ssh-add is installed so the forwarded host agent's keys can be loaded and listed
-        file: /usr/bin/ssh-add
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/ssh-add
+            exists: true
     ssh-client-step-2:
         check: ssh-keygen is installed for generating and inspecting key material
-        file: /usr/bin/ssh-keygen
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/ssh-keygen
+            exists: true
     ssh-client-step-3:
         check: ssh -V identifies the client as OpenSSH on stderr and exits cleanly
         exit_status: 0

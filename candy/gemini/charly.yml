@@ -14,12 +14,16 @@ gemini:
             - nodejs
     gemini-step-0:
         check: the gemini binary is installed into the npm global bin directory
-        file: ${HOME}/.npm-global/bin/gemini
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/bin/gemini
+            exists: true
     gemini-step-1:
         check: the @google/gemini-cli scoped package is unpacked under the npm global lib directory
-        file: ${HOME}/.npm-global/lib/node_modules/@google/gemini-cli/package.json
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/lib/node_modules/@google/gemini-cli/package.json
+            exists: true
     gemini-step-2:
         check: running gemini --version exits cleanly and prints a semantic version
         exit_status: 0

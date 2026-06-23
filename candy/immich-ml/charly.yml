@@ -85,20 +85,28 @@ immich-ml:
         run_as: "${USER}"
     immich-ml-step-5:
         check: the dedicated machine-learning virtualenv ships a python interpreter
-        file: /opt/immich/machine-learning/.venv/bin/python
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /opt/immich/machine-learning/.venv/bin/python
+            exists: true
     immich-ml-step-6:
         check: the immich_ml inference module is installed into the machine-learning tree
-        file: /opt/immich/machine-learning/immich_ml
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: /opt/immich/machine-learning/immich_ml
+            filetype: directory
     immich-ml-step-7:
         check: the uv package manager that built the venv is on the system PATH
-        file: /usr/local/bin/uv
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/uv
+            exists: true
     immich-ml-step-8:
         check: the per-user model cache directory is provisioned under the home tree
-        file: ${HOME}/.immich/models
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.immich/models
+            filetype: directory
     immich-ml-step-9:
         check: the supervised immich-ml service is running
         context:

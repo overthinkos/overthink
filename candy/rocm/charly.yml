@@ -35,12 +35,16 @@ rocm:
             installed: true
     rocm-step-1:
         check: the clinfo OpenCL diagnostic tool is present at /usr/bin/clinfo
-        file: /usr/bin/clinfo
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/clinfo
+            exists: true
     rocm-step-2:
         check: the rocm-smi GPU management tool is present at /usr/bin/rocm-smi
-        file: /usr/bin/rocm-smi
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/rocm-smi
+            exists: true
     rocm-step-3:
         check: the rocm-smi package is installed in the image
         plugin: package

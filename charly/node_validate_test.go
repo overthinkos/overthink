@@ -14,7 +14,9 @@ func TestValidateCandyManifestCUE_NodeForm(t *testing.T) {
     package: [redis]
   redis-check:
     check: the binary exists
-    file: /usr/bin/redis-server
+    plugin: file
+    plugin_input:
+      file: /usr/bin/redis-server
 `
 	if err := validateCandyManifestCUE("ok", []byte(ok)); err != nil {
 		t.Fatalf("valid node-form candy rejected: %v", err)

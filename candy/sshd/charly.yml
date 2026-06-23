@@ -76,8 +76,10 @@ sshd:
                 chmod 0440 /etc/sudoers.d/charly-user
     sshd-step-2:
         check: the OpenSSH sshd daemon binary is installed at /usr/sbin/sshd
-        file: /usr/sbin/sshd
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/sbin/sshd
+            exists: true
     sshd-step-3:
         check: the OpenSSH server package is installed (openssh on Arch)
         plugin: package
@@ -89,9 +91,11 @@ sshd:
             installed: true
     sshd-step-4:
         check: the sshd-wrapper launcher is present and world-executable
-        file: /usr/local/bin/sshd-wrapper
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/sshd-wrapper
+            exists: true
+            mode: "0755"
     sshd-step-5:
         check: the uid-1000 account can run sudo with no password (NOPASSWD rule in effect)
         exit_status: 0
@@ -106,14 +110,18 @@ sshd:
     sshd-binary:
         check: file=/usr/sbin/sshd
         id: sshd-binary
-        file: /usr/sbin/sshd
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/sbin/sshd
+            exists: true
     sshd-wrapper:
         check: file=/usr/local/bin/sshd-wrapper
         id: sshd-wrapper
-        file: /usr/local/bin/sshd-wrapper
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/sshd-wrapper
+            exists: true
+            mode: "0755"
     openssh-server-package:
         check: package=openssh-server
         id: openssh-server-package

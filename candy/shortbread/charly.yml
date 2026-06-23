@@ -106,8 +106,10 @@ shortbread:
         mode: "0755"
     shortbread-step-3:
         check: the tilemaker binary built from systemed/tilemaker source is installed under /usr/local/bin
-        file: /usr/local/bin/tilemaker
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/tilemaker
+            exists: true
     shortbread-step-4:
         check: tilemaker resolves on PATH so the notebook DAG can invoke it (tilemaker ships no --version flag, so resolve by name)
         exit_status: 0
@@ -116,20 +118,28 @@ shortbread:
             command: command -v tilemaker
     shortbread-step-5:
         check: the shortbread per-feature Lua classifier is bundled for tilemaker --process
-        file: /opt/shortbread-tilemaker/process.lua
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /opt/shortbread-tilemaker/process.lua
+            exists: true
     shortbread-step-6:
         check: the shortbread layer and zoom schema definition is bundled for tilemaker --config
-        file: /opt/shortbread-tilemaker/config.json
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /opt/shortbread-tilemaker/config.json
+            exists: true
     shortbread-step-7:
         check: the cloned bundle has its .git history stripped to keep the image small
-        file: /opt/shortbread-tilemaker/.git
-        exists: false
+        plugin: file
+        plugin_input:
+            file: /opt/shortbread-tilemaker/.git
+            exists: false
     shortbread-step-8:
         check: the versatiles-watched output directory is pre-created at build time so versatiles serve starts cleanly on a fresh deploy
-        file: /workspace/tiles/shortbread
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /workspace/tiles/shortbread
+            exists: true
     shortbread-step-9:
         agent-check: a tilemaker run converts an OSM PBF into a monaco-shortbread.pmtiles archive in that directory using the bundled config.json and process.lua
     shortbread-lua-runtime:

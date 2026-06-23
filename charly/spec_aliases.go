@@ -32,7 +32,6 @@ type (
 	CandyCapabilities        = spec.CandyCapabilities
 	CandyPluginDecl          = spec.Plugin
 	CandyYAML                = spec.CandyYAML
-	ContainsList             = spec.ContainsList
 	CredentialMount          = spec.CredentialMount
 	DataYAML                 = spec.DataYAML
 	DebootstrapRepo          = spec.DebootstrapRepo

@@ -38,17 +38,23 @@ os-layer:
             charly-os-content-marker
     os-layer-step-2:
         check: the predetermined marker file exists at /etc/charly-os-marker
-        file: /etc/charly-os-marker
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /etc/charly-os-marker
+            exists: true
     os-layer-step-3:
         check: the marker file carries the content marker charly-os-content-marker
-        file: /etc/charly-os-marker
-        contains:
-            - charly-os-content-marker
+        plugin: file
+        plugin_input:
+            file: /etc/charly-os-marker
+            contains:
+                - charly-os-content-marker
     os-layer-step-4:
         check: bash is present at /usr/bin/bash to back the keepalive service
-        file: /usr/bin/bash
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/bash
+            exists: true
     os-layer-step-5:
         check: procps-ng is installed so pgrep can probe the keepalive process
         plugin: package

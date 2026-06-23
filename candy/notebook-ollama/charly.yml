@@ -17,10 +17,12 @@ notebook-ollama:
               dest: ollama
     notebook-ollama-step-0:
         check: the ollama subdirectory is provisioned in the workspace
-        file: ${VOLUME_CONTAINER_PATH:workspace}/ollama
-        filetype: directory
         context:
             - runtime
+        plugin: file
+        plugin_input:
+            file: ${VOLUME_CONTAINER_PATH:workspace}/ollama
+            filetype: directory
     notebook-ollama-step-1:
         check: the Ollama_Requests producer notebook is present
         exit_status: 0
@@ -33,12 +35,16 @@ notebook-ollama:
             command: ls ${VOLUME_CONTAINER_PATH:workspace}/ollama/
     notebook-ollama-step-2:
         check: the Ollama_Requests producer notebook is staged in the image data tree
-        file: /data/workspace/ollama/00_Ollama_Requests.ipynb
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /data/workspace/ollama/00_Ollama_Requests.ipynb
+            exists: true
     notebook-ollama-step-3:
         check: the notebooks.yaml manifest cataloguing the collection is staged
-        file: /data/workspace/ollama/notebooks.yaml
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /data/workspace/ollama/notebooks.yaml
+            exists: true
     notebook-ollama-step-4:
         check: a substantial collection of integration notebooks is staged, not just the producer
         exit_status: 0
@@ -50,20 +56,28 @@ notebook-ollama:
     notebook-ollama-staged-dir:
         check: file=/data/workspace/ollama
         id: notebook-ollama-staged-dir
-        file: /data/workspace/ollama
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: /data/workspace/ollama
+            filetype: directory
     notebook-ollama-openai-staged:
         check: file=/data/workspace/ollama/02_Ollama_OpenAI.ipynb
         id: notebook-ollama-openai-staged
-        file: /data/workspace/ollama/02_Ollama_OpenAI.ipynb
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /data/workspace/ollama/02_Ollama_OpenAI.ipynb
+            exists: true
     notebook-ollama-library-staged:
         check: file=/data/workspace/ollama/03_Ollama_Library.ipynb
         id: notebook-ollama-library-staged
-        file: /data/workspace/ollama/03_Ollama_Library.ipynb
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /data/workspace/ollama/03_Ollama_Library.ipynb
+            exists: true
     notebook-ollama-anthropic-staged:
         check: file=/data/workspace/ollama/05_Ollama_Anthropic.ipynb
         id: notebook-ollama-anthropic-staged
-        file: /data/workspace/ollama/05_Ollama_Anthropic.ipynb
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /data/workspace/ollama/05_Ollama_Anthropic.ipynb
+            exists: true

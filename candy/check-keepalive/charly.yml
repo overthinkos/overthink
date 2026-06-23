@@ -23,18 +23,24 @@ check-keepalive:
               restart: always
     check-keepalive-step-0:
         check: the assembled supervisord config registers a keepalive program
-        file: /etc/supervisord.conf
-        contains:
-            - "[program:keepalive]"
+        plugin: file
+        plugin_input:
+            file: /etc/supervisord.conf
+            contains:
+                - "[program:keepalive]"
     check-keepalive-step-1:
         check: the keepalive program runs /usr/bin/sleep infinity
-        file: /etc/supervisord.conf
-        contains:
-            - "command=/usr/bin/sleep infinity"
+        plugin: file
+        plugin_input:
+            file: /etc/supervisord.conf
+            contains:
+                - "command=/usr/bin/sleep infinity"
     check-keepalive-step-2:
         check: composing check-keepalive pulls in the supervisord init binary
-        file: /usr/bin/supervisord
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/supervisord
+            exists: true
     check-keepalive-step-3:
         check: supervisord reports the keepalive program RUNNING on the live pod
         stdout:
@@ -47,7 +53,9 @@ check-keepalive:
     keepalive-program-registered:
         check: file=/etc/supervisord.conf
         id: keepalive-program-registered
-        file: /etc/supervisord.conf
-        contains:
-            - "[program:keepalive]"
-            - "command=/usr/bin/sleep infinity"
+        plugin: file
+        plugin_input:
+            file: /etc/supervisord.conf
+            contains:
+                - "[program:keepalive]"
+                - "command=/usr/bin/sleep infinity"

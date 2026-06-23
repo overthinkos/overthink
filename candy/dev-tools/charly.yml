@@ -121,20 +121,28 @@ dev-tools:
                 fi
     dev-tools-step-1:
         check: the ripgrep fast-search binary is on PATH
-        file: /usr/bin/rg
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/rg
+            exists: true
     dev-tools-step-2:
         check: the neovim editor binary is on PATH
-        file: /usr/bin/nvim
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/nvim
+            exists: true
     dev-tools-step-3:
         check: the htop process monitor binary is on PATH
-        file: /usr/bin/htop
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/htop
+            exists: true
     dev-tools-step-4:
         check: /usr/bin/bat resolves on every distro (native on Fedora/Arch, batcat symlink on Debian/Ubuntu)
-        file: /usr/bin/bat
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/bat
+            exists: true
     dev-tools-step-5:
         check: the bat pager runs and reports its version
         exit_status: 0
@@ -154,28 +162,34 @@ dev-tools:
     fastfetch-binary:
         check: file=/usr/bin/fastfetch
         id: fastfetch-binary
-        file: /usr/bin/fastfetch
-        exists: true
         exclude_distro:
             - ubuntu
+        plugin: file
+        plugin_input:
+            file: /usr/bin/fastfetch
+            exists: true
     gopls-binary:
         check: file=/usr/bin/gopls
         id: gopls-binary
-        file: /usr/bin/gopls
-        exists: true
         exclude_distro:
             - debian
             - ubuntu
             - fedora
+        plugin: file
+        plugin_input:
+            file: /usr/bin/gopls
+            exists: true
     golangci-lint-binary:
         check: the golangci-lint Go meta-linter binary is on PATH (Arch/CachyOS only)
         id: golangci-lint-binary
-        file: /usr/bin/golangci-lint
-        exists: true
         exclude_distro:
             - debian
             - ubuntu
             - fedora
+        plugin: file
+        plugin_input:
+            file: /usr/bin/golangci-lint
+            exists: true
     neovim-package:
         check: package=neovim
         id: neovim-package

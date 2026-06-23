@@ -14,19 +14,19 @@
 //
 // SELF-CONTAINED: it references NO base def (it reproduces the matcher shape
 // standalone under plugin-private def names — #MatchingContains / #MatchingMatcher /
-// #MatchingMatchOp — so there is NO collision with the base #ContainsList / #Matcher /
-// #MatchOpMap when base ++ plugin compiles), so it compiles standalone (gengotypes +
+// #MatchingMatchOp — so there is NO collision with the base #Matcher / #MatchOpMap when
+// base ++ plugin compiles), so it compiles standalone (gengotypes +
 // the load-gate compile) AND splices onto the base.
 #MatchingInput: {
 	// matching — the value (any scalar/list/map) the matchers are evaluated against;
 	// coerced to a string by the provider (sdk.MatchValueString) before matching.
 	matching: _ @go(Matching)
 	// contains — the goss-style matchers every authored value must satisfy. Reproduces
-	// the base #ContainsList shape standalone (scalar / single operator-map / list).
+	// the contains matcher-list shape standalone (scalar / single operator-map / list).
 	contains?: #MatchingContains @go(Contains)
 }
 
-// #MatchingContains mirrors the base #ContainsList: a single matcher OR a list.
+// #MatchingContains is the contains matcher list: a single matcher OR a list.
 #MatchingContains: (#MatchingMatcher | [...#MatchingMatcher])
 
 // #MatchingMatcher mirrors the base #Matcher: a bare scalar (implicit match) or a

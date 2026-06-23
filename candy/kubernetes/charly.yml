@@ -75,8 +75,10 @@ kubernetes:
                 fi
     kubernetes-step-3:
         check: the kubectl API client binary is installed at /usr/bin/kubectl
-        file: /usr/bin/kubectl
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/kubectl
+            exists: true
     kubernetes-step-4:
         check: kubectl reports its client version and exits cleanly
         exit_status: 0
@@ -87,8 +89,10 @@ kubernetes:
             command: /usr/bin/kubectl version --client
     kubernetes-step-5:
         check: the helm chart package manager binary is installed at /usr/bin/helm
-        file: /usr/bin/helm
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/helm
+            exists: true
     kubernetes-step-6:
         check: helm reports its short version string and exits cleanly
         exit_status: 0
@@ -97,8 +101,10 @@ kubernetes:
             command: /usr/bin/helm version --short
     kubernetes-step-7:
         check: the k3d cluster manager binary is installed at /usr/bin/k3d
-        file: /usr/bin/k3d
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/k3d
+            exists: true
     kubernetes-step-8:
         check: k3d reports its release version and exits cleanly
         exit_status: 0

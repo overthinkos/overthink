@@ -31,44 +31,64 @@ sway-desktop:
             - fastfetch
     sway-desktop-step-0:
         check: the waybar status bar binary from the composed waybar candy is installed
-        file: /usr/bin/waybar
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/waybar
+            exists: true
     sway-desktop-step-1:
         check: the swaync notification daemon from the composed swaync candy is installed
-        file: /usr/bin/swaync
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/swaync
+            exists: true
     sway-desktop-step-2:
         check: the thunar file manager from the composed thunar candy is installed
-        file: /usr/bin/thunar
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/thunar
+            exists: true
     sway-desktop-step-3:
         check: the xfce4-terminal emulator from the composed xfce4-terminal candy is installed
-        file: /usr/bin/xfce4-terminal
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/xfce4-terminal
+            exists: true
     sway-desktop-step-4:
         check: the grim screenshot tool from the composed wl-screenshot-grim candy is installed
-        file: /usr/bin/grim
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/grim
+            exists: true
     sway-desktop-step-5:
         check: the wtype keyboard-injection tool from the composed wl-tools candy is installed
-        file: /usr/bin/wtype
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/wtype
+            exists: true
     sway-desktop-step-6:
         check: the wf-recorder Wayland screen recorder from the composed wf-recorder candy is installed
-        file: /usr/bin/wf-recorder
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/wf-recorder
+            exists: true
     sway-desktop-step-7:
         check: Google Chrome from the composed chrome-sway candy is installed for the desktop to launch
-        file: /usr/bin/google-chrome-stable
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/google-chrome-stable
+            exists: true
     sway-desktop-step-8:
         check: the PipeWire audio server from the composed pipewire candy is installed
-        file: /usr/bin/pipewire
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/pipewire
+            exists: true
     sway-desktop-step-9:
         check: the pavucontrol mixer from the composed pavucontrol candy is installed
-        file: /usr/bin/pavucontrol
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/pavucontrol
+            exists: true
     sway-desktop-step-10:
         check: tmux from the composed tmux candy reports its version and exits cleanly
         exit_status: 0
@@ -98,5 +118,7 @@ sway-desktop:
     sway-desktop-wlr-randr-binary:
         check: file=/usr/bin/wlr-randr
         id: sway-desktop-wlr-randr-binary
-        file: /usr/bin/wlr-randr
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/wlr-randr
+            exists: true

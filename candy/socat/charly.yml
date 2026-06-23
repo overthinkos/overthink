@@ -36,8 +36,10 @@ socat:
         run_as: root
     socat-step-1:
         check: the socat binary is installed at /usr/bin/socat
-        file: /usr/bin/socat
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/socat
+            exists: true
     socat-step-2:
         check: socat reports its version and exits zero
         exit_status: 0
@@ -46,9 +48,11 @@ socat:
             command: /usr/bin/socat -V
     socat-step-3:
         check: the relay-wrapper script is installed executable at /usr/local/bin/relay-wrapper
-        file: /usr/local/bin/relay-wrapper
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/relay-wrapper
+            exists: true
+            mode: "0755"
     socat-step-4:
         check: invoking relay-wrapper with no port argument prints a usage error and exits non-zero
         exit_status: 1

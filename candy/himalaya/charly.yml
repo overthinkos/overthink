@@ -23,8 +23,10 @@ himalaya:
             command: cargo install himalaya --locked
     himalaya-step-1:
         check: the himalaya binary is installed into the user's cargo bin directory
-        file: ${HOME}/.cargo/bin/himalaya
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.cargo/bin/himalaya
+            exists: true
     himalaya-step-2:
         check: the installed himalaya binary runs --version and exits cleanly
         exit_status: 0

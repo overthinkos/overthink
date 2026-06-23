@@ -11,22 +11,15 @@ import "context"
 // The do-mode (act) half of the state-provision verbs is a ProvisionActor method
 // per provider (checkrun_act.go) — runProvisionAct resolves + type-asserts it (C1b).
 
-type fileVerb struct{ builtinVerbBase }
-
-func (fileVerb) Reserved() string { return "file" }
-func (fileVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runFile(ctx, op)
-}
-
-// package / command / service / user / unix_group / kernel-param / mount are NOT here —
-// each is an extracted verb, a dedicated plugin UNIT (plugin_verb_package.go /
-// plugin_verb_command.go / plugin_verb_service.go / plugin_user.go / plugin_unix_group.go /
-// plugin_kernel_param.go / plugin_mount.go) that self-registers via
+// file / package / command / service / user / unix_group / kernel-param / mount are NOT
+// here — each is an extracted verb, a dedicated plugin UNIT (plugin_verb_file.go /
+// plugin_verb_package.go / plugin_verb_command.go / plugin_verb_service.go / plugin_user.go /
+// plugin_unix_group.go / plugin_kernel_param.go / plugin_mount.go) that self-registers via
 // RegisterBuiltinPluginUnit (absent from both builtinProviderInstances and the providers:
-// manifest). user/unix_group/kernel-param/mount are BOTH a CheckVerbProvider AND a
-// ProvisionActor (useradd / groupadd / sysctl-write / mount at install emit + runtime act).
-// `package` and `service` are the TYPED-STEP verbs — each a CheckVerbProvider AND a
-// TypedStepProvider (its act lowers to a SystemPackagesStep / ServicePackagedStep with
+// manifest). file/user/unix_group/kernel-param/mount are BOTH a CheckVerbProvider AND a
+// ProvisionActor (touch+chmod / useradd / groupadd / sysctl-write / mount at install emit +
+// runtime act). `package` and `service` are the TYPED-STEP verbs — each a CheckVerbProvider
+// AND a TypedStepProvider (its act lowers to a SystemPackagesStep / ServicePackagedStep with
 // load-bearing reversals, NOT a RenderProvisionScript) AND a ProvisionActor (the
 // runtime/box-build live-act path); `package` is the simpler one (no PriorEnabled state).
 // `command` is a CheckVerbProvider ONLY — its act is the dedicated install-task emitCmd

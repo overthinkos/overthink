@@ -148,23 +148,31 @@ marimo:
             auto_instantiate = true
     marimo-step-5:
         check: the marimo notebook+MCP server binary is installed in the pixi env
-        file: ${HOME}/.pixi/envs/default/bin/marimo
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.pixi/envs/default/bin/marimo
+            exists: true
     marimo-step-6:
         check: the Apache Airflow CLI is installed in the same pixi env (the airflow layer ships none of its own)
-        file: ${HOME}/.pixi/envs/default/bin/airflow
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.pixi/envs/default/bin/airflow
+            exists: true
     marimo-step-7:
         check: the marimo-team/skills bundle is unpacked read-only under MARIMO_SKILLS_DIR
-        file: /opt/marimo-skills/skills
-        exists: true
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: /opt/marimo-skills/skills
+            exists: true
+            filetype: directory
     marimo-step-8:
         check: the baked marimo.toml enables auto_instantiate so cells run on page open
-        file: ${HOME}/.config/marimo/marimo.toml
-        exists: true
-        contains:
-            - "auto_instantiate = true"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.config/marimo/marimo.toml
+            exists: true
+            contains:
+                - "auto_instantiate = true"
     marimo-step-9:
         agent-check: a marimo deployment is running with `marimo edit --mcp --mcp-allow-remote` on port 2718
     marimo-step-10:

@@ -11,8 +11,10 @@ xurl:
             - nodejs
     xurl-step-0:
         check: the xurl CLI is installed in the npm global bin
-        file: ${HOME}/.npm-global/bin/xurl
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/bin/xurl
+            exists: true
     xurl-step-1:
         check: the xurl CLI runs and prints its usage
         exit_status: 0

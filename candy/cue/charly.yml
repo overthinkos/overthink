@@ -24,8 +24,10 @@ cue:
         run_as: root
     cue-step-1:
         check: the cue binary is installed at /usr/local/bin/cue
-        file: /usr/local/bin/cue
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/cue
+            exists: true
     cue-step-2:
         check: cue reports the pinned v0.16.1 release on stdout
         exit_status: 0

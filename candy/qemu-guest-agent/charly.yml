@@ -60,8 +60,10 @@ qemu-guest-agent:
             fsfreeze-hook=/etc/qemu/fsfreeze-hook
     qemu-guest-agent-step-3:
         check: the qemu-ga daemon binary is installed at /usr/bin/qemu-ga
-        file: /usr/bin/qemu-ga
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/qemu-ga
+            exists: true
     qemu-guest-agent-step-4:
         check: the cross-distro qemu-guest-agent package is installed
         plugin: package
@@ -70,12 +72,16 @@ qemu-guest-agent:
             installed: true
     qemu-guest-agent-step-5:
         check: the fsfreeze hook dispatcher is installed and references its drop-in dir
-        file: /etc/qemu/fsfreeze-hook
-        contains: "fsfreeze-hook.d"
+        plugin: file
+        plugin_input:
+            file: /etc/qemu/fsfreeze-hook
+            contains: "fsfreeze-hook.d"
     qemu-guest-agent-step-6:
         check: the per-application freeze/thaw drop-in directory exists
-        file: /etc/qemu/fsfreeze-hook.d
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: /etc/qemu/fsfreeze-hook.d
+            filetype: directory
     qemu-guest-agent-step-7:
         check: freezing filesystems with no hooks installed runs the dispatcher and exits 0
         exit_status: 0
@@ -84,14 +90,20 @@ qemu-guest-agent:
             command: /etc/qemu/fsfreeze-hook freeze
     qemu-guest-agent-step-8:
         check: the guest-agent config wires in the fsfreeze hook
-        file: /etc/qemu/qemu-ga.conf
-        contains: "fsfreeze-hook=/etc/qemu/fsfreeze-hook"
+        plugin: file
+        plugin_input:
+            file: /etc/qemu/qemu-ga.conf
+            contains: "fsfreeze-hook=/etc/qemu/fsfreeze-hook"
     qemu-guest-agent-step-9:
         check: the config documents that no guest-agent RPCs are blocked
-        file: /etc/qemu/qemu-ga.conf
-        contains: "No RPCs are blocked"
+        plugin: file
+        plugin_input:
+            file: /etc/qemu/qemu-ga.conf
+            contains: "No RPCs are blocked"
     qemu-ga-config:
         check: file=/etc/qemu/qemu-ga.conf
         id: qemu-ga-config
-        file: /etc/qemu/qemu-ga.conf
-        contains: "fsfreeze-hook"
+        plugin: file
+        plugin_input:
+            file: /etc/qemu/qemu-ga.conf
+            contains: "fsfreeze-hook"

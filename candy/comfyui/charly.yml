@@ -60,16 +60,22 @@ comfyui:
                 git clone --depth 1 https://github.com/ltdrdata/ComfyUI-Manager.git ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager || true
     comfyui-step-1:
         check: the ComfyUI server entrypoint main.py is baked into ~/ComfyUI
-        file: ${HOME}/ComfyUI/main.py
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/ComfyUI/main.py
+            exists: true
     comfyui-step-2:
         check: the ComfyUI-Manager custom node directory is cloned alongside it
-        file: ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager
+            filetype: directory
     comfyui-step-3:
         check: aria2c is installed so model checkpoints can be fetched in parallel
-        file: /usr/bin/aria2c
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/aria2c
+            exists: true
     comfyui-step-4:
         check: git-lfs is installed for pulling large model repositories
         plugin: package
@@ -81,8 +87,10 @@ comfyui:
     comfyui-models-checkpoints:
         check: file=${HOME}/ComfyUI/models/checkpoints
         id: comfyui-models-checkpoints
-        file: ${HOME}/ComfyUI/models/checkpoints
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: ${HOME}/ComfyUI/models/checkpoints
+            filetype: directory
     comfyui-aria2-package:
         check: package=aria2
         id: comfyui-aria2-package
@@ -93,8 +101,10 @@ comfyui:
     comfyui-git-lfs-binary:
         check: file=/usr/bin/git-lfs
         id: comfyui-git-lfs-binary
-        file: /usr/bin/git-lfs
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/git-lfs
+            exists: true
     comfyui-service-running:
         check: service=comfyui
         id: comfyui-service-running

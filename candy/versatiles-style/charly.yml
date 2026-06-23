@@ -155,5 +155,7 @@ versatiles-style:
     versatiles-style-install-dir:
         check: file=/opt/versatiles-style
         id: versatiles-style-install-dir
-        file: /opt/versatiles-style
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: /opt/versatiles-style
+            filetype: directory

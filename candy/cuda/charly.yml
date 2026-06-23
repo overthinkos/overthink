@@ -160,8 +160,10 @@ cuda:
                 done
     cuda-step-2:
         check: the nvcc CUDA compiler driver is on the canonical /usr path
-        file: /usr/bin/nvcc
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/nvcc
+            exists: true
     cuda-step-3:
         check: nvcc reports its CUDA compilation-tools release
         exit_status: 0
@@ -172,8 +174,10 @@ cuda:
             command: nvcc --version
     cuda-step-4:
         check: the cuDNN header is available at /usr/include regardless of distro
-        file: /usr/include/cudnn.h
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/include/cudnn.h
+            exists: true
     cuda-step-5:
         check: the CUDA runtime library is linkable from the canonical /usr/lib64 path
         exit_status: 0

@@ -140,8 +140,10 @@ build-toolchain:
                     - rustc
     build-toolchain-step-0:
         check: the GNU C compiler binary is installed at /usr/bin/gcc
-        file: /usr/bin/gcc
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/gcc
+            exists: true
     build-toolchain-step-1:
         check: gcc reports its version and exits successfully
         exit_status: 0
@@ -150,12 +152,16 @@ build-toolchain:
             command: /usr/bin/gcc --version
     build-toolchain-step-2:
         check: GNU make is available to drive Makefile builds
-        file: /usr/bin/make
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/make
+            exists: true
     build-toolchain-step-3:
         check: the CMake build-system generator is available
-        file: /usr/bin/cmake
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/cmake
+            exists: true
     build-toolchain-step-4:
         check: cmake reports its version and exits successfully
         exit_status: 0
@@ -164,12 +170,16 @@ build-toolchain:
             command: /usr/bin/cmake --version
     build-toolchain-step-5:
         check: the cargo Rust package manager is installed
-        file: /usr/bin/cargo
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/cargo
+            exists: true
     build-toolchain-step-6:
         check: the nasm assembler (needed by SIMD native crates) is installed
-        file: /usr/bin/nasm
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/nasm
+            exists: true
     build-toolchain-step-7:
         check: cargo reports its version and exits successfully
         exit_status: 0
@@ -178,16 +188,22 @@ build-toolchain:
             command: /usr/bin/cargo --version
     build-toolchain-step-8:
         check: the GNU debugger is available for native debugging
-        file: /usr/bin/gdb
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/gdb
+            exists: true
     build-toolchain-step-9:
         check: ccache is available to accelerate repeat compilations
-        file: /usr/bin/ccache
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/ccache
+            exists: true
     build-toolchain-step-10:
         check: git is available so builder stages can clone pinned sources
-        file: /usr/bin/git
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/git
+            exists: true
     make-version:
         check: command=/usr/bin/make --version
         id: make-version

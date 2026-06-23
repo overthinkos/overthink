@@ -35,8 +35,10 @@ sag:
                 go clean -cache
     sag-step-1:
         check: the sag binary is present in the user's Go bin directory
-        file: ${HOME}/go/bin/sag
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/go/bin/sag
+            exists: true
     sag-step-2:
         check: the sag command resolves on PATH from the Go bin directory
         exit_status: 0

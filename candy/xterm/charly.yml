@@ -16,8 +16,10 @@ xterm:
                     - xterm
     xterm-step-0:
         check: the xterm binary is installed at /usr/bin/xterm
-        file: /usr/bin/xterm
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/xterm
+            exists: true
     xterm-step-1:
         check: the xterm package is registered with the package manager
         plugin: package

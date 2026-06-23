@@ -14,8 +14,10 @@ tmux:
             - tmux
     tmux-step-0:
         check: the tmux multiplexer binary is installed at /usr/bin/tmux
-        file: /usr/bin/tmux
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/tmux
+            exists: true
     tmux-step-1:
         check: the tmux package is registered with the system package manager
         plugin: package

@@ -290,16 +290,22 @@ container-nesting:
             mountopt = "nodev,fsync=0"
     container-nesting-step-10:
         check: the podman container engine is installed for in-container use
-        file: /usr/bin/podman
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/podman
+            exists: true
     container-nesting-step-11:
         check: the buildah image-build tool is installed
-        file: /usr/bin/buildah
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/buildah
+            exists: true
     container-nesting-step-12:
         check: the skopeo image-copy tool is installed
-        file: /usr/bin/skopeo
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/skopeo
+            exists: true
     container-nesting-step-13:
         check: containers.conf pins userns=host so the inner /proc mount is not rejected by the kernel mount_too_revealing check
         exit_status: 0
@@ -308,8 +314,10 @@ container-nesting:
             command: grep -E '^userns\s*=\s*"host"' /etc/containers/containers.conf
     container-nesting-step-14:
         check: policy.json is present so podman pull/run accepts an image signature policy
-        file: /etc/containers/policy.json
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /etc/containers/policy.json
+            exists: true
     container-nesting-step-15:
         check: newuidmap carries the cap_setuid file capability so a nested user namespace can be delegated
         exit_status: 0
@@ -355,18 +363,24 @@ container-nesting:
     newuidmap-binary:
         check: file=/usr/bin/newuidmap
         id: newuidmap-binary
-        file: /usr/bin/newuidmap
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/newuidmap
+            exists: true
     newgidmap-binary:
         check: file=/usr/bin/newgidmap
         id: newgidmap-binary
-        file: /usr/bin/newgidmap
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/newgidmap
+            exists: true
     tailscale-binary:
         check: file=/usr/bin/tailscale
         id: tailscale-binary
-        file: /usr/bin/tailscale
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/tailscale
+            exists: true
     tailscale-version:
         check: command=/usr/bin/tailscale version
         id: tailscale-version

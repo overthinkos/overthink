@@ -296,19 +296,18 @@ var VerbCatalog = map[string]VerbSpec{
 	// emitCmd branch (`plugin == "command"` in emitTasks/renderOpCommand/
 	// opActsInBuildDeploy), preserving the full command build/deploy install path.
 
-	// system-state probe/provision — assert by default; the act-capable subset
-	// lowers into existing reversible InstallPlan step kinds.
-	"file": {ctxBuildDeployRuntime, DoAssert, true}, // probe; file-creation is the write/copy verbs (act → runtime executor)
-	// package / service / unix_group / user / kernel-param / mount are extracted
+	// file / package / service / unix_group / user / kernel-param / mount are extracted
 	// STATE-PROVISION verbs — each BOTH a check AND an act. They left #Op/spec.OpVerbs for
-	// their builtin plugin units (charly/plugin/builtins/{package,service,unix_group,user,
-	// kernel_param,mount}) and dispatch via the generic `plugin:` verb, so they have no
+	// their builtin plugin units (charly/plugin/builtins/{file,package,service,unix_group,
+	// user,kernel_param,mount}) and dispatch via the generic `plugin:` verb, so they have no
 	// VerbCatalog entry. `package` and `service` are the TYPED-STEP verbs: each act lowers
 	// into a SystemPackagesStep / ServicePackagedStep via the TypedStepProvider (its
 	// LowersTo() + ConstructStep now live on the provider, NOT this catalog) so the
-	// load-bearing reversals survive; the other four render at install emit via the act-emit
-	// enabler (resolveProvisionScript). http / interface / addr are observe-only goss verbs
-	// likewise extracted (charly/plugin/builtins/{http,interface,addr}).
+	// load-bearing reversals survive; file + the other four render at install emit via the
+	// act-emit enabler (resolveProvisionScript — file's act is the RUNTIME touch+chmod
+	// file-creation, distinct from the write/copy BUILD-time COPY directives). http /
+	// interface / addr are observe-only goss verbs likewise extracted
+	// (charly/plugin/builtins/{http,interface,addr}).
 
 	// live-container — runtime only; act drives UI/config, reversed via plan
 	// teardown (never the ledger). kube also legal at deploy (apply manifest).

@@ -49,12 +49,16 @@ valkey:
         run_as: "${USER}"
     valkey-step-1:
         check: the valkey-server daemon binary is installed at /usr/bin/valkey-server
-        file: /usr/bin/valkey-server
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/valkey-server
+            exists: true
     valkey-step-2:
         check: the valkey-cli client binary is installed at /usr/bin/valkey-cli
-        file: /usr/bin/valkey-cli
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/valkey-cli
+            exists: true
     valkey-step-3:
         check: the valkey package is installed
         plugin: package

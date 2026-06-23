@@ -18,8 +18,10 @@ fastfetch:
                     - fastfetch
     fastfetch-step-0:
         check: the fastfetch binary is installed at /usr/bin/fastfetch
-        file: /usr/bin/fastfetch
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/fastfetch
+            exists: true
     fastfetch-step-1:
         check: fastfetch --version prints a version banner and exits 0
         exit_status: 0

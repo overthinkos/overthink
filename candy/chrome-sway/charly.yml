@@ -31,24 +31,34 @@ chrome-sway:
         run_as: "${USER}"
     chrome-sway-step-2:
         check: the chrome-sway autostart snippet is installed in sway's config.d drop-in dir
-        file: ${HOME}/.config/sway/config.d/chrome-sway.conf
-        exists: true
-        mode: "0644"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.config/sway/config.d/chrome-sway.conf
+            exists: true
+            mode: "0644"
     chrome-sway-step-3:
         check: the snippet tells sway to exec the chrome-wrapper launcher on startup
-        file: ${HOME}/.config/sway/config.d/chrome-sway.conf
-        contains:
-            - contains: "exec chrome-wrapper"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.config/sway/config.d/chrome-sway.conf
+            contains:
+                - contains: "exec chrome-wrapper"
     chrome-sway-step-4:
         check: the chrome-wrapper launcher the snippet execs is installed and executable
-        file: ${HOME}/.local/bin/chrome-wrapper
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/chrome-wrapper
+            exists: true
+            mode: "0755"
     chrome-sway-step-5:
         check: Google Chrome is installed for the compositor to launch
-        file: /usr/bin/google-chrome-stable
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/google-chrome-stable
+            exists: true
     chrome-sway-step-6:
         check: the sway compositor that reads the config.d drop-in is installed
-        file: /usr/bin/sway
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/sway
+            exists: true

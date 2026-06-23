@@ -15,12 +15,16 @@ mcporter:
             - nodejs
     mcporter-step-0:
         check: the mcporter binary is installed into the npm global bin directory
-        file: ${HOME}/.npm-global/bin/mcporter
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/bin/mcporter
+            exists: true
     mcporter-step-1:
         check: the mcporter package is unpacked under the npm global lib directory
-        file: ${HOME}/.npm-global/lib/node_modules/mcporter/package.json
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/lib/node_modules/mcporter/package.json
+            exists: true
     mcporter-step-2:
         check: running mcporter --version exits cleanly and prints a semantic version
         exit_status: 0

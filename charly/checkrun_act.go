@@ -85,30 +85,12 @@ func (r *Runner) runProvisionAct(ctx context.Context, c *Op, verb string) (Check
 }
 
 // The do:act renderers — the ProvisionActor half of each state-provision verb
-// provider. Each renders the shell that performs the verb's side-effect on the
-// live target; ok=false for an input that cannot act (e.g. kernel-param with no
-// desired value).
-
-func (fileVerb) RenderProvisionScript(c *Op, _ []string) (string, bool) {
-	// Ensure the file exists with the given content + mode.
-	path := shellSingleQuote(c.File)
-	var b strings.Builder
-	if c.Content != "" {
-		// Heredoc with a collision-resistant marker; content is verbatim.
-		fmt.Fprintf(&b, "mkdir -p \"$(dirname %s)\" && cat > %s <<'CHARLY_ACT_EOF'\n%s\nCHARLY_ACT_EOF", path, path, c.Content)
-	} else {
-		fmt.Fprintf(&b, "mkdir -p \"$(dirname %s)\" && touch %s", path, path)
-	}
-	if c.Mode != "" {
-		fmt.Fprintf(&b, " && chmod %s %s", shellSingleQuote(c.Mode), path)
-	}
-	return b.String(), true
-}
-
-// package / service / user / unix_group / kernel-param / mount RenderProvisionScript (the
-// do:act halves) live with their dedicated plugin units (plugin_verb_package.go /
-// plugin_verb_service.go / plugin_user.go / plugin_unix_group.go / plugin_kernel_param.go /
-// plugin_mount.go) — each decodes plugin_input rather than the removed
+// provider — live with their dedicated plugin units (file/package/service/user/
+// unix_group/kernel-param/mount RenderProvisionScript in plugin_verb_file.go /
+// plugin_verb_package.go / plugin_verb_service.go / plugin_user.go / plugin_unix_group.go /
+// plugin_kernel_param.go / plugin_mount.go) — each decodes plugin_input rather than the
+// removed Op.File/Exists/Owner/GroupOf/Filetype/Contains/Sha256 (mode + content stay
+// SHARED #Op modifiers the file act reads off the step Op) /
 // Op.Package/Installed/Versions/PackageMap / Op.Service/Running/Enabled /
 // Op.User/UID/Home/Shell / Op.UnixGroup/GID / Op.KernelParam/Value /
 // Op.Mount/MountSource/Filesystem/Opts fields. `package`'s and `service`'s

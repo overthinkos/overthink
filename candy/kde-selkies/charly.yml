@@ -61,30 +61,42 @@ kde-selkies:
         run_as: "${USER}"
     kde-selkies-step-2:
         check: the kde-selkies-session launcher is installed and executable in the deploy user's PATH
-        file: ${HOME}/.local/bin/kde-selkies-session
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/kde-selkies-session
+            exists: true
+            mode: "0755"
     kde-selkies-step-3:
         check: the launcher execs startplasma-wayland to bring up the nested KDE Plasma session
-        file: ${HOME}/.local/bin/kde-selkies-session
-        contains:
-            - contains: "startplasma-wayland"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/kde-selkies-session
+            contains:
+                - contains: "startplasma-wayland"
     kde-selkies-step-4:
         check: the KDE Plasma session entrypoint the launcher execs is present (composed from kde-shell)
-        file: /usr/bin/startplasma-wayland
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/startplasma-wayland
+            exists: true
     kde-selkies-step-5:
         check: the KWin Wayland compositor that renders the nested session into pixelflux is present
-        file: /usr/bin/kwin_wayland
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/kwin_wayland
+            exists: true
     kde-selkies-step-6:
         check: kdotool — the KWin window-automation tool that drives `charly check wl` on this session — is present
-        file: /usr/bin/kdotool
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/kdotool
+            exists: true
     kde-selkies-step-7:
         check: the pipewire audio daemon composed for the streamed session is present
-        file: /usr/bin/pipewire
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/pipewire
+            exists: true
     kde-selkies-step-8:
         check: the nested KDE Plasma session reaches RUNNING under supervisord without crash-looping
         stdout:

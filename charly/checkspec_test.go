@@ -17,7 +17,10 @@ func TestCheck_Kind(t *testing.T) {
 		wantKey string
 		wantErr string // substring
 	}{
-		{"file", Op{File: "/usr/bin/redis"}, "file", ""},
+		// `file` is NO LONGER a verb — it left #OpVerb in the file→plugin extraction and
+		// is now `plugin: file` + #FileInput. A bare Op has no File field, so the file
+		// CHECK is the generic plugin verb.
+		{"file-as-plugin", Op{Plugin: "file", PluginInput: map[string]any{"file": "/usr/bin/redis"}}, "plugin", ""},
 		// `package` is NO LONGER a verb — it left #OpVerb in the package→plugin
 		// extraction and is now `plugin: package` + #PackageInput. A bare Op has no
 		// Package field, so the package CHECK is the generic plugin verb.
@@ -33,7 +36,7 @@ func TestCheck_Kind(t *testing.T) {
 		{"command-as-plugin", Op{Plugin: "command", PluginInput: map[string]any{"command": "redis-cli ping"}}, "plugin", ""},
 		{"plugin", Op{Plugin: "matching"}, "plugin", ""},
 		{"none", Op{}, "", "no verb"},
-		{"two", Op{File: "/x", Mkdir: "/tmp/d"}, "", "multiple verbs"},
+		{"two", Op{Copy: "/x", Mkdir: "/tmp/d"}, "", "multiple verbs"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -58,9 +61,11 @@ func TestCheck_Kind(t *testing.T) {
 // tags produce the authoring shape documented in the plan.
 func TestCheck_UnmarshalYAMLList(t *testing.T) {
 	src := `
-- file: /usr/bin/redis-server
-  exists: true
-  mode: "0755"
+- plugin: file
+  plugin_input:
+    file: /usr/bin/redis-server
+    exists: true
+    mode: "0755"
 - plugin: port
   plugin_input:
     port: 6379
@@ -91,15 +96,20 @@ func TestCheck_UnmarshalYAMLList(t *testing.T) {
 		t.Fatalf("got %d checks, want 5", len(got))
 	}
 
-	// 0: file check
-	if got[0].File != "/usr/bin/redis-server" {
-		t.Errorf("file = %q, want /usr/bin/redis-server", got[0].File)
+	// 0: file check — now the `file` plugin verb (authored as plugin: file +
+	// plugin_input, validated against the file plugin's spliced #FileInput schema; the
+	// file-exclusive fields + the shared mode ride plugin_input).
+	if got[0].Plugin != "file" {
+		t.Errorf("plugin = %q, want file", got[0].Plugin)
 	}
-	if got[0].Exists == nil || !*got[0].Exists {
-		t.Errorf("file[0].exists should be pointer-to-true, got %v", got[0].Exists)
+	if got[0].PluginInput == nil || got[0].PluginInput["file"] != "/usr/bin/redis-server" {
+		t.Errorf("plugin_input.file = %v, want /usr/bin/redis-server", got[0].PluginInput)
 	}
-	if got[0].Mode != "0755" {
-		t.Errorf("mode = %q, want 0755", got[0].Mode)
+	if got[0].PluginInput["exists"] != true {
+		t.Errorf("plugin_input.exists = %v, want true", got[0].PluginInput["exists"])
+	}
+	if got[0].PluginInput["mode"] != "0755" {
+		t.Errorf("plugin_input.mode = %v, want 0755", got[0].PluginInput["mode"])
 	}
 
 	// 1: port listening — now the `port` plugin verb (authored as plugin: port +
@@ -267,34 +277,31 @@ func TestIsRuntimeOnlyVar(t *testing.T) {
 
 // Full-Check in-place expansion across all string-bearing fields.
 func TestCheck_ExpandVars(t *testing.T) {
+	// file is now a plugin verb; its path + owner ride plugin_input. opExpandVars walks the
+	// PluginInput map (expandAnyVars), so ${HOME} / ${MISSING} resolve there exactly as they
+	// did when file/owner were base #Op string fields. Command stays an #Op modifier.
 	c := Op{
-		File:    "${HOME}/.redis",
+		Plugin: "file",
+		PluginInput: map[string]any{
+			"file":  "${HOME}/.redis",
+			"owner": "${MISSING}",
+		},
 		Command: "redis-cli -p ${HOST_PORT:6379}",
-		// http is now a plugin verb; its URL rides plugin_input. opExpandVars walks the
-		// PluginInput map (expandAnyVars), so ${CONTAINER_IP} resolves there exactly as it
-		// did when http was a base #Op string field.
-		Plugin:      "http",
-		PluginInput: map[string]any{"http": "http://${CONTAINER_IP}:8080/health"},
-		Owner:       "${MISSING}",
 	}
 	env := map[string]string{
 		"HOME":           "/home/user",
 		"HOST_PORT:6379": "16379",
-		"CONTAINER_IP":   "10.0.0.5",
 	}
 	missing := opExpandVars(&c, env)
 
-	if c.File != "/home/user/.redis" {
-		t.Errorf("File = %q", c.File)
+	if got := c.PluginInput["file"]; got != "/home/user/.redis" {
+		t.Errorf("plugin_input.file = %q", got)
 	}
 	if c.Command != "redis-cli -p 16379" {
 		t.Errorf("Command = %q", c.Command)
 	}
-	if got := c.PluginInput["http"]; got != "http://10.0.0.5:8080/health" {
-		t.Errorf("plugin_input.http = %q", got)
-	}
-	if c.Owner != "${MISSING}" {
-		t.Errorf("Owner should remain unresolved: %q", c.Owner)
+	if got := c.PluginInput["owner"]; got != "${MISSING}" {
+		t.Errorf("plugin_input.owner should remain unresolved: %q", got)
 	}
 	wantMissing := []string{"MISSING"}
 	if !reflect.DeepEqual(missing, wantMissing) {
@@ -376,114 +383,19 @@ func TestTestVarRefPattern_BackwardCompatible(t *testing.T) {
 	}
 }
 
-// TestContainsList_BareSequenceDefaultsToContains validates the field-semantic
-// fix for `contains: [...]` on file probes. Pre-2026-04-27, MatcherList's
-// SequenceNode branch unconditionally promoted bare scalars to Op="equals",
-// which made `contains: ["X"]` ask "does the entire content EQUAL X" — wrong
-// for a field literally named contains. ContainsList preserves the
-// authored Op for explicit operator-map elements while defaulting bare
-// scalars/sequences to Op="contains".
-func TestContainsList_BareSequenceDefaultsToContains(t *testing.T) {
-	tests := []struct {
-		name      string
-		yaml      string
-		wantLen   int
-		wantOps   []string
-		wantValue []any
-	}{
-		{
-			name:      "bare scalar promotes to contains",
-			yaml:      `contains: foo`,
-			wantLen:   1,
-			wantOps:   []string{"contains"},
-			wantValue: []any{"foo"},
-		},
-		{
-			name:      "bare sequence promotes each element to contains",
-			yaml:      `contains: [foo, bar]`,
-			wantLen:   2,
-			wantOps:   []string{"contains", "contains"},
-			wantValue: []any{"foo", "bar"},
-		},
-		{
-			name:      "explicit equals map keeps Op=equals",
-			yaml:      "contains:\n  equals: foo",
-			wantLen:   1,
-			wantOps:   []string{"equals"},
-			wantValue: []any{"foo"},
-		},
-		{
-			name:      "explicit matches map keeps Op=matches",
-			yaml:      `contains: {matches: "^prefix"}`,
-			wantLen:   1,
-			wantOps:   []string{"matches"},
-			wantValue: []any{"^prefix"},
-		},
-		{
-			name:      "mixed sequence: explicit equals + bare scalar",
-			yaml:      `contains: [{equals: foo}, bar]`,
-			wantLen:   2,
-			wantOps:   []string{"equals", "contains"},
-			wantValue: []any{"foo", "bar"},
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			var c Op
-			if err := decodeViaCUEForTest(t, tc.yaml, &c); err != nil {
-				t.Fatalf("yaml unmarshal: %v", err)
-			}
-			if len(c.Contains) != tc.wantLen {
-				t.Fatalf("len = %d, want %d", len(c.Contains), tc.wantLen)
-			}
-			for i := range c.Contains {
-				if c.Contains[i].Op != tc.wantOps[i] {
-					t.Errorf("[%d].Op = %q, want %q", i, c.Contains[i].Op, tc.wantOps[i])
-				}
-				if !reflect.DeepEqual(c.Contains[i].Value, tc.wantValue[i]) {
-					t.Errorf("[%d].Value = %v (%T), want %v (%T)",
-						i, c.Contains[i].Value, c.Contains[i].Value,
-						tc.wantValue[i], tc.wantValue[i])
-				}
-			}
-		})
-	}
-}
+// The former TestContainsList_BareSequenceDefaultsToContains /
+// TestContainsList_RealWorldHarnessProbe tested the base #Op `contains` load
+// normalizer, which left #Op with the `file` verb when it was
+// extracted into a plugin. The contains-default (a bare scalar → Op="contains") now
+// lives in the file plugin's decodeContainsList — covered by TestDecodeContainsList in
+// plugin_verb_file_test.go.
 
-// TestContainsList_RealWorldHarnessProbe simulates the check.yml:248 form
-// that triggered the 2026-04-27 incident. Before the fix, file probes with
-// `contains: ["marker"]` silently asked for content EQUALITY — passing
-// coincidentally when the file's TrimRight'd content equaled the marker
-// (phase 1 fixture-os) and failing whenever the file had any other content
-// such as wrapping HTML (phase 2 fixture-web). Post-fix the probe correctly
-// asks for substring containment.
-func TestContainsList_RealWorldHarnessProbe(t *testing.T) {
-	yamlSrc := `
-file: /srv/fixture/index.html
-exists: true
-contains: ["charly-fixture-web-content-marker"]
-`
-	var c Op
-	if err := decodeViaCUEForTest(t, yamlSrc, &c); err != nil {
-		t.Fatalf("yaml unmarshal: %v", err)
-	}
-	if len(c.Contains) != 1 {
-		t.Fatalf("len(Contains) = %d, want 1", len(c.Contains))
-	}
-	if c.Contains[0].Op != "contains" {
-		t.Errorf("Op = %q, want %q (the field-name semantic intent)",
-			c.Contains[0].Op, "contains")
-	}
-	if c.Contains[0].Value != "charly-fixture-web-content-marker" {
-		t.Errorf("Value = %v, want \"charly-fixture-web-content-marker\"", c.Contains[0].Value)
-	}
-}
-
-// TestContainsList_DoesNotAffectMatcherList ensures the fix is field-scoped:
-// stdout/body/etc. (typed MatcherList) keep Op="equals" as the default for
-// bare scalars, since `stdout: PONG` should mean "stdout EQUALS PONG", not
-// "stdout CONTAINS PONG". Only Contains was field-semantically broken.
-func TestContainsList_DoesNotAffectMatcherList(t *testing.T) {
+// TestMatcherList_BareScalarDefaultsToEquals ensures a typed MatcherList field
+// (stdout/body/…) keeps Op="equals" as the default for bare scalars, since
+// `stdout: PONG` means "stdout EQUALS PONG", not "stdout CONTAINS PONG" — the field-name
+// `contains:` semantic (Op="contains") is reproduced only in the file plugin's
+// #FileContains, never on a typed MatcherList.
+func TestMatcherList_BareScalarDefaultsToEquals(t *testing.T) {
 	yamlSrc := `
 command: echo PONG
 stdout: PONG
@@ -496,7 +408,7 @@ stdout: PONG
 		t.Fatalf("len(Stdout) = %d, want 1", len(c.Stdout))
 	}
 	if c.Stdout[0].Op != "equals" {
-		t.Errorf("MatcherList default = %q, want %q (regression: ContainsList logic must not leak to MatcherList)",
+		t.Errorf("MatcherList default = %q, want %q (a bare scalar on a typed MatcherList is equals, never contains)",
 			c.Stdout[0].Op, "equals")
 	}
 }

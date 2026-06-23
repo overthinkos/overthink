@@ -30,8 +30,10 @@ blogwatcher:
                 go clean -cache
     blogwatcher-step-1:
         check: the blogwatcher binary is installed at ~/go/bin/blogwatcher
-        file: ${HOME}/go/bin/blogwatcher
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/go/bin/blogwatcher
+            exists: true
     blogwatcher-step-2:
         check: running blogwatcher --help exits 0 and lists the scan subcommand
         exit_status: 0

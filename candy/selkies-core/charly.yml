@@ -70,15 +70,19 @@ selkies-core:
               scope: system
     selkies-core-step-0:
         check: the assembled supervisord config carries selkies-core's own [program:chrome] launcher entry
-        file: /etc/supervisord.conf
-        exists: true
-        contains:
-            - contains: "[program:chrome]"
+        plugin: file
+        plugin_input:
+            file: /etc/supervisord.conf
+            exists: true
+            contains:
+                - contains: "[program:chrome]"
     selkies-core-step-1:
         check: that supervised entry execs the chrome-wrapper launcher (self-synchronizing — it polls for the nested compositor's wayland-0 socket)
-        file: /etc/supervisord.conf
-        contains:
-            - contains: "chrome-wrapper"
+        plugin: file
+        plugin_input:
+            file: /etc/supervisord.conf
+            contains:
+                - contains: "chrome-wrapper"
     selkies-core-step-2:
         check: the init system reports selkies-core's supervised chrome program as RUNNING
         context:
@@ -105,10 +109,12 @@ selkies-core:
     selkies-chrome-supervisor-baked:
         check: file=/etc/supervisord.conf
         id: selkies-chrome-supervisor-baked
-        file: /etc/supervisord.conf
-        contains:
-            - contains: "[program:chrome]"
-            - contains: "chrome-wrapper"
+        plugin: file
+        plugin_input:
+            file: /etc/supervisord.conf
+            contains:
+                - contains: "[program:chrome]"
+                - contains: "chrome-wrapper"
     selkies-core-chrome-launch-flags:
         check: the supervised Chrome browser launched with --no-first-run (the first-run "welcome / make Chrome default" dialog is suppressed) and --start-maximized
         id: selkies-core-chrome-launch-flags

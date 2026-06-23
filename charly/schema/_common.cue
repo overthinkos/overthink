@@ -16,7 +16,6 @@
 // VerbCatalog entry (the registry bijection gate proves it). Keep in lockstep with
 // the `--- verb discriminators ---` group in #Op.
 #OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" |
-	"file" |
 	"cdp" | "wl" | "dbus" | "vnc" | "mcp" | "record" | "spice" |
 	"libvirt" | "kube" | "adb" | "appium" | "summarize" | "kill" | "plugin") @go(-)
 
@@ -48,7 +47,6 @@
 // never authored and intentionally absent.
 #Op: {
 	// --- verb discriminators (exactly one set; Go Kind() enforces) ---
-	file?:           string
 	mkdir?:          string
 	copy?:           string
 	write?:          string
@@ -176,14 +174,16 @@
 	venue?:     string @go(Venue)
 	intent_do?: string @go(IntentDo)
 
-	// --- file ---
-	exists?:   bool @go(,type=*bool)
-	mode?:     string & =~"^0[0-7]{3,4}$"
-	owner?:    string
-	group_of?: string @go(GroupOf)
-	filetype?: "file" | "directory" | "symlink"
-	contains?: #ContainsList
-	sha256?:   string
+	// --- file/copy/write SHARED modifier ---
+	// `mode` is the SHARED octal-permission modifier: the copy/write install verbs read
+	// Op.Mode at deploy (deploy_target_local.go / deploy_target_vm.go via parseTaskMode),
+	// so it STAYS in #Op. The file-EXCLUSIVE fields (file/exists/owner/group_of/filetype/
+	// contains/sha256) LEFT #Op — they are read ONLY by the `file` plugin verb and now live
+	// in its #FileInput (charly/plugin/builtins/file, with the contains-default semantic
+	// reproduced via decodeContainsList). The state-provision migrator MOVES `mode` into a
+	// file step's plugin_input while LEAVING it here for copy/write (the shared-companion
+	// pattern, like gid between unix_group and user).
+	mode?: string & =~"^0[0-7]{3,4}$"
 
 	// exclude_distro — a SHARED step-level skip filter read by the generic runOne for
 	// EVERY verb (skip the step when any image distro tag intersects the list), NOT a
@@ -292,15 +292,15 @@
 
 // Matcher operators (validMatcherOps, validate_check.go). A matcher is a scalar
 // (implicit equals), or a single-operator map; #MatcherList accepts a single
-// matcher OR a list. #ContainsList shares the shape (bare scalars mean contains
-// at decode, but the validated SHAPE is identical).
+// matcher OR a list. (The base no longer carries a contains-default list def — that
+// shape left with the `file` verb's `contains` field and is now reproduced standalone
+// in the file plugin's #FileContains, decoded with the substring default via
+// decodeContainsList; no base #Op field uses it anymore.)
 #MatchOpMap: {equals: _} | {not_equals: _} | {contains: _} | {not_contains: _} | {matches: _} | {not_matches: _} | {lt: _} | {le: _} | {gt: _} | {ge: _}
 
 #Matcher: (string | bool | number | #MatchOpMap) @go(-) // gengotypes: hand Matcher (spec/union_types.go, ported from checkspec.go)
 
 #MatcherList: (#Matcher | [...#Matcher]) @go(-) // gengotypes: hand MatcherList
-
-#ContainsList: (#MatcherList) @go(-) // gengotypes: hand ContainsList
 
 // ---------------------------------------------------------------------------
 // Build-vocabulary shared shapes (distro formats + builders).

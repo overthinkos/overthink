@@ -73,8 +73,10 @@ github-actions:
                 rm -f /tmp/actionlint.tar.gz
     github-actions-step-2:
         check: the act CLI is installed at its fixed path
-        file: /usr/bin/act
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/act
+            exists: true
     github-actions-step-3:
         check: act reports its version without error
         exit_status: 0
@@ -83,8 +85,10 @@ github-actions:
             command: /usr/bin/act --version
     github-actions-step-4:
         check: the actionlint linter is installed at its fixed path
-        file: /usr/local/bin/actionlint
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/actionlint
+            exists: true
     github-actions-step-5:
         check: actionlint reports its version without error
         exit_status: 0

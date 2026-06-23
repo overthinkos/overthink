@@ -30,8 +30,10 @@ wacli:
                 go clean -cache
     wacli-step-1:
         check: the wacli WhatsApp CLI binary is installed in the user's Go bin directory
-        file: ${HOME}/go/bin/wacli
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/go/bin/wacli
+            exists: true
     wacli-step-2:
         check: the installed wacli binary carries the executable bit and can be invoked
         exit_status: 0
@@ -44,5 +46,7 @@ wacli:
     wacli-go-toolchain:
         check: file=/usr/bin/go
         id: wacli-go-toolchain
-        file: /usr/bin/go
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/go
+            exists: true

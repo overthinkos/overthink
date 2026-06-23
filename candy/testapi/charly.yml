@@ -38,8 +38,10 @@ testapi:
         run_as: "${USER}"
     testapi-step-2:
         check: the FastAPI application module is installed in the service working directory
-        file: /home/user/testapi/app.py
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /home/user/testapi/app.py
+            exists: true
     testapi-step-3:
         check: the pixi environment can import the fastapi and uvicorn modules
         exit_status: 0
@@ -69,8 +71,10 @@ testapi:
     testapi-uvicorn-binary:
         check: file=/home/user/.pixi/envs/default/bin/uvicorn
         id: testapi-uvicorn-binary
-        file: /home/user/.pixi/envs/default/bin/uvicorn
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /home/user/.pixi/envs/default/bin/uvicorn
+            exists: true
     testapi-service-running:
         check: service=testapi
         id: testapi-service-running

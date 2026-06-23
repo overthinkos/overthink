@@ -24,8 +24,10 @@ uv:
             - /usr/local/bin/uvx
     uv-step-1:
         check: the uv binary is installed at /usr/local/bin/uv
-        file: /usr/local/bin/uv
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/uv
+            exists: true
     uv-step-2:
         check: uv reports its version and exits successfully
         exit_status: 0
@@ -34,5 +36,7 @@ uv:
             command: /usr/local/bin/uv --version
     uv-step-3:
         check: the uvx tool-runner is installed at /usr/local/bin/uvx
-        file: /usr/local/bin/uvx
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/uvx
+            exists: true

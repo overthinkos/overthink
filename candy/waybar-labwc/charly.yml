@@ -60,29 +60,41 @@ waybar-labwc:
         run_as: "${USER}"
     waybar-labwc-step-5:
         check: the waybar status bar binary is installed at /usr/bin/waybar
-        file: /usr/bin/waybar
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/waybar
+            exists: true
     waybar-labwc-step-6:
         check: the labwc launch wrapper is installed and executable
-        file: ${HOME}/.local/bin/waybar-labwc-wrapper
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/waybar-labwc-wrapper
+            exists: true
+            mode: "0755"
     waybar-labwc-step-7:
         check: the wrapper attaches waybar to labwc's wayland-0 socket, not the pixelflux capture compositor
-        file: ${HOME}/.local/bin/waybar-labwc-wrapper
-        contains: ["wayland-0"]
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/waybar-labwc-wrapper
+            contains: ["wayland-0"]
     waybar-labwc-step-8:
         check: the bottom-bar waybar config is installed in the user's config dir
-        file: ${HOME}/.config/waybar/config
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.config/waybar/config
+            exists: true
     waybar-labwc-step-9:
         check: the config wires the wlr foreign-toplevel taskbar module
-        file: ${HOME}/.config/waybar/config
-        contains: ["wlr/taskbar"]
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.config/waybar/config
+            contains: ["wlr/taskbar"]
     waybar-labwc-step-10:
         check: the matching style sheet is installed alongside the config
-        file: ${HOME}/.config/waybar/style.css
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.config/waybar/style.css
+            exists: true
     waybar-labwc-step-11:
         agent-check: the waybar bar is visible along the bottom of the running labwc desktop session, showing the taskbar and the Chrome launcher
     waybar-package:

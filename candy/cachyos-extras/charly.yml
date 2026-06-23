@@ -54,16 +54,22 @@ cachyos-extras:
                         - gvisor-tap-vsock
     cachyos-extras-step-0:
         check: the btop resource monitor binary is present
-        file: /usr/bin/btop
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/btop
+            exists: true
     cachyos-extras-step-1:
         check: the duf disk-usage viewer binary is present
-        file: /usr/bin/duf
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/duf
+            exists: true
     cachyos-extras-step-2:
         check: the paru AUR helper binary is present
-        file: /usr/bin/paru
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/paru
+            exists: true
     cachyos-extras-step-3:
         check: the cloudflared-bin AUR tunnel client resolves on PATH
         exit_status: 0
@@ -72,8 +78,10 @@ cachyos-extras:
             command: command -v cloudflared
     cachyos-extras-step-4:
         check: the syncthing file-synchronisation daemon binary is present
-        file: /usr/bin/syncthing
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/syncthing
+            exists: true
     accountsservice-installed:
         check: package=accountsservice
         id: accountsservice-installed

@@ -16,8 +16,10 @@ gocryptfs:
             - gocryptfs
     gocryptfs-step-0:
         check: the gocryptfs encrypted-filesystem binary is installed at /usr/bin/gocryptfs
-        file: /usr/bin/gocryptfs
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/gocryptfs
+            exists: true
     gocryptfs-step-1:
         check: gocryptfs runs and prints a version string (gocryptfs X.Y.Z) on stdout
         exit_status: 0

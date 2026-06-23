@@ -180,13 +180,17 @@ versatiles-frontend:
                 main()
     versatiles-frontend-step-4:
         check: the pre-built frontend SPA is unpacked with its index.html at the layer root
-        file: /opt/versatiles-frontend/index.html
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /opt/versatiles-frontend/index.html
+            exists: true
     versatiles-frontend-step-5:
         check: the CORS-enabled static server script is installed and executable
-        file: /opt/versatiles-frontend-cors-server.py
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: /opt/versatiles-frontend-cors-server.py
+            exists: true
+            mode: "0755"
     versatiles-frontend-step-6:
         check: the versatiles-style bundle is co-located under the http.server root at /style/
         exit_status: 0

@@ -81,32 +81,46 @@ labwc:
         run_as: "${USER}"
     labwc-step-5:
         check: the labwc Wayland compositor binary is installed at /usr/bin/labwc
-        file: /usr/bin/labwc
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/labwc
+            exists: true
     labwc-step-6:
         check: the labwc-wrapper that nests the compositor under pixelflux wayland-1 is installed
-        file: ${HOME}/.local/bin/labwc-wrapper
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/labwc-wrapper
+            exists: true
     labwc-step-7:
         check: the labwc rc.xml configuration (server-side decorations, maximize-all window rule) is present
-        file: ${HOME}/.config/labwc/rc.xml
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.config/labwc/rc.xml
+            exists: true
     labwc-step-8:
         check: the labwc autostart session script is present
-        file: ${HOME}/.config/labwc/autostart
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.config/labwc/autostart
+            exists: true
     labwc-step-9:
         check: the foot terminal emulator is installed for the desktop session
-        file: /usr/bin/foot
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/foot
+            exists: true
     labwc-step-10:
         check: the thunar file manager is installed for the desktop session
-        file: /usr/bin/thunar
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/thunar
+            exists: true
     labwc-step-11:
         check: Xwayland is installed so X11 applications run inside the Wayland session
-        file: /usr/bin/Xwayland
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/Xwayland
+            exists: true
     labwc-step-12:
         agent-check: once pixelflux's wayland-1 socket is healthy, labwc creates its own wayland-0 socket and hosts the desktop applications as a stable supervised service
     labwc-service-running:

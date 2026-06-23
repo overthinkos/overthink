@@ -28,30 +28,42 @@ selkies-kde-desktop:
             - kde-selkies
     selkies-kde-desktop-step-0:
         check: the kde-selkies flavor primitive's nested-session launcher is installed and executable in the deploy user's PATH
-        file: ${HOME}/.local/bin/kde-selkies-session
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/kde-selkies-session
+            exists: true
+            mode: "0755"
     selkies-kde-desktop-step-1:
         check: the launcher execs startplasma-wayland — the KDE Plasma session entrypoint that distinguishes this flavor from labwc
-        file: ${HOME}/.local/bin/kde-selkies-session
-        contains:
-            - contains: "startplasma-wayland"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/kde-selkies-session
+            contains:
+                - contains: "startplasma-wayland"
     selkies-kde-desktop-step-2:
         check: the KWin Wayland compositor (pulled transitively via kde-shell) that renders the nested Plasma session into pixelflux is present
-        file: /usr/bin/kwin_wayland
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/kwin_wayland
+            exists: true
     selkies-kde-desktop-step-3:
         check: the Plasma shell composed from kde-shell is present
-        file: /usr/bin/plasmashell
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/plasmashell
+            exists: true
     selkies-kde-desktop-step-4:
         check: Google Chrome — the supervised browser the shared selkies-core spine streams — is present
-        file: /usr/bin/google-chrome-stable
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/google-chrome-stable
+            exists: true
     selkies-kde-desktop-step-5:
         check: the pipewire audio daemon shared by the streamed session is present
-        file: /usr/bin/pipewire
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/pipewire
+            exists: true
     selkies-kde-desktop-step-6:
         check: the composed nested KDE Plasma session reaches RUNNING under supervisord without crash-looping
         stdout:
@@ -77,8 +89,10 @@ selkies-kde-desktop:
     selkies-kde-desktop-plasma-session:
         check: file=/usr/bin/startplasma-wayland
         id: selkies-kde-desktop-plasma-session
-        file: /usr/bin/startplasma-wayland
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/startplasma-wayland
+            exists: true
     selkies-kde-desktop-plasma-package:
         check: package=plasma-desktop
         id: selkies-kde-desktop-plasma-package

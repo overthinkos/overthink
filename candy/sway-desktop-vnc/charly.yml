@@ -19,16 +19,22 @@ sway-desktop-vnc:
             WLR_RENDERER: "pixman"
     sway-desktop-vnc-step-0:
         check: the sway Wayland compositor binary is installed
-        file: /usr/bin/sway
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/sway
+            exists: true
     sway-desktop-vnc-step-1:
         check: the wayvnc VNC server binary is installed
-        file: /usr/bin/wayvnc
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/wayvnc
+            exists: true
     sway-desktop-vnc-step-2:
         check: the Chrome browser binary is installed
-        file: /usr/bin/google-chrome-stable
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/google-chrome-stable
+            exists: true
     sway-desktop-vnc-step-3:
         check: the Wayland renderer is pinned to the pixman software backend so the desktop runs without a GPU
         exit_status: 0

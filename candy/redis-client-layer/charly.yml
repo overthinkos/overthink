@@ -23,8 +23,10 @@ redis-client-layer:
               scope: system
     redis-client-layer-step-0:
         check: the redis-cli client binary is installed at /usr/bin/redis-cli
-        file: /usr/bin/redis-cli
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/redis-cli
+            exists: true
     redis-client-layer-step-1:
         check: the redis package that provides redis-cli is installed (valkey-compat-redis on Fedora 43)
         plugin: package
@@ -41,12 +43,16 @@ redis-client-layer:
             command: redis-cli --version
     redis-client-layer-step-3:
         check: the ss socket-inspection tool from iproute is installed at /usr/sbin/ss
-        file: /usr/sbin/ss
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/sbin/ss
+            exists: true
     redis-client-layer-step-4:
         check: the pgrep process tool from procps-ng is installed at /usr/bin/pgrep
-        file: /usr/bin/pgrep
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/pgrep
+            exists: true
     redis-client-layer-step-5:
         check: the keep-alive supervised service is running in the deployed pod
         context:

@@ -18,10 +18,12 @@ notebook-llm-on-supercomputers:
               dest: llms_on_supercomputers
     notebook-llm-on-supercomputers-step-0:
         check: the llms_on_supercomputers subdirectory is provisioned in the workspace
-        file: ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers
-        filetype: directory
         context:
             - runtime
+        plugin: file
+        plugin_input:
+            file: ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers
+            filetype: directory
     notebook-llm-on-supercomputers-step-1:
         check: at least one course notebook (D0_* prefix) is present
         exit_status: 0
@@ -44,10 +46,12 @@ notebook-llm-on-supercomputers:
             command: ls ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers/
     notebook-llm-on-supercomputers-step-3:
         check: the supporting datasets subdirectory ships alongside the notebooks
-        file: ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers/datasets
-        filetype: directory
         context:
             - runtime
+        plugin: file
+        plugin_input:
+            file: ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers/datasets
+            filetype: directory
     notebook-llm-on-supercomputers-step-4:
         check: the booking-queries classification CSV is present for the RAG and evaluation notebooks
         exit_status: 0

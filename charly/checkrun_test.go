@@ -65,7 +65,10 @@ func newFakeRunner(t *testing.T, mode RunMode) (*Runner, *fakeExecutor) {
 	return r, fake
 }
 
-// file verb — exists pass, mode mismatch, filetype check, missing file.
+// file plugin verb — exists pass, mode mismatch, filetype check, missing file. Now a
+// dedicated built-in plugin unit dispatched IN-PROCESS via the CheckVerbProvider RunVerb
+// path (TestMain loads its schema); authored as plugin: file + plugin_input (the
+// file-exclusive fields + the shared mode ride plugin_input).
 func TestRunner_FileVerb(t *testing.T) {
 	t.Run("exists true, mode ok", func(t *testing.T) {
 		r, fake := newFakeRunner(t, RunModeLive)
@@ -73,7 +76,7 @@ func TestRunner_FileVerb(t *testing.T) {
 			{matchPrefix: "if [ -e", stdout: "exists=1|regular file|755|root|root\n"},
 		}
 		results := r.Run(context.Background(), []Op{
-			{File: "/usr/bin/redis-server", Exists: new(true), Mode: "0755", Filetype: "file"},
+			{Plugin: "file", PluginInput: map[string]any{"file": "/usr/bin/redis-server", "exists": true, "mode": "0755", "filetype": "file"}},
 		})
 		if len(results) != 1 || results[0].Status != TestPass {
 			t.Errorf("expected pass, got %+v", results[0])
@@ -86,7 +89,7 @@ func TestRunner_FileVerb(t *testing.T) {
 			{matchPrefix: "if [ -e", stdout: "exists=1|regular file|755|root|root\n"},
 		}
 		results := r.Run(context.Background(), []Op{
-			{File: "/x", Mode: "0644"},
+			{Plugin: "file", PluginInput: map[string]any{"file": "/x", "mode": "0644"}},
 		})
 		if results[0].Status != TestFail || !strings.Contains(results[0].Message, "mode") {
 			t.Errorf("expected mode failure, got %+v", results[0])
@@ -99,7 +102,7 @@ func TestRunner_FileVerb(t *testing.T) {
 			{matchPrefix: "if [ -e", stdout: "exists=0||||\n"},
 		}
 		results := r.Run(context.Background(), []Op{
-			{File: "/nope", Exists: new(false)},
+			{Plugin: "file", PluginInput: map[string]any{"file": "/nope", "exists": false}},
 		})
 		if results[0].Status != TestPass {
 			t.Errorf("expected pass for absent-as-expected, got %+v", results[0])
@@ -112,10 +115,24 @@ func TestRunner_FileVerb(t *testing.T) {
 			{matchPrefix: "if [ -e", stdout: "exists=1|regular file|644|root|root\n"},
 		}
 		results := r.Run(context.Background(), []Op{
-			{File: "/x", Exists: new(false)},
+			{Plugin: "file", PluginInput: map[string]any{"file": "/x", "exists": false}},
 		})
 		if results[0].Status != TestFail {
 			t.Errorf("expected fail, got %+v", results[0])
+		}
+	})
+
+	t.Run("contains bare scalar defaults to substring", func(t *testing.T) {
+		r, fake := newFakeRunner(t, RunModeLive)
+		fake.responses = []fakeResponse{
+			{matchPrefix: "if [ -e", stdout: "exists=1|regular file|644|root|root\n"},
+			{matchPrefix: "cat ", stdout: "line one\nfsfreeze-hook.d here\nline three\n"},
+		}
+		results := r.Run(context.Background(), []Op{
+			{Plugin: "file", PluginInput: map[string]any{"file": "/etc/x", "contains": "fsfreeze-hook.d"}},
+		})
+		if results[0].Status != TestPass {
+			t.Errorf("expected pass (bare-scalar contains = substring), got %+v", results[0])
 		}
 	})
 }
@@ -316,7 +333,7 @@ func TestRunner_EmptyCheck(t *testing.T) {
 // the number of failures.
 func TestFormatResultsText(t *testing.T) {
 	results := []CheckResult{
-		{Op: &Op{File: "/x"}, Verb: "file", Status: TestPass, Message: "ok"},
+		{Op: &Op{Plugin: "file", PluginInput: map[string]any{"file": "/x"}}, Verb: "file", Status: TestPass, Message: "ok"},
 		{Op: &Op{Plugin: "addr", PluginInput: map[string]any{"addr": "127.0.0.1:6379"}}, Verb: "addr", Status: TestFail, Message: "not reachable", Elapsed: 5 * time.Millisecond},
 		{Op: cmdOpP("a"), Verb: "command", Status: TestSkip, Message: "skipped"},
 	}

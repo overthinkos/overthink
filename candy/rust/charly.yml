@@ -30,8 +30,10 @@ rust:
                     - cargo
     rust-step-0:
         check: the rustc compiler binary is installed at /usr/bin/rustc
-        file: /usr/bin/rustc
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/rustc
+            exists: true
     rust-step-1:
         check: rustc reports a version string and exits cleanly
         exit_status: 0
@@ -42,8 +44,10 @@ rust:
             command: /usr/bin/rustc --version
     rust-step-2:
         check: the cargo package manager binary is installed at /usr/bin/cargo
-        file: /usr/bin/cargo
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/cargo
+            exists: true
     rust-step-3:
         check: cargo reports a version string and exits cleanly
         exit_status: 0

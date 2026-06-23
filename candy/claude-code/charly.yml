@@ -15,8 +15,10 @@ claude-code:
             - "~/.local/bin"
     claude-code-step-0:
         check: the claude binary is installed into the npm global bin directory
-        file: ${HOME}/.npm-global/bin/claude
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/bin/claude
+            exists: true
     claude-code-step-1:
         check: running claude --version exits cleanly and prints the Claude Code banner
         exit_status: 0

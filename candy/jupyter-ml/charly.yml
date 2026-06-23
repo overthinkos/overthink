@@ -72,8 +72,10 @@ jupyter-ml:
             command: ${HOME}/.pixi/envs/default/bin/jupyter labextension list 2>&1
     jupyter-ml-step-2:
         check: the llama.cpp CLI binary is present from the composed llama-cpp candy
-        file: ${HOME}/llama.cpp/llama-cli
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/llama.cpp/llama-cli
+            exists: true
     jupyter-ml-step-3:
         check: the vLLM inference engine wheel is installed in the pixi env from the composed unsloth candy
         exit_status: 0
@@ -84,10 +86,12 @@ jupyter-ml:
             command: ${HOME}/.pixi/envs/default/bin/pip show vllm
     jupyter-ml-step-4:
         check: the workspace volume is mounted for notebooks
-        file: /workspace
-        filetype: directory
         context:
             - runtime
+        plugin: file
+        plugin_input:
+            file: /workspace
+            filetype: directory
     jupyter-ml-step-5:
         check: the JupyterLab service is running under supervisord
         context:

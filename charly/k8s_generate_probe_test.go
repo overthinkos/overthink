@@ -80,9 +80,9 @@ func TestCheckToProbe_Addr(t *testing.T) {
 	}
 }
 
-// TestCheckToProbe_File covers file: → exec test -e.
+// TestCheckToProbe_File covers plugin: file (path from plugin_input) → exec test -e.
 func TestCheckToProbe_File(t *testing.T) {
-	got := checkToProbe(&Op{File: "/etc/ready"})
+	got := checkToProbe(&Op{Plugin: "file", PluginInput: map[string]any{"file": "/etc/ready"}})
 	want := map[string]any{"exec": map[string]any{"command": []string{"test", "-e", "/etc/ready"}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
@@ -108,12 +108,14 @@ func TestCheckToProbe_NilAndEmpty(t *testing.T) {
 	}
 }
 
-// TestCheckToProbe_HTTPPriority documents the priority order: HTTP (now read from
+// TestCheckToProbe_HTTPPriority documents the priority order: HTTP (read from
 // plugin_input) wins over Addr/File/Command when multiple are set (no real check carries
-// more than one verb after validation, but the function is robust).
+// more than one verb after validation, but the function is robust). file/addr are plugin
+// verbs now (one plugin per op), so the residual cross-field case is HTTP vs the Command
+// modifier.
 func TestCheckToProbe_HTTPPriority(t *testing.T) {
-	got := checkToProbe(&Op{Plugin: "http", PluginInput: map[string]any{"http": "http://example.com:80/health"}, File: "/etc/ready"})
+	got := checkToProbe(&Op{Plugin: "http", PluginInput: map[string]any{"http": "http://example.com:80/health"}, Command: "test -e /etc/ready"})
 	if _, ok := got["httpGet"]; !ok {
-		t.Errorf("expected httpGet to win over file, got %v", got)
+		t.Errorf("expected httpGet to win over command, got %v", got)
 	}
 }

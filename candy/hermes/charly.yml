@@ -108,27 +108,35 @@ hermes:
         run_as: "${USER}"
     hermes-step-2:
         check: the hermes Python CLI is installed into the pixi default environment
-        file: ${HOME}/.pixi/envs/default/bin/hermes
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.pixi/envs/default/bin/hermes
+            exists: true
     hermes-step-3:
         check: the hermes entrypoint wrapper is installed and executable on the user PATH
-        file: ${HOME}/.local/bin/hermes-entrypoint
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/hermes-entrypoint
+            exists: true
+            mode: "0755"
     hermes-step-4:
         check: the upstream hermes-agent source tree is staged under $HOME so the entrypoint can bootstrap config, skills, and the WhatsApp bridge
-        file: ${HOME}/hermes-agent
-        exists: true
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: ${HOME}/hermes-agent
+            exists: true
+            filetype: directory
     hermes-step-5:
         agent-check: when deployed, the persistent /opt/data volume is mounted and the supervised hermes service reaches a running state, having auto-configured an LLM provider from the supplied API key
     hermes-data-volume-mount:
         check: file=/opt/data
         id: hermes-data-volume-mount
-        file: /opt/data
-        filetype: directory
         context:
             - runtime
+        plugin: file
+        plugin_input:
+            file: /opt/data
+            filetype: directory
     hermes-service-running:
         check: service=hermes
         id: hermes-service-running

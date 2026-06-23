@@ -275,8 +275,8 @@ func SubstituteStepNonces(plan []Step, nonces map[string]string) ([]Step, error)
 		}
 		return match
 	})
-	// Re-decode through the CUE path (Matcher shorthand → UnmarshalJSON,
-	// ContainsList → normalizer) so the per-type shorthand UnmarshalYAML methods
+	// Re-decode through the CUE path (Matcher shorthand → UnmarshalJSON, the other
+	// shorthand types → normalizer) so the per-type shorthand UnmarshalYAML methods
 	// can be deleted. The substituted bytes are a YAML sequence of steps.
 	var doc yaml.Node
 	if err := yaml.Unmarshal(substituted, &doc); err != nil {

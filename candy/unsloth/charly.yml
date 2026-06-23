@@ -66,5 +66,7 @@ unsloth:
     unsloth-pixi-python:
         check: file=${HOME}/.pixi/envs/default/bin/python
         id: unsloth-pixi-python
-        file: ${HOME}/.pixi/envs/default/bin/python
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.pixi/envs/default/bin/python
+            exists: true

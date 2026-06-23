@@ -198,13 +198,17 @@ k3s-server:
                 chmod 0600 /etc/rancher/k3s/config.yaml
     k3s-server-step-1:
         check: the k3s server config file is rendered with admin-only (0600) permissions
-        file: /etc/rancher/k3s/config.yaml
-        exists: true
-        mode: "0600"
+        plugin: file
+        plugin_input:
+            file: /etc/rancher/k3s/config.yaml
+            exists: true
+            mode: "0600"
     k3s-server-step-2:
         check: the k3s control-plane binary the service execs is installed by the required k3s candy
-        file: /usr/local/bin/k3s
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/k3s
+            exists: true
     k3s-server-step-3:
         check: the cluster reports at least one Ready node
         kube: wait-nodes
@@ -242,15 +246,19 @@ k3s-server:
     k3s-config-file:
         check: file=/etc/rancher/k3s/config.yaml
         id: k3s-config-file
-        file: /etc/rancher/k3s/config.yaml
-        exists: true
-        mode: "0600"
         context:
             - build
+        plugin: file
+        plugin_input:
+            file: /etc/rancher/k3s/config.yaml
+            exists: true
+            mode: "0600"
     k3s-binary:
         check: file=/usr/local/bin/k3s
         id: k3s-binary
-        file: /usr/local/bin/k3s
-        exists: true
         context:
             - build
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/k3s
+            exists: true

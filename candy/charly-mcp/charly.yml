@@ -58,12 +58,16 @@ charly-mcp:
         run_as: root
     charly-mcp-step-1:
         check: the composed charly candy bakes the charly CLI binary at /usr/bin/charly
-        file: /usr/bin/charly
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/charly
+            exists: true
     charly-mcp-step-2:
         check: the world-writable /workspace project mount exists in the built image
-        file: /workspace
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: /workspace
+            filetype: directory
     charly-mcp-step-3:
         check: the supervised charly-mcp service is running
         context:

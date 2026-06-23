@@ -45,8 +45,10 @@ openclaw-full:
             - sqlite
     openclaw-full-step-0:
         check: the claude-code CLI is composed into the image under the npm global bin dir
-        file: ${HOME}/.npm-global/bin/claude
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/bin/claude
+            exists: true
     openclaw-full-step-1:
         check: claude --version exits cleanly and prints the Claude Code banner
         exit_status: 0
@@ -57,32 +59,46 @@ openclaw-full:
             command: ${HOME}/.npm-global/bin/claude --version
     openclaw-full-step-2:
         check: the mcporter MCP CLI is composed into the image
-        file: ${HOME}/.npm-global/bin/mcporter
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/bin/mcporter
+            exists: true
     openclaw-full-step-3:
         check: ripgrep's rg binary is present from the composed ripgrep candy
-        file: /usr/bin/rg
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/rg
+            exists: true
     openclaw-full-step-4:
         check: the sqlite3 shell is present from the composed sqlite candy
-        file: /usr/bin/sqlite3
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/sqlite3
+            exists: true
     openclaw-full-step-5:
         check: tmux is present from the composed tmux candy
-        file: /usr/bin/tmux
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/tmux
+            exists: true
     openclaw-full-step-6:
         check: ffmpeg is present from the composed ffmpeg candy
-        file: /usr/bin/ffmpeg
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/ffmpeg
+            exists: true
     openclaw-full-step-7:
         check: the GitHub CLI gh is present from the composed gh candy
-        file: /usr/bin/gh
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/gh
+            exists: true
     openclaw-full-step-8:
         check: the uv Python package manager is composed into the image at /usr/local/bin/uv
-        file: /usr/local/bin/uv
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/uv
+            exists: true
     openclaw-full-step-9:
         agent-check: the running OpenClaw gateway exposes the bundled CLI tools to agent requests without relying on a system browser
     openclaw-full-ripgrep-package:
@@ -95,10 +111,14 @@ openclaw-full:
     openclaw-full-git-binary:
         check: file=/usr/bin/git
         id: openclaw-full-git-binary
-        file: /usr/bin/git
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/git
+            exists: true
     openclaw-full-uvx-binary:
         check: file=/usr/local/bin/uvx
         id: openclaw-full-uvx-binary
-        file: /usr/local/bin/uvx
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/uvx
+            exists: true

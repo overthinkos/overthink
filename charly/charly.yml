@@ -1,4 +1,4 @@
-version: 2026.174.0900
+version: 2026.174.1100
 
 # providers — the registry membership manifest (provider class -> the words it
 # contributes). Read at init (registry_bootstrap.go) to drive built-in provider
@@ -12,7 +12,7 @@ version: 2026.174.0900
 # externalized this way, so those two lists are empty by design.
 providers:
     kind: [android, builder, candy, distro, group, init, k8s, local, pod, resource, target, vm]
-    verb: [adb, appium, cdp, dbus, file, kill, kube, libvirt, mcp, plugin, record, spice, summarize, vnc, wl]
+    verb: [adb, appium, cdp, dbus, kill, kube, libvirt, mcp, plugin, record, spice, summarize, vnc, wl]
     deploy: []
     step: []
     builder: []

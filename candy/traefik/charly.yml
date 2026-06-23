@@ -58,8 +58,10 @@ traefik:
                 sed -i "s#\${HOME}#${HOME_DIR}#g" /etc/traefik/traefik.yml
     traefik-step-4:
         check: the traefik release binary is installed at /usr/local/bin/traefik
-        file: /usr/local/bin/traefik
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/traefik
+            exists: true
     traefik-step-5:
         check: running the binary reports the pinned 3.4.0 release
         exit_status: 0
@@ -70,21 +72,27 @@ traefik:
             command: /usr/local/bin/traefik version
     traefik-step-6:
         check: the static configuration is staged at /etc/traefik/traefik.yml with mode 0644 and the letsencrypt resolver
-        file: /etc/traefik/traefik.yml
-        mode: "0644"
-        contains:
-            - contains: "certResolver: letsencrypt"
+        plugin: file
+        plugin_input:
+            file: /etc/traefik/traefik.yml
+            mode: "0644"
+            contains:
+                - contains: "certResolver: letsencrypt"
     traefik-acme-storage-resolved:
         check: the ACME storage path is resolved to an absolute home, not the literal ${HOME} (traefik does not expand env in static config)
         id: traefik-acme-storage-resolved
-        file: /etc/traefik/traefik.yml
-        contains:
-            - not_contains: "${HOME}"
-            - matches: "storage: /home/"
+        plugin: file
+        plugin_input:
+            file: /etc/traefik/traefik.yml
+            contains:
+                - not_contains: "${HOME}"
+                - matches: "storage: /home/"
     traefik-step-8:
         check: the watched dynamic-provider directory exists
-        file: /etc/traefik/dynamic
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: /etc/traefik/dynamic
+            filetype: directory
     traefik-step-9:
         check: the insecure API and dashboard answer with HTTP 200 on the API port
         context:

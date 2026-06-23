@@ -44,8 +44,10 @@ openclaw:
               scope: system
     openclaw-step-0:
         check: the openclaw gateway binary is installed into the npm global bin
-        file: ${HOME}/.npm-global/bin/openclaw
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/bin/openclaw
+            exists: true
     openclaw-step-1:
         check: the openclaw gateway runs as a supervised service
         context:

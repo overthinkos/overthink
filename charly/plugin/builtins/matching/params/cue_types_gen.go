@@ -18,8 +18,8 @@ package params
 //
 // SELF-CONTAINED: it references NO base def (it reproduces the matcher shape
 // standalone under plugin-private def names — #MatchingContains / #MatchingMatcher /
-// #MatchingMatchOp — so there is NO collision with the base #ContainsList / #Matcher /
-// #MatchOpMap when base ++ plugin compiles), so it compiles standalone (gengotypes +
+// #MatchingMatchOp — so there is NO collision with the base #Matcher / #MatchOpMap when
+// base ++ plugin compiles), so it compiles standalone (gengotypes +
 // the load-gate compile) AND splices onto the base.
 type MatchingInput struct {
 	// matching — the value (any scalar/list/map) the matchers are evaluated against;
@@ -27,11 +27,11 @@ type MatchingInput struct {
 	Matching any/* CUE top */ `yaml:"matching,omitempty" json:"matching"`
 
 	// contains — the goss-style matchers every authored value must satisfy. Reproduces
-	// the base #ContainsList shape standalone (scalar / single operator-map / list).
+	// the contains matcher-list shape standalone (scalar / single operator-map / list).
 	Contains MatchingContains `yaml:"contains,omitempty" json:"contains,omitempty"`
 }
 
-// #MatchingContains mirrors the base #ContainsList: a single matcher OR a list.
+// #MatchingContains is the contains matcher list: a single matcher OR a list.
 type MatchingContains any /* CUE disjunction: (bool|string|list|struct|number) */
 
 // #MatchingMatcher mirrors the base #Matcher: a bare scalar (implicit match) or a

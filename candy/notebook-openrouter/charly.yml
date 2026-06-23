@@ -21,10 +21,12 @@ notebook-openrouter:
               dest: openrouter
     notebook-openrouter-step-0:
         check: the openrouter subdirectory is provisioned in the workspace
-        file: ${VOLUME_CONTAINER_PATH:workspace}/openrouter
-        filetype: directory
         context:
             - runtime
+        plugin: file
+        plugin_input:
+            file: ${VOLUME_CONTAINER_PATH:workspace}/openrouter
+            filetype: directory
     notebook-openrouter-step-1:
         check: the OpenRouter_Basics producer notebook is present
         exit_status: 0
@@ -37,17 +39,23 @@ notebook-openrouter:
             command: ls ${VOLUME_CONTAINER_PATH:workspace}/openrouter/
     notebook-openrouter-step-2:
         check: the OpenRouter_Basics producer notebook is staged in the image data tree
-        file: /data/workspace/openrouter/00_OpenRouter_Basics.ipynb
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /data/workspace/openrouter/00_OpenRouter_Basics.ipynb
+            exists: true
     notebook-openrouter-step-3:
         check: the notebooks.yaml manifest cataloguing the collection is staged
-        file: /data/workspace/openrouter/notebooks.yaml
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /data/workspace/openrouter/notebooks.yaml
+            exists: true
     notebook-openrouter-step-4:
         check: the basics notebook authenticates with the OPENROUTER_API_KEY declared via env_require
-        file: /data/workspace/openrouter/00_OpenRouter_Basics.ipynb
-        contains:
-            - contains: "OPENROUTER_API_KEY"
+        plugin: file
+        plugin_input:
+            file: /data/workspace/openrouter/00_OpenRouter_Basics.ipynb
+            contains:
+                - contains: "OPENROUTER_API_KEY"
     notebook-openrouter-step-5:
         check: all three documented tutorial notebooks (basics, models, inference) are staged as runnable examples
         exit_status: 0
@@ -59,21 +67,29 @@ notebook-openrouter:
     notebook-openrouter-staged-dir:
         check: file=/data/workspace/openrouter
         id: notebook-openrouter-staged-dir
-        file: /data/workspace/openrouter
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: /data/workspace/openrouter
+            filetype: directory
     notebook-openrouter-models-staged:
         check: file=/data/workspace/openrouter/01_OpenRouter_Models.ipynb
         id: notebook-openrouter-models-staged
-        file: /data/workspace/openrouter/01_OpenRouter_Models.ipynb
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /data/workspace/openrouter/01_OpenRouter_Models.ipynb
+            exists: true
     notebook-openrouter-inference-staged:
         check: file=/data/workspace/openrouter/02_OpenRouter_Inference.ipynb
         id: notebook-openrouter-inference-staged
-        file: /data/workspace/openrouter/02_OpenRouter_Inference.ipynb
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /data/workspace/openrouter/02_OpenRouter_Inference.ipynb
+            exists: true
     notebook-openrouter-manifest-staged:
         check: file=/data/workspace/openrouter/notebooks.yaml
         id: notebook-openrouter-manifest-staged
-        file: /data/workspace/openrouter/notebooks.yaml
-        contains:
-            - contains: "OpenRouter Integration"
+        plugin: file
+        plugin_input:
+            file: /data/workspace/openrouter/notebooks.yaml
+            contains:
+                - contains: "OpenRouter Integration"

@@ -62,8 +62,10 @@ nvidia:
             installed: true
     nvidia-step-3:
         check: the nvidia-ctk CLI binary lands on the canonical /usr/bin path
-        file: /usr/bin/nvidia-ctk
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/nvidia-ctk
+            exists: true
     nvidia-step-4:
         check: nvidia-ctk runs and reports a version number
         exit_status: 0
@@ -74,9 +76,11 @@ nvidia:
             command: nvidia-ctk --version
     nvidia-step-5:
         check: the Vulkan ICD directory exists to hold the nvidia ICD symlinks
-        file: /etc/vulkan/icd.d
-        exists: true
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: /etc/vulkan/icd.d
+            exists: true
+            filetype: directory
     nvidia-step-6:
         check: LD_LIBRARY_PATH is exported so the GPU driver libs under /usr/lib64 resolve at runtime
         exit_status: 0

@@ -162,19 +162,25 @@ android-emulator-layer:
         mode: "0755"
     android-emulator-layer-step-5:
         check: the start-emulator launcher is installed and executable
-        file: /usr/local/bin/start-emulator
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/start-emulator
+            exists: true
+            mode: "0755"
     android-emulator-layer-step-6:
         check: the wait-for-display gate is installed and executable
-        file: /usr/local/bin/wait-for-display
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/wait-for-display
+            exists: true
+            mode: "0755"
     android-emulator-layer-step-7:
         check: the AVD home directory exists for the runtime user
-        file: ${HOME}/.android/avd
-        exists: true
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.android/avd
+            exists: true
+            filetype: directory
     android-emulator-layer-step-8:
         check: the emulator supervisord service is running
         context:

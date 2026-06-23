@@ -70,8 +70,10 @@ versatiles-fonts:
                 rm -rf "$TMPDIR"
     versatiles-fonts-step-2:
         check: the install directory /opt/versatiles-fonts exists
-        file: /opt/versatiles-fonts
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: /opt/versatiles-fonts
+            filetype: directory
     versatiles-fonts-step-3:
         check: at least one signed-distance-field glyph PBF was unpacked from the release tarball
         exit_status: 0

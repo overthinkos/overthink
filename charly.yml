@@ -1,4 +1,4 @@
-version: 2026.174.0900
+version: 2026.174.1100
 # Canonical repo identity. After the 2026-06 box inversion main imports the three
 # active distro submodules (arch / cachyos / fedora) ONE-DIRECTIONALLY to reference
 # their relocated boxes; the submodules no longer import main as a namespace (they
@@ -306,9 +306,11 @@ check-k3s-vm:
     kv-kubeconfig-file:
         check: file=/etc/rancher/k3s/k3s.yaml
         id: kv-kubeconfig-file
-        file: /etc/rancher/k3s/k3s.yaml
-        exists: true
         context: [runtime]
+        plugin: file
+        plugin_input:
+            file: /etc/rancher/k3s/k3s.yaml
+            exists: true
     kv-k8s-nodes:
         check: k8s=nodes
         id: kv-k8s-nodes
@@ -508,8 +510,10 @@ charly-cli:
                 running: true
         charly-cli-step-1:
             check: the built os image's predetermined marker file is present
-            file: /etc/charly-os-marker
-            contains: ["charly-os-content-marker"]
+            plugin: file
+            plugin_input:
+                file: /etc/charly-os-marker
+                contains: ["charly-os-content-marker"]
 default:
     group:
         description: Default benchmark — progressive verb-coverage curriculum across the full `charly check` surface (system state → network → cross-pod → MCP → Kubernetes → desktop → VM → nested).
@@ -658,12 +662,16 @@ default:
             agent_provisioned: true
         default-step-0:
             check: the predetermined marker file exists at /etc/charly-os-marker
-            file: /etc/charly-os-marker
-            exists: true
+            plugin: file
+            plugin_input:
+                file: /etc/charly-os-marker
+                exists: true
         default-step-1:
             check: the marker file contains the predetermined content marker
-            file: /etc/charly-os-marker
-            contains: ["charly-os-content-marker"]
+            plugin: file
+            plugin_input:
+                file: /etc/charly-os-marker
+                contains: ["charly-os-content-marker"]
         default-step-2:
             check: the predetermined system package is installed
             plugin: package
@@ -738,9 +746,11 @@ default:
                 body: {contains: ["charly-web-content-marker"]}
         default-step-14:
             check: the served content file persists on disk with the predetermined marker
-            file: /srv/fixture/index.html
-            exists: true
-            contains: ["charly-web-content-marker"]
+            plugin: file
+            plugin_input:
+                file: /srv/fixture/index.html
+                exists: true
+                contains: ["charly-web-content-marker"]
         default-step-15:
             check: a self-curl from inside the pod returns the predetermined marker
             exit_status: 0
@@ -1115,8 +1125,10 @@ default:
                 command: "uptime"
         default-step-72:
             check: the guest has hardware-accelerated virtualization available
-            file: /dev/kvm
-            exists: true
+            plugin: file
+            plugin_input:
+                file: /dev/kvm
+                exists: true
         inner-app-pod:
             pod:
                 agent_provisioned: true
@@ -1248,8 +1260,10 @@ scaffolding-selftest:
             include: box:fedora.composition-source
         scaffolding-selftest-step-2:
             check: a marker file written during the composition self-test is present
-            file: /etc/charly-composition-selftest
-            exists: true
+            plugin: file
+            plugin_input:
+                file: /etc/charly-composition-selftest
+                exists: true
 # =================================================================
 # check-local — per-kind R10 smoke template for kind:local.
 # Applied via the check-local bed (kind:check) in this file's check: block. Single layer

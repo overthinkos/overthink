@@ -39,7 +39,9 @@ func TestRenderProvisionScript(t *testing.T) {
 		// decodes plugin_input.
 		{"package", Op{Plugin: "package", PluginInput: map[string]any{"package": "redis"}}, "package", true, "install"},
 		{"service", Op{Plugin: "service", PluginInput: map[string]any{"service": "sshd"}}, "service", true, "enable --now"},
-		{"file-content", Op{File: "/etc/x.conf", Content: "hi\n", Mode: "0644"}, "file", true, "chmod '0644'"},
+		// file is an extracted state-provision verb: a builtin plugin unit whose provider is a
+		// ProvisionActor reading plugin_input (file/mode) + the SHARED content off the step Op.
+		{"file-content", Op{Plugin: "file", PluginInput: map[string]any{"file": "/etc/x.conf", "mode": "0644"}, Content: "hi\n"}, "file", true, "chmod '0644'"},
 		// unix_group / user / kernel-param / mount are extracted state-provision verbs:
 		// builtin plugin units whose providers are ProvisionActors reading plugin_input (not
 		// the removed Op.UnixGroup/User/KernelParam/Mount/… fields).
@@ -72,10 +74,11 @@ func TestRenderProvisionScript(t *testing.T) {
 func TestRunProvisionActDispatch(t *testing.T) {
 	ctx := context.Background()
 
-	// file is a ProvisionActor → renders `mkdir … && touch …`, execs, passes.
+	// file is a ProvisionActor → renders `mkdir … && touch …`, execs, passes. The verb is
+	// now the generic plugin: file (Kind()=plugin → Op.Plugin=file resolves the provider).
 	fe := &fakeExecutor{responses: []fakeResponse{{matchPrefix: "mkdir", exit: 0}}}
 	r := &Runner{Exec: fe, Mode: RunModeLive}
-	res, ok := r.runProvisionAct(ctx, &Op{File: "/tmp/x"}, "file")
+	res, ok := r.runProvisionAct(ctx, &Op{Plugin: "file", PluginInput: map[string]any{"file": "/tmp/x"}}, "file")
 	if !ok {
 		t.Fatalf("runProvisionAct(file) ok=false, want true (file is a ProvisionActor)")
 	}
@@ -100,7 +103,7 @@ func TestRunProvisionActDispatch(t *testing.T) {
 	// Non-zero exit → fail.
 	feFail := &fakeExecutor{responses: []fakeResponse{{matchPrefix: "mkdir", exit: 1, stderr: "boom"}}}
 	rFail := &Runner{Exec: feFail, Mode: RunModeLive}
-	res2, ok := rFail.runProvisionAct(ctx, &Op{File: "/tmp/y"}, "file")
+	res2, ok := rFail.runProvisionAct(ctx, &Op{Plugin: "file", PluginInput: map[string]any{"file": "/tmp/y"}}, "file")
 	if !ok || res2.Status != TestFail {
 		t.Fatalf("runProvisionAct(file, exit 1) = (status=%v, ok=%v), want (TestFail, true)", res2.Status, ok)
 	}

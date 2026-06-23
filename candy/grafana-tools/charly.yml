@@ -113,32 +113,46 @@ grafana-tools:
                 chmod +x /usr/local/bin/grafanactl && rm -rf /tmp/grafanactl.tar.gz /tmp/grafanactl
     grafana-tools-step-7:
         check: the mcp-grafana MCP server binary is installed on the PATH
-        file: /usr/local/bin/mcp-grafana
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/mcp-grafana
+            exists: true
     grafana-tools-step-8:
         check: Loki's logcli query client is installed
-        file: /usr/local/bin/logcli
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/logcli
+            exists: true
     grafana-tools-step-9:
         check: Prometheus' promtool is installed
-        file: /usr/local/bin/promtool
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/promtool
+            exists: true
     grafana-tools-step-10:
         check: Mimir's mimirtool is installed
-        file: /usr/local/bin/mimirtool
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/mimirtool
+            exists: true
     grafana-tools-step-11:
         check: Tempo's tempo-cli is installed
-        file: /usr/local/bin/tempo-cli
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/tempo-cli
+            exists: true
     grafana-tools-step-12:
         check: Tanka's tk binary is installed
-        file: /usr/local/bin/tk
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/tk
+            exists: true
     grafana-tools-step-13:
         check: grafanactl is installed
-        file: /usr/local/bin/grafanactl
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/grafanactl
+            exists: true
     grafana-tools-step-14:
         check: logcli reports its version and exits cleanly
         exit_status: 0

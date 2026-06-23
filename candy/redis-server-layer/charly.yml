@@ -31,12 +31,16 @@ redis-server-layer:
         mode: "0755"
     redis-server-layer-step-1:
         check: the redis-server daemon binary is present at /usr/bin/redis-server
-        file: /usr/bin/redis-server
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/redis-server
+            exists: true
     redis-server-layer-step-2:
         check: the redis-cli client binary is present at /usr/bin/redis-cli
-        file: /usr/bin/redis-cli
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/redis-cli
+            exists: true
     redis-server-layer-step-3:
         check: the redis package (valkey-compat-redis on Fedora 43) is installed
         plugin: package

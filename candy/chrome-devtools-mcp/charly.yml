@@ -31,12 +31,16 @@ chrome-devtools-mcp:
               scope: system
     chrome-devtools-mcp-step-0:
         check: the chrome-devtools-mcp server binary is installed under the npm global prefix
-        file: ${HOME}/.npm-global/bin/chrome-devtools-mcp
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/bin/chrome-devtools-mcp
+            exists: true
     chrome-devtools-mcp-step-1:
         check: the mcp-proxy stdio-to-HTTP bridge binary is installed in the pixi env
-        file: ${HOME}/.pixi/envs/default/bin/mcp-proxy
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.pixi/envs/default/bin/mcp-proxy
+            exists: true
     chrome-devtools-mcp-step-2:
         check: the MCP endpoint answers a protocol ping on port 9224
         mcp: ping

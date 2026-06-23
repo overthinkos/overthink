@@ -104,12 +104,16 @@ k3s:
                 ln -sf /usr/local/bin/k3s /usr/local/bin/ctr
     k3s-step-1:
         check: the verified k3s multi-call binary is installed at /usr/local/bin/k3s
-        file: /usr/local/bin/k3s
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/k3s
+            exists: true
     k3s-step-2:
         check: the k3s binary is executable (mode 0755)
-        file: /usr/local/bin/k3s
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/k3s
+            mode: "0755"
     k3s-step-3:
         check: the binary reports the pinned k3s version
         exit_status: 0
@@ -120,14 +124,18 @@ k3s:
             command: /usr/local/bin/k3s --version
     k3s-step-4:
         check: kubectl dispatches through the k3s multi-call binary via a symlink
-        file: /usr/local/bin/kubectl
-        exists: true
-        filetype: symlink
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/kubectl
+            exists: true
+            filetype: symlink
     k3s-step-5:
         check: crictl dispatches through the same multi-call binary
-        file: /usr/local/bin/crictl
-        exists: true
-        filetype: symlink
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/crictl
+            exists: true
+            filetype: symlink
     k3s-step-6:
         check: conntrack is installed for kube-proxy connection tracking
         plugin: package

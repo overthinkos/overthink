@@ -540,8 +540,12 @@ func (r *Runner) effectiveEnv() map[string]string {
 
 // runFile checks existence, mode, owner, group, filetype, sha256, and
 // optional content matchers on a path inside the target.
-func (r *Runner) runFile(ctx context.Context, c *Op) CheckResult {
-	path := c.File
+// runFile is the do:assert half of the extracted `file` plugin verb (fileVerb in
+// plugin_verb_file.go). `c` carries result metadata (failf/passf); `f` is the decoded
+// plugin_input (params.FileInput → fileCheck) — the file-EXCLUSIVE fields left #Op, and
+// `mode` (shared with copy/write) rides the file step's plugin_input too.
+func (r *Runner) runFile(ctx context.Context, c *Op, f fileCheck) CheckResult {
+	path := f.Path
 	// Probe script emits a single line: exists|type|mode|owner|group|sha256
 	// then (optionally) the file's contents on stdout following a marker.
 	// `stat -c` portable fields: %F (type), %a (mode), %U (user), %G (group).
@@ -570,8 +574,8 @@ fi`, shellSingleQuote(path))
 
 	// exists attribute (nil = default true)
 	wantExists := true
-	if c.Exists != nil {
-		wantExists = *c.Exists
+	if f.Exists != nil {
+		wantExists = *f.Exists
 	}
 	if wantExists != exists {
 		return failf(c, "exists=%v, want %v", exists, wantExists)
@@ -579,40 +583,40 @@ fi`, shellSingleQuote(path))
 	if !exists {
 		return passf(c, "file absent (as expected)")
 	}
-	if c.Mode != "" && strings.TrimLeft(mode, "0") != strings.TrimLeft(c.Mode, "0") {
-		return failf(c, "mode=%s, want %s", mode, c.Mode)
+	if f.Mode != "" && strings.TrimLeft(mode, "0") != strings.TrimLeft(f.Mode, "0") {
+		return failf(c, "mode=%s, want %s", mode, f.Mode)
 	}
-	if c.Owner != "" && owner != c.Owner {
-		return failf(c, "owner=%s, want %s", owner, c.Owner)
+	if f.Owner != "" && owner != f.Owner {
+		return failf(c, "owner=%s, want %s", owner, f.Owner)
 	}
-	if c.GroupOf != "" && group != c.GroupOf {
-		return failf(c, "group=%s, want %s", group, c.GroupOf)
+	if f.GroupOf != "" && group != f.GroupOf {
+		return failf(c, "group=%s, want %s", group, f.GroupOf)
 	}
-	if c.Filetype != "" {
+	if f.Filetype != "" {
 		ft := normalizeFiletype(typeStr)
-		if ft != c.Filetype {
-			return failf(c, "filetype=%s, want %s", ft, c.Filetype)
+		if ft != f.Filetype {
+			return failf(c, "filetype=%s, want %s", ft, f.Filetype)
 		}
 	}
 
 	// Content matchers: pull file contents and evaluate.
-	if len(c.Contains) > 0 {
+	if len(f.Contains) > 0 {
 		contents, err := r.readFile(ctx, path)
 		if err != nil {
 			return failf(c, "read for contains: %v", err)
 		}
-		if err := sdk.MatchAll(contents, c.Contains); err != nil {
+		if err := sdk.MatchAll(contents, f.Contains); err != nil {
 			return failf(c, "contains: %v", err)
 		}
 	}
-	if c.Sha256 != "" {
+	if f.Sha256 != "" {
 		out, _, exit, err := r.Exec.RunCapture(ctx, fmt.Sprintf("sha256sum %s", shellSingleQuote(path)))
 		if err != nil || exit != 0 {
 			return failf(c, "sha256 probe exit %d err %v", exit, err)
 		}
 		sum := strings.Fields(strings.TrimSpace(out))
-		if len(sum) == 0 || sum[0] != c.Sha256 {
-			return failf(c, "sha256=%s, want %s", sum, c.Sha256)
+		if len(sum) == 0 || sum[0] != f.Sha256 {
+			return failf(c, "sha256=%s, want %s", sum, f.Sha256)
 		}
 	}
 
@@ -1084,7 +1088,7 @@ func FormatResultsText(w io.Writer, results []CheckResult) int {
 			skips++
 		}
 		verb := r.Verb
-		subject := firstNonEmpty(r.Op.File, pluginInputStr(r.Op, "http"), r.Op.Command, pluginInputStr(r.Op, "command"), pluginInputStr(r.Op, "addr"))
+		subject := firstNonEmpty(pluginInputStr(r.Op, "file"), pluginInputStr(r.Op, "http"), r.Op.Command, pluginInputStr(r.Op, "command"), pluginInputStr(r.Op, "addr"))
 		fmt.Fprintf(w, "%s %s %s — %s\n", glyph, verb, subject, r.Message)
 		if r.Op.Origin != "" && r.Status == TestFail {
 			fmt.Fprintf(w, "  from %s\n", r.Op.Origin)
@@ -1116,7 +1120,7 @@ func FormatResultsJSON(w io.Writer, results []CheckResult) int {
 	out := make([]entry, 0, len(results))
 	fails := 0
 	for _, r := range results {
-		subject := firstNonEmpty(r.Op.File, pluginInputStr(r.Op, "http"), r.Op.Command, pluginInputStr(r.Op, "command"), pluginInputStr(r.Op, "addr"))
+		subject := firstNonEmpty(pluginInputStr(r.Op, "file"), pluginInputStr(r.Op, "http"), r.Op.Command, pluginInputStr(r.Op, "command"), pluginInputStr(r.Op, "addr"))
 		if r.Status == TestFail {
 			fails++
 		}
@@ -1139,7 +1143,7 @@ func FormatResultsTAP(w io.Writer, results []CheckResult) int {
 	fails := 0
 	fmt.Fprintf(w, "TAP version 13\n1..%d\n", len(results))
 	for i, r := range results {
-		subject := firstNonEmpty(r.Op.File, pluginInputStr(r.Op, "http"), r.Op.Command, pluginInputStr(r.Op, "command"), pluginInputStr(r.Op, "addr"))
+		subject := firstNonEmpty(pluginInputStr(r.Op, "file"), pluginInputStr(r.Op, "http"), r.Op.Command, pluginInputStr(r.Op, "command"), pluginInputStr(r.Op, "addr"))
 		label := fmt.Sprintf("%s %s - %s", r.Verb, subject, r.Message)
 		switch r.Status {
 		case TestPass:

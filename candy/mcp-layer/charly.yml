@@ -234,12 +234,16 @@ mcp-layer:
                 srv.serve_forever()
     mcp-layer-step-2:
         check: the stdlib MCP server script is baked into the image at /opt/harness-mcp/mcp_server.py
-        file: /opt/harness-mcp/mcp_server.py
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /opt/harness-mcp/mcp_server.py
+            exists: true
     mcp-layer-step-3:
         check: the python3 interpreter that runs the stub is installed at /usr/bin/python3
-        file: /usr/bin/python3
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/python3
+            exists: true
     mcp-layer-step-4:
         check: the python3 package providing the interpreter is installed
         plugin: package

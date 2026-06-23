@@ -114,9 +114,11 @@ openwebui:
         run_as: "${USER}"
     openwebui-step-2:
         check: the auto-config entrypoint script is present and executable at ${HOME}/.local/bin/openwebui-entrypoint
-        file: ${HOME}/.local/bin/openwebui-entrypoint
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/openwebui-entrypoint
+            exists: true
+            mode: "0755"
     openwebui-step-3:
         check: the openwebui service is running under the init system
         context:

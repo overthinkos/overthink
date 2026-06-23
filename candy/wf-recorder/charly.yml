@@ -13,8 +13,10 @@ wf-recorder:
                     - wf-recorder
     wf-recorder-step-0:
         check: the wf-recorder binary is installed at /usr/bin/wf-recorder
-        file: /usr/bin/wf-recorder
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/wf-recorder
+            exists: true
     wf-recorder-step-1:
         check: the wf-recorder package is registered with the package manager
         plugin: package

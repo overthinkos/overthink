@@ -14,8 +14,10 @@ ripgrep:
             - ripgrep
     ripgrep-step-0:
         check: the rg binary is installed at /usr/bin/rg
-        file: /usr/bin/rg
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/rg
+            exists: true
     ripgrep-step-1:
         check: rg reports a parseable ripgrep version on stdout
         exit_status: 0

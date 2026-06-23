@@ -30,8 +30,10 @@ goplaces:
                 go clean -cache
     goplaces-step-1:
         check: the goplaces binary is go-installed into the user's GOPATH bin
-        file: ${HOME}/go/bin/goplaces
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/go/bin/goplaces
+            exists: true
     goplaces-step-2:
         check: the installed goplaces binary carries the executable bit
         exit_status: 0

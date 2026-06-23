@@ -85,8 +85,10 @@ sway:
         run_as: "${USER}"
     sway-step-6:
         check: the Sway compositor binary is installed at /usr/bin/sway
-        file: /usr/bin/sway
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/sway
+            exists: true
     sway-step-7:
         check: the sway package is registered in the package database
         plugin: package
@@ -95,13 +97,17 @@ sway:
             installed: true
     sway-step-8:
         check: the sway-wrapper launcher is installed and executable
-        file: ${HOME}/.local/bin/sway-wrapper
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/sway-wrapper
+            exists: true
+            mode: "0755"
     sway-step-9:
         check: the Sway config file is staged in the user's home
-        file: ${HOME}/.config/sway/config
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.config/sway/config
+            exists: true
     sway-step-10:
         check: the sway compositor service is running under supervisord
         context:

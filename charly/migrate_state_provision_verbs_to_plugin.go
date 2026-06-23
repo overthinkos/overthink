@@ -7,11 +7,12 @@ package main
 // provision). `unix_group` (getent-group probe + groupadd) was the first extracted;
 // `user` (getent-passwd + useradd), `kernel-param` (sysctl read + write), `mount`
 // (findmnt + mount), `command` (exec probe + install-task RUN), `service`
-// (supervisorctl/systemctl probe + enable the packaged unit) and finally `package`
-// (rpm/dpkg/pacman probe + install) followed. Each left the closed `#Op`/`spec.OpVerbs`
-// and became a BUILTIN plugin unit
-// (plugin/builtins/{unix_group,user,kernel_param,mount,command,service,package}). user/
-// unix_group/kernel-param/mount are BOTH a CheckVerbProvider AND a ProvisionActor;
+// (supervisorctl/systemctl probe + enable the packaged unit), `package`
+// (rpm/dpkg/pacman probe + install) and finally `file` (stat probe + touch+chmod
+// file-creation — the LAST state-provision/goss-tier verb) followed. Each left the closed
+// `#Op`/`spec.OpVerbs` and became a BUILTIN plugin unit
+// (plugin/builtins/{unix_group,user,kernel_param,mount,command,service,package,file}). file/
+// user/unix_group/kernel-param/mount are BOTH a CheckVerbProvider AND a ProvisionActor;
 // `command` is a CheckVerbProvider ONLY — its act IS the dedicated install-task emitCmd
 // branch (`plugin == "command"` in emitTasks/renderOpCommand), NOT a RenderProvisionScript;
 // `service` and `package` are the TWO TYPED-STEP verbs — each a CheckVerbProvider AND a
@@ -75,6 +76,16 @@ import "gopkg.in/yaml.v3"
 //     stderr (shared via matchAll) and the general timeout/method/env STAY at step level
 //     (#Op). `command` itself is ALSO a shared modifier (wl/libvirt argv), so it is the
 //     command VERB only when no charly-verb is set — see migrateStateProvisionVerbStep.
+//   - file       → exists/mode/owner/group_of/filetype/contains/sha256 (#FileInput) — the
+//     LAST state-provision/goss-tier verb extracted (a stat probe + a touch+chmod RUNTIME
+//     file-creation act, distinct from the BUILD-time write:/copy: COPY directives). Six
+//     companions are file-EXCLUSIVE (read ONLY by the file verb) and leave #Op entirely;
+//     `mode` is the SHARED companion — it STAYS in #Op (the copy/write install verbs read
+//     Op.Mode at deploy) yet MOVES into a file step's plugin_input here, exactly how `gid`
+//     stays in #Op for `user` yet moves on a unix_group step. `content` stays a SHARED #Op
+//     modifier (the write verb reads it too) and is NOT a companion — the file act reads it
+//     off the step Op. The bare-scalar `contains` default (substring) is preserved at
+//     runtime by the file plugin's decodeContainsList; the node moves verbatim here.
 var stateProvisionVerbFields = []struct {
 	verb   string
 	fields []string
@@ -86,6 +97,7 @@ var stateProvisionVerbFields = []struct {
 	{"service", []string{"running", "enabled"}},
 	{"package", []string{"package_map", "installed", "version"}},
 	{"command", []string{"background", "from_host", "in_container"}},
+	{"file", []string{"exists", "mode", "owner", "group_of", "filetype", "contains", "sha256"}},
 }
 
 // charlyVerbKeys are the live-container verb discriminators (cdp/wl/dbus/…). When any is

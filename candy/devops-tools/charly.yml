@@ -87,8 +87,10 @@ devops-tools:
                 rm -f /tmp/install-opentofu.sh
     devops-tools-step-4:
         check: the AWS CLI v2 binary is installed at /usr/local/bin/aws
-        file: /usr/local/bin/aws
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/aws
+            exists: true
     devops-tools-step-5:
         check: aws reports its own version string
         exit_status: 0
@@ -99,8 +101,10 @@ devops-tools:
             command: /usr/local/bin/aws --version
     devops-tools-step-6:
         check: the Scaleway CLI binary is installed at /usr/local/bin/scw
-        file: /usr/local/bin/scw
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/scw
+            exists: true
     devops-tools-step-7:
         check: OpenTofu is installed and reports its version
         exit_status: 0
@@ -109,12 +113,16 @@ devops-tools:
             command: /usr/local/bin/tofu version
     devops-tools-step-8:
         check: the kubectx kubectl-context switcher script is installed
-        file: /usr/local/bin/kubectx
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/kubectx
+            exists: true
     devops-tools-step-9:
         check: the kubens kubectl-namespace switcher script is installed
-        file: /usr/local/bin/kubens
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/kubens
+            exists: true
     devops-tools-step-10:
         check: jq is installed and reports its version
         exit_status: 0
@@ -130,13 +138,17 @@ devops-tools:
     tofu-binary:
         check: file=/usr/local/bin/tofu
         id: tofu-binary
-        file: /usr/local/bin/tofu
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/tofu
+            exists: true
     jq-binary:
         check: file=/usr/bin/jq
         id: jq-binary
-        file: /usr/bin/jq
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/jq
+            exists: true
     scw-version:
         check: command=/usr/local/bin/scw version
         id: scw-version

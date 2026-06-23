@@ -128,8 +128,8 @@ func (s *Step) KeywordText() string {
 func (s *Step) IsAgent() bool { return s.AgentRun != "" || s.AgentCheck != "" }
 
 // ---------------------------------------------------------------------------
-// Matcher / MatcherList / ContainsList — #Matcher / #MatcherList / #ContainsList
-// (checkspec.go). The custom (Un)Marshal logic is ported verbatim.
+// Matcher / MatcherList — #Matcher / #MatcherList (checkspec.go). The custom
+// (Un)Marshal logic is ported verbatim.
 // ---------------------------------------------------------------------------
 
 // Matcher is a goss-style matcher: a scalar (implicit equality) or an
@@ -213,10 +213,10 @@ func (ml *MatcherList) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// ContainsList is a MatcherList variant whose bare-scalar/sequence elements
-// default to Op="contains" instead of Op="equals". Used on probe fields whose
-// YAML key is literally `contains:`.
-type ContainsList []Matcher
+// (The former ContainsList — a MatcherList variant whose bare scalars defaulted to
+// Op="contains" — left the base schema with the `file` verb's `contains` field. It is
+// now reproduced standalone in the file plugin's #FileContains and decoded with that
+// default via decodeContainsList; no base #Op field uses it anymore.)
 
 // ---------------------------------------------------------------------------
 // PackageItem — #PackageItem (calamares_types.go). Bare scalar XOR object form;

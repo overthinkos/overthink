@@ -73,8 +73,10 @@ kde-desktop:
                 systemctl set-default graphical.target || true
     kde-desktop-step-1:
         check: the SDDM display-manager binary is installed for the graphical seat
-        file: /usr/bin/sddm
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/sddm
+            exists: true
     kde-desktop-step-2:
         check: the sddm package is present in the image
         plugin: package
@@ -83,16 +85,22 @@ kde-desktop:
             installed: true
     kde-desktop-step-3:
         check: the workstation system monitor is available
-        file: /usr/bin/plasma-systemmonitor
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/plasma-systemmonitor
+            exists: true
     kde-desktop-step-4:
         check: the filelight disk-usage visualiser is installed
-        file: /usr/bin/filelight
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/filelight
+            exists: true
     kde-desktop-step-5:
         check: the KDE partition manager is installed
-        file: /usr/bin/partitionmanager
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/partitionmanager
+            exists: true
     kde-desktop-step-6:
         check: the haruna media player package is present
         plugin: package

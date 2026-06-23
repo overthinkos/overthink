@@ -204,24 +204,32 @@ airflow:
         # and triggers it via POST /api/v2/dags/.../dagRuns.
     airflow-step-8:
         check: the one-shot init wrapper is installed and executable
-        file: /usr/local/bin/airflow-init.sh
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/airflow-init.sh
+            exists: true
+            mode: "0755"
     airflow-step-9:
         check: the api-server wrapper is installed and executable
-        file: /usr/local/bin/airflow-webserver.sh
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/airflow-webserver.sh
+            exists: true
+            mode: "0755"
     airflow-step-10:
         check: the scheduler wrapper is installed and executable
-        file: /usr/local/bin/airflow-scheduler.sh
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/airflow-scheduler.sh
+            exists: true
+            mode: "0755"
     airflow-step-11:
         check: the dag-processor wrapper is installed and executable
-        file: /usr/local/bin/airflow-dag-processor.sh
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/airflow-dag-processor.sh
+            exists: true
+            mode: "0755"
     airflow-step-12:
         check: the running api-server answers /api/v2/version with HTTP 200
         timeout: 30s

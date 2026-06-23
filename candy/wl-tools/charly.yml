@@ -35,33 +35,47 @@ wl-tools:
                     - ydotool
     wl-tools-step-0:
         check: the wtype keyboard-injection tool is installed
-        file: /usr/bin/wtype
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/wtype
+            exists: true
     wl-tools-step-1:
         check: the wl-clipboard copy tool is installed
-        file: /usr/bin/wl-copy
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/wl-copy
+            exists: true
     wl-tools-step-2:
         check: the wlrctl wlroots control tool is installed
-        file: /usr/bin/wlrctl
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/wlrctl
+            exists: true
     wl-paste-binary:
         check: file=/usr/bin/wl-paste
         id: wl-paste-binary
-        file: /usr/bin/wl-paste
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/wl-paste
+            exists: true
     wlr-randr-binary:
         check: file=/usr/bin/wlr-randr
         id: wlr-randr-binary
-        file: /usr/bin/wlr-randr
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/wlr-randr
+            exists: true
     xdotool-binary:
         check: file=/usr/bin/xdotool
         id: xdotool-binary
-        file: /usr/bin/xdotool
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/xdotool
+            exists: true
     ydotool-binary:
         check: file=/usr/bin/ydotool
         id: ydotool-binary
-        file: /usr/bin/ydotool
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/ydotool
+            exists: true

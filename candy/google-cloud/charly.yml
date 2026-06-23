@@ -34,8 +34,10 @@ google-cloud:
                 done
     google-cloud-step-1:
         check: the gcloud CLI is symlinked onto PATH
-        file: /usr/bin/gcloud
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/gcloud
+            exists: true
     google-cloud-step-2:
         check: gcloud reports its version and exits cleanly
         exit_status: 0
@@ -44,12 +46,16 @@ google-cloud:
             command: /usr/bin/gcloud --version
     google-cloud-step-3:
         check: the gsutil storage CLI is on PATH
-        file: /usr/bin/gsutil
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/gsutil
+            exists: true
     google-cloud-step-4:
         check: the bq BigQuery CLI is on PATH
-        file: /usr/bin/bq
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/bq
+            exists: true
     google-cloud-step-5:
         check: bq reports its version and exits cleanly
         exit_status: 0
@@ -58,8 +64,10 @@ google-cloud:
             command: /usr/bin/bq version
     google-cloud-step-6:
         check: the SDK tree is unpacked at its /var/opt install prefix
-        file: /var/opt/google-cloud-sdk/bin/gcloud
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /var/opt/google-cloud-sdk/bin/gcloud
+            exists: true
     gsutil-version:
         check: command=/usr/bin/gsutil version
         id: gsutil-version

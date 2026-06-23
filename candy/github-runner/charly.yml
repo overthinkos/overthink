@@ -134,12 +134,16 @@ github-runner:
             insecure = true
     github-runner-step-5:
         check: the GitHub Actions runner is extracted under the home directory with its config.sh present
-        file: "${HOME}/actions-runner/config.sh"
-        exists: true
+        plugin: file
+        plugin_input:
+            file: "${HOME}/actions-runner/config.sh"
+            exists: true
     github-runner-step-6:
         check: the runner's run.sh service launcher is present
-        file: "${HOME}/actions-runner/run.sh"
-        exists: true
+        plugin: file
+        plugin_input:
+            file: "${HOME}/actions-runner/run.sh"
+            exists: true
     github-runner-step-7:
         check: config.sh executes, proving the .NET native deps (icu/krb5/openssl/libunwind/lttng-ust) resolved on this distro
         exit_status: 0
@@ -172,8 +176,10 @@ github-runner:
             command: go version
     github-runner-step-12:
         check: the aarch64 qemu interpreter is installed so jobs can cross-build for arm64 via binfmt
-        file: /usr/bin/qemu-aarch64-static
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/qemu-aarch64-static
+            exists: true
     github-runner-step-13:
         check: the runner service process runs as the unprivileged uid 1000, never root
         stdout:
@@ -253,10 +259,12 @@ github-runner:
     gr-ghcr-mirror:
         check: file=${HOME}/.config/containers/registries.conf.d/ghcr-mirror.conf
         id: gr-ghcr-mirror
-        file: "${HOME}/.config/containers/registries.conf.d/ghcr-mirror.conf"
-        exists: true
         context:
             - runtime
+        plugin: file
+        plugin_input:
+            file: "${HOME}/.config/containers/registries.conf.d/ghcr-mirror.conf"
+            exists: true
     gr-newuidmap-cap:
         check: command=getcap /usr/bin/newuidmap
         id: gr-newuidmap-cap

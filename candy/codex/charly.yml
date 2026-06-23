@@ -12,8 +12,10 @@ codex:
             - nodejs
     codex-step-0:
         check: the codex binary is installed into the npm global bin directory
-        file: ${HOME}/.npm-global/bin/codex
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/bin/codex
+            exists: true
     codex-step-1:
         check: running codex --version exits cleanly
         exit_status: 0

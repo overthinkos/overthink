@@ -23,8 +23,10 @@ pre-commit:
             command: cargo install taplo-cli --locked
     pre-commit-step-1:
         check: the pre-commit orchestrator is installed in the pixi environment
-        file: ${HOME}/.pixi/envs/default/bin/pre-commit
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.pixi/envs/default/bin/pre-commit
+            exists: true
     pre-commit-step-2:
         check: pre-commit reports its version and exits cleanly
         exit_status: 0
@@ -33,8 +35,10 @@ pre-commit:
             command: ${HOME}/.pixi/envs/default/bin/pre-commit --version
     pre-commit-step-3:
         check: the taplo TOML linter/formatter binary is installed from cargo
-        file: ${HOME}/.cargo/bin/taplo
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.cargo/bin/taplo
+            exists: true
     pre-commit-step-4:
         check: taplo reports its version and exits cleanly
         exit_status: 0
@@ -43,8 +47,10 @@ pre-commit:
             command: ${HOME}/.cargo/bin/taplo --version
     pre-commit-step-5:
         check: the markdownlint Markdown linter lands on the npm-global PATH
-        file: ${HOME}/.npm-global/bin/markdownlint
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/bin/markdownlint
+            exists: true
     pre-commit-step-6:
         check: markdownlint reports its version and exits cleanly
         exit_status: 0

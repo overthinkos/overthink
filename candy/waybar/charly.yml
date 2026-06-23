@@ -72,8 +72,10 @@ waybar:
         run_as: "${USER}"
     waybar-step-6:
         check: the waybar status-bar binary is installed from the distro package
-        file: /usr/bin/waybar
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/waybar
+            exists: true
     waybar-step-7:
         check: waybar is recorded as installed in the package database
         plugin: package
@@ -82,19 +84,27 @@ waybar:
             installed: true
     waybar-step-8:
         check: the waybar-wrapper launcher script is installed under the user's bin
-        file: ${HOME}/.local/bin/waybar-wrapper
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/waybar-wrapper
+            exists: true
     waybar-step-9:
         check: the sway-autotile helper script is installed under the user's bin
-        file: ${HOME}/.local/bin/sway-autotile
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/sway-autotile
+            exists: true
     waybar-step-10:
         check: the waybar module-layout config is staged for the user
-        file: ${HOME}/.config/waybar/config
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.config/waybar/config
+            exists: true
     waybar-step-11:
         check: the Catppuccin Mocha stylesheet is staged for the user
-        file: ${HOME}/.config/waybar/style.css
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.config/waybar/style.css
+            exists: true
     waybar-step-12:
         agent-check: the waybar status bar appears on the running Sway desktop showing the taskbar, Chrome-restart, and notification toggle modules

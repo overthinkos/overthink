@@ -42,8 +42,10 @@ heroic:
                 rm -f /tmp/heroic.rpm
     heroic-step-1:
         check: the Heroic Games Launcher binary is installed on PATH
-        file: /usr/bin/heroic
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/heroic
+            exists: true
     heroic-step-2:
         check: the heroic RPM is registered in the package database
         plugin: package
@@ -52,8 +54,10 @@ heroic:
             installed: true
     heroic-step-3:
         check: a desktop entry installs so the launcher appears in the application menu
-        file: /usr/share/applications/heroic.desktop
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/share/applications/heroic.desktop
+            exists: true
     heroic-step-4:
         check: the MangoHud overlay is installed for in-game FPS and stats
         plugin: package
@@ -68,9 +72,11 @@ heroic:
             installed: true
     heroic-step-6:
         check: the heroic-config volume is mounted as a directory so Wine/Proton tools and settings survive a rebuild
-        file: ${VOLUME_CONTAINER_PATH:heroic-config}
-        filetype: directory
         context:
             - runtime
+        plugin: file
+        plugin_input:
+            file: ${VOLUME_CONTAINER_PATH:heroic-config}
+            filetype: directory
     heroic-step-7:
         agent-check: installed games and their Wine prefixes are retained between container restarts

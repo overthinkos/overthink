@@ -45,8 +45,10 @@ jupyter:
               scope: system
     jupyter-step-0:
         check: JupyterLab is installed as a pixi-managed binary in the default env
-        file: ${HOME}/.pixi/envs/default/bin/jupyter-lab
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.pixi/envs/default/bin/jupyter-lab
+            exists: true
     jupyter-step-1:
         check: the spaCy en_core_web_sm model loads for NLP notebooks
         exit_status: 0
@@ -55,10 +57,12 @@ jupyter:
             command: ${HOME}/.pixi/envs/default/bin/python -c "import spacy; spacy.load('en_core_web_sm')"
     jupyter-step-2:
         check: the workspace volume is mounted for notebooks
-        file: /workspace
-        filetype: directory
         context:
             - runtime
+        plugin: file
+        plugin_input:
+            file: /workspace
+            filetype: directory
     jupyter-step-3:
         check: the JupyterLab service is running under supervisord
         context:

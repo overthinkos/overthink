@@ -76,12 +76,45 @@ func TestEmitTasks_PluginAct_UnixGroup(t *testing.T) {
 	}
 }
 
+// rawFileRunOp is the RAW plan op the box build walks straight into emitTasks for a
+// run: file step — Plugin set, file/mode in plugin_input, content a SHARED #Op modifier.
+func rawFileRunOp() Op {
+	return Op{Plugin: "file", PluginInput: map[string]any{"file": "/etc/app/seed.conf", "mode": "0600"}, Content: "hello"}
+}
+
+// TestEmitTasks_PluginAct_File is the main-repo equivalent of the box/fedora check-pod
+// generate `grep -c 'unknown verb' Containerfile == 0`: it runs the REAL box-build emit
+// path (g.emitTasks) on a raw plugin: file run-Op and proves it renders the RUNTIME
+// file-creation (mkdir/cat+chmod) into a Containerfile RUN — NOT dropped as
+// `# unknown verb "plugin"`. file's act reaches the SAME resolveProvisionScript seam as
+// unix_group, so this guards the file ProvisionActor wiring end-to-end through the
+// install-emit pipeline.
+func TestEmitTasks_PluginAct_File(t *testing.T) {
+	dir := t.TempDir()
+	layer := &Candy{Name: "lyr"}
+	g := &Generator{BuildDir: dir}
+	var b strings.Builder
+	if _, err := g.emitTasks(&b, layer, testResolvedBox(), []Op{rawFileRunOp()}, dir, ".build/test-img"); err != nil {
+		t.Fatalf("emitTasks: %v", err)
+	}
+	out := b.String()
+	for _, want := range []string{"RUN", "mkdir", "/etc/app/seed.conf", "chmod", "0600"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("emitTasks Containerfile = %q, want substring %q", out, want)
+		}
+	}
+	if strings.Contains(out, "unknown verb") {
+		t.Errorf("the raw plugin: file op was DROPPED as an unknown verb (the box-build regression):\n%s", out)
+	}
+}
+
 // The other extracted state-provision verbs (user / kernel-param / mount) reach the SAME
 // resolveProvisionScript seam through renderOpCommand — each renders its act shell from
 // plugin_input via its provider's ProvisionActor. One renderOpCommand assertion per verb
 // proves the act half emits at the local/vm deploy seam; the box-build emitTasks seam is
 // verb-agnostic (it calls resolveProvisionScript too — proven generic by
-// TestEmitTasks_PluginAct_UnixGroup and TestEmitTasks_PluginAct_KernelParam below).
+// TestEmitTasks_PluginAct_UnixGroup, TestEmitTasks_PluginAct_File and
+// TestEmitTasks_PluginAct_KernelParam below).
 
 // renderOpCommand turns a plugin: user run-Op into the idempotent useradd shell.
 func TestRenderOpCommand_PluginAct_User(t *testing.T) {

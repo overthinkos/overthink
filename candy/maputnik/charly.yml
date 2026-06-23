@@ -131,13 +131,17 @@ maputnik:
                 rm -rf /root/.npm
     maputnik-step-2:
         check: the maputnik static dist directory was built from upstream source
-        file: /opt/maputnik/build
-        filetype: directory
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /opt/maputnik/build
+            exists: true
+            filetype: directory
     maputnik-step-3:
         check: the SPA entrypoint index.html is present in the served dist
-        file: /opt/maputnik/build/index.html
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /opt/maputnik/build/index.html
+            exists: true
     maputnik-step-4:
         check: the node runtime used to build the SPA is installed and runnable
         exit_status: 0

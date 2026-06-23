@@ -168,16 +168,22 @@ virtualization:
                 fi
     virtualization-step-1:
         check: the libvirt client virsh is installed at its fixed path
-        file: /usr/bin/virsh
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/virsh
+            exists: true
     virtualization-step-2:
         check: the QEMU x86_64 system emulator binary is present
-        file: /usr/bin/qemu-system-x86_64
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/qemu-system-x86_64
+            exists: true
     virtualization-step-3:
         check: the qemu-img disk-image tool is present
-        file: /usr/bin/qemu-img
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/qemu-img
+            exists: true
     virtualization-step-4:
         check: the libvirt qemu driver package is installed (cross-distro name resolution)
         plugin: package

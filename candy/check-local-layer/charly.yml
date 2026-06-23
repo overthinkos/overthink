@@ -16,13 +16,17 @@ check-local-layer:
             check-local v1
     check-local-layer-step-1:
         check: the check-local marker file is present at /etc/check-local-marker
-        file: /etc/check-local-marker
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /etc/check-local-marker
+            exists: true
     check-local-layer-step-2:
         check: the marker records the check-local version stamp "check-local v1"
-        file: /etc/check-local-marker
-        contains:
-            - contains: "check-local v1"
+        plugin: file
+        plugin_input:
+            file: /etc/check-local-marker
+            contains:
+                - contains: "check-local v1"
     check-local-layer-step-3:
         check: after the check-local kind:local apply, the marker resolves on the host filesystem outside any container
         context:
@@ -43,6 +47,8 @@ check-local-layer:
     check-local-marker-build:
         check: file=/etc/check-local-marker
         id: check-local-marker-build
-        file: /etc/check-local-marker
-        exists: true
-        mode: "0644"
+        plugin: file
+        plugin_input:
+            file: /etc/check-local-marker
+            exists: true
+            mode: "0644"

@@ -70,7 +70,16 @@ func TestMigrateStateProvisionVerbsToPlugin(t *testing.T) {
 		"            arch: valkey\n" +
 		"          installed: true\n" +
 		"          version: [\"7.0.5\"]\n" +
-		"          exclude_distro: [\"ubuntu\"]\n"
+		"          exclude_distro: [\"ubuntu\"]\n" +
+		"        - check: \"the config marker is present\"\n" +
+		"          file: \"/etc/app/marker\"\n" +
+		"          mode: \"0644\"\n" + // SHARED mode → moves into plugin_input on a file step
+		"          contains:\n" +
+		"            - fsfreeze-hook.d\n" + // bare-scalar contains (the contains-default is runtime-side)
+		"        - run: \"seed the config file\"\n" +
+		"          file: \"/etc/app/seed.conf\"\n" +
+		"          content: \"hello\"\n" + // SHARED modifier (write verb reads it too) → STAYS at step level
+		"          mode: \"0600\"\n"
 	rootPath := filepath.Join(dir, "charly.yml")
 	if err := os.WriteFile(rootPath, []byte(rootYML), 0o644); err != nil {
 		t.Fatal(err)
@@ -94,7 +103,7 @@ func TestMigrateStateProvisionVerbsToPlugin(t *testing.T) {
 		t.Fatalf("re-parse migrated YAML: %v", err)
 	}
 	plan, ok := doc["sample"].(map[string]any)["plan"].([]any)
-	if !ok || len(plan) != 11 {
+	if !ok || len(plan) != 13 {
 		t.Fatalf("plan shape wrong (len=%d): %v", len(plan), doc["sample"])
 	}
 
@@ -289,6 +298,48 @@ func TestMigrateStateProvisionVerbsToPlugin(t *testing.T) {
 		t.Errorf("step 10: exclude_distro must NOT move into plugin_input (it is shared, stays at step level): %v", pkgPI)
 	}
 
+	// (l) a check: file step CONVERTS — the LAST state-provision/goss-tier verb. The
+	//     file-EXCLUSIVE companions move into plugin_input, the SHARED `mode` MOVES into
+	//     plugin_input here yet STAYS in #Op for copy/write, and the bare-scalar `contains`
+	//     node moves verbatim (its substring default is applied at runtime by decodeContainsList).
+	fileCheck := plan[11].(map[string]any)
+	if fileCheck["plugin"] != "file" {
+		t.Errorf("step 11: plugin: file not added, got %v: %v", fileCheck["plugin"], fileCheck)
+	}
+	for _, k := range []string{"file", "mode", "contains"} {
+		if _, has := fileCheck[k]; has {
+			t.Errorf("step 11: bare %s: not removed (must move into plugin_input): %v", k, fileCheck)
+		}
+	}
+	fileCheckPI := fileCheck["plugin_input"].(map[string]any)
+	if fileCheckPI["file"] != "/etc/app/marker" || fileCheckPI["mode"] != "0644" {
+		t.Errorf("step 11: plugin_input = %v, want {file: /etc/app/marker, mode: 0644, ...}", fileCheckPI)
+	}
+	if _, has := fileCheckPI["contains"]; !has {
+		t.Errorf("step 11: contains did not move into plugin_input: %v", fileCheckPI)
+	}
+
+	// (m) a run: file step ALSO converts (the act timeline) — file/mode move into
+	//     plugin_input, but `content` is a SHARED #Op modifier (the write verb reads it too)
+	//     and is NOT a file companion, so it STAYS at step level for the file act to read.
+	fileRun := plan[12].(map[string]any)
+	if fileRun["plugin"] != "file" {
+		t.Errorf("step 12: a run: file step must CONVERT, got plugin=%v: %v", fileRun["plugin"], fileRun)
+	}
+	if fileRun["run"] != "seed the config file" {
+		t.Errorf("step 12: the run: keyword must be preserved: %v", fileRun)
+	}
+	if fileRun["content"] != "hello" {
+		t.Errorf("step 12: content MUST stay at step level (shared modifier, not a file companion), got %v", fileRun["content"])
+	}
+	fileRunPI := fileRun["plugin_input"].(map[string]any)
+	if fileRunPI["file"] != "/etc/app/seed.conf" || fileRunPI["mode"] != "0600" {
+		t.Errorf("step 12: plugin_input = %v, want {file: /etc/app/seed.conf, mode: 0600}", fileRunPI)
+	}
+	if _, has := fileRunPI["content"]; has {
+		t.Errorf("step 12: content must NOT move into plugin_input (it is shared, stays at step level): %v", fileRunPI)
+	}
+
 	// (h) idempotent — a second pass changes nothing (the nested plugin_input keys are not
 	//     step nodes, so they are never re-processed).
 	again, err := MigrateStateProvisionVerbsToPlugin(dir, false)
@@ -315,9 +366,8 @@ func TestMigrateStateProvisionVerbsToPlugin_NoVerbUntouched(t *testing.T) {
 		"sample:\n" +
 		"    candy: {}\n" +
 		"    plan:\n" +
-		"        - check: \"the marker file exists\"\n" +
-		"          file: \"/etc/marker\"\n" +
-		"          exists: true\n" +
+		"        - check: \"the cdp endpoint is up\"\n" + // cdp is a live-container verb, NOT extracted by this migrator
+		"          cdp: status\n" +
 		"        - run: \"make a dir\"\n" + // mkdir is NOT an extracted verb → no rewrite
 		"          mkdir: \"/opt/app\"\n"
 	rootPath := filepath.Join(dir, "charly.yml")

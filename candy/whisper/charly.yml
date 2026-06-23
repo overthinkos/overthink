@@ -14,8 +14,10 @@ whisper:
             - ffmpeg
     whisper-step-0:
         check: the whisper CLI is installed in the pixi default env
-        file: ${HOME}/.pixi/envs/default/bin/whisper
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.pixi/envs/default/bin/whisper
+            exists: true
     whisper-step-1:
         check: the whisper CLI runs and prints its usage
         exit_status: 0

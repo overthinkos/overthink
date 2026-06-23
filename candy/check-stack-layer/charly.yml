@@ -70,15 +70,19 @@ check-stack-layer:
             gid: 4242
     check-stack-layer-step-1:
         check: the check-stack marker file is present at /etc/check-stack-marker
-        file: /etc/check-stack-marker
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /etc/check-stack-marker
+            exists: true
     check-stack-layer-step-2:
         agent-check: the check listener accepts a TCP connection on port 18794 from inside the deployment
     check-compose-order:
         check: file=/etc/check-base-marker
         id: check-compose-order
-        file: /etc/check-base-marker
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /etc/check-base-marker
+            exists: true
     check-port-listening:
         check: port=18794
         id: check-port-listening

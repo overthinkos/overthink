@@ -44,13 +44,17 @@ wayvnc:
         run_as: "${USER}"
     wayvnc-step-2:
         check: the wayvnc server binary is installed at /usr/bin/wayvnc
-        file: /usr/bin/wayvnc
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/wayvnc
+            exists: true
     wayvnc-step-3:
         check: the wayvnc launcher wrapper is installed and executable
-        file: ${HOME}/.local/bin/wayvnc-wrapper
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/wayvnc-wrapper
+            exists: true
+            mode: "0755"
     wayvnc-step-4:
         check: the supervised wayvnc service is running
         context:

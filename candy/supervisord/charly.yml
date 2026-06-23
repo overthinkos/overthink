@@ -36,12 +36,16 @@ supervisord:
         mode: "0700"
     supervisord-step-1:
         check: the supervisord process manager binary is installed
-        file: /usr/bin/supervisord
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/supervisord
+            exists: true
     supervisord-step-2:
         check: the supervisorctl control client is installed
-        file: /usr/bin/supervisorctl
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/supervisorctl
+            exists: true
     supervisord-step-3:
         check: the supervisor package is recorded in the package database
         plugin: package
@@ -50,8 +54,10 @@ supervisord:
             installed: true
     supervisord-step-4:
         check: a per-user XDG_RUNTIME_DIR directory exists in the image
-        file: /tmp/xdg-runtime
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: /tmp/xdg-runtime
+            filetype: directory
     supervisord-step-5:
         check: XDG_RUNTIME_DIR is exported and points at a /tmp-based per-user runtime dir
         exit_status: 0

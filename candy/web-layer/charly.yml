@@ -107,10 +107,12 @@ web-layer:
             installed: true
     web-layer-step-4:
         check: the fixture index.html carries the predetermined content marker
-        file: /srv/fixture/index.html
-        exists: true
-        contains:
-            - charly-fixture-web-content-marker
+        plugin: file
+        plugin_input:
+            file: /srv/fixture/index.html
+            exists: true
+            contains:
+                - charly-fixture-web-content-marker
     web-layer-step-5:
         check: the fixture web server answers HTTP 200 with the marker on its published port
         context:

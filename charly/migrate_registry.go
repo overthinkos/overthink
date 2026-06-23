@@ -71,7 +71,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.174.0900")
+var latestSchemaVersion = mustCalVer("2026.174.1100")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -526,11 +526,18 @@ func migrationSteps() []MigrationStep {
 		// and `package` (package: <name> + installed:/version:/package_map: → plugin: package +
 		// plugin_input) — each act lowers into a ServicePackagedStep / SystemPackagesStep so the
 		// load-bearing reversals survive (a RenderProvisionScript would drop them); package keeps
-		// its SHARED exclude_distro modifier at step level. The command/service extractions first
-		// raised HEAD; the package extraction raises it again to 2026.174.0900 (the calver-schema
-		// stamp below) — a closed `#Op` no longer accepting the command-exclusive in_container/
-		// background/from_host, the service:/running:/enabled:, NOR the package:/installed:/
-		// version:/package_map: step keys forces a re-migrate.
+		// its SHARED exclude_distro modifier at step level. It ALSO converts the LAST
+		// state-provision/goss-tier verb `file` (file: <path> + exists:/owner:/group_of:/
+		// filetype:/contains:/sha256: + the SHARED mode: → plugin: file + plugin_input) — a
+		// CheckVerbProvider + ProvisionActor whose act is the RUNTIME touch+chmod file-creation;
+		// `mode` STAYS in #Op for copy/write yet moves into a file step's plugin_input (the
+		// shared-companion pattern), and the bare-scalar `contains` default is preserved at
+		// runtime by the file plugin's decodeContainsList. The command/service/package
+		// extractions raised HEAD; the file extraction raises it again to 2026.174.1100 (the
+		// calver-schema stamp below) — a closed `#Op` no longer accepting the command-exclusive
+		// in_container/background/from_host, the service:/running:/enabled:, the package:/
+		// installed:/version:/package_map:, NOR the file:/exists:/owner:/group_of:/filetype:/
+		// contains:/sha256: step keys forces a re-migrate.
 		// TouchesHost false → remote-cache auto-migration applies it to fetched candy manifests.
 		// See migrate_state_provision_verbs_to_plugin.go + CHANGELOG/.
 		{mustCalVer("2026.174.0050"), "state-provision-verbs-to-plugin", false, func(c *MigrateContext) (bool, error) {
@@ -543,7 +550,7 @@ func migrationSteps() []MigrationStep {
 		// TouchesHost is false so it ALSO runs in project-only mode (remote-cache
 		// auto-migration); its host-file stamping is gated on ctx.HostDeployPath,
 		// which the project-only runner leaves empty.
-		{mustCalVer("2026.174.0900"), "calver-schema", false, func(c *MigrateContext) (bool, error) {
+		{mustCalVer("2026.174.1100"), "calver-schema", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateCalverSchema(c.Dir, c.HostDeployPath, latestSchemaVersion, c.DryRun)
 			return len(w) > 0, err
 		}},

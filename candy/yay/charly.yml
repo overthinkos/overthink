@@ -27,8 +27,10 @@ yay:
                 curl -fsSL "$URL" | tar -xzf - -C /usr/local/bin --strip-components=1 --wildcards '*/yay'
     yay-step-1:
         check: the yay binary is installed at /usr/local/bin/yay
-        file: /usr/local/bin/yay
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/yay
+            exists: true
     yay-step-2:
         check: yay runs and reports its version
         exit_status: 0

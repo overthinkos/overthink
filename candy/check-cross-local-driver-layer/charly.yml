@@ -21,13 +21,17 @@ check-cross-local-driver-layer:
             charly-cross-local-driver v1
     check-cross-local-driver-layer-step-2:
         check: applying the layer leaves the cross-local-driver marker file under the host cache dir
-        file: "${HOME}/.cache/charly-cross-local-driver-marker"
-        exists: true
+        plugin: file
+        plugin_input:
+            file: "${HOME}/.cache/charly-cross-local-driver-marker"
+            exists: true
     check-cross-local-driver-layer-step-3:
         check: the marker records the driver version stamp the cross-local-http bed reads back to confirm the host-driver member applied
-        file: "${HOME}/.cache/charly-cross-local-driver-marker"
-        contains:
-            - charly-cross-local-driver v1
+        plugin: file
+        plugin_input:
+            file: "${HOME}/.cache/charly-cross-local-driver-marker"
+            contains:
+                - charly-cross-local-driver v1
     cross-local-driver-marker:
         check: command=test -f ${HOME}/.cache/charly-cross-local-driver-marker
         id: cross-local-driver-marker

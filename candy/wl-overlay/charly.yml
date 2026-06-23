@@ -34,9 +34,11 @@ wl-overlay:
         run_as: "${USER}"
     wl-overlay-step-2:
         check: the charly-overlay helper script is installed and executable
-        file: ${HOME}/.local/bin/charly-overlay
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/charly-overlay
+            exists: true
+            mode: "0755"
     wl-overlay-step-3:
         check: the gtk4-layer-shell library package is installed
         plugin: package

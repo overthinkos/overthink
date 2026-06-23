@@ -43,8 +43,10 @@ hermes-playwright:
             command: HOME=/tmp npx playwright install chromium
     hermes-playwright-step-1:
         check: the Playwright browsers cache directory is baked into the image
-        file: /tmp/.cache/ms-playwright
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /tmp/.cache/ms-playwright
+            exists: true
     hermes-playwright-step-2:
         check: a Chromium build directory is present under the cache path
         stdout:

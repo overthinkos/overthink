@@ -15,16 +15,22 @@ summarize:
             - nodejs
     summarize-step-0:
         check: the summarize binary is installed into the npm global bin directory
-        file: ${HOME}/.npm-global/bin/summarize
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/bin/summarize
+            exists: true
     summarize-step-1:
         check: the summarizer alias binary is installed alongside it
-        file: ${HOME}/.npm-global/bin/summarizer
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/bin/summarizer
+            exists: true
     summarize-step-2:
         check: the @steipete/summarize package is unpacked under the npm global lib directory
-        file: ${HOME}/.npm-global/lib/node_modules/@steipete/summarize/package.json
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/lib/node_modules/@steipete/summarize/package.json
+            exists: true
     summarize-step-3:
         check: running summarize --version prints a version and exits cleanly
         exit_status: 0

@@ -121,20 +121,28 @@ android-sdk:
                 cp -a "${SDK_CACHE}/system-images/." /opt/android-sdk/system-images/
     android-sdk-step-2:
         check: the cmdline-tools sdkmanager lands under /opt/android-sdk
-        file: /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager
+            exists: true
     android-sdk-step-3:
         check: platform-tools provides adb
-        file: /opt/android-sdk/platform-tools/adb
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /opt/android-sdk/platform-tools/adb
+            exists: true
     android-sdk-step-4:
         check: build-tools 36 provides aapt2 (Appium's ADB badging probe needs it)
-        file: /opt/android-sdk/build-tools/36/aapt2
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /opt/android-sdk/build-tools/36/aapt2
+            exists: true
     android-sdk-step-5:
         check: the emulator binary is installed
-        file: /opt/android-sdk/emulator/emulator
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /opt/android-sdk/emulator/emulator
+            exists: true
     android-sdk-step-6:
         check: adb runs and reports the Android Debug Bridge banner
         exit_status: 0
@@ -151,16 +159,22 @@ android-sdk:
             command: which apkeep
     android-sdk-step-8:
         check: the android-36 platform is installed
-        file: /opt/android-sdk/platforms/android-36
-        exists: true
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: /opt/android-sdk/platforms/android-36
+            exists: true
+            filetype: directory
     android-sdk-step-9:
         check: the sdkmanager-fetched google_apis_playstore x86_64 system image is present
-        file: /opt/android-sdk/system-images/android-36/google_apis_playstore/x86_64
-        exists: true
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: /opt/android-sdk/system-images/android-36/google_apis_playstore/x86_64
+            exists: true
+            filetype: directory
     avdmanager-binary:
         check: file=/opt/android-sdk/cmdline-tools/latest/bin/avdmanager
         id: avdmanager-binary
-        file: /opt/android-sdk/cmdline-tools/latest/bin/avdmanager
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /opt/android-sdk/cmdline-tools/latest/bin/avdmanager
+            exists: true

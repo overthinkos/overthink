@@ -43,12 +43,16 @@ redis:
         run_as: "${USER}"
     redis-step-1:
         check: the redis-server daemon binary is installed at /usr/bin/redis-server
-        file: /usr/bin/redis-server
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/redis-server
+            exists: true
     redis-step-2:
         check: the redis-cli client binary is installed at /usr/bin/redis-cli
-        file: /usr/bin/redis-cli
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/redis-cli
+            exists: true
     redis-step-3:
         check: the providing package is installed (redis on Fedora, valkey on Arch/CachyOS)
         plugin: package

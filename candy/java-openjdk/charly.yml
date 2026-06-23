@@ -70,12 +70,16 @@ java-openjdk:
                 fi
     java-openjdk-step-1:
         check: the JRE launcher is installed at /usr/bin/java
-        file: /usr/bin/java
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/java
+            exists: true
     java-openjdk-step-2:
         check: the compiler is installed at /usr/bin/javac
-        file: /usr/bin/javac
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/javac
+            exists: true
     java-openjdk-step-3:
         check: the distro-agnostic JAVA_HOME exposes a working java launcher
         exit_status: 0

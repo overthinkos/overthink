@@ -24,8 +24,10 @@ gnupg:
                     - gnupg
     gnupg-step-0:
         check: the gpg encryption/signing binary is present at /usr/bin/gpg
-        file: /usr/bin/gpg
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/gpg
+            exists: true
     gnupg-step-1:
         check: invoking gpg --version exits cleanly and identifies itself as GnuPG
         exit_status: 0
@@ -36,12 +38,16 @@ gnupg:
             command: /usr/bin/gpg --version
     gnupg-step-2:
         check: the gpg-agent daemon ships so a forwarded host agent can answer key operations
-        file: /usr/bin/gpg-agent
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/gpg-agent
+            exists: true
     gnupg-step-3:
         check: the gpgconf helper ships so the agent socket path can be resolved
-        file: /usr/bin/gpgconf
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/gpgconf
+            exists: true
     gnupg-package:
         check: package=gnupg
         id: gnupg-package

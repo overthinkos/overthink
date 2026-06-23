@@ -19,8 +19,10 @@ libnotify:
                     - libnotify
     libnotify-step-0:
         check: the notify-send CLI is installed at /usr/bin/notify-send
-        file: /usr/bin/notify-send
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/notify-send
+            exists: true
     libnotify-step-1:
         check: the libnotify package providing the client is installed
         plugin: package

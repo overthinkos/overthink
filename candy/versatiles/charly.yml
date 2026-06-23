@@ -140,9 +140,11 @@ versatiles:
             exec /usr/local/bin/versatiles serve --port 8090 "${ARGS[@]}"
     versatiles-step-2:
         check: the versatiles binary is installed and executable at /usr/local/bin/versatiles
-        file: /usr/local/bin/versatiles
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/versatiles
+            exists: true
+            mode: "0755"
     versatiles-step-3:
         check: the installed binary reports its version
         exit_status: 0
@@ -157,9 +159,11 @@ versatiles:
             command: versatiles convert --help
     versatiles-step-5:
         check: the supervisord serve wrapper is installed and executable at /usr/local/bin/versatiles-wrapper.sh
-        file: /usr/local/bin/versatiles-wrapper.sh
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/versatiles-wrapper.sh
+            exists: true
+            mode: "0755"
     versatiles-step-6:
         check: the versatiles service is running under the init system
         context:

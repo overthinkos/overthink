@@ -26,7 +26,7 @@ func TestCueTightening_RejectsAndAccepts(t *testing.T) {
 		return "candy:\n" + body
 	}
 	const candyHead = "  version: 2026.144.1443\n  name: x\n  description: d\n"
-	const candyPlan = "  plan:\n  - check: c\n    file: /x\n"
+	const candyPlan = "  plan:\n  - check: c\n    plugin: file\n    plugin_input:\n      file: /x\n"
 
 	cases := []struct {
 		name   string
@@ -158,7 +158,7 @@ func TestCueTightening_RejectsAndAccepts(t *testing.T) {
 		{"candy check bad timeout rejected", "candy",
 			candy(candyHead + "  plan:\n  - check: c\n    http: http://x/\n    status: 200\n    context: [runtime]\n    timeout: notaduration\n"), true},
 		{"candy check bad context rejected", "candy",
-			candy(candyHead + "  plan:\n  - check: c\n    file: /x\n    context: [weird]\n"), true},
+			candy(candyHead + "  plan:\n  - check: c\n    plugin: file\n    plugin_input:\n      file: /x\n    context: [weird]\n"), true},
 		{"candy check bad matcher op rejected", "candy",
 			candy(candyHead + "  plan:\n  - check: c\n    command: x\n    context: [runtime]\n    stdout:\n    - mystery: \"?\"\n"), true},
 		{"candy check mcp bogus method rejected", "candy",

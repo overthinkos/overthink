@@ -17,8 +17,10 @@ sqlite:
                     - sqlite
     sqlite-step-0:
         check: the sqlite3 binary is installed at /usr/bin/sqlite3
-        file: /usr/bin/sqlite3
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/sqlite3
+            exists: true
     sqlite-step-1:
         check: the sqlite package is present in the image
         plugin: package

@@ -56,16 +56,22 @@ kde-shell:
                         - kdotool
     kde-shell-step-0:
         check: plasmashell, the Plasma shell, is installed at /usr/bin/plasmashell
-        file: /usr/bin/plasmashell
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/plasmashell
+            exists: true
     kde-shell-step-1:
         check: kwin_wayland, the Wayland compositor, is installed at /usr/bin/kwin_wayland
-        file: /usr/bin/kwin_wayland
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/kwin_wayland
+            exists: true
     kde-shell-step-2:
         check: startplasma-wayland, the session entry point, is installed at /usr/bin/startplasma-wayland
-        file: /usr/bin/startplasma-wayland
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/startplasma-wayland
+            exists: true
     kde-shell-step-3:
         check: the dependency-pulling top package plasma-desktop is installed in the rpm/pacman database
         plugin: package
@@ -74,13 +80,19 @@ kde-shell:
             installed: true
     kde-shell-step-4:
         check: the Dolphin file manager is installed at /usr/bin/dolphin
-        file: /usr/bin/dolphin
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/dolphin
+            exists: true
     kde-shell-step-5:
         check: the Konsole terminal is installed at /usr/bin/konsole
-        file: /usr/bin/konsole
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/konsole
+            exists: true
     kde-shell-step-6:
         check: kdotool, the KWin window-management automation tool that drives charly check wl on KWin, is installed at /usr/bin/kdotool
-        file: /usr/bin/kdotool
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/kdotool
+            exists: true

@@ -18,10 +18,12 @@ notebook-osm:
               dest: notebooks
     notebook-osm-step-0:
         check: the notebooks subdirectory is provisioned in the workspace
-        file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks
-        filetype: directory
         context:
             - runtime
+        plugin: file
+        plugin_input:
+            file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks
+            filetype: directory
     notebook-osm-step-1:
         check: the osm-monaco-viz notebook is present
         exit_status: 0
@@ -35,7 +37,9 @@ notebook-osm:
     notebook-osm-viz-present:
         check: file=${VOLUME_CONTAINER_PATH:workspace}/notebooks/osm-monaco-viz.py
         id: notebook-osm-viz-present
-        file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks/osm-monaco-viz.py
-        exists: true
         context:
             - runtime
+        plugin: file
+        plugin_input:
+            file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks/osm-monaco-viz.py
+            exists: true

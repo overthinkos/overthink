@@ -32,8 +32,10 @@ steam:
               path: "~/.local/share/Steam"
     steam-step-0:
         check: the Steam client launcher is installed at /usr/bin/steam
-        file: /usr/bin/steam
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/steam
+            exists: true
     steam-step-1:
         check: the steam RPM is present in the package database
         plugin: package
@@ -42,8 +44,10 @@ steam:
             installed: true
     steam-step-2:
         check: the gamescope nested Wayland compositor binary is installed
-        file: /usr/bin/gamescope
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/gamescope
+            exists: true
     steam-step-3:
         check: the gamescope RPM is present in the package database
         plugin: package

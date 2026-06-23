@@ -61,18 +61,24 @@ filebrowser:
         run_as: root
     filebrowser-step-3:
         check: the filebrowser binary is installed and executable at /usr/local/bin/filebrowser
-        file: /usr/local/bin/filebrowser
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/filebrowser
+            exists: true
+            mode: "0755"
     filebrowser-step-4:
         check: the server config is present at /etc/filebrowser/config.yaml
-        file: /etc/filebrowser/config.yaml
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /etc/filebrowser/config.yaml
+            exists: true
     filebrowser-step-5:
         check: the config declares the listen port 8080
-        file: /etc/filebrowser/config.yaml
-        contains:
-            - matches: "port: 8080"
+        plugin: file
+        plugin_input:
+            file: /etc/filebrowser/config.yaml
+            contains:
+                - matches: "port: 8080"
     filebrowser-step-6:
         check: the filebrowser service is running under the init system
         context:
@@ -103,7 +109,9 @@ filebrowser:
     filebrowser-volumes-exist:
         check: file=${VOLUME_CONTAINER_PATH:data}
         id: filebrowser-volumes-exist
-        file: ${VOLUME_CONTAINER_PATH:data}
-        filetype: directory
         context:
             - runtime
+        plugin: file
+        plugin_input:
+            file: ${VOLUME_CONTAINER_PATH:data}
+            filetype: directory

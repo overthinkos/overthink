@@ -86,20 +86,28 @@ charly:
             command: charly version
     charly-step-2:
         check: the gocryptfs encrypted-storage binary (gocryptfs candy) is installed
-        file: /usr/bin/gocryptfs
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/gocryptfs
+            exists: true
     charly-step-3:
         check: the socat console-relay binary (socat candy) is installed
-        file: /usr/bin/socat
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/socat
+            exists: true
     charly-step-4:
         check: the libvirt virsh client (virtualization candy) is installed
-        file: /usr/bin/virsh
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/virsh
+            exists: true
     charly-step-5:
         check: the qemu system emulator (virtualization candy) is installed
-        file: /usr/bin/qemu-system-x86_64
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/qemu-system-x86_64
+            exists: true
     charly-step-6:
         check: charly doctor runs and emits its Summary line
         exit_status: 0

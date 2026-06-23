@@ -18,17 +18,23 @@ nvenc-headers:
                     - ffnvcodec-headers
     nvenc-headers-step-0:
         check: the NVENC encode API header is installed for nvenc-sys to compile against
-        file: /usr/include/ffnvcodec/nvEncodeAPI.h
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/include/ffnvcodec/nvEncodeAPI.h
+            exists: true
     nvenc-headers-step-1:
         check: the ffnvcodec pkg-config descriptor is installed so downstream builds can link against ffnvcodec
-        file: /usr/lib/pkgconfig/ffnvcodec.pc
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/lib/pkgconfig/ffnvcodec.pc
+            exists: true
     nvenc-headers-step-2:
         check: the header declares the NvEncodeAPICreateInstance entry point the nvenc-sys crate binds to
-        file: /usr/include/ffnvcodec/nvEncodeAPI.h
-        contains:
-            - NvEncodeAPICreateInstance
+        plugin: file
+        plugin_input:
+            file: /usr/include/ffnvcodec/nvEncodeAPI.h
+            contains:
+                - NvEncodeAPICreateInstance
     nvenc-headers-package:
         check: package=ffnvcodec-headers
         id: nvenc-headers-package

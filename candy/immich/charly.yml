@@ -306,18 +306,24 @@ immich:
         run_as: "${USER}"
     immich-step-13:
         check: the Immich Node server bundle is built into /opt/immich/server
-        file: /opt/immich/server/dist/main.js
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /opt/immich/server/dist/main.js
+            exists: true
     immich-step-14:
         check: the PostgreSQL-aware server startup wrapper is installed and executable
-        file: /usr/local/bin/immich-server-start.sh
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/immich-server-start.sh
+            exists: true
+            mode: "0755"
     immich-step-15:
         check: the idempotent DB-migration wrapper is installed and executable
-        file: /usr/local/bin/immich-db-migrate.sh
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/immich-db-migrate.sh
+            exists: true
+            mode: "0755"
     immich-step-16:
         check: the libvips image-processing library is installed for thumbnailing and transcoding
         plugin: package
@@ -329,9 +335,11 @@ immich:
             installed: true
     immich-step-17:
         check: the Postgres init script seeds the pgvector extension Immich requires
-        file: /docker-entrypoint-initdb.d/01-immich-extensions.sql
-        exists: true
-        contains: "CREATE EXTENSION IF NOT EXISTS vector"
+        plugin: file
+        plugin_input:
+            file: /docker-entrypoint-initdb.d/01-immich-extensions.sql
+            exists: true
+            contains: "CREATE EXTENSION IF NOT EXISTS vector"
     immich-step-18:
         check: the running Immich API answers its health ping on port 2283
         context:
@@ -347,13 +355,17 @@ immich:
     immich-initdb-sql:
         check: file=/docker-entrypoint-initdb.d/01-immich-extensions.sql
         id: immich-initdb-sql
-        file: /docker-entrypoint-initdb.d/01-immich-extensions.sql
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /docker-entrypoint-initdb.d/01-immich-extensions.sql
+            exists: true
     immich-library-dir:
         check: file=${HOME}/.immich/library
         id: immich-library-dir
-        file: ${HOME}/.immich/library
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.immich/library
+            filetype: directory
     immich-server-running:
         check: service=immich-server
         id: immich-server-running

@@ -330,9 +330,11 @@ k8s-layer:
                 srv.serve_forever()
     k8s-layer-step-2:
         check: the fake Kubernetes apiserver script is installed and executable at /opt/harness-k8s/fake_apiserver.py
-        file: /opt/harness-k8s/fake_apiserver.py
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: /opt/harness-k8s/fake_apiserver.py
+            exists: true
+            mode: "0755"
     k8s-layer-step-3:
         check: a GET to /api/v1/nodes returns HTTP 200 carrying the Ready fixture node charly-fixture-k8s
         context:
@@ -348,8 +350,10 @@ k8s-layer:
     harness-k8s-python3:
         check: file=/usr/bin/python3
         id: harness-k8s-python3
-        file: /usr/bin/python3
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/python3
+            exists: true
     harness-k8s-python3-package:
         check: package=python3
         id: harness-k8s-python3-package

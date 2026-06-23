@@ -71,32 +71,46 @@ swaync:
         run_as: "${USER}"
     swaync-step-6:
         check: the swaync notification daemon binary is installed
-        file: /usr/bin/swaync
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/swaync
+            exists: true
     swaync-step-7:
         check: the swaync-client control CLI is installed
-        file: /usr/bin/swaync-client
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/swaync-client
+            exists: true
     swaync-step-8:
         check: the swaync config.json is staged in the user config dir
-        file: ${HOME}/.config/swaync/config.json
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.config/swaync/config.json
+            exists: true
     swaync-step-9:
         check: the Catppuccin style.css is staged alongside it
-        file: ${HOME}/.config/swaync/style.css
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.config/swaync/style.css
+            exists: true
     swaync-step-10:
         check: the wayland-aware wrapper script is installed
-        file: ${HOME}/.local/bin/swaync-wrapper
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/swaync-wrapper
+            exists: true
     swaync-step-11:
         check: the daemon D-Bus auto-activation unit is removed so it cannot spawn a competing instance
-        file: /usr/share/dbus-1/services/org.erikreider.swaync.service
-        exists: false
+        plugin: file
+        plugin_input:
+            file: /usr/share/dbus-1/services/org.erikreider.swaync.service
+            exists: false
     swaync-step-12:
         check: the control-center D-Bus auto-activation unit is also removed
-        file: /usr/share/dbus-1/services/org.erikreider.swaync.cc.service
-        exists: false
+        plugin: file
+        plugin_input:
+            file: /usr/share/dbus-1/services/org.erikreider.swaync.cc.service
+            exists: false
     swaync-package:
         check: package=SwayNotificationCenter
         id: swaync-package

@@ -76,12 +76,16 @@ unsloth-studio:
     unsloth-cli-present:
         check: the Unsloth Studio CLI launcher is installed by the official installer (the `unsloth` console-script is NOT in the pixi env — it comes from install.sh)
         id: unsloth-cli-present
-        file: ${HOME}/.local/bin/unsloth
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/unsloth
+            exists: true
     unsloth-studio-step-2:
         check: the pixi fine-tuning environment provides a Python interpreter at ~/.pixi/envs/default
-        file: ${HOME}/.pixi/envs/default/bin/python
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.pixi/envs/default/bin/python
+            exists: true
     unsloth-studio-step-3:
         check: PyTorch imports successfully inside that environment
         stdout:
@@ -91,8 +95,10 @@ unsloth-studio:
             command: ${HOME}/.pixi/envs/default/bin/python -c "import torch; print('torch', torch.__version__)"
     unsloth-studio-step-4:
         check: the composed llama.cpp CLI binary is present so fine-tuned models can be exported to GGUF
-        file: ${HOME}/llama.cpp/llama-cli
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/llama.cpp/llama-cli
+            exists: true
     unsloth-studio-step-5:
         agent-check: the Unsloth Studio web UI is served on port 8888 and is usable for interactive LLM fine-tuning
     unsloth-studio-finetuning-stack:

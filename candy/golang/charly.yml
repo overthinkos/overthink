@@ -24,8 +24,10 @@ golang:
                     - golang-go
     golang-step-0:
         check: the go compiler binary is installed at /usr/bin/go
-        file: /usr/bin/go
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/go
+            exists: true
     golang-step-1:
         check: running `go version` succeeds and prints a Go toolchain version
         exit_status: 0

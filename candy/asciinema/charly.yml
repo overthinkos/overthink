@@ -14,8 +14,10 @@ asciinema:
             - asciinema
     asciinema-step-0:
         check: the asciinema recorder binary is installed at /usr/bin/asciinema
-        file: /usr/bin/asciinema
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/asciinema
+            exists: true
     asciinema-step-1:
         check: the asciinema package is registered in the distro package database
         plugin: package

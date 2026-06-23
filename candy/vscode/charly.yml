@@ -85,8 +85,10 @@ vscode:
                 ln -sf /opt/vscode/bin/code /usr/bin/code
     vscode-step-1:
         check: the code launcher is present at /usr/bin/code
-        file: /usr/bin/code
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/code
+            exists: true
     vscode-step-2:
         check: running code --version exits 0 and prints a semantic version
         exit_status: 0
@@ -98,10 +100,12 @@ vscode:
     code-binary:
         check: file=/usr/bin/code
         id: code-binary
-        file: /usr/bin/code
-        exists: true
         context:
             - build
+        plugin: file
+        plugin_input:
+            file: /usr/bin/code
+            exists: true
     code-version:
         check: command=/usr/bin/code --version
         id: code-version

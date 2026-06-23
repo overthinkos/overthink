@@ -30,9 +30,11 @@ ordercli:
                 go clean -cache
     ordercli-step-1:
         check: the ordercli binary is installed at ${HOME}/go/bin/ordercli
-        file: ${HOME}/go/bin/ordercli
-        exists: true
-        filetype: file
+        plugin: file
+        plugin_input:
+            file: ${HOME}/go/bin/ordercli
+            exists: true
+            filetype: file
     ordercli-step-2:
         check: running ordercli --help prints its delivery-provider subcommands
         stdout:

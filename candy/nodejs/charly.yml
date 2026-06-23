@@ -74,8 +74,10 @@ nodejs:
                 chmod 0755 /usr/local/bin/pnpm
     nodejs-step-1:
         check: the node interpreter is installed at /usr/bin/node
-        file: /usr/bin/node
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/node
+            exists: true
     nodejs-step-2:
         check: node reports its version and exits cleanly
         exit_status: 0
@@ -84,8 +86,10 @@ nodejs:
             command: /usr/bin/node --version
     nodejs-step-3:
         check: the npm package manager is installed at /usr/bin/npm
-        file: /usr/bin/npm
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/npm
+            exists: true
     nodejs-step-4:
         check: npm reports its version and exits cleanly
         exit_status: 0
@@ -94,8 +98,10 @@ nodejs:
             command: /usr/bin/npm --version
     nodejs-step-5:
         check: the self-contained pnpm binary lands on the system PATH at /usr/local/bin/pnpm
-        file: /usr/local/bin/pnpm
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/local/bin/pnpm
+            exists: true
     nodejs-step-6:
         check: pnpm runs and reports its version
         exit_status: 0

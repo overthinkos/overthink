@@ -17,20 +17,28 @@ agent-forwarding:
             - ssh-client
     agent-forwarding-step-0:
         check: the GnuPG client binary is installed so a forwarded host GPG agent socket can be used for signing and decryption
-        file: /usr/bin/gpg
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/gpg
+            exists: true
     agent-forwarding-step-1:
         check: the SSH client is installed so git and ssh use the forwarded host SSH agent
-        file: /usr/bin/ssh
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/ssh
+            exists: true
     agent-forwarding-step-2:
         check: ssh-add is installed so the forwarded host agent's keys can be listed
-        file: /usr/bin/ssh-add
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/ssh-add
+            exists: true
     agent-forwarding-step-3:
         check: the direnv binary is installed for the .secrets/.envrc autoload workflow
-        file: /usr/bin/direnv
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/direnv
+            exists: true
     agent-forwarding-step-4:
         agent-check: with a host SSH agent forwarded at runtime, ssh-add -l inside the deployment lists the host's keys
     agent-forwarding-gnupg-package:

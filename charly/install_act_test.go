@@ -152,10 +152,9 @@ func TestServicePluginActEmitsIntoBoxBuild(t *testing.T) {
 // A build-context run: step folds into the install plan; a sibling check: step in
 // the same plan does NOT (it is a runtime probe, not an install step).
 func TestCompileOpSteps_FoldsBuildContextRunStepNotCheck(t *testing.T) {
-	tr := true
 	layer := &Candy{Name: "x", plan: []Step{
 		{Run: "install vim", Op: Op{Plugin: "package", PluginInput: map[string]any{"package": "vim"}, Context: []string{"build"}}},
-		{Check: "vim present", Op: Op{File: "/usr/bin/vim", Exists: &tr}}, // a check: step → not folded
+		{Check: "vim present", Op: Op{Plugin: "file", PluginInput: map[string]any{"file": "/usr/bin/vim", "exists": true}}}, // a check: step → not folded
 	}}
 	steps := compileOpSteps(layer, testResolvedBox())
 	pkgCount := 0
@@ -199,11 +198,14 @@ func TestCompileOpSteps_RunCommandLowersToOpStep(t *testing.T) {
 }
 
 // The validator rejects a build-context run: step whose verb has no build/deploy
-// install path (file creation is the write/copy verbs) — the compiler would
-// otherwise silently drop it. The run: keyword stamps the act intent.
+// install path (a pure observe verb like `addr` — a CheckVerbProvider, NOT a
+// ProvisionActor — acts only at runtime) — the compiler would otherwise silently drop
+// it. The run: keyword stamps the act intent. (file IS act-capable in build/deploy now —
+// it is a ProvisionActor like user/mount, rendering touch+chmod at install emit — so it
+// is no longer the example here.)
 func TestValidateOps_RejectsRuntimeOnlyActInBuild(t *testing.T) {
 	layers := map[string]*Candy{
-		"l": {Name: "l", plan: []Step{{Run: "create x", Op: Op{File: "/x", Context: []string{"build"}}}}},
+		"l": {Name: "l", plan: []Step{{Run: "reach x", Op: Op{Plugin: "addr", PluginInput: map[string]any{"addr": "127.0.0.1:80"}, Context: []string{"build"}}}}},
 	}
 	got := runValidateOps(t, &Config{Box: map[string]BoxConfig{}}, layers)
 	if !strings.Contains(got, "cannot act") {

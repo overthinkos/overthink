@@ -11,7 +11,7 @@ package main
 //     UnmarshalJSON, so its shorthand needs no on-disk change (Matcher, MatcherList,
 //     PortScope). The walker neither expands nor recurses into it.
 //   - A registered shorthand type (no UnmarshalJSON) is rewritten by its expander
-//     (PackageItem, PortSpec, ContainsList, ShellConfig, …).
+//     (PackageItem, PortSpec, ShellConfig, …).
 //   - A scalar bound for a Go string field is force-tagged !!str (yaml.v3 coerced
 //     int/bool→string silently; CUE preserves the scalar type, so e.g.
 //     `stop_timeout: 30` must become `"30"`).
@@ -36,7 +36,6 @@ type shorthandExpander func(node *yaml.Node) error
 var cueShorthandExpanders = map[reflect.Type]shorthandExpander{
 	reflect.TypeOf(PackageItem{}):              expandPackageItemNode,
 	reflect.TypeOf(PortSpec{}):                 expandPortSpecNode,
-	reflect.TypeOf(ContainsList{}):             expandContainsListNode,
 	reflect.TypeOf(LibvirtGraphicsListeners{}): expandLibvirtListenersNode,
 	reflect.TypeOf(PreemptibleConfig{}):        expandPreemptibleNode,
 	reflect.TypeOf(TunnelYAML{}):               expandTunnelNode,
@@ -223,31 +222,6 @@ func expandPortSpecNode(node *yaml.Node) error {
 		"port", portNode,
 		"protocol", scalarNode(proto),
 	)
-	return nil
-}
-
-// expandContainsListNode: wraps a scalar in a one-element list and promotes
-// each bare scalar element to {op: contains, value: X}. Mapping/sequence
-// elements (explicit operator maps) are left for Matcher's JSON decode.
-func expandContainsListNode(node *yaml.Node) error {
-	promote := func(child *yaml.Node) *yaml.Node {
-		if child.Kind == yaml.ScalarNode {
-			return mappingNodes("op", scalarNode("contains"), "value", cloneScalar(child))
-		}
-		return child
-	}
-	if node.Kind == yaml.SequenceNode {
-		for i, child := range node.Content {
-			node.Content[i] = promote(child)
-		}
-		return nil
-	}
-	// Copy the original BEFORE overwriting *node — promote returns the same
-	// pointer for a non-scalar, so wrapping node-in-place would make the new
-	// sequence contain node itself (a cycle that hangs yaml.v3 Marshal).
-	orig := *node
-	elem := promote(&orig)
-	*node = yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq", Content: []*yaml.Node{elem}}
 	return nil
 }
 

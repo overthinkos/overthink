@@ -32,8 +32,10 @@ gogcli:
                 go clean -cache
     gogcli-step-1:
         check: the gog binary is installed at ~/go/bin/gog
-        file: ${HOME}/go/bin/gog
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/go/bin/gog
+            exists: true
     gogcli-step-2:
         check: running `gog --version` exits 0, proving the built binary actually runs
         exit_status: 0

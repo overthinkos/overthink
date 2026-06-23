@@ -131,40 +131,58 @@ debug-tools:
                     - rsync
     debug-tools-step-0:
         check: the DNS lookup tool dig is present for probing service discovery
-        file: /usr/bin/dig
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/dig
+            exists: true
     debug-tools-step-1:
         check: the socket-statistics tool ss is present for inspecting listening ports
-        file: /usr/sbin/ss
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/sbin/ss
+            exists: true
     debug-tools-step-2:
         check: tcpdump is present for capturing traffic between services
-        file: /usr/sbin/tcpdump
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/sbin/tcpdump
+            exists: true
     debug-tools-step-3:
         check: the process-table tool ps is available to list running processes
-        file: /usr/bin/ps
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/ps
+            exists: true
     debug-tools-step-4:
         check: the interactive process monitor htop is available
-        file: /usr/bin/htop
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/htop
+            exists: true
     debug-tools-step-5:
         check: the syscall tracer strace is available to debug a stuck process
-        file: /usr/bin/strace
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/strace
+            exists: true
     debug-tools-step-6:
         check: an editor (vim) is present so config files can be inspected in place
-        file: /usr/bin/vim
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/vim
+            exists: true
     debug-tools-step-7:
         check: tmux is present so a long-running probe survives a dropped exec session
-        file: /usr/bin/tmux
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/tmux
+            exists: true
     debug-tools-step-8:
         check: lsof is present to report which process holds an open file or socket
-        file: /usr/bin/lsof
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/lsof
+            exists: true
     ping-binary:
         check: command=command -v ping
         id: ping-binary
@@ -182,28 +200,38 @@ debug-tools:
     nano-binary:
         check: file=/usr/bin/nano
         id: nano-binary
-        file: /usr/bin/nano
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/nano
+            exists: true
     tree-binary:
         check: file=/usr/bin/tree
         id: tree-binary
-        file: /usr/bin/tree
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/tree
+            exists: true
     wget-binary:
         check: file=/usr/bin/wget
         id: wget-binary
-        file: /usr/bin/wget
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/wget
+            exists: true
     file-binary:
         check: file=/usr/bin/file
         id: file-binary
-        file: /usr/bin/file
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/file
+            exists: true
     rsync-binary:
         check: file=/usr/bin/rsync
         id: rsync-binary
-        file: /usr/bin/rsync
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/rsync
+            exists: true
     procps-package:
         check: package=procps-ng
         id: procps-package

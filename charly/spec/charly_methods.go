@@ -62,9 +62,11 @@ func (c *Op) VerbsSet() []string {
 	if c.Build != "" {
 		set = append(set, "build")
 	}
-	if c.File != "" {
-		set = append(set, "file")
-	}
+	// `file` is NO LONGER a verb — it left #OpVerb in the file→plugin extraction (a file
+	// check/run is now `plugin: file` + #FileInput; exists/owner/group_of/filetype/contains/
+	// sha256 moved into plugin_input, and the SHARED `mode` rides plugin_input on a file step
+	// while staying an #Op modifier for copy/write). Op no longer carries a File field, so it
+	// contributes no verb.
 	// `package` is NO LONGER a verb — it left #OpVerb in the package→plugin extraction
 	// (a package check/run is now `plugin: package` + #PackageInput; installed/version/
 	// package_map moved into plugin_input). Op no longer carries a Package field, so it
@@ -126,9 +128,12 @@ func (c *Op) VerbsSet() []string {
 // in-place ${VAR} expansion driven by ExpandVars (free function in main).
 func (c *Op) StringFields() []*string {
 	return []*string{
-		&c.File, &c.Command,
+		&c.Command,
 		&c.ID, &c.Description, &c.Timeout,
-		&c.Mode, &c.Owner, &c.GroupOf, &c.Filetype, &c.Sha256,
+		// `mode` is the SHARED file/copy/write modifier kept on #Op (owner/group_of/filetype/
+		// sha256 left with the file verb into #FileInput; file's plugin_input is expanded by
+		// the plugin path, not here).
+		&c.Mode,
 		&c.Method, &c.RequestBody,
 		// Test-mode live-container verb discriminators + modifiers.
 		&c.Cdp, &c.Wl, &c.Dbus, &c.Vnc, &c.Mcp,

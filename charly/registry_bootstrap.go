@@ -26,15 +26,15 @@ import (
 // registered (deploy/step have a gate; builders have none). See plugin_deploy_local.go,
 // plugin_step_reboot.go, plugin_builder_cargo.go.
 var builtinProviderInstances = []Provider{
-	// verbs (ClassVerb) — package/command/service/http/interface/addr/unix_group/user/
-	// kernel-param/mount are NOT here: each is a dedicated plugin UNIT (plugin_verb_package.go /
-	// plugin_verb_command.go / plugin_verb_service.go / plugin_http.go / plugin_interface.go /
-	// plugin_addr.go / plugin_unix_group.go / plugin_user.go / plugin_kernel_param.go /
-	// plugin_mount.go) that self-registers via RegisterBuiltinPluginUnit, absent from both
-	// this slice and the providers: manifest (the goss-verb→plugin + the state-provision-verb→
-	// plugin extractions, like process/port/dns; `command` is the install-task-act member and
+	// verbs (ClassVerb) — file/package/command/service/http/interface/addr/unix_group/user/
+	// kernel-param/mount are NOT here: each is a dedicated plugin UNIT (plugin_verb_file.go /
+	// plugin_verb_package.go / plugin_verb_command.go / plugin_verb_service.go / plugin_http.go /
+	// plugin_interface.go / plugin_addr.go / plugin_unix_group.go / plugin_user.go /
+	// plugin_kernel_param.go / plugin_mount.go) that self-registers via RegisterBuiltinPluginUnit,
+	// absent from both this slice and the providers: manifest (the goss-verb→plugin + the
+	// state-provision-verb→plugin extractions, like process/port/dns; `file` is the LAST
+	// state-provision/goss-tier verb extracted; `command` is the install-task-act member and
 	// `package`/`service` are the TWO typed-step members of that set).
-	fileVerb{},
 	cdpVerb{}, wlVerb{}, dbusVerb{}, vncVerb{},
 	mcpVerb{}, recordVerb{}, spiceVerb{}, libvirtVerb{}, kubeVerb{}, adbVerb{}, appiumVerb{},
 	summarizeVerb{}, killVerb{}, pluginVerb{},

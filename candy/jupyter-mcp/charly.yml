@@ -52,10 +52,12 @@ jupyter-mcp:
             command: ${HOME}/.pixi/envs/default/bin/python -c "import jupyter_mcp"
     jupyter-mcp-step-5:
         check: the Jupyter Server config drop-in enables the jupyter_mcp extension
-        file: ${HOME}/.pixi/envs/default/etc/jupyter/jupyter_server_config.d/jupyter_mcp.json
-        exists: true
-        contains:
-            - contains: "jupyter_mcp"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.pixi/envs/default/etc/jupyter/jupyter_server_config.d/jupyter_mcp.json
+            exists: true
+            contains:
+                - contains: "jupyter_mcp"
     jupyter-mcp-step-6:
         check: the deployed JupyterLab routes /mcp to the MCP handler (an empty POST returns 400, not a 404)
         method: POST

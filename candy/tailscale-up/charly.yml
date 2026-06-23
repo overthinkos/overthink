@@ -100,12 +100,16 @@ tailscale-up:
                 fi
     tailscale-up-step-1:
         check: the tailscale CLI is composed into the image at /usr/bin/tailscale via require:tailscale
-        file: /usr/bin/tailscale
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/tailscale
+            exists: true
     tailscale-up-step-2:
         check: the tailscaled daemon the deploy task starts is present at /usr/sbin/tailscaled
-        file: /usr/sbin/tailscaled
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/sbin/tailscaled
+            exists: true
     tailscale-up-step-3:
         check: the composed tailscale CLI runs offline so the deploy task can call `tailscale set`
         exit_status: 0

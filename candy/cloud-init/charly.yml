@@ -60,8 +60,10 @@ cloud-init:
             datasource_list: [ NoCloud, None ]
     cloud-init-step-2:
         check: the cloud-init binary is present in the image
-        file: /usr/bin/cloud-init
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/cloud-init
+            exists: true
     cloud-init-step-3:
         check: cloud-init responds to --version with a version string
         exit_status: 0
@@ -72,19 +74,25 @@ cloud-init:
             command: cloud-init --version 2>&1
     cloud-init-step-4:
         check: the NoCloud datasource drop-in is installed mode 0644
-        file: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
-        exists: true
-        mode: "0644"
+        plugin: file
+        plugin_input:
+            file: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
+            exists: true
+            mode: "0644"
     cloud-init-step-5:
         check: the drop-in restricts the datasource list to NoCloud
-        file: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
-        contains:
-            - contains: datasource_list
-            - contains: NoCloud
+        plugin: file
+        plugin_input:
+            file: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
+            contains:
+                - contains: datasource_list
+                - contains: NoCloud
     cloud-init-step-6:
         check: the growpart partition-resize utility is installed
-        file: /usr/bin/growpart
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/growpart
+            exists: true
     cloud-init-package-2:
         check: package=cloud-init
         id: cloud-init-package
@@ -95,13 +103,15 @@ cloud-init:
     cloud-init-nocloud-datasource:
         check: file=/etc/cloud/cloud.cfg.d/99-nocloud.cfg
         id: cloud-init-nocloud-datasource
-        file: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
-        exists: true
-        mode: "0644"
-        contains:
-            - contains: datasource_list
-            - contains: NoCloud
-            - contains: None
+        plugin: file
+        plugin_input:
+            file: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
+            exists: true
+            mode: "0644"
+            contains:
+                - contains: datasource_list
+                - contains: NoCloud
+                - contains: None
     cloud-init-growpart-package:
         check: package=cloud-utils-growpart
         id: cloud-init-growpart-package

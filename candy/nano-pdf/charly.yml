@@ -14,8 +14,10 @@ nano-pdf:
             - python
     nano-pdf-step-0:
         check: the nano-pdf console script exists in the default pixi environment
-        file: ${HOME}/.pixi/envs/default/bin/nano-pdf
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.pixi/envs/default/bin/nano-pdf
+            exists: true
     nano-pdf-step-1:
         check: the nano-pdf distribution is installed at version 0.2.1
         exit_status: 0

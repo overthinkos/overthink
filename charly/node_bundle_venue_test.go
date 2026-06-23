@@ -17,7 +17,7 @@ func TestFlattenBundleVenues_StampsAndHoists(t *testing.T) {
 					Target:           "pod",
 					AgentProvisioned: true,
 					Plan: []Step{
-						{Check: "marker present", Op: Op{File: "/etc/charly-os-marker"}},
+						{Check: "marker present", Op: Op{Plugin: "file", PluginInput: map[string]any{"file": "/etc/charly-os-marker"}}},
 					},
 				},
 			},

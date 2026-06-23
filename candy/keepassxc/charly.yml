@@ -14,8 +14,10 @@ keepassxc:
             - keepassxc
     keepassxc-step-0:
         check: the KeePassXC desktop binary is installed at /usr/bin/keepassxc
-        file: /usr/bin/keepassxc
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/keepassxc
+            exists: true
     keepassxc-step-1:
         check: the keepassxc package is registered with the system package manager
         plugin: package
@@ -24,8 +26,10 @@ keepassxc:
             installed: true
     keepassxc-step-2:
         check: the keepassxc-cli console tool ships alongside the GUI
-        file: /usr/bin/keepassxc-cli
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/keepassxc-cli
+            exists: true
     keepassxc-step-3:
         check: keepassxc-cli runs headless and prints a semantic version
         exit_status: 0

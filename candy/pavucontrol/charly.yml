@@ -21,8 +21,10 @@ pavucontrol:
                     - pavucontrol
     pavucontrol-step-0:
         check: the pavucontrol GTK mixer binary is installed at /usr/bin/pavucontrol
-        file: /usr/bin/pavucontrol
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/pavucontrol
+            exists: true
     pavucontrol-step-1:
         check: the pavucontrol package is recorded in the package database
         plugin: package
@@ -31,5 +33,7 @@ pavucontrol:
             installed: true
     pavucontrol-step-2:
         check: the required PipeWire audio server that pavucontrol controls is present
-        file: /usr/bin/pipewire
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/pipewire
+            exists: true

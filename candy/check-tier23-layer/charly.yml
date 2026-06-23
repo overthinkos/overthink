@@ -52,13 +52,17 @@ check-tier23-layer:
             </body></html>
     check-tier23-layer-step-3:
         check: curl is installed so tier3 can fetch artifacts over HTTP
-        file: /usr/bin/curl
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/curl
+            exists: true
     check-tier23-layer-step-4:
         check: the persistent tier3 version marker is on disk and carries tier3-ok
-        file: /srv/bench/version.txt
-        contains:
-            - tier3-ok
+        plugin: file
+        plugin_input:
+            file: /srv/bench/version.txt
+            contains:
+                - tier3-ok
     check-tier23-layer-step-5:
         check: the tier2 HTTP server answers on port 8080 with a page containing "charly benchmark"
         context:
@@ -73,15 +77,19 @@ check-tier23-layer:
     tier23-version-file:
         check: file=/srv/bench/version.txt
         id: tier23-version-file
-        file: /srv/bench/version.txt
-        exists: true
-        contains:
-            - tier3-ok
+        plugin: file
+        plugin_input:
+            file: /srv/bench/version.txt
+            exists: true
+            contains:
+                - tier3-ok
     tier23-index-exists:
         check: file=/srv/bench/index.html
         id: tier23-index-exists
-        file: /srv/bench/index.html
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /srv/bench/index.html
+            exists: true
     tier23-port-open:
         check: addr=127.0.0.1:${HOST_PORT:8080}
         id: tier23-port-open

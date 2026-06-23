@@ -103,39 +103,53 @@ chrome-cdp:
         run_as: "${USER}"
     chrome-cdp-step-11:
         check: the chrome-wrapper launcher is installed and executable in the user's local bin
-        file: ${HOME}/.local/bin/chrome-wrapper
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/chrome-wrapper
+            exists: true
+            mode: "0755"
     chrome-cdp-step-12:
         check: the wrapper enables Chrome's CDP on the internal debugging port 9223
-        file: ${HOME}/.local/bin/chrome-wrapper
-        contains:
-            - contains: "remote-debugging-port=9223"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/chrome-wrapper
+            contains:
+                - contains: "remote-debugging-port=9223"
     chrome-cdp-step-13:
         check: the wrapper spoofs a Windows user-agent for cross-site compatibility
-        file: ${HOME}/.local/bin/chrome-wrapper
-        contains:
-            - contains: "Windows NT 10.0"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/chrome-wrapper
+            contains:
+                - contains: "Windows NT 10.0"
     chrome-cdp-step-14:
         check: the cdp-proxy forwarder script is installed and forwards published 9222 to internal 9223
-        file: ${HOME}/.local/bin/cdp-proxy
-        exists: true
-        contains:
-            - contains: "LISTEN_PORT = 9222"
-            - contains: "TARGET_PORT = 9223"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/cdp-proxy
+            exists: true
+            contains:
+                - contains: "LISTEN_PORT = 9222"
+                - contains: "TARGET_PORT = 9223"
     chrome-cdp-step-15:
         check: the browser-open helper that $BROWSER points at is installed and executable
-        file: ${HOME}/.local/bin/browser-open
-        exists: true
-        mode: "0755"
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/browser-open
+            exists: true
+            mode: "0755"
     chrome-cdp-step-16:
         check: the chrome-windows extension manifest is staged under the user's data dir
-        file: ${HOME}/.local/share/chrome-windows/manifest.json
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/share/chrome-windows/manifest.json
+            exists: true
     chrome-cdp-step-17:
         check: the chrome-windows content script is staged alongside the manifest
-        file: ${HOME}/.local/share/chrome-windows/content.js
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/share/chrome-windows/content.js
+            exists: true
     chrome-cdp-step-18:
         check: the cdp-proxy service is running under the init system
         context:
@@ -160,13 +174,17 @@ chrome-cdp:
     browser-open-wrapper:
         check: file=${HOME}/.local/bin/browser-open
         id: browser-open-wrapper
-        file: ${HOME}/.local/bin/browser-open
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/browser-open
+            exists: true
     cdp-proxy-wrapper:
         check: file=${HOME}/.local/bin/cdp-proxy
         id: cdp-proxy-wrapper
-        file: ${HOME}/.local/bin/cdp-proxy
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/bin/cdp-proxy
+            exists: true
     chrome-cdp-port-2:
         check: addr=127.0.0.1:${HOST_PORT:9222}
         id: chrome-cdp-port

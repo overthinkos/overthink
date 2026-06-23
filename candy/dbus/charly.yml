@@ -43,8 +43,10 @@ dbus:
               scope: system
     dbus-step-0:
         check: the dbus-daemon binary is installed at /usr/bin/dbus-daemon
-        file: /usr/bin/dbus-daemon
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/dbus-daemon
+            exists: true
     dbus-step-1:
         check: the providing D-Bus package is installed (dbus-daemon on Fedora, dbus on Arch/Debian/Ubuntu)
         plugin: package

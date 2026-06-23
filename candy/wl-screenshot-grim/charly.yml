@@ -14,8 +14,10 @@ wl-screenshot-grim:
                     - grim
     wl-screenshot-grim-step-0:
         check: the grim screenshot binary is installed at /usr/bin/grim
-        file: /usr/bin/grim
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/grim
+            exists: true
     wl-screenshot-grim-step-1:
         check: the grim package is registered with the package manager
         plugin: package

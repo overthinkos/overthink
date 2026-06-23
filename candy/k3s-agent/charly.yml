@@ -119,21 +119,29 @@ k3s-agent:
                 systemctl enable --now k3s-agent.service
     k3s-agent-step-2:
         check: the rendered agent config exists with owner-only permissions
-        file: /etc/rancher/k3s/config.yaml
-        exists: true
-        mode: "0600"
+        plugin: file
+        plugin_input:
+            file: /etc/rancher/k3s/config.yaml
+            exists: true
+            mode: "0600"
     k3s-agent-step-3:
         check: the config points the agent at the cluster server URL
-        file: /etc/rancher/k3s/config.yaml
-        contains: "server:"
+        plugin: file
+        plugin_input:
+            file: /etc/rancher/k3s/config.yaml
+            contains: "server:"
     k3s-agent-step-4:
         check: the k3s-agent systemd unit is installed
-        file: /etc/systemd/system/k3s-agent.service
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /etc/systemd/system/k3s-agent.service
+            exists: true
     k3s-agent-step-5:
         check: the unit starts the node in agent (worker) mode
-        file: /etc/systemd/system/k3s-agent.service
-        contains: "k3s agent"
+        plugin: file
+        plugin_input:
+            file: /etc/systemd/system/k3s-agent.service
+            contains: "k3s agent"
     k3s-agent-step-6:
         check: the worker node registers with the server and reaches Ready
         kube: wait-nodes
@@ -149,15 +157,19 @@ k3s-agent:
     k3s-agent-config-file:
         check: file=/etc/rancher/k3s/config.yaml
         id: k3s-agent-config-file
-        file: /etc/rancher/k3s/config.yaml
-        exists: true
-        mode: "0600"
         context:
             - build
+        plugin: file
+        plugin_input:
+            file: /etc/rancher/k3s/config.yaml
+            exists: true
+            mode: "0600"
     k3s-agent-service-unit:
         check: file=/etc/systemd/system/k3s-agent.service
         id: k3s-agent-service-unit
-        file: /etc/systemd/system/k3s-agent.service
-        exists: true
         context:
             - build
+        plugin: file
+        plugin_input:
+            file: /etc/systemd/system/k3s-agent.service
+            exists: true

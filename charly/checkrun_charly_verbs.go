@@ -1490,8 +1490,6 @@ func isZeroField(c *Op, name string) bool {
 		return c.KubeGroup == ""
 	case "KubeVersion":
 		return c.KubeVersion == ""
-	case "File":
-		return c.File == ""
 	case "Args":
 		return len(c.Args) == 0
 	case "Apk":

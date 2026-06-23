@@ -15,8 +15,10 @@ clawhub:
             - nodejs
     clawhub-step-0:
         check: the clawhub CLI binary is installed on the npm global bin path
-        file: ${HOME}/.npm-global/bin/clawhub
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/bin/clawhub
+            exists: true
     clawhub-step-1:
         check: running clawhub --cli-version prints a semantic version and exits zero
         exit_status: 0
@@ -30,8 +32,10 @@ clawhub:
     clawdhub-alias-binary:
         check: file=${HOME}/.npm-global/bin/clawdhub
         id: clawdhub-alias-binary
-        file: ${HOME}/.npm-global/bin/clawdhub
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.npm-global/bin/clawdhub
+            exists: true
     clawhub-help-subcommands:
         check: command=${HOME}/.npm-global/bin/clawhub --help
         id: clawhub-help-subcommands

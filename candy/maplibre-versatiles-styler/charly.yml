@@ -114,9 +114,11 @@ maplibre-versatiles-styler:
                 rm -rf "$TMPDIR" /root/.npm
     maplibre-versatiles-styler-step-2:
         check: the styler install directory exists in the built image
-        file: /opt/maplibre-versatiles-styler
-        filetype: directory
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /opt/maplibre-versatiles-styler
+            exists: true
+            filetype: directory
     maplibre-versatiles-styler-step-3:
         check: at least one non-empty JavaScript bundle is present for consumers to load
         exit_status: 0

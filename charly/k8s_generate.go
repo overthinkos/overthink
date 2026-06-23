@@ -820,6 +820,9 @@ func checkToProbe(c *Op) map[string]any {
 	// generates the httpGet / tcpSocket probe (else the probe would silently vanish).
 	httpURL := pluginInputStr(c, "http")
 	addrTarget := pluginInputStr(c, "addr")
+	// `file` is a plugin verb now — its path rides plugin_input (the file-exclusive
+	// discriminator left #Op into #FileInput).
+	fileTarget := pluginInputStr(c, "file")
 	// `command` is a plugin verb now — its body rides plugin_input (with a literal
 	// Op.Command fallback for a directly-constructed probe Op).
 	cmdStr := c.Command
@@ -846,10 +849,10 @@ func checkToProbe(c *Op) map[string]any {
 			probe["host"] = host
 		}
 		return map[string]any{"tcpSocket": probe}
-	case c.File != "":
+	case fileTarget != "":
 		// Probe semantics: file exists. K8s exec probes succeed iff
 		// exit 0; `test -e <path>` matches that contract.
-		return map[string]any{"exec": map[string]any{"command": []string{"test", "-e", c.File}}}
+		return map[string]any{"exec": map[string]any{"command": []string{"test", "-e", fileTarget}}}
 	case cmdStr != "":
 		// `sh -c <cmd>` because the command often carries pipelines or
 		// shell-substitutions that bare exec wouldn't handle.

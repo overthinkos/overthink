@@ -99,8 +99,10 @@ language-runtimes:
                 rm -f /tmp/dotnet-install.sh
     language-runtimes-step-1:
         check: the .NET 9 SDK binary is installed at /usr/bin/dotnet
-        file: /usr/bin/dotnet
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/dotnet
+            exists: true
     language-runtimes-step-2:
         check: dotnet reports its SDK version and exits cleanly
         exit_status: 0
@@ -109,8 +111,10 @@ language-runtimes:
             command: /usr/bin/dotnet --version
     language-runtimes-step-3:
         check: the PHP CLI binary is installed at /usr/bin/php
-        file: /usr/bin/php
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/php
+            exists: true
     language-runtimes-step-4:
         check: php prints its version banner and exits cleanly
         exit_status: 0
@@ -119,8 +123,10 @@ language-runtimes:
             command: /usr/bin/php --version
     language-runtimes-step-5:
         check: the system Python 3 interpreter is at /usr/bin/python3 (the RPM one, not a pixi-env path)
-        file: /usr/bin/python3
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/python3
+            exists: true
     language-runtimes-step-6:
         check: python3 reports its version and exits cleanly
         exit_status: 0

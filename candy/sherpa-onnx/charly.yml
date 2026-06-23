@@ -57,8 +57,10 @@ sherpa-onnx:
                   | tar -xjf - -C ~/.local/share/sherpa-onnx/models
     sherpa-onnx-step-4:
         check: the sherpa-onnx offline-tts engine binary is installed under the runtime bin dir
-        file: ${HOME}/.local/share/sherpa-onnx/runtime/bin/sherpa-onnx-offline-tts
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/share/sherpa-onnx/runtime/bin/sherpa-onnx-offline-tts
+            exists: true
     sherpa-onnx-step-5:
         check: the offline-tts engine binary is executable
         exit_status: 0
@@ -67,22 +69,32 @@ sherpa-onnx:
             command: test -x ${HOME}/.local/share/sherpa-onnx/runtime/bin/sherpa-onnx-offline-tts
     sherpa-onnx-step-6:
         check: the sherpa-onnx C-API shared library ships under the runtime lib dir
-        file: ${HOME}/.local/share/sherpa-onnx/runtime/lib/libsherpa-onnx-c-api.so
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/share/sherpa-onnx/runtime/lib/libsherpa-onnx-c-api.so
+            exists: true
     sherpa-onnx-step-7:
         check: the bundled ONNX Runtime shared library ships alongside it so the engine can link
-        file: ${HOME}/.local/share/sherpa-onnx/runtime/lib/libonnxruntime.so
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/share/sherpa-onnx/runtime/lib/libonnxruntime.so
+            exists: true
     sherpa-onnx-step-8:
         check: the en_US-lessac-high VITS voice model is baked into the image for offline synthesis
-        file: ${HOME}/.local/share/sherpa-onnx/models/vits-piper-en_US-lessac-high/en_US-lessac-high.onnx
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/share/sherpa-onnx/models/vits-piper-en_US-lessac-high/en_US-lessac-high.onnx
+            exists: true
     sherpa-onnx-step-9:
         check: the voice model tokens file ships next to the model
-        file: ${HOME}/.local/share/sherpa-onnx/models/vits-piper-en_US-lessac-high/tokens.txt
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/share/sherpa-onnx/models/vits-piper-en_US-lessac-high/tokens.txt
+            exists: true
     sherpa-onnx-cli-binary:
         check: file=${HOME}/.local/share/sherpa-onnx/runtime/bin/sherpa-onnx
         id: sherpa-onnx-cli-binary
-        file: ${HOME}/.local/share/sherpa-onnx/runtime/bin/sherpa-onnx
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.local/share/sherpa-onnx/runtime/bin/sherpa-onnx
+            exists: true

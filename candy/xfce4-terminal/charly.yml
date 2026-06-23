@@ -26,9 +26,13 @@ xfce4-terminal:
         run_as: "${USER}"
     xfce4-terminal-step-2:
         check: the xfce4-terminal binary is installed at /usr/bin/xfce4-terminal
-        file: /usr/bin/xfce4-terminal
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /usr/bin/xfce4-terminal
+            exists: true
     xfce4-terminal-step-3:
         check: the sway config snippet for the terminal is installed
-        file: ${HOME}/.config/sway/config.d/xfce4-terminal.conf
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/.config/sway/config.d/xfce4-terminal.conf
+            exists: true

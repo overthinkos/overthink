@@ -30,8 +30,10 @@ gifgrep:
                 go clean -cache
     gifgrep-step-1:
         check: the gifgrep binary is installed at ~/go/bin/gifgrep
-        file: ${HOME}/go/bin/gifgrep
-        exists: true
+        plugin: file
+        plugin_input:
+            file: ${HOME}/go/bin/gifgrep
+            exists: true
     gifgrep-step-2:
         check: running gifgrep --help exits 0 and prints the Kong usage banner
         exit_status: 0

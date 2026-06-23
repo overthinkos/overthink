@@ -16,10 +16,12 @@ notebook-finetuning:
               dest: finetuning
     notebook-finetuning-step-0:
         check: the finetuning subdirectory is provisioned in the workspace
-        file: ${VOLUME_CONTAINER_PATH:workspace}/finetuning
-        filetype: directory
         context:
             - runtime
+        plugin: file
+        plugin_input:
+            file: ${VOLUME_CONTAINER_PATH:workspace}/finetuning
+            filetype: directory
     notebook-finetuning-step-1:
         check: the Unsloth_Setup producer notebook is present
         exit_status: 0
@@ -32,12 +34,16 @@ notebook-finetuning:
             command: ls ${VOLUME_CONTAINER_PATH:workspace}/finetuning/
     notebook-finetuning-step-2:
         check: the Unsloth_Setup producer notebook is staged in the image data tree
-        file: /data/workspace/finetuning/00_Unsloth_Setup.ipynb
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /data/workspace/finetuning/00_Unsloth_Setup.ipynb
+            exists: true
     notebook-finetuning-step-3:
         check: the notebooks.yaml manifest cataloguing the collection is staged
-        file: /data/workspace/finetuning/notebooks.yaml
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /data/workspace/finetuning/notebooks.yaml
+            exists: true
     notebook-finetuning-step-4:
         check: a substantial collection of training notebooks is staged, not just the setup notebook
         exit_status: 0
@@ -51,15 +57,21 @@ notebook-finetuning:
     notebook-finetuning-staged-dir:
         check: file=/data/workspace/finetuning
         id: notebook-finetuning-staged-dir
-        file: /data/workspace/finetuning
-        filetype: directory
+        plugin: file
+        plugin_input:
+            file: /data/workspace/finetuning
+            filetype: directory
     notebook-finetuning-sft-staged:
         check: file=/data/workspace/finetuning/03_SFT_Training_Qwen.ipynb
         id: notebook-finetuning-sft-staged
-        file: /data/workspace/finetuning/03_SFT_Training_Qwen.ipynb
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /data/workspace/finetuning/03_SFT_Training_Qwen.ipynb
+            exists: true
     notebook-finetuning-qlora-staged:
         check: file=/data/workspace/finetuning/08_QLoRA_Multi_Adapter_Qwen_Think.ipynb
         id: notebook-finetuning-qlora-staged
-        file: /data/workspace/finetuning/08_QLoRA_Multi_Adapter_Qwen_Think.ipynb
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /data/workspace/finetuning/08_QLoRA_Multi_Adapter_Qwen_Think.ipynb
+            exists: true

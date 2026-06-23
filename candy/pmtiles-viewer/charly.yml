@@ -125,13 +125,17 @@ pmtiles-viewer:
                 rm -rf /root/.npm
     pmtiles-viewer-step-2:
         check: the Vite build artifact directory is present in the image
-        file: /opt/pmtiles-viewer/build
-        filetype: directory
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /opt/pmtiles-viewer/build
+            exists: true
+            filetype: directory
     pmtiles-viewer-step-3:
         check: the SPA entry point index.html exists in the build artifact
-        file: /opt/pmtiles-viewer/build/index.html
-        exists: true
+        plugin: file
+        plugin_input:
+            file: /opt/pmtiles-viewer/build/index.html
+            exists: true
     pmtiles-viewer-step-4:
         check: the node toolchain that builds the SPA is installed
         exit_status: 0

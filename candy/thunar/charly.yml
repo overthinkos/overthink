@@ -32,10 +32,12 @@ thunar:
         exists: true
     thunar-step-3:
         check: the thunar package is present in the package database
-        package: thunar
-        package_map:
-            fedora: Thunar
-        installed: true
+        plugin: package
+        plugin_input:
+            package: thunar
+            package_map:
+                fedora: Thunar
+            installed: true
     thunar-step-4:
         check: a Sway config.d drop-in is installed for thunar
         file: ${HOME}/.config/sway/config.d/thunar.conf

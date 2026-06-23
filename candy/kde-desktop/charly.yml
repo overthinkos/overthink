@@ -77,8 +77,10 @@ kde-desktop:
         exists: true
     kde-desktop-step-2:
         check: the sddm package is present in the image
-        package: sddm
-        installed: true
+        plugin: package
+        plugin_input:
+            package: sddm
+            installed: true
     kde-desktop-step-3:
         check: the workstation system monitor is available
         file: /usr/bin/plasma-systemmonitor
@@ -93,8 +95,10 @@ kde-desktop:
         exists: true
     kde-desktop-step-6:
         check: the haruna media player package is present
-        package: haruna
-        installed: true
+        plugin: package
+        plugin_input:
+            package: haruna
+            installed: true
     kde-desktop-step-7:
         check: the systemd default target is graphical so SDDM starts a KDE login on the real GPU output
         exit_status: 0

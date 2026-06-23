@@ -320,11 +320,13 @@ immich:
         mode: "0755"
     immich-step-16:
         check: the libvips image-processing library is installed for thumbnailing and transcoding
-        package: vips
-        package_map:
-            arch: libvips
-            fedora: vips
-        installed: true
+        plugin: package
+        plugin_input:
+            package: vips
+            package_map:
+                arch: libvips
+                fedora: vips
+            installed: true
     immich-step-17:
         check: the Postgres init script seeds the pgvector extension Immich requires
         file: /docker-entrypoint-initdb.d/01-immich-extensions.sql

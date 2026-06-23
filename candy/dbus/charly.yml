@@ -47,10 +47,12 @@ dbus:
         exists: true
     dbus-step-1:
         check: the providing D-Bus package is installed (dbus-daemon on Fedora, dbus on Arch/Debian/Ubuntu)
-        package: dbus-daemon
-        package_map:
-            arch: dbus
-        installed: true
+        plugin: package
+        plugin_input:
+            package: dbus-daemon
+            package_map:
+                arch: dbus
+            installed: true
     dbus-step-2:
         check: the DBUS_SESSION_BUS_ADDRESS env var is exported as a unix-socket address
         exit_status: 0

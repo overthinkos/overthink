@@ -39,5 +39,7 @@ fastfetch:
     fastfetch-package:
         check: package=fastfetch
         id: fastfetch-package
-        package: fastfetch
-        installed: true
+        plugin: package
+        plugin_input:
+            package: fastfetch
+            installed: true

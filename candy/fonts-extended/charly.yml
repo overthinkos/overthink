@@ -28,37 +28,55 @@ fonts-extended:
                     - awesome-terminal-fonts
     fonts-extended-step-0:
         check: the heavy Noto CJK font set — the reason this candy is split out from desktop-fonts — is installed
-        package: noto-fonts-cjk
-        installed: true
+        plugin: package
+        plugin_input:
+            package: noto-fonts-cjk
+            installed: true
     fonts-extended-step-1:
         check: the Noto color-emoji font is installed
-        package: noto-fonts-emoji
-        installed: true
+        plugin: package
+        plugin_input:
+            package: noto-fonts-emoji
+            installed: true
     fonts-extended-step-2:
         check: the Noto base Latin family is installed
-        package: noto-fonts
-        installed: true
+        plugin: package
+        plugin_input:
+            package: noto-fonts
+            installed: true
     fonts-extended-step-3:
         check: the Cantarell GNOME UI font is installed
-        package: cantarell-fonts
-        installed: true
+        plugin: package
+        plugin_input:
+            package: cantarell-fonts
+            installed: true
     fonts-extended-step-4:
         check: the DejaVu family is installed
-        package: ttf-dejavu
-        installed: true
+        plugin: package
+        plugin_input:
+            package: ttf-dejavu
+            installed: true
     fonts-extended-step-5:
         check: the Bitstream Vera family is installed
-        package: ttf-bitstream-vera
-        installed: true
+        plugin: package
+        plugin_input:
+            package: ttf-bitstream-vera
+            installed: true
     fonts-extended-step-6:
         check: the Open Sans family is installed
-        package: ttf-opensans
-        installed: true
+        plugin: package
+        plugin_input:
+            package: ttf-opensans
+            installed: true
     fonts-extended-step-7:
         check: the Meslo Nerd patched font for terminal and powerline glyphs is installed
-        package: ttf-meslo-nerd
-        installed: true
+        plugin: package
+        plugin_input:
+            package: ttf-meslo-nerd
+            installed: true
     fonts-extended-step-8:
         check: the awesome-terminal-fonts glyph set is installed
-        package: awesome-terminal-fonts
-        installed: true
+        plugin: package
+        plugin_input:
+            package: awesome-terminal-fonts
+            installed: true

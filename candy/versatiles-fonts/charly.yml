@@ -98,10 +98,14 @@ versatiles-fonts:
     versatiles-fonts-curl:
         check: package=curl
         id: versatiles-fonts-curl
-        package: curl
-        installed: true
+        plugin: package
+        plugin_input:
+            package: curl
+            installed: true
     versatiles-fonts-jq:
         check: package=jq
         id: versatiles-fonts-jq
-        package: jq
-        installed: true
+        plugin: package
+        plugin_input:
+            package: jq
+            installed: true

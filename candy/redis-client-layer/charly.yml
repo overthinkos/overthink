@@ -27,8 +27,10 @@ redis-client-layer:
         exists: true
     redis-client-layer-step-1:
         check: the redis package that provides redis-cli is installed (valkey-compat-redis on Fedora 43)
-        package: valkey-compat-redis
-        installed: true
+        plugin: package
+        plugin_input:
+            package: valkey-compat-redis
+            installed: true
     redis-client-layer-step-2:
         check: redis-cli actually runs and reports a version
         exit_status: 0

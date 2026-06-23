@@ -287,8 +287,10 @@ func TestPlanUnify_PerStepScorerReportsSolvedAndFailingID(t *testing.T) {
 // §J.8 — a migrated task:→run: step lowers to an InstallStep AND reverses on
 // `charly bundle del` (the task:→plan: fold preserves the ledger/reversal).
 func TestPlanUnify_RunStepLowersToInstallStepAndReverses(t *testing.T) {
-	// The migration turns a `task: { package: redis }` op into a run: step.
-	layer := &Candy{Name: "x", plan: []Step{{Run: "install redis", Op: Op{Package: "redis"}}}}
+	// The migration turns a `task: { package: redis }` op into a run: step. `package` is
+	// now an extracted plugin verb (plugin: package + plugin_input), whose TypedStepProvider
+	// lowers the run-act into the same SystemPackagesStep.
+	layer := &Candy{Name: "x", plan: []Step{{Run: "install redis", Op: Op{Plugin: "package", PluginInput: map[string]any{"package": "redis"}}}}}
 	steps := compileOpSteps(layer, testResolvedBox())
 
 	var sp *SystemPackagesStep

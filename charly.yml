@@ -1,4 +1,4 @@
-version: 2026.174.0700
+version: 2026.174.0900
 # Canonical repo identity. After the 2026-06 box inversion main imports the three
 # active distro submodules (arch / cachyos / fedora) ONE-DIRECTIONALLY to reference
 # their relocated boxes; the submodules no longer import main as a namespace (they
@@ -666,8 +666,10 @@ default:
             contains: ["charly-os-content-marker"]
         default-step-2:
             check: the predetermined system package is installed
-            package: bash
-            installed: true
+            plugin: package
+            plugin_input:
+                package: bash
+                installed: true
         default-step-3:
             check: a predetermined process is running by name
             plugin: process
@@ -711,8 +713,10 @@ default:
             agent_provisioned: true
         default-step-10:
             check: the HTTP server's system package is installed
-            package: nginx
-            installed: true
+            plugin: package
+            plugin_input:
+                package: nginx
+                installed: true
         default-step-11:
             check: the HTTP server's port is listening inside the pod
             plugin: port

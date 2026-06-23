@@ -207,35 +207,47 @@ debug-tools:
     procps-package:
         check: package=procps-ng
         id: procps-package
-        package: procps-ng
-        package_map:
-            fedora: procps-ng
-            arch: procps-ng
-            debian: procps
-            ubuntu: procps
-        installed: true
+        plugin: package
+        plugin_input:
+            package: procps-ng
+            package_map:
+                fedora: procps-ng
+                arch: procps-ng
+                debian: procps
+                ubuntu: procps
+            installed: true
     htop-package:
         check: package=htop
         id: htop-package
-        package: htop
-        installed: true
+        plugin: package
+        plugin_input:
+            package: htop
+            installed: true
     strace-package:
         check: package=strace
         id: strace-package
-        package: strace
-        installed: true
+        plugin: package
+        plugin_input:
+            package: strace
+            installed: true
     tcpdump-package:
         check: package=tcpdump
         id: tcpdump-package
-        package: tcpdump
-        installed: true
+        plugin: package
+        plugin_input:
+            package: tcpdump
+            installed: true
     tmux-package:
         check: package=tmux
         id: tmux-package
-        package: tmux
-        installed: true
+        plugin: package
+        plugin_input:
+            package: tmux
+            installed: true
     lsof-package:
         check: package=lsof
         id: lsof-package
-        package: lsof
-        installed: true
+        plugin: package
+        plugin_input:
+            package: lsof
+            installed: true

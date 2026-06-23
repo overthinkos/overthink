@@ -91,8 +91,10 @@ hermes-full:
     hermes-full-neovim-package:
         check: package=neovim
         id: hermes-full-neovim-package
-        package: neovim
-        installed: true
+        plugin: package
+        plugin_input:
+            package: neovim
+            installed: true
     hermes-full-tofu-binary:
         check: file=/usr/local/bin/tofu
         id: hermes-full-tofu-binary
@@ -111,5 +113,7 @@ hermes-full:
     hermes-full-tmux-package:
         check: package=tmux
         id: hermes-full-tmux-package
-        package: tmux
-        installed: true
+        plugin: package
+        plugin_input:
+            package: tmux
+            installed: true

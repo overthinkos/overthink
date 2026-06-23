@@ -41,8 +41,10 @@ ripgrep:
     ripgrep-package-2:
         check: package=ripgrep
         id: ripgrep-package
-        package: ripgrep
-        installed: true
+        plugin: package
+        plugin_input:
+            package: ripgrep
+            installed: true
     ripgrep-search-matches:
         check: command=printf 'needle-in-haystack\nother-line\n' | rg needle
         id: ripgrep-search-matches

@@ -56,16 +56,20 @@ selkies-desktop:
     selkies-desktop-swaync-package:
         check: package=swaync
         id: selkies-desktop-swaync-package
-        package: swaync
-        package_map:
-            arch: swaync
-            fedora: SwayNotificationCenter
-        installed: true
+        plugin: package
+        plugin_input:
+            package: swaync
+            package_map:
+                arch: swaync
+                fedora: SwayNotificationCenter
+            installed: true
     selkies-desktop-pavucontrol-package:
         check: package=pavucontrol
         id: selkies-desktop-pavucontrol-package
-        package: pavucontrol
-        installed: true
+        plugin: package
+        plugin_input:
+            package: pavucontrol
+            installed: true
     selkies-desktop-panel-running:
         check: service=waybar
         id: selkies-desktop-panel-running

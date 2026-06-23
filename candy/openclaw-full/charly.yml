@@ -88,8 +88,10 @@ openclaw-full:
     openclaw-full-ripgrep-package:
         check: package=ripgrep
         id: openclaw-full-ripgrep-package
-        package: ripgrep
-        installed: true
+        plugin: package
+        plugin_input:
+            package: ripgrep
+            installed: true
     openclaw-full-git-binary:
         check: file=/usr/bin/git
         id: openclaw-full-git-binary

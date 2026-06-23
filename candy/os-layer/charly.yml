@@ -51,13 +51,17 @@ os-layer:
         exists: true
     os-layer-step-5:
         check: procps-ng is installed so pgrep can probe the keepalive process
-        package: procps-ng
-        installed: true
+        plugin: package
+        plugin_input:
+            package: procps-ng
+            installed: true
     os-bash-installed:
         check: package=bash
         id: os-bash-installed
-        package: bash
-        installed: true
+        plugin: package
+        plugin_input:
+            package: bash
+            installed: true
     os-bash-service-running:
         check: service=os-bash
         id: os-bash-service-running

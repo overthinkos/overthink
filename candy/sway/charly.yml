@@ -89,8 +89,10 @@ sway:
         exists: true
     sway-step-7:
         check: the sway package is registered in the package database
-        package: sway
-        installed: true
+        plugin: package
+        plugin_input:
+            package: sway
+            installed: true
     sway-step-8:
         check: the sway-wrapper launcher is installed and executable
         file: ${HOME}/.local/bin/sway-wrapper

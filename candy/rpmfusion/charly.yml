@@ -22,16 +22,20 @@ rpmfusion:
         exists: true
     rpmfusion-step-2:
         check: the rpmfusion-free-release package is recorded in the rpm database
-        package: rpmfusion-free-release
-        installed: true
+        plugin: package
+        plugin_input:
+            package: rpmfusion-free-release
+            installed: true
     rpmfusion-step-3:
         check: the RPM Fusion nonfree repo definition file is present on disk
         file: /etc/yum.repos.d/rpmfusion-nonfree.repo
         exists: true
     rpmfusion-step-4:
         check: the rpmfusion-nonfree-release package is recorded in the rpm database
-        package: rpmfusion-nonfree-release
-        installed: true
+        plugin: package
+        plugin_input:
+            package: rpmfusion-nonfree-release
+            installed: true
     rpmfusion-step-5:
         check: the free repo file declares the rpmfusion-free repository section header
         file: /etc/yum.repos.d/rpmfusion-free.repo

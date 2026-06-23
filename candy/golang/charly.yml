@@ -52,10 +52,12 @@ golang:
     go-package:
         check: package=go
         id: go-package
-        package: go
-        package_map:
-            arch: go
-            debian: golang-go
-            ubuntu: golang-go
-            fedora: golang-bin
-        installed: true
+        plugin: package
+        plugin_input:
+            package: go
+            package_map:
+                arch: go
+                debian: golang-go
+                ubuntu: golang-go
+                fedora: golang-bin
+            installed: true

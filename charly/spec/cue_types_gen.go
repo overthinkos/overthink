@@ -12,8 +12,6 @@ type Op struct {
 	// --- verb discriminators (exactly one set; Go Kind() enforces) ---
 	File string `yaml:"file,omitempty" json:"file,omitempty"`
 
-	Package string `yaml:"package,omitempty" json:"package,omitempty"`
-
 	Mkdir string `yaml:"mkdir,omitempty" json:"mkdir,omitempty"`
 
 	Copy string `yaml:"copy,omitempty" json:"copy,omitempty"`
@@ -218,13 +216,10 @@ type Op struct {
 
 	Sha256 string `yaml:"sha256,omitempty" json:"sha256,omitempty"`
 
-	// --- package ---
-	Installed *bool `yaml:"installed,omitempty" json:"installed,omitempty"`
-
-	Versions []string `yaml:"version,omitempty" json:"version,omitempty"`
-
-	PackageMap map[string]string `yaml:"package_map,omitempty" json:"package_map,omitempty"`
-
+	// exclude_distro — a SHARED step-level skip filter read by the generic runOne for
+	// EVERY verb (skip the step when any image distro tag intersects the list), NOT a
+	// package-exclusive field, so it STAYS on #Op. The `package`-exclusive fields
+	// (installed/version/package_map) MOVED into #PackageInput when `package` extracted.
 	ExcludeDistros []string `yaml:"exclude_distro,omitempty" json:"exclude_distro,omitempty"`
 
 	// --- command-verb matchers (SHARED via matchAll: the `command` plugin verb +

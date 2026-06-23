@@ -39,5 +39,7 @@ wl-overlay:
         mode: "0755"
     wl-overlay-step-3:
         check: the gtk4-layer-shell library package is installed
-        package: gtk4-layer-shell
-        installed: true
+        plugin: package
+        plugin_input:
+            package: gtk4-layer-shell
+            installed: true

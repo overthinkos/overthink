@@ -88,8 +88,10 @@ cloud-init:
     cloud-init-package-2:
         check: package=cloud-init
         id: cloud-init-package
-        package: cloud-init
-        installed: true
+        plugin: package
+        plugin_input:
+            package: cloud-init
+            installed: true
     cloud-init-nocloud-datasource:
         check: file=/etc/cloud/cloud.cfg.d/99-nocloud.cfg
         id: cloud-init-nocloud-datasource
@@ -103,10 +105,12 @@ cloud-init:
     cloud-init-growpart-package:
         check: package=cloud-utils-growpart
         id: cloud-init-growpart-package
-        package: cloud-utils-growpart
-        package_map:
-            arch: cloud-guest-utils
-            debian: cloud-guest-utils
-            ubuntu: cloud-guest-utils
-            fedora: cloud-utils-growpart
-        installed: true
+        plugin: package
+        plugin_input:
+            package: cloud-utils-growpart
+            package_map:
+                arch: cloud-guest-utils
+                debian: cloud-guest-utils
+                ubuntu: cloud-guest-utils
+                fedora: cloud-utils-growpart
+            installed: true

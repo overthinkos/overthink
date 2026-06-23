@@ -126,9 +126,13 @@ maplibre-versatiles-styler:
                 find /opt/maplibre-versatiles-styler -maxdepth 4 -name '*.js' -size +1c | head -1 | grep -q .
     maplibre-versatiles-styler-step-4:
         check: the node runtime used to fetch and bundle the package is installed
-        package: nodejs
-        installed: true
+        plugin: package
+        plugin_input:
+            package: nodejs
+            installed: true
     maplibre-versatiles-styler-step-5:
         check: the npm client used by the install fallback is available
-        package: npm
-        installed: true
+        plugin: package
+        plugin_input:
+            package: npm
+            installed: true

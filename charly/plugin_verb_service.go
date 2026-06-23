@@ -48,8 +48,8 @@ func (serviceVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runService(ctx, op, in.Service, in.Running, in.Enabled)
 }
 
-// LowersTo names the InstallPlan step kind service's act lowers into — the former
-// VerbCatalog["service"].LowersTo, now owned by the provider.
+// LowersTo names the InstallPlan step kind service's act lowers into — the role of the
+// now-removed VerbCatalog["service"].LowersTo field, now owned by the provider.
 func (serviceVerb) LowersTo() StepKind { return StepKindServicePackaged }
 
 // ConstructStep (the do:act build/deploy half) decodes plugin_input and builds the

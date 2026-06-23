@@ -35,15 +35,19 @@ a11y-tools:
             command: /usr/bin/python3 -c "import gi"
     a11y-tools-step-2:
         check: the AT-SPI python binding package is installed for the running distro
-        package: python3-pyatspi
-        package_map:
-            arch: python-atspi
-            fedora: python3-pyatspi
-        installed: true
+        plugin: package
+        plugin_input:
+            package: python3-pyatspi
+            package_map:
+                arch: python-atspi
+                fedora: python3-pyatspi
+            installed: true
     a11y-tools-step-3:
         check: the PyGObject package is installed for the running distro
-        package: python3-gobject
-        package_map:
-            arch: python-gobject
-            fedora: python3-gobject
-        installed: true
+        plugin: package
+        plugin_input:
+            package: python3-gobject
+            package_map:
+                arch: python-gobject
+                fedora: python3-gobject
+            installed: true

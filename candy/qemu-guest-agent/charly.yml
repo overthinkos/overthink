@@ -64,8 +64,10 @@ qemu-guest-agent:
         exists: true
     qemu-guest-agent-step-4:
         check: the cross-distro qemu-guest-agent package is installed
-        package: qemu-guest-agent
-        installed: true
+        plugin: package
+        plugin_input:
+            package: qemu-guest-agent
+            installed: true
     qemu-guest-agent-step-5:
         check: the fsfreeze hook dispatcher is installed and references its drop-in dir
         file: /etc/qemu/fsfreeze-hook

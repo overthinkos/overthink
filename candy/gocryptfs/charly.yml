@@ -29,5 +29,7 @@ gocryptfs:
     gocryptfs-package-2:
         check: package=gocryptfs
         id: gocryptfs-package
-        package: gocryptfs
-        installed: true
+        plugin: package
+        plugin_input:
+            package: gocryptfs
+            installed: true

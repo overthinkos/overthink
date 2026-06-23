@@ -16,7 +16,7 @@
 // VerbCatalog entry (the registry bijection gate proves it). Keep in lockstep with
 // the `--- verb discriminators ---` group in #Op.
 #OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" |
-	"file" | "package" |
+	"file" |
 	"cdp" | "wl" | "dbus" | "vnc" | "mcp" | "record" | "spice" |
 	"libvirt" | "kube" | "adb" | "appium" | "summarize" | "kill" | "plugin") @go(-)
 
@@ -49,7 +49,6 @@
 #Op: {
 	// --- verb discriminators (exactly one set; Go Kind() enforces) ---
 	file?:           string
-	package?:        string
 	mkdir?:          string
 	copy?:           string
 	write?:          string
@@ -186,12 +185,18 @@
 	contains?: #ContainsList
 	sha256?:   string
 
-	// --- package ---
-	installed?: bool @go(,type=*bool)
-	version?: [...string] @go(Versions)
-	package_map?: {[string]: string} @go(PackageMap)
+	// exclude_distro — a SHARED step-level skip filter read by the generic runOne for
+	// EVERY verb (skip the step when any image distro tag intersects the list), NOT a
+	// package-exclusive field, so it STAYS on #Op. The `package`-exclusive fields
+	// (installed/version/package_map) MOVED into #PackageInput when `package` extracted.
 	exclude_distro?: [...string] @go(ExcludeDistros)
 
+	// `package`/`installed`/`version`/`package_map` are NOT here — `package` is an
+	// extracted plugin verb (plugin: package + #PackageInput, charly/plugin/builtins/package).
+	// It left #OpVerb/spec.OpVerbs, and installed/version/package_map (read ONLY by the
+	// package verb off the step Op) MOVED into #PackageInput with it. The shared
+	// `exclude_distro` modifier above is NOT package-exclusive and stays on #Op.
+	//
 	// `service`/`running`/`enabled` are NOT here — `service` is an extracted plugin
 	// verb (plugin: service + #ServiceInput, charly/plugin/builtins/service). It left
 	// #OpVerb/spec.OpVerbs, and `running`/`enabled` (read ONLY by the service verb off

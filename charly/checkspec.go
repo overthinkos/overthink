@@ -257,7 +257,11 @@ type VerbSpec struct {
 	Contexts   []ExecContext
 	DefaultDo  DoMode
 	Reversible bool
-	LowersTo   StepKind
+	// LowersTo is gone — the ONLY verbs that lowered into a typed install step
+	// (package → SystemPackagesStep, service → ServicePackagedStep) are now extracted
+	// plugin verbs whose TypedStepProvider owns the lowering (LowersTo() + ConstructStep
+	// on the provider). No remaining VerbCatalog verb lowers into a typed step, so
+	// ActsInBuildDeploy reduces to the installVerbs membership test.
 }
 
 // HasContext reports whether the verb is legal in ctx.
@@ -278,13 +282,13 @@ var (
 // registry bijection in registry.go).
 var VerbCatalog = map[string]VerbSpec{
 	// install/build — imperative; build+deploy only (no live-runtime form).
-	"mkdir":    {ctxBuildDeploy, DoAct, false, ""},
-	"copy":     {ctxBuildDeploy, DoAct, true, ""}, // build → COPY, deploy → PutFile (venue-lowered)
-	"write":    {ctxBuildDeploy, DoAct, true, ""},
-	"link":     {ctxBuildDeploy, DoAct, true, ""},
-	"download": {ctxBuildDeploy, DoAct, true, ""},
-	"setcap":   {ctxBuildDeploy, DoAct, false, ""},
-	"build":    {ctxBuildDeploy, DoAct, false, ""},
+	"mkdir":    {ctxBuildDeploy, DoAct, false},
+	"copy":     {ctxBuildDeploy, DoAct, true}, // build → COPY, deploy → PutFile (venue-lowered)
+	"write":    {ctxBuildDeploy, DoAct, true},
+	"link":     {ctxBuildDeploy, DoAct, true},
+	"download": {ctxBuildDeploy, DoAct, true},
+	"setcap":   {ctxBuildDeploy, DoAct, false},
+	"build":    {ctxBuildDeploy, DoAct, false},
 
 	// `command` is NOT here — it is an extracted plugin verb (plugin: command +
 	// #CommandInput). It left #OpVerb/spec.OpVerbs/VerbCatalog; the check dispatches via
@@ -294,48 +298,49 @@ var VerbCatalog = map[string]VerbSpec{
 
 	// system-state probe/provision — assert by default; the act-capable subset
 	// lowers into existing reversible InstallPlan step kinds.
-	"file":    {ctxBuildDeployRuntime, DoAssert, true, ""}, // probe; file-creation is the write/copy verbs (act → runtime executor)
-	"package": {ctxBuildDeployRuntime, DoAssert, true, StepKindSystemPackages},
-	// service / unix_group / user / kernel-param / mount are extracted STATE-PROVISION
-	// verbs — each BOTH a check AND an act. They left #Op/spec.OpVerbs for their builtin
-	// plugin units (charly/plugin/builtins/{service,unix_group,user,kernel_param,mount}) and
-	// dispatch via the generic `plugin:` verb, so they have no VerbCatalog entry. `service`
-	// is the TYPED-STEP outlier: its act lowers into a ServicePackagedStep via the
-	// TypedStepProvider (its former StepKindServicePackaged LowersTo now lives on the
-	// provider, NOT this catalog) so the load-bearing reversals survive; the other four
-	// render at install emit via the act-emit enabler (resolveProvisionScript). http /
-	// interface / addr are observe-only goss verbs likewise extracted
-	// (charly/plugin/builtins/{http,interface,addr}).
+	"file": {ctxBuildDeployRuntime, DoAssert, true}, // probe; file-creation is the write/copy verbs (act → runtime executor)
+	// package / service / unix_group / user / kernel-param / mount are extracted
+	// STATE-PROVISION verbs — each BOTH a check AND an act. They left #Op/spec.OpVerbs for
+	// their builtin plugin units (charly/plugin/builtins/{package,service,unix_group,user,
+	// kernel_param,mount}) and dispatch via the generic `plugin:` verb, so they have no
+	// VerbCatalog entry. `package` and `service` are the TYPED-STEP verbs: each act lowers
+	// into a SystemPackagesStep / ServicePackagedStep via the TypedStepProvider (its
+	// LowersTo() + ConstructStep now live on the provider, NOT this catalog) so the
+	// load-bearing reversals survive; the other four render at install emit via the act-emit
+	// enabler (resolveProvisionScript). http / interface / addr are observe-only goss verbs
+	// likewise extracted (charly/plugin/builtins/{http,interface,addr}).
 
 	// live-container — runtime only; act drives UI/config, reversed via plan
 	// teardown (never the ledger). kube also legal at deploy (apply manifest).
-	"cdp":     {ctxRuntimeOnly, DoAssert, false, ""},
-	"wl":      {ctxRuntimeOnly, DoAssert, false, ""},
-	"dbus":    {ctxRuntimeOnly, DoAssert, false, ""},
-	"vnc":     {ctxRuntimeOnly, DoAssert, false, ""},
-	"mcp":     {ctxRuntimeOnly, DoAssert, false, ""},
-	"record":  {ctxRuntimeOnly, DoAssert, false, ""},
-	"spice":   {ctxRuntimeOnly, DoAssert, false, ""},
-	"libvirt": {ctxRuntimeOnly, DoAssert, false, ""},
-	"kube":    {ctxDeployRuntime, DoAssert, false, ""},
-	"adb":     {ctxRuntimeOnly, DoAssert, false, ""},
-	"appium":  {ctxRuntimeOnly, DoAssert, false, ""},
+	"cdp":     {ctxRuntimeOnly, DoAssert, false},
+	"wl":      {ctxRuntimeOnly, DoAssert, false},
+	"dbus":    {ctxRuntimeOnly, DoAssert, false},
+	"vnc":     {ctxRuntimeOnly, DoAssert, false},
+	"mcp":     {ctxRuntimeOnly, DoAssert, false},
+	"record":  {ctxRuntimeOnly, DoAssert, false},
+	"spice":   {ctxRuntimeOnly, DoAssert, false},
+	"libvirt": {ctxRuntimeOnly, DoAssert, false},
+	"kube":    {ctxDeployRuntime, DoAssert, false},
+	"adb":     {ctxRuntimeOnly, DoAssert, false},
+	"appium":  {ctxRuntimeOnly, DoAssert, false},
 
 	// meta.
-	"summarize": {ctxRuntimeOnly, DoAssert, false, ""},
-	"kill":      {ctxRuntimeOnly, DoAct, false, ""},
+	"summarize": {ctxRuntimeOnly, DoAssert, false},
+	"kill":      {ctxRuntimeOnly, DoAct, false},
 
 	// plugin — the generic plugin-verb discriminator. Its VALUE (Op.Plugin) is the
 	// reserved word served by a registered Provider (built-in or out-of-tree). The
 	// handler is runOne's providerRegistry.ResolveVerb dispatch; context is
 	// permissive (a plugin verb may probe at build/deploy/runtime — the plugin's
 	// own check declares where it applies). DoAssert (a check), not reversible.
-	"plugin": {ctxBuildDeployRuntime, DoAssert, false, ""},
+	"plugin": {ctxBuildDeployRuntime, DoAssert, false},
 }
 
 // installVerbs are the verbs that render directly to a generic OpStep install
 // step (a Containerfile directive at build, a deploy shell command at deploy).
-// Distinct from the LowersTo verbs, which lower into a typed install step.
+// The verbs that lowered into a TYPED install step (package/service) are now extracted
+// plugin verbs whose TypedStepProvider owns the lowering — handled by opActsInBuildDeploy,
+// not this map.
 var installVerbs = map[string]bool{
 	"mkdir": true, "copy": true, "write": true, "link": true,
 	"download": true, "setcap": true, "build": true,
@@ -345,14 +350,16 @@ var installVerbs = map[string]bool{
 	// "command" again).
 }
 
-// ActsInBuildDeploy reports whether a do:act op with this verb has a real
-// build/deploy install path — a generic OpStep (the install verbs) or a typed
-// lowering (VerbCatalog.LowersTo). Every other verb's act form runs only at runtime
-// (the check Runner's executor), so a build/deploy do:act op of such a verb would be
-// silently dropped by the compiler — the validator rejects it instead (file creation
-// in build/deploy is the write/copy verbs).
+// ActsInBuildDeploy reports whether a do:act op with this NON-plugin verb has a real
+// build/deploy install path — a generic OpStep (the install verbs). The verbs that lowered
+// into a typed install step (package/service) are extracted plugin verbs now, handled by
+// opActsInBuildDeploy's TypedStepProvider branch — so no remaining VerbCatalog verb lowers,
+// and this reduces to the installVerbs membership test. Every other verb's act form runs
+// only at runtime (the check Runner's executor), so a build/deploy do:act op of such a verb
+// would be silently dropped by the compiler — the validator rejects it instead (file
+// creation in build/deploy is the write/copy verbs).
 func ActsInBuildDeploy(verb string) bool {
-	return installVerbs[verb] || VerbCatalog[verb].LowersTo != ""
+	return installVerbs[verb]
 }
 
 // opActsInBuildDeploy is the Op-level act-capability test, threading the generic

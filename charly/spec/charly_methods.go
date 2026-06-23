@@ -65,9 +65,10 @@ func (c *Op) VerbsSet() []string {
 	if c.File != "" {
 		set = append(set, "file")
 	}
-	if c.Package != "" {
-		set = append(set, "package")
-	}
+	// `package` is NO LONGER a verb — it left #OpVerb in the package→plugin extraction
+	// (a package check/run is now `plugin: package` + #PackageInput; installed/version/
+	// package_map moved into plugin_input). Op no longer carries a Package field, so it
+	// contributes no verb. The shared `exclude_distro` skip modifier stays on #Op.
 	// `service` is NO LONGER a verb — it left #OpVerb in the service→plugin extraction
 	// (a service check/run is now `plugin: service` + #ServiceInput, running/enabled moved
 	// into plugin_input). Op no longer carries a Service field, so it contributes no verb.
@@ -125,7 +126,7 @@ func (c *Op) VerbsSet() []string {
 // in-place ${VAR} expansion driven by ExpandVars (free function in main).
 func (c *Op) StringFields() []*string {
 	return []*string{
-		&c.File, &c.Package, &c.Command,
+		&c.File, &c.Command,
 		&c.ID, &c.Description, &c.Timeout,
 		&c.Mode, &c.Owner, &c.GroupOf, &c.Filetype, &c.Sha256,
 		&c.Method, &c.RequestBody,

@@ -18,5 +18,7 @@ wl-screenshot-grim:
         exists: true
     wl-screenshot-grim-step-1:
         check: the grim package is registered with the package manager
-        package: grim
-        installed: true
+        plugin: package
+        plugin_input:
+            package: grim
+            installed: true

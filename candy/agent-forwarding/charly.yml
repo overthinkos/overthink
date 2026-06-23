@@ -36,23 +36,29 @@ agent-forwarding:
     agent-forwarding-gnupg-package:
         check: package=gnupg
         id: agent-forwarding-gnupg-package
-        package: gnupg
-        package_map:
-            fedora: gnupg2
-        installed: true
+        plugin: package
+        plugin_input:
+            package: gnupg
+            package_map:
+                fedora: gnupg2
+            installed: true
     agent-forwarding-ssh-client-package:
         check: package=openssh-client
         id: agent-forwarding-ssh-client-package
-        package: openssh-client
-        package_map:
-            arch: openssh
-            fedora: openssh-clients
-        installed: true
+        plugin: package
+        plugin_input:
+            package: openssh-client
+            package_map:
+                arch: openssh
+                fedora: openssh-clients
+            installed: true
     agent-forwarding-direnv-package:
         check: package=direnv
         id: agent-forwarding-direnv-package
-        package: direnv
-        installed: true
+        plugin: package
+        plugin_input:
+            package: direnv
+            installed: true
     agent-forwarding-gpg-runs:
         check: command=/usr/bin/gpg --version
         id: agent-forwarding-gpg-runs

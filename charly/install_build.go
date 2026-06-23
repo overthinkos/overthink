@@ -644,8 +644,8 @@ func buildSystemPackagesStep(format string, phase Phase, packages []string, raw 
 // timeline is the candy's `plan:` `run:` steps (StepKind()==KwRun) whose
 // context includes build/deploy, in declared (cache-stable) order — the fold
 // that retired the separate `task:` list. Each run op either LOWERS into an
-// existing typed step (package → SystemPackagesStep via VerbCatalog.LowersTo;
-// the `plugin: service` verb → ServicePackagedStep via its TypedStepProvider) so
+// existing typed step (the `plugin: package` verb → SystemPackagesStep and the
+// `plugin: service` verb → ServicePackagedStep, each via its TypedStepProvider) so
 // emit + reversal are REUSED, or stays a generic OpStep (install verbs + command +
 // the RenderProvisionScript plugin verbs). A run: step scoped runtime-only is
 // plan-runtime provisioning the check Runner executes — NOT the install
@@ -672,44 +672,32 @@ func compileOpSteps(layer *Candy, img *ResolvedBox) []InstallStep {
 	return out
 }
 
-// compileActOp lowers a single install-timeline op into the right InstallStep.
-// It consumes VerbCatalog.LowersTo (package → SystemPackagesStep) AND the
+// compileActOp lowers a single install-timeline op into the right InstallStep via the
 // TypedStepProvider seam: a `plugin:` verb whose provider lowers into a typed step
-// (service → ServicePackagedStep) is constructed via that provider's ConstructStep,
-// so its Reverse() records the LOAD-BEARING reversals — a generic OpStep would drop
-// them. Every other verb (the install verbs + command + the RenderProvisionScript
-// plugin verbs) stays a generic OpStep. Callers decide which ops reach here —
-// compileOpSteps passes the plan's build/deploy-context run: steps (the install
-// timeline is act by definition, regardless of a verb's runtime-context do:assert
-// default).
+// (package → SystemPackagesStep, service → ServicePackagedStep) is constructed via that
+// provider's ConstructStep, so its Reverse() records the LOAD-BEARING reversals — a generic
+// OpStep would drop them. Every other verb (the install verbs + command + the
+// RenderProvisionScript plugin verbs) stays a generic OpStep. Callers decide which ops reach
+// here — compileOpSteps passes the plan's build/deploy-context run: steps (the install
+// timeline is act by definition, regardless of a verb's runtime-context do:assert default).
 func compileActOp(op *Op, layer *Candy, img *ResolvedBox) InstallStep {
 	verb, err := op.Kind()
 	if err != nil {
 		return nil
 	}
 	userDir, _ := resolveUserSpec(op.RunAs, img)
-	// A `plugin:` verb whose provider lowers into a TYPED install step (service →
-	// ServicePackagedStep) constructs that step here — BEFORE the generic OpStep
-	// fallthrough — so its Reverse() records the load-bearing reversals. The typed
-	// step then flows through the SAME ServicePackagedStep.Emit{OCI,Local,VM} +
-	// Reverse() as before the verb was extracted. A `plugin:` verb whose provider is
-	// NOT a TypedStepProvider (command, the RenderProvisionScript verbs) falls through
-	// to OpStep, unchanged.
+	// A `plugin:` verb whose provider lowers into a TYPED install step (package →
+	// SystemPackagesStep, service → ServicePackagedStep) constructs that step here —
+	// BEFORE the generic OpStep fallthrough — so its Reverse() records the load-bearing
+	// reversals. The typed step then flows through the SAME Emit{OCI,Local,VM} + Reverse()
+	// as before the verb was extracted. A `plugin:` verb whose provider is NOT a
+	// TypedStepProvider (command, the RenderProvisionScript verbs) falls through to OpStep,
+	// unchanged.
 	if verb == "plugin" {
 		if prov, ok := providerRegistry.ResolveVerb(op.Plugin); ok {
 			if stepprov, ok := prov.(TypedStepProvider); ok {
 				return stepprov.ConstructStep(op, layer, img)
 			}
-		}
-	}
-	switch VerbCatalog[verb].LowersTo {
-	case StepKindSystemPackages:
-		// package → install the (cross-distro-resolved) package via the
-		// image's primary format; SystemPackagesStep.Reverse removes it.
-		return &SystemPackagesStep{
-			Format:   img.Pkg,
-			Phase:    PhaseInstall,
-			Packages: []string{resolvePackageName(op, img.Tags)},
 		}
 	}
 	// Install verbs (mkdir/copy/write/link/download/setcap/build) + command →

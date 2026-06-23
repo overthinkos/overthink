@@ -8,14 +8,20 @@ import (
 	"testing"
 )
 
-// Package verb — installed-present, version match, and absent-as-expected paths.
+// package plugin verb — installed-present, version match, and absent-as-expected paths.
+// Now an extracted state-provision (typed-step) verb, a dedicated builtin plugin unit
+// dispatched IN-PROCESS via the CheckVerbProvider RunVerb path (TestMain loads its schema);
+// authored as plugin: package + plugin_input (package + installed/version/package_map). The
+// package/installed/version/package_map fields left the closed #Op.
 func TestRunner_Package(t *testing.T) {
 	t.Run("installed via rpm", func(t *testing.T) {
 		r, fake := newFakeRunner(t, RunModeLive)
 		fake.responses = []fakeResponse{
 			{matchPrefix: "rpm -q 'redis'", exit: 0},
 		}
-		res := r.Run(context.Background(), []Op{{Package: "redis", Installed: new(true)}})
+		res := r.Run(context.Background(), []Op{
+			{Plugin: "package", PluginInput: map[string]any{"package": "redis", "installed": true}},
+		})
 		if res[0].Status != TestPass {
 			t.Errorf("expected pass, got %+v", res[0])
 		}
@@ -26,7 +32,9 @@ func TestRunner_Package(t *testing.T) {
 		fake.responses = []fakeResponse{
 			{matchPrefix: "rpm -q 'redis'", exit: 1},
 		}
-		res := r.Run(context.Background(), []Op{{Package: "redis", Installed: new(true)}})
+		res := r.Run(context.Background(), []Op{
+			{Plugin: "package", PluginInput: map[string]any{"package": "redis", "installed": true}},
+		})
 		if res[0].Status != TestFail {
 			t.Errorf("expected fail, got %+v", res[0])
 		}
@@ -39,7 +47,7 @@ func TestRunner_Package(t *testing.T) {
 			{matchPrefix: "rpm -q --qf '%{VERSION}", stdout: "7.0.5\n", exit: 0},
 		}
 		res := r.Run(context.Background(), []Op{
-			{Package: "redis", Versions: []string{"7.0.5", "7.0.6"}},
+			{Plugin: "package", PluginInput: map[string]any{"package": "redis", "version": []any{"7.0.5", "7.0.6"}}},
 		})
 		if res[0].Status != TestPass {
 			t.Errorf("expected pass, got %+v", res[0])
@@ -277,58 +285,66 @@ func TestRunner_MatchingPlugin(t *testing.T) {
 // openssh-server on Fedora vs openssh on Arch). The first matching distro
 // tag wins; unmatched distros fall back to the Package scalar.
 func TestResolvePackageName(t *testing.T) {
+	// The package name + per-distro map now arrive as decoded params.PackageInput fields
+	// (the `package` verb left the closed #Op), so resolvePackageName takes them directly.
 	cases := []struct {
-		name    string
-		check   Op
-		distros []string
-		want    string
+		name       string
+		pkg        string
+		packageMap map[string]string
+		distros    []string
+		want       string
 	}{
 		{
 			name:    "empty map returns scalar",
-			check:   Op{Package: "openssh-server"},
+			pkg:     "openssh-server",
 			distros: []string{"fedora"},
 			want:    "openssh-server",
 		},
 		{
 			name: "map key matches distro tag",
-			check: Op{Package: "openssh-server", PackageMap: map[string]string{
+			pkg:  "openssh-server",
+			packageMap: map[string]string{
 				"arch":   "openssh",
 				"fedora": "openssh-server",
-			}},
+			},
 			distros: []string{"arch"},
 			want:    "openssh",
 		},
 		{
 			name: "first matching tag wins",
-			check: Op{Package: "openssh-server", PackageMap: map[string]string{
+			pkg:  "openssh-server",
+			packageMap: map[string]string{
 				"fedora:43": "openssh-server43",
 				"fedora":    "openssh-server",
-			}},
+			},
 			distros: []string{"fedora:43", "fedora"},
 			want:    "openssh-server43",
 		},
 		{
 			name: "no tag matches — fallback to scalar",
-			check: Op{Package: "openssh-server", PackageMap: map[string]string{
+			pkg:  "openssh-server",
+			packageMap: map[string]string{
 				"arch": "openssh",
-			}},
+			},
 			distros: []string{"ubuntu"},
 			want:    "openssh-server",
 		},
 		{
 			name: "empty distros — fallback to scalar",
-			check: Op{Package: "openssh-server", PackageMap: map[string]string{
+			pkg:  "openssh-server",
+			packageMap: map[string]string{
 				"arch": "openssh",
-			}},
+			},
 			distros: nil,
 			want:    "openssh-server",
 		},
 		{
 			name: "empty string map value — fall through to next distro",
-			check: Op{Package: "openssh-server", PackageMap: map[string]string{
+			pkg:  "openssh-server",
+			packageMap: map[string]string{
 				"arch":   "",
 				"fedora": "openssh-server",
-			}},
+			},
 			distros: []string{"arch", "fedora"},
 			want:    "openssh-server",
 		},
@@ -336,7 +352,7 @@ func TestResolvePackageName(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := resolvePackageName(&tc.check, tc.distros)
+			got := resolvePackageName(tc.pkg, tc.packageMap, tc.distros)
 			if got != tc.want {
 				t.Errorf("resolvePackageName() = %q, want %q", got, tc.want)
 			}

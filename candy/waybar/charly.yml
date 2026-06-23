@@ -76,8 +76,10 @@ waybar:
         exists: true
     waybar-step-7:
         check: waybar is recorded as installed in the package database
-        package: waybar
-        installed: true
+        plugin: package
+        plugin_input:
+            package: waybar
+            installed: true
     waybar-step-8:
         check: the waybar-wrapper launcher script is installed under the user's bin
         file: ${HOME}/.local/bin/waybar-wrapper

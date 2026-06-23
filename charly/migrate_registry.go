@@ -71,7 +71,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.174.0700")
+var latestSchemaVersion = mustCalVer("2026.174.0900")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -521,14 +521,16 @@ func migrationSteps() []MigrationStep {
 		// is converted ONLY when no charly-verb is present (else it is a wl/libvirt argv
 		// modifier — stepHasCharlyVerb). Gated on isStepNode so a Calamares group's / a published
 		// port's / an SSH user: field is never rewritten, and a migrated config's nested
-		// plugin_input is a no-op (idempotent). This migrator ALSO converts the TYPED-STEP-
-		// OUTLIER `service` verb (service: <unit> + running:/enabled: → plugin: service +
-		// plugin_input) — its act lowers into a ServicePackagedStep so the load-bearing
-		// reversals survive (a RenderProvisionScript would drop them). The command extraction
-		// first raised HEAD; the service extraction raises it again to 2026.174.0700 (the
-		// calver-schema stamp below) — a closed `#Op` no longer accepting the
-		// command-exclusive in_container/background/from_host NOR the service:/running:/enabled:
-		// step keys forces a re-migrate.
+		// plugin_input is a no-op (idempotent). This migrator ALSO converts the TWO TYPED-STEP
+		// verbs `service` (service: <unit> + running:/enabled: → plugin: service + plugin_input)
+		// and `package` (package: <name> + installed:/version:/package_map: → plugin: package +
+		// plugin_input) — each act lowers into a ServicePackagedStep / SystemPackagesStep so the
+		// load-bearing reversals survive (a RenderProvisionScript would drop them); package keeps
+		// its SHARED exclude_distro modifier at step level. The command/service extractions first
+		// raised HEAD; the package extraction raises it again to 2026.174.0900 (the calver-schema
+		// stamp below) — a closed `#Op` no longer accepting the command-exclusive in_container/
+		// background/from_host, the service:/running:/enabled:, NOR the package:/installed:/
+		// version:/package_map: step keys forces a re-migrate.
 		// TouchesHost false → remote-cache auto-migration applies it to fetched candy manifests.
 		// See migrate_state_provision_verbs_to_plugin.go + CHANGELOG/.
 		{mustCalVer("2026.174.0050"), "state-provision-verbs-to-plugin", false, func(c *MigrateContext) (bool, error) {
@@ -541,7 +543,7 @@ func migrationSteps() []MigrationStep {
 		// TouchesHost is false so it ALSO runs in project-only mode (remote-cache
 		// auto-migration); its host-file stamping is gated on ctx.HostDeployPath,
 		// which the project-only runner leaves empty.
-		{mustCalVer("2026.174.0700"), "calver-schema", false, func(c *MigrateContext) (bool, error) {
+		{mustCalVer("2026.174.0900"), "calver-schema", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateCalverSchema(c.Dir, c.HostDeployPath, latestSchemaVersion, c.DryRun)
 			return len(w) > 0, err
 		}},

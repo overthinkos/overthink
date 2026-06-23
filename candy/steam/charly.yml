@@ -36,16 +36,20 @@ steam:
         exists: true
     steam-step-1:
         check: the steam RPM is present in the package database
-        package: steam
-        installed: true
+        plugin: package
+        plugin_input:
+            package: steam
+            installed: true
     steam-step-2:
         check: the gamescope nested Wayland compositor binary is installed
         file: /usr/bin/gamescope
         exists: true
     steam-step-3:
         check: the gamescope RPM is present in the package database
-        package: gamescope
-        installed: true
+        plugin: package
+        plugin_input:
+            package: gamescope
+            installed: true
     steam-step-4:
         check: STEAM_RUNTIME_PREFER_HOST_LIBRARIES is pinned to 0 so Steam uses its bundled runtime
         stdout: "0"

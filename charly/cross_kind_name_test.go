@@ -39,7 +39,7 @@ func TestCrossKindNameReuse_LoaderAcceptsAllKinds(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	must(filepath.Join(dir, "charly.yml"), `version: 2026.174.0700
+	must(filepath.Join(dir, "charly.yml"), `version: 2026.174.0900
 defaults:
   registry: ghcr.io/example
 discover:
@@ -89,7 +89,7 @@ discover:
 
 	// --- Within ONE document: duplicate top-level name rejected. ---
 	dir2 := t.TempDir()
-	dupDoc := `version: 2026.174.0700
+	dupDoc := `version: 2026.174.0900
 redis:
   candy:
     base: fedora
@@ -119,7 +119,7 @@ func TestCrossKindNameReuse_RetiredKeysRejected(t *testing.T) {
 	}{
 		{
 			name: "deployment.qc",
-			cfgYAML: `version: 2026.174.0700
+			cfgYAML: `version: 2026.174.0900
 deploy:
   qc:
     target: local
@@ -130,7 +130,7 @@ deploy:
 		},
 		{
 			name: "deployment.cachyos-dx",
-			cfgYAML: `version: 2026.174.0700
+			cfgYAML: `version: 2026.174.0900
 deploy:
   cachyos-dx:
     target: local
@@ -141,7 +141,7 @@ deploy:
 		},
 		{
 			name: "local.cachyos-dx",
-			cfgYAML: `version: 2026.174.0700
+			cfgYAML: `version: 2026.174.0900
 local:
   cachyos-dx:
     candy: [example]

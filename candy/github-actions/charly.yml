@@ -94,5 +94,7 @@ github-actions:
     guestfs-tools-package:
         check: package=guestfs-tools
         id: guestfs-tools-package
-        package: guestfs-tools
-        installed: true
+        plugin: package
+        plugin_input:
+            package: guestfs-tools
+            installed: true

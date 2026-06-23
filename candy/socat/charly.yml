@@ -59,15 +59,19 @@ socat:
             command: /usr/local/bin/relay-wrapper
     socat-step-5:
         check: the iproute package providing the ip command the relay uses is installed
-        package: iproute
-        package_map:
-            arch: iproute2
-            debian: iproute2
-            ubuntu: iproute2
-            fedora: iproute
-        installed: true
+        plugin: package
+        plugin_input:
+            package: iproute
+            package_map:
+                arch: iproute2
+                debian: iproute2
+                ubuntu: iproute2
+                fedora: iproute
+            installed: true
     socat-package-2:
         check: package=socat
         id: socat-package
-        package: socat
-        installed: true
+        plugin: package
+        plugin_input:
+            package: socat
+            installed: true

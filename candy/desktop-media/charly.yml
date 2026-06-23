@@ -39,8 +39,10 @@ desktop-media:
                     - pavucontrol
     desktop-media-step-0:
         check: the GStreamer libav codec bridge is installed for Plasma/Phonon/Haruna playback
-        package: gst-libav
-        installed: true
+        plugin: package
+        plugin_input:
+            package: gst-libav
+            installed: true
     desktop-media-step-1:
         check: the libav GStreamer plugin shared object is present on disk
         file: /usr/lib/gstreamer-1.0/libgstlibav.so
@@ -51,8 +53,10 @@ desktop-media:
         exists: true
     desktop-media-step-3:
         check: the ALSA->PipeWire bridge package is installed so ALSA clients route through PipeWire
-        package: pipewire-alsa
-        installed: true
+        plugin: package
+        plugin_input:
+            package: pipewire-alsa
+            installed: true
     desktop-media-step-4:
         check: the PipeWire default-PCM ALSA config drop-in is installed
         file: /etc/alsa/conf.d/99-pipewire-default.conf
@@ -67,17 +71,23 @@ desktop-media:
         exists: true
     desktop-media-step-7:
         check: the libdvdcss DVD decryption library is installed
-        package: libdvdcss
-        installed: true
+        plugin: package
+        plugin_input:
+            package: libdvdcss
+            installed: true
     desktop-media-step-8:
         check: the poppler-glib PDF library that backs document thumbnails is installed
-        package: poppler-glib
-        installed: true
+        plugin: package
+        plugin_input:
+            package: poppler-glib
+            installed: true
     vlc-plugins-all-installed:
         check: package=vlc-plugins-all
         id: vlc-plugins-all-installed
-        package: vlc-plugins-all
-        installed: true
+        plugin: package
+        plugin_input:
+            package: vlc-plugins-all
+            installed: true
     alsa-utils-aplay:
         check: file=/usr/bin/aplay
         id: alsa-utils-aplay

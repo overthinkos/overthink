@@ -105,5 +105,7 @@ nodejs:
     nodejs-package-2:
         check: package=nodejs
         id: nodejs-package
-        package: nodejs
-        installed: true
+        plugin: package
+        plugin_input:
+            package: nodejs
+            installed: true

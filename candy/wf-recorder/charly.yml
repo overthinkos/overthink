@@ -17,5 +17,7 @@ wf-recorder:
         exists: true
     wf-recorder-step-1:
         check: the wf-recorder package is registered with the package manager
-        package: wf-recorder
-        installed: true
+        plugin: package
+        plugin_input:
+            package: wf-recorder
+            installed: true

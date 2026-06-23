@@ -23,8 +23,10 @@ libnotify:
         exists: true
     libnotify-step-1:
         check: the libnotify package providing the client is installed
-        package: libnotify
-        installed: true
+        plugin: package
+        plugin_input:
+            package: libnotify
+            installed: true
     libnotify-step-2:
         check: notify-send --version runs cleanly and prints its version string
         exit_status: 0

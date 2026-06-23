@@ -68,8 +68,10 @@ kde-shell:
         exists: true
     kde-shell-step-3:
         check: the dependency-pulling top package plasma-desktop is installed in the rpm/pacman database
-        package: plasma-desktop
-        installed: true
+        plugin: package
+        plugin_input:
+            package: plasma-desktop
+            installed: true
     kde-shell-step-4:
         check: the Dolphin file manager is installed at /usr/bin/dolphin
         file: /usr/bin/dolphin

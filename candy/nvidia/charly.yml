@@ -56,8 +56,10 @@ nvidia:
                   ln -sf /usr/share/vulkan/implicit_layer.d/nvidia_layers.json /etc/vulkan/icd.d/nvidia_layers.json || true
     nvidia-step-2:
         check: the nvidia-container-toolkit package is installed for CDI device generation
-        package: nvidia-container-toolkit
-        installed: true
+        plugin: package
+        plugin_input:
+            package: nvidia-container-toolkit
+            installed: true
     nvidia-step-3:
         check: the nvidia-ctk CLI binary lands on the canonical /usr/bin path
         file: /usr/bin/nvidia-ctk

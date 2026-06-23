@@ -72,8 +72,10 @@ comfyui:
         exists: true
     comfyui-step-4:
         check: git-lfs is installed for pulling large model repositories
-        package: git-lfs
-        installed: true
+        plugin: package
+        plugin_input:
+            package: git-lfs
+            installed: true
     comfyui-step-5:
         agent-check: the comfyui supervisord service comes up and serves the image-generation web UI and /system_stats API on port 8188
     comfyui-models-checkpoints:
@@ -84,8 +86,10 @@ comfyui:
     comfyui-aria2-package:
         check: package=aria2
         id: comfyui-aria2-package
-        package: aria2
-        installed: true
+        plugin: package
+        plugin_input:
+            package: aria2
+            installed: true
     comfyui-git-lfs-binary:
         check: file=/usr/bin/git-lfs
         id: comfyui-git-lfs-binary

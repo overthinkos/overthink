@@ -108,17 +108,23 @@ gh:
     gh-package-2:
         check: package=gh
         id: gh-package
-        package: gh
-        package_map:
-            arch: github-cli
-        installed: true
+        plugin: package
+        plugin_input:
+            package: gh
+            package_map:
+                arch: github-cli
+            installed: true
     git-package:
         check: package=git
         id: git-package
-        package: git
-        installed: true
+        plugin: package
+        plugin_input:
+            package: git
+            installed: true
     git-lfs-package:
         check: package=git-lfs
         id: git-lfs-package
-        package: git-lfs
-        installed: true
+        plugin: package
+        plugin_input:
+            package: git-lfs
+            installed: true

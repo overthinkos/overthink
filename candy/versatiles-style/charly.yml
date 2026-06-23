@@ -140,8 +140,10 @@ versatiles-style:
                 find /opt/versatiles-style -maxdepth 3 -name 'versatiles-style*.js' -size +1c | head -1 | grep -q .
     versatiles-style-step-3:
         check: nodejs is installed so the @versatiles/style bundle can be built and served
-        package: nodejs
-        installed: true
+        plugin: package
+        plugin_input:
+            package: nodejs
+            installed: true
     versatiles-style-step-4:
         check: the node runtime reports its version
         exit_status: 0

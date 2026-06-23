@@ -101,8 +101,10 @@ web-layer:
             }
     web-layer-step-3:
         check: nginx is installed
-        package: nginx
-        installed: true
+        plugin: package
+        plugin_input:
+            package: nginx
+            installed: true
     web-layer-step-4:
         check: the fixture index.html carries the predetermined content marker
         file: /srv/fixture/index.html
@@ -122,5 +124,7 @@ web-layer:
     fixture-web-curl-installed:
         check: package=curl
         id: fixture-web-curl-installed
-        package: curl
-        installed: true
+        plugin: package
+        plugin_input:
+            package: curl
+            installed: true

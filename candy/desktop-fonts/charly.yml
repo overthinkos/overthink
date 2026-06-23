@@ -27,22 +27,28 @@ desktop-fonts:
                     - che/nerd-fonts
     desktop-fonts-step-0:
         check: the JetBrains Mono coding-font package is installed for waybar and swaync
-        package: jetbrains-mono-fonts
-        package_map:
-            arch: ttf-jetbrains-mono
-            fedora: jetbrains-mono-fonts
-        installed: true
+        plugin: package
+        plugin_input:
+            package: jetbrains-mono-fonts
+            package_map:
+                arch: ttf-jetbrains-mono
+                fedora: jetbrains-mono-fonts
+            installed: true
     desktop-fonts-step-1:
         check: the Liberation web-font family Chrome falls back to for sans rendering is installed
-        package: liberation-sans-fonts
-        package_map:
-            arch: ttf-liberation
-            fedora: liberation-sans-fonts
-        installed: true
+        plugin: package
+        plugin_input:
+            package: liberation-sans-fonts
+            package_map:
+                arch: ttf-liberation
+                fedora: liberation-sans-fonts
+            installed: true
     desktop-fonts-step-2:
         check: the Nerd Fonts symbol set providing waybar and swaync icon glyphs is installed
-        package: nerd-fonts
-        package_map:
-            arch: ttf-nerd-fonts-symbols
-            fedora: nerd-fonts
-        installed: true
+        plugin: package
+        plugin_input:
+            package: nerd-fonts
+            package_map:
+                arch: ttf-nerd-fonts-symbols
+                fedora: nerd-fonts
+            installed: true

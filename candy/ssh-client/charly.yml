@@ -49,8 +49,10 @@ ssh-client:
     ssh-client-package:
         check: package=openssh-client
         id: ssh-client-package
-        package: openssh-client
-        package_map:
-            arch: openssh
-            fedora: openssh-clients
-        installed: true
+        plugin: package
+        plugin_input:
+            package: openssh-client
+            package_map:
+                arch: openssh
+                fedora: openssh-clients
+            installed: true

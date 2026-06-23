@@ -46,20 +46,26 @@ heroic:
         exists: true
     heroic-step-2:
         check: the heroic RPM is registered in the package database
-        package: heroic
-        installed: true
+        plugin: package
+        plugin_input:
+            package: heroic
+            installed: true
     heroic-step-3:
         check: a desktop entry installs so the launcher appears in the application menu
         file: /usr/share/applications/heroic.desktop
         exists: true
     heroic-step-4:
         check: the MangoHud overlay is installed for in-game FPS and stats
-        package: mangohud
-        installed: true
+        plugin: package
+        plugin_input:
+            package: mangohud
+            installed: true
     heroic-step-5:
         check: Feral GameMode is installed to optimize the CPU governor while gaming
-        package: gamemode
-        installed: true
+        plugin: package
+        plugin_input:
+            package: gamemode
+            installed: true
     heroic-step-6:
         check: the heroic-config volume is mounted as a directory so Wine/Proton tools and settings survive a rebuild
         file: ${VOLUME_CONTAINER_PATH:heroic-config}

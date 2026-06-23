@@ -25,59 +25,65 @@ import (
 // ---------------------------------------------------------------------------
 
 // resolvePackageName picks the correct package name for the running image's
-// distro. If Check.PackageMap has a key matching any of the image's distro
-// tags, that mapping wins; otherwise the Check.Package scalar is used as-is.
-// The first matching distro tag wins — tags are authored in priority order
-// ("fedora:43" before "fedora"), so a map keyed by either hits.
-func resolvePackageName(c *Op, distros []string) string {
-	if len(c.PackageMap) == 0 {
-		return c.Package
+// distro. If packageMap has a key matching any of the image's distro tags, that
+// mapping wins; otherwise the pkg scalar is used as-is. The first matching distro
+// tag wins — tags are authored in priority order ("fedora:43" before "fedora"), so
+// a map keyed by either hits. The package name + per-distro map arrive from the
+// `package` plugin's typed plugin_input (params.PackageInput) — the verb left the
+// closed #Op, so they no longer ride the (removed) Op.Package/Op.PackageMap fields.
+// Shared by the assert path (runPackage), the typed-step act (packageVerb.ConstructStep),
+// and the runtime act (packageVerb.RenderProvisionScript).
+func resolvePackageName(pkg string, packageMap map[string]string, distros []string) string {
+	if len(packageMap) == 0 {
+		return pkg
 	}
 	for _, tag := range distros {
-		if name, ok := c.PackageMap[tag]; ok && name != "" {
+		if name, ok := packageMap[tag]; ok && name != "" {
 			return name
 		}
 	}
-	return c.Package
+	return pkg
 }
 
-// runPackage: `rpm -q`, `dpkg -s`, or `pacman -Q` — exit 0 ⇒ installed.
-// When Versions is set, pulls the version string and compares exactly.
-// PackageMap (if set) overrides the package name per distro — the first
-// Distros tag that matches a map key wins; otherwise Package is used.
-func (r *Runner) runPackage(ctx context.Context, c *Op) CheckResult {
+// runPackage: `rpm -q`, `dpkg -s`, or `pacman -Q` — exit 0 ⇒ installed. The package
+// name, optional install expectation, version allow-list, and per-distro map arrive from
+// the `package` plugin's typed plugin_input (params.PackageInput, decoded by
+// packageVerb.RunVerb in plugin_verb_package.go) — the verb left the closed #Op, so they
+// no longer ride the (removed) Op.Package/Op.Installed/Op.Versions/Op.PackageMap fields.
+// c is retained only for result metadata (id/description via failf/passf) + r.Distros.
+func (r *Runner) runPackage(ctx context.Context, c *Op, pkg string, packageMap map[string]string, installed *bool, versions []string) CheckResult {
 	wantInstalled := true
-	if c.Installed != nil {
-		wantInstalled = *c.Installed
+	if installed != nil {
+		wantInstalled = *installed
 	}
-	name := resolvePackageName(c, r.Distros)
-	pkg := shellSingleQuote(name)
+	name := resolvePackageName(pkg, packageMap, r.Distros)
+	pkgQ := shellSingleQuote(name)
 	probe := fmt.Sprintf(
 		`rpm -q %[1]s >/dev/null 2>&1 || (dpkg -s %[1]s 2>/dev/null | grep -q "^Status:.*install ok installed") || pacman -Q %[1]s >/dev/null 2>&1`,
-		pkg)
+		pkgQ)
 	_, stderr, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
 		return failf(c, "probe failed: %v (%s)", err, stderr)
 	}
-	installed := exit == 0
-	if installed != wantInstalled {
-		return failf(c, "installed=%v, want %v", installed, wantInstalled)
+	isInstalled := exit == 0
+	if isInstalled != wantInstalled {
+		return failf(c, "installed=%v, want %v", isInstalled, wantInstalled)
 	}
-	if !installed {
+	if !isInstalled {
 		return passf(c, "absent (as expected)")
 	}
-	if len(c.Versions) > 0 {
+	if len(versions) > 0 {
 		versionProbe := fmt.Sprintf(
 			`rpm -q --qf '%%{VERSION}\n' %[1]s 2>/dev/null || dpkg -s %[1]s 2>/dev/null | awk '/^Version:/{print $2; exit}' || pacman -Q %[1]s 2>/dev/null | awk '{print $2}'`,
-			pkg)
+			pkgQ)
 		ver, _, exit, err := r.Exec.RunCapture(ctx, versionProbe)
 		if err != nil || exit != 0 {
 			return failf(c, "version probe exit %d err %v", exit, err)
 		}
 		got := strings.TrimSpace(ver)
-		matched := slices.Contains(c.Versions, got)
+		matched := slices.Contains(versions, got)
 		if !matched {
-			return failf(c, "version %q not in %v", got, c.Versions)
+			return failf(c, "version %q not in %v", got, versions)
 		}
 	}
 	return passf(c, "installed")

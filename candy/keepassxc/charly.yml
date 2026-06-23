@@ -18,8 +18,10 @@ keepassxc:
         exists: true
     keepassxc-step-1:
         check: the keepassxc package is registered with the system package manager
-        package: keepassxc
-        installed: true
+        plugin: package
+        plugin_input:
+            package: keepassxc
+            installed: true
     keepassxc-step-2:
         check: the keepassxc-cli console tool ships alongside the GUI
         file: /usr/bin/keepassxc-cli

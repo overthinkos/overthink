@@ -174,8 +174,10 @@ postgresql:
         mode: "0755"
     postgresql-step-7:
         check: the pgvector similarity-search extension package is installed
-        package: pgvector
-        installed: true
+        plugin: package
+        plugin_input:
+            package: pgvector
+            installed: true
     postgresql-step-8:
         check: the entrypoint initialized the cluster data directory on first run
         exit_status: 0
@@ -197,10 +199,12 @@ postgresql:
     postgresql-package:
         check: package=postgresql-server
         id: postgresql-package
-        package: postgresql-server
-        package_map:
-            arch: postgresql
-        installed: true
+        plugin: package
+        plugin_input:
+            package: postgresql-server
+            package_map:
+                arch: postgresql
+            installed: true
     postgresql-service-running:
         check: service=postgresql
         id: postgresql-service-running

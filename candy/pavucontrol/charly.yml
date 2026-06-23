@@ -25,8 +25,10 @@ pavucontrol:
         exists: true
     pavucontrol-step-1:
         check: the pavucontrol package is recorded in the package database
-        package: pavucontrol
-        installed: true
+        plugin: package
+        plugin_input:
+            package: pavucontrol
+            installed: true
     pavucontrol-step-2:
         check: the required PipeWire audio server that pavucontrol controls is present
         file: /usr/bin/pipewire

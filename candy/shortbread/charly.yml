@@ -135,10 +135,12 @@ shortbread:
     shortbread-lua-runtime:
         check: package=lua
         id: shortbread-lua-runtime
-        package: lua
-        package_map:
-            fedora: lua-devel
-        installed: true
+        plugin: package
+        plugin_input:
+            package: lua
+            package_map:
+                fedora: lua-devel
+            installed: true
     shortbread-tiles-dir-runtime:
         check: command=test -d /workspace/tiles/shortbread
         id: shortbread-tiles-dir-runtime

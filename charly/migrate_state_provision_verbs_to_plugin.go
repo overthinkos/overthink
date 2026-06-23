@@ -6,17 +6,19 @@ package main
 // A STATE-PROVISION verb carries BOTH a check (do:assert probe) AND an act (do:act
 // provision). `unix_group` (getent-group probe + groupadd) was the first extracted;
 // `user` (getent-passwd + useradd), `kernel-param` (sysctl read + write), `mount`
-// (findmnt + mount), `command` (exec probe + install-task RUN) and finally `service`
-// (supervisorctl/systemctl probe + enable the packaged unit) followed. Each left the
-// closed `#Op`/`spec.OpVerbs` and became a BUILTIN plugin unit
-// (plugin/builtins/{unix_group,user,kernel_param,mount,command,service}). user/unix_group/
-// kernel-param/mount are BOTH a CheckVerbProvider AND a ProvisionActor; `command` is a
-// CheckVerbProvider ONLY — its act IS the dedicated install-task emitCmd branch
-// (`plugin == "command"` in emitTasks/renderOpCommand), NOT a RenderProvisionScript;
-// `service` is the TYPED-STEP OUTLIER — a CheckVerbProvider AND a TypedStepProvider whose
-// act lowers into a ServicePackagedStep (compileActOp) so the load-bearing reversals
-// survive (a RenderProvisionScript shell string would drop them), plus a ProvisionActor
-// for the runtime live-act path. A
+// (findmnt + mount), `command` (exec probe + install-task RUN), `service`
+// (supervisorctl/systemctl probe + enable the packaged unit) and finally `package`
+// (rpm/dpkg/pacman probe + install) followed. Each left the closed `#Op`/`spec.OpVerbs`
+// and became a BUILTIN plugin unit
+// (plugin/builtins/{unix_group,user,kernel_param,mount,command,service,package}). user/
+// unix_group/kernel-param/mount are BOTH a CheckVerbProvider AND a ProvisionActor;
+// `command` is a CheckVerbProvider ONLY — its act IS the dedicated install-task emitCmd
+// branch (`plugin == "command"` in emitTasks/renderOpCommand), NOT a RenderProvisionScript;
+// `service` and `package` are the TWO TYPED-STEP verbs — each a CheckVerbProvider AND a
+// TypedStepProvider whose act lowers into a ServicePackagedStep / SystemPackagesStep
+// (compileActOp) so the load-bearing reversals survive (a RenderProvisionScript shell string
+// would drop them), plus a ProvisionActor for the runtime/box-build live-act path; `package`
+// is the simpler one (no PriorEnabled teardown-restore state). A
 // plan step that authored one inline now authors the generic plugin step `plugin: <verb>`
 // + a typed `plugin_input:` validated against the unit's #*Input def.
 //
@@ -54,12 +56,20 @@ import "gopkg.in/yaml.v3"
 //   - user       → uid/gid/home/shell (#UserInput)
 //   - kernel-param → value      (#KernelParamInput)
 //   - mount      → mount_source/filesystem/opt (#MountInput)
-//   - service    → running/enabled (#ServiceInput) — the TYPED-STEP-OUTLIER verb: its
+//   - service    → running/enabled (#ServiceInput) — a TYPED-STEP verb: its
 //     companions running/enabled were #Op fields read ONLY by the service verb (process
 //     reproduced `running` standalone in #ProcessInput and reads its own plugin_input),
 //     so both move into plugin_input. Its do:act lowers into a TYPED ServicePackagedStep
 //     (load-bearing reversals), not a RenderProvisionScript — but a check: OR a run:
 //     service step migrates identically to the others.
+//   - package    → package_map/installed/version (#PackageInput) — the SECOND TYPED-STEP
+//     verb (simpler than service: no PriorEnabled state). Its companions package_map/
+//     installed/version were #Op fields read ONLY by the package verb (resolvePackageName +
+//     runPackage), so all three move into plugin_input. The SHARED `exclude_distro` modifier
+//     (read by the generic runOne skip filter for EVERY verb) STAYS at step level (#Op). Its
+//     do:act lowers into a TYPED SystemPackagesStep (ReverseOpPackageRemove +
+//     ReverseOpCoprDisable), not a RenderProvisionScript — but a check: OR a run: package
+//     step migrates identically to the others.
 //   - command    → background/from_host/in_container (#CommandInput) — the FIELD-SPLIT
 //     case: ONLY the command-EXCLUSIVE fields move; the matchers exit_status/stdout/
 //     stderr (shared via matchAll) and the general timeout/method/env STAY at step level
@@ -74,6 +84,7 @@ var stateProvisionVerbFields = []struct {
 	{"kernel-param", []string{"value"}},
 	{"mount", []string{"mount_source", "filesystem", "opt"}},
 	{"service", []string{"running", "enabled"}},
+	{"package", []string{"package_map", "installed", "version"}},
 	{"command", []string{"background", "from_host", "in_container"}},
 }
 

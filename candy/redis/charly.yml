@@ -51,10 +51,12 @@ redis:
         exists: true
     redis-step-3:
         check: the providing package is installed (redis on Fedora, valkey on Arch/CachyOS)
-        package: valkey-compat-redis
-        package_map:
-            arch: valkey
-        installed: true
+        plugin: package
+        plugin_input:
+            package: valkey-compat-redis
+            package_map:
+                arch: valkey
+            installed: true
     redis-step-4:
         check: redis-cli ping returns PONG against the supervised redis-server
         stdout: PONG

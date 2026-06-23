@@ -179,5 +179,7 @@ dev-tools:
     neovim-package:
         check: package=neovim
         id: neovim-package
-        package: neovim
-        installed: true
+        plugin: package
+        plugin_input:
+            package: neovim
+            installed: true

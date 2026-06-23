@@ -46,12 +46,16 @@ xdg-portal:
         run_as: "${USER}"
     xdg-portal-step-4:
         check: the xdg-desktop-portal package is installed
-        package: xdg-desktop-portal
-        installed: true
+        plugin: package
+        plugin_input:
+            package: xdg-desktop-portal
+            installed: true
     xdg-portal-step-5:
         check: the wlroots portal backend package is installed
-        package: xdg-desktop-portal-wlr
-        installed: true
+        plugin: package
+        plugin_input:
+            package: xdg-desktop-portal-wlr
+            installed: true
     xdg-portal-step-6:
         check: the slurp region selector binary is installed
         file: /usr/bin/slurp

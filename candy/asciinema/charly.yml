@@ -18,8 +18,10 @@ asciinema:
         exists: true
     asciinema-step-1:
         check: the asciinema package is registered in the distro package database
-        package: asciinema
-        installed: true
+        plugin: package
+        plugin_input:
+            package: asciinema
+            installed: true
     asciinema-step-2:
         check: running asciinema --version prints the asciinema version banner and exits cleanly
         exit_status: 0

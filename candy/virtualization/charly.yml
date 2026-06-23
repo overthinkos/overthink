@@ -180,13 +180,15 @@ virtualization:
         exists: true
     virtualization-step-4:
         check: the libvirt qemu driver package is installed (cross-distro name resolution)
-        package: libvirt-daemon-driver-qemu
-        package_map:
-            arch: libvirt
-            fedora: libvirt-daemon-driver-qemu
-            debian: libvirt-daemon-system
-            ubuntu: libvirt-daemon-system
-        installed: true
+        plugin: package
+        plugin_input:
+            package: libvirt-daemon-driver-qemu
+            package_map:
+                arch: libvirt
+                fedora: libvirt-daemon-driver-qemu
+                debian: libvirt-daemon-system
+                ubuntu: libvirt-daemon-system
+            installed: true
     virtualization-step-5:
         check: virsh reaches the rootless qemu:///session daemon and lists domains
         exit_status: 0
@@ -201,11 +203,13 @@ virtualization:
     libvirt-qemu-driver-package:
         check: package=libvirt-daemon-driver-qemu
         id: libvirt-qemu-driver-package
-        package: libvirt-daemon-driver-qemu
-        package_map:
-            arch: libvirt
-            fedora: libvirt-daemon-driver-qemu
-            fedora:43: libvirt-daemon-driver-qemu
-            debian: libvirt-daemon-system
-            ubuntu: libvirt-daemon-system
-        installed: true
+        plugin: package
+        plugin_input:
+            package: libvirt-daemon-driver-qemu
+            package_map:
+                arch: libvirt
+                fedora: libvirt-daemon-driver-qemu
+                fedora:43: libvirt-daemon-driver-qemu
+                debian: libvirt-daemon-system
+                ubuntu: libvirt-daemon-system
+            installed: true

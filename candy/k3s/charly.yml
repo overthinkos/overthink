@@ -130,18 +130,24 @@ k3s:
         filetype: symlink
     k3s-step-6:
         check: conntrack is installed for kube-proxy connection tracking
-        package: conntrack-tools
-        installed: true
-        package_map:
-            debian: conntrack
-            ubuntu: conntrack
+        plugin: package
+        plugin_input:
+            package: conntrack-tools
+            package_map:
+                debian: conntrack
+                ubuntu: conntrack
+            installed: true
     k3s-step-7:
         check: socat is installed for the k3s apiserver tunnel proxy
-        package: socat
-        installed: true
+        plugin: package
+        plugin_input:
+            package: socat
+            installed: true
     k3s-step-8:
         check: iptables is installed for service and pod network routing
-        package: iptables
-        installed: true
-        package_map:
-            arch: iptables-nft
+        plugin: package
+        plugin_input:
+            package: iptables
+            package_map:
+                arch: iptables-nft
+            installed: true

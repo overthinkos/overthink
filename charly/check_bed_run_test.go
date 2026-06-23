@@ -172,7 +172,7 @@ func TestPersistBedDeployOverrides_SeedsPortBeforeConfig(t *testing.T) {
 	}
 	// A pre-existing unrelated deploy must survive the seed (merge, not clobber).
 	// Node-form: the bundle target is inferred from box (→ pod); port is a child node.
-	initialYAML := `version: 2026.174.0700
+	initialYAML := `version: 2026.174.0900
 ollama:
     pod:
         image: ollama

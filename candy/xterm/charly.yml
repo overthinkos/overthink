@@ -20,5 +20,7 @@ xterm:
         exists: true
     xterm-step-1:
         check: the xterm package is registered with the package manager
-        package: xterm
-        installed: true
+        plugin: package
+        plugin_input:
+            package: xterm
+            installed: true

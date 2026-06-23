@@ -21,8 +21,10 @@ sqlite:
         exists: true
     sqlite-step-1:
         check: the sqlite package is present in the image
-        package: sqlite
-        installed: true
+        plugin: package
+        plugin_input:
+            package: sqlite
+            installed: true
     sqlite-step-2:
         check: sqlite3 reports a 3.x version string
         exit_status: 0

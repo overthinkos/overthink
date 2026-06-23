@@ -126,8 +126,10 @@ tailscale-up:
     tailscale-up-package-composed:
         check: package=tailscale
         id: tailscale-up-package-composed
-        package: tailscale
-        installed: true
+        plugin: package
+        plugin_input:
+            package: tailscale
+            installed: true
     tailscale-up-operator-readable:
         check: |
             command=# Three-state probe:

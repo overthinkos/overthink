@@ -100,8 +100,10 @@ swaync:
     swaync-package:
         check: package=SwayNotificationCenter
         id: swaync-package
-        package: SwayNotificationCenter
-        package_map:
-            arch: swaync
-            fedora: SwayNotificationCenter
-        installed: true
+        plugin: package
+        plugin_input:
+            package: SwayNotificationCenter
+            package_map:
+                arch: swaync
+                fedora: SwayNotificationCenter
+            installed: true

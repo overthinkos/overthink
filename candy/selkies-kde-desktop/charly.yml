@@ -82,8 +82,10 @@ selkies-kde-desktop:
     selkies-kde-desktop-plasma-package:
         check: package=plasma-desktop
         id: selkies-kde-desktop-plasma-package
-        package: plasma-desktop
-        installed: true
+        plugin: package
+        plugin_input:
+            package: plasma-desktop
+            installed: true
     selkies-kde-desktop-stream-https:
         check: http=https://127.0.0.1:${HOST_PORT:3000}/
         id: selkies-kde-desktop-stream-https

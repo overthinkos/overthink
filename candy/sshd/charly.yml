@@ -80,11 +80,13 @@ sshd:
         exists: true
     sshd-step-3:
         check: the OpenSSH server package is installed (openssh on Arch)
-        package: openssh-server
-        package_map:
-            arch: openssh
-            fedora: openssh-server
-        installed: true
+        plugin: package
+        plugin_input:
+            package: openssh-server
+            package_map:
+                arch: openssh
+                fedora: openssh-server
+            installed: true
     sshd-step-4:
         check: the sshd-wrapper launcher is present and world-executable
         file: /usr/local/bin/sshd-wrapper
@@ -115,12 +117,14 @@ sshd:
     openssh-server-package:
         check: package=openssh-server
         id: openssh-server-package
-        package: openssh-server
-        package_map:
-            arch: openssh
-            fedora: openssh-server
-            fedora:43: openssh-server
-        installed: true
+        plugin: package
+        plugin_input:
+            package: openssh-server
+            package_map:
+                arch: openssh
+                fedora: openssh-server
+                fedora:43: openssh-server
+            installed: true
     sshd-service-running:
         check: service=sshd
         id: sshd-service-running

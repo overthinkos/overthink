@@ -92,16 +92,20 @@ docker-ce:
     docker-ce-package:
         check: package=docker-ce
         id: docker-ce-package
-        package: docker-ce
-        package_map:
-            arch: docker
-            fedora: docker-ce
-        installed: true
+        plugin: package
+        plugin_input:
+            package: docker-ce
+            package_map:
+                arch: docker
+                fedora: docker-ce
+            installed: true
     containerd-package:
         check: package=containerd.io
         id: containerd-package
-        package: containerd.io
-        package_map:
-            arch: containerd
-            fedora: containerd.io
-        installed: true
+        plugin: package
+        plugin_input:
+            package: containerd.io
+            package_map:
+                arch: containerd
+                fedora: containerd.io
+            installed: true

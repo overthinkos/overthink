@@ -83,8 +83,10 @@ chrome:
     chrome-package-installed:
         check: package=google-chrome-stable
         id: chrome-package-installed
-        package: google-chrome-stable
-        package_map:
-            arch: google-chrome
-            fedora: google-chrome-stable
-        installed: true
+        plugin: package
+        plugin_input:
+            package: google-chrome-stable
+            package_map:
+                arch: google-chrome
+                fedora: google-chrome-stable
+            installed: true

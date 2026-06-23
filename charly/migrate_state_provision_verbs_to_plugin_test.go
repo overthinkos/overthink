@@ -63,7 +63,14 @@ func TestMigrateStateProvisionVerbsToPlugin(t *testing.T) {
 		"        - check: \"the sleep service is running\"\n" +
 		"          service: \"check-sleep\"\n" +
 		"          running: true\n" +
-		"          enabled: true\n"
+		"          enabled: true\n" +
+		"        - check: \"the redis package is installed\"\n" +
+		"          package: \"valkey-compat-redis\"\n" +
+		"          package_map:\n" +
+		"            arch: valkey\n" +
+		"          installed: true\n" +
+		"          version: [\"7.0.5\"]\n" +
+		"          exclude_distro: [\"ubuntu\"]\n"
 	rootPath := filepath.Join(dir, "charly.yml")
 	if err := os.WriteFile(rootPath, []byte(rootYML), 0o644); err != nil {
 		t.Fatal(err)
@@ -87,7 +94,7 @@ func TestMigrateStateProvisionVerbsToPlugin(t *testing.T) {
 		t.Fatalf("re-parse migrated YAML: %v", err)
 	}
 	plan, ok := doc["sample"].(map[string]any)["plan"].([]any)
-	if !ok || len(plan) != 10 {
+	if !ok || len(plan) != 11 {
 		t.Fatalf("plan shape wrong (len=%d): %v", len(plan), doc["sample"])
 	}
 
@@ -251,6 +258,35 @@ func TestMigrateStateProvisionVerbsToPlugin(t *testing.T) {
 	svcPI := svcStep["plugin_input"].(map[string]any)
 	if svcPI["service"] != "check-sleep" || svcPI["running"] != true || svcPI["enabled"] != true {
 		t.Errorf("step 9: plugin_input = %v, want {service: check-sleep, running: true, enabled: true}", svcPI)
+	}
+
+	// (k) a check: package step CONVERTS — the SECOND TYPED-STEP verb migrates like the
+	//     others; its companions package_map/installed/version move into plugin_input, while
+	//     the SHARED exclude_distro modifier STAYS at step level (NOT package-exclusive).
+	pkgStep := plan[10].(map[string]any)
+	if pkgStep["plugin"] != "package" {
+		t.Errorf("step 10: plugin: package not added, got %v: %v", pkgStep["plugin"], pkgStep)
+	}
+	for _, k := range []string{"package", "package_map", "installed", "version"} {
+		if _, has := pkgStep[k]; has {
+			t.Errorf("step 10: bare %s: not removed (must move into plugin_input): %v", k, pkgStep)
+		}
+	}
+	if _, has := pkgStep["exclude_distro"]; !has {
+		t.Errorf("step 10: exclude_distro: was removed — it is SHARED (read by runOne for every verb) and must STAY at step level: %v", pkgStep)
+	}
+	pkgPI := pkgStep["plugin_input"].(map[string]any)
+	if pkgPI["package"] != "valkey-compat-redis" || pkgPI["installed"] != true {
+		t.Errorf("step 10: plugin_input = %v, want package=valkey-compat-redis installed=true", pkgPI)
+	}
+	if _, has := pkgPI["package_map"]; !has {
+		t.Errorf("step 10: package_map did not move into plugin_input: %v", pkgPI)
+	}
+	if _, has := pkgPI["version"]; !has {
+		t.Errorf("step 10: version did not move into plugin_input: %v", pkgPI)
+	}
+	if _, has := pkgPI["exclude_distro"]; has {
+		t.Errorf("step 10: exclude_distro must NOT move into plugin_input (it is shared, stays at step level): %v", pkgPI)
 	}
 
 	// (h) idempotent — a second pass changes nothing (the nested plugin_input keys are not

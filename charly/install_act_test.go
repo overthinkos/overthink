@@ -5,28 +5,78 @@ import (
 	"testing"
 )
 
-// A run: package step lowers into a SystemPackagesStep whose Reverse() removes
-// the package — so `charly bundle del` undoes it. The keyword (run:) supplies
-// the act intent the deleted Op.Do axis used to carry.
-func TestCompileRunStep_PackageLowersToSystemPackages(t *testing.T) {
-	layer := &Candy{Name: "x", plan: []Step{{Run: "install redis", Op: Op{Package: "redis"}}}}
+// The REVERSAL-PRESERVATION GATE for the package→plugin extraction: a
+// run: {plugin: package} step is a TYPED-STEP verb (the SECOND, after service) —
+// compileActOp MUST construct a *SystemPackagesStep (NOT a generic OpStep), so its
+// Reverse() records the LOAD-BEARING ReverseOpPackageRemove (and ReverseOpCoprDisable for a
+// copr repo). A shell-string OpStep (the path the RenderProvisionScript verbs take) would
+// DROP them — that is exactly what this verb's TypedStepProvider exists to prevent. The
+// keyword (run:) supplies the act intent the deleted Op.Do axis used to carry.
+func TestCompileRunStep_PackagePluginLowersToSystemPackagesWithReversals(t *testing.T) {
+	layer := &Candy{Name: "x", plan: []Step{{Run: "install redis", Op: Op{
+		Plugin:      "package",
+		PluginInput: map[string]any{"package": "redis"},
+	}}}}
 	steps := compileOpSteps(layer, testResolvedBox())
 
 	var sp *SystemPackagesStep
 	for _, s := range steps {
+		if _, isOp := s.(*OpStep); isOp {
+			t.Fatalf("plugin: package run step lowered to a generic OpStep — the load-bearing reversals would be DROPPED; got %#v", s)
+		}
 		if v, ok := s.(*SystemPackagesStep); ok {
 			sp = v
 		}
 	}
 	if sp == nil {
-		t.Fatalf("package run: step did not lower to SystemPackagesStep; got %#v", steps)
+		t.Fatalf("plugin: package run step did not lower to a *SystemPackagesStep; got %#v", steps)
 	}
 	if len(sp.Packages) != 1 || sp.Packages[0] != "redis" {
-		t.Errorf("SystemPackagesStep.Packages = %v, want [redis]", sp.Packages)
+		t.Fatalf("SystemPackagesStep.Packages = %v, want [redis]", sp.Packages)
 	}
+	// The install-phase step installs the package → Reverse() removes it.
 	rev := sp.Reverse()
 	if len(rev) != 1 || rev[0].Kind != ReverseOpPackageRemove {
-		t.Errorf("package run: step did not reverse to package-remove: %+v", rev)
+		t.Errorf("plugin: package run step did not reverse to package-remove: %+v", rev)
+	}
+	// A PhasePrepare step carrying a copr repo reverses to ReverseOpCoprDisable — the OTHER
+	// load-bearing reversal SystemPackagesStep records (and the typed step preserves), which
+	// a generic OpStep cannot express.
+	prep := &SystemPackagesStep{Format: "rpm", Phase: PhasePrepare, Copr: []string{"someuser/somerepo"}}
+	var sawCopr bool
+	for _, op := range prep.Reverse() {
+		if op.Kind == ReverseOpCoprDisable {
+			sawCopr = true
+		}
+	}
+	if !sawCopr {
+		t.Errorf("a copr PhasePrepare SystemPackagesStep did not reverse to copr-disable: %+v", prep.Reverse())
+	}
+}
+
+// The package act renders into the box build: a build-context run: {plugin: package} step,
+// emitted through the REAL box-build path (writeCandySteps→emitTasks), renders the
+// dnf/apt/pacman install of the package as a Containerfile RUN via the provider's
+// ProvisionActor (resolveProvisionScript: the ONE Op→act-shell seam). This proves the
+// box-build `case "plugin"` seam handles the extracted package verb (not as an "unknown
+// verb"), parallel to TestServicePluginActEmitsIntoBoxBuild for the typed pod-overlay path.
+func TestPackagePluginActEmitsIntoBoxBuild(t *testing.T) {
+	dir := t.TempDir()
+	layer := &Candy{Name: "lyr"}
+	g := &Generator{BuildDir: dir}
+	op := Op{Plugin: "package", PluginInput: map[string]any{"package": "redis"}}
+	var b strings.Builder
+	if _, err := g.emitTasks(&b, layer, testResolvedBox(), []Op{op}, dir, ".build/test-img"); err != nil {
+		t.Fatalf("emitTasks: %v", err)
+	}
+	out := b.String()
+	for _, want := range []string{"RUN", "dnf install", "pacman -S", "redis"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("emitTasks Containerfile = %q, want substring %q", out, want)
+		}
+	}
+	if strings.Contains(out, `unknown verb "plugin"`) {
+		t.Errorf("the raw plugin: package op was DROPPED as an unknown verb (the box-build regression):\n%s", out)
 	}
 }
 
@@ -104,7 +154,7 @@ func TestServicePluginActEmitsIntoBoxBuild(t *testing.T) {
 func TestCompileOpSteps_FoldsBuildContextRunStepNotCheck(t *testing.T) {
 	tr := true
 	layer := &Candy{Name: "x", plan: []Step{
-		{Run: "install vim", Op: Op{Package: "vim", Context: []string{"build"}}},
+		{Run: "install vim", Op: Op{Plugin: "package", PluginInput: map[string]any{"package": "vim"}, Context: []string{"build"}}},
 		{Check: "vim present", Op: Op{File: "/usr/bin/vim", Exists: &tr}}, // a check: step → not folded
 	}}
 	steps := compileOpSteps(layer, testResolvedBox())

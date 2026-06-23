@@ -63,16 +63,22 @@ hermes-playwright:
                 test -x "$bin" && echo "EXEC_OK:$bin"
     hermes-playwright-step-4:
         check: the NSS library Chromium links against is installed
-        package: nss
-        installed: true
+        plugin: package
+        plugin_input:
+            package: nss
+            installed: true
     hermes-playwright-step-5:
         check: the GTK3 runtime Chromium needs to launch is installed
-        package: gtk3
-        installed: true
+        plugin: package
+        plugin_input:
+            package: gtk3
+            installed: true
     hermes-playwright-step-6:
         agent-check: Playwright can launch the installed Chromium headlessly to drive a browser automation session
     hermes-playwright-alsa-lib-package:
         check: package=alsa-lib
         id: hermes-playwright-alsa-lib-package
-        package: alsa-lib
-        installed: true
+        plugin: package
+        plugin_input:
+            package: alsa-lib
+            installed: true

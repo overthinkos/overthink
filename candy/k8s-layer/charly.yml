@@ -353,8 +353,10 @@ k8s-layer:
     harness-k8s-python3-package:
         check: package=python3
         id: harness-k8s-python3-package
-        package: python3
-        installed: true
+        plugin: package
+        plugin_input:
+            package: python3
+            installed: true
     harness-k8s-service-running:
         check: service=harness-k8s-fixture
         id: harness-k8s-service-running

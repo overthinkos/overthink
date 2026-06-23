@@ -29,7 +29,7 @@ func runValidateOps(t *testing.T, cfg *Config, layers map[string]*Candy) string 
 // is a narrative-only (agent-graded) step and is intentionally NOT an error.
 func TestValidateOps_MultiVerbRejected(t *testing.T) {
 	layers := map[string]*Candy{
-		"lyr": opsCandy("lyr", Op{File: "/x", Package: "redis"}),
+		"lyr": opsCandy("lyr", Op{File: "/x", Mkdir: "/tmp/d"}),
 	}
 	cfg := &Config{Box: map[string]BoxConfig{}}
 	got := runValidateOps(t, cfg, layers)

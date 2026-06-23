@@ -44,8 +44,10 @@ supervisord:
         exists: true
     supervisord-step-3:
         check: the supervisor package is recorded in the package database
-        package: supervisor
-        installed: true
+        plugin: package
+        plugin_input:
+            package: supervisor
+            installed: true
     supervisord-step-4:
         check: a per-user XDG_RUNTIME_DIR directory exists in the image
         file: /tmp/xdg-runtime

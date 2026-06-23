@@ -57,8 +57,9 @@ type ProvisionActor interface {
 // / RemoveDropin) a shell string would drop. compileActOp resolves a `plugin:` verb's
 // provider and, when it implements this, returns ConstructStep (the typed step flows
 // through the SAME ServicePackagedStep.Emit{OCI,Local,VM} + Reverse() as before) instead
-// of falling through to a generic OpStep. LowersTo names the step kind (the former
-// VerbCatalog.LowersTo entry, now owned by the provider); ConstructStep builds the step
+// of falling through to a generic OpStep. LowersTo names the step kind (the now-removed
+// VerbSpec.LowersTo field's role — package/service were its only users, so the field was
+// deleted and the lowering target lives on the provider); ConstructStep builds the step
 // from the op's plugin_input. A TypedStepProvider therefore also "acts in build/deploy"
 // (opActsInBuildDeploy) even though it is not a ProvisionActor.
 type TypedStepProvider interface {

@@ -39,8 +39,10 @@ redis-server-layer:
         exists: true
     redis-server-layer-step-3:
         check: the redis package (valkey-compat-redis on Fedora 43) is installed
-        package: valkey-compat-redis
-        installed: true
+        plugin: package
+        plugin_input:
+            package: valkey-compat-redis
+            installed: true
     redis-server-layer-step-4:
         check: the running redis-server answers PING with PONG on port 6379
         stdout: PONG

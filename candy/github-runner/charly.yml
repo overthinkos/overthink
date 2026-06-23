@@ -209,35 +209,47 @@ github-runner:
     gr-go-pkg:
         check: package=golang
         id: gr-go-pkg
-        package: golang
-        package_map:
-            arch: go
-        installed: true
+        plugin: package
+        plugin_input:
+            package: golang
+            package_map:
+                arch: go
+            installed: true
     gr-icu-pkg:
         check: package=icu
         id: gr-icu-pkg
-        package: icu
-        installed: true
+        plugin: package
+        plugin_input:
+            package: icu
+            installed: true
     gr-pkgbuild-dep-slirp4netns:
         check: package=slirp4netns
         id: gr-pkgbuild-dep-slirp4netns
-        package: slirp4netns
-        installed: true
+        plugin: package
+        plugin_input:
+            package: slirp4netns
+            installed: true
     gr-pkgbuild-dep-libisoburn:
         check: package=libisoburn
         id: gr-pkgbuild-dep-libisoburn
-        package: libisoburn
-        installed: true
+        plugin: package
+        plugin_input:
+            package: libisoburn
+            installed: true
     gr-pkgbuild-dep-cdrtools:
         check: package=cdrtools
         id: gr-pkgbuild-dep-cdrtools
-        package: cdrtools
-        installed: true
+        plugin: package
+        plugin_input:
+            package: cdrtools
+            installed: true
     gr-pkgbuild-dep-swtpm:
         check: package=swtpm
         id: gr-pkgbuild-dep-swtpm
-        package: swtpm
-        installed: true
+        plugin: package
+        plugin_input:
+            package: swtpm
+            installed: true
     gr-ghcr-mirror:
         check: file=${HOME}/.config/containers/registries.conf.d/ghcr-mirror.conf
         id: gr-ghcr-mirror

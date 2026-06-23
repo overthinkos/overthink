@@ -57,8 +57,10 @@ valkey:
         exists: true
     valkey-step-3:
         check: the valkey package is installed
-        package: valkey
-        installed: true
+        plugin: package
+        plugin_input:
+            package: valkey
+            installed: true
     valkey-step-4:
         check: valkey-cli ping returns PONG against the supervised valkey-server
         stdout: PONG

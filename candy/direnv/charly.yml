@@ -60,8 +60,10 @@ direnv:
     direnv-package-2:
         check: package=direnv
         id: direnv-package
-        package: direnv
-        installed: true
+        plugin: package
+        plugin_input:
+            package: direnv
+            installed: true
     direnv-version:
         check: command=/usr/bin/direnv version
         id: direnv-version

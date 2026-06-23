@@ -105,26 +105,19 @@ func (fileVerb) RenderProvisionScript(c *Op, _ []string) (string, bool) {
 	return b.String(), true
 }
 
-func (packageVerb) RenderProvisionScript(c *Op, distros []string) (string, bool) {
-	// Install via whichever package manager the target carries; the name
-	// is cross-distro-resolved exactly as the assert path resolves it.
-	name := shellSingleQuote(resolvePackageName(c, distros))
-	return fmt.Sprintf(`if command -v dnf >/dev/null 2>&1; then dnf install -y %[1]s; `+
-		`elif command -v apt-get >/dev/null 2>&1; then apt-get update && apt-get install -y %[1]s; `+
-		`elif command -v pacman >/dev/null 2>&1; then pacman -S --noconfirm %[1]s; `+
-		`else echo "no supported package manager" >&2; exit 1; fi`, name), true
-}
-
-// service / user / unix_group / kernel-param / mount RenderProvisionScript (the do:act
-// halves) live with their dedicated plugin units (plugin_verb_service.go / plugin_user.go /
-// plugin_unix_group.go / plugin_kernel_param.go / plugin_mount.go) — each decodes
-// plugin_input rather than the removed Op.Service/Running/Enabled / Op.User/UID/Home/Shell
-// / Op.UnixGroup/GID / Op.KernelParam/Value / Op.Mount/MountSource/Filesystem/Opts fields.
-// `service`'s RenderProvisionScript is the RUNTIME live-act path ONLY (a `run: {plugin:
-// service}` step the check Runner executes) — its build/deploy install timeline lowers
-// into a TYPED ServicePackagedStep via the TypedStepProvider (compileActOp), NOT this
-// shell. They still reuse the package-level firstMatcherScalar (below) + shellSingleQuote
-// via the shared decodeMatcherList codec.
+// package / service / user / unix_group / kernel-param / mount RenderProvisionScript (the
+// do:act halves) live with their dedicated plugin units (plugin_verb_package.go /
+// plugin_verb_service.go / plugin_user.go / plugin_unix_group.go / plugin_kernel_param.go /
+// plugin_mount.go) — each decodes plugin_input rather than the removed
+// Op.Package/Installed/Versions/PackageMap / Op.Service/Running/Enabled /
+// Op.User/UID/Home/Shell / Op.UnixGroup/GID / Op.KernelParam/Value /
+// Op.Mount/MountSource/Filesystem/Opts fields. `package`'s and `service`'s
+// RenderProvisionScript are the RUNTIME/box-build live-act path (a `run: {plugin: package}`
+// / `run: {plugin: service}` step the check Runner executes, plus the box-build emitTasks
+// `case "plugin"` seam) — their build/deploy install timeline lowers into a TYPED
+// SystemPackagesStep / ServicePackagedStep via the TypedStepProvider (compileActOp), NOT
+// this shell. They still reuse the package-level firstMatcherScalar (below) +
+// shellSingleQuote via the shared decodeMatcherList codec.
 
 // firstMatcherScalar returns the first matcher's value rendered as a string,
 // used by the act renderers to read a desired scalar (sysctl value, mount

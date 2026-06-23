@@ -29,8 +29,10 @@ rocm:
                     - rocm-smi
     rocm-step-0:
         check: the ROCm HIP runtime package is installed in the image
-        package: rocm-hip-runtime
-        installed: true
+        plugin: package
+        plugin_input:
+            package: rocm-hip-runtime
+            installed: true
     rocm-step-1:
         check: the clinfo OpenCL diagnostic tool is present at /usr/bin/clinfo
         file: /usr/bin/clinfo
@@ -41,8 +43,10 @@ rocm:
         exists: true
     rocm-step-3:
         check: the rocm-smi package is installed in the image
-        package: rocm-smi
-        installed: true
+        plugin: package
+        plugin_input:
+            package: rocm-smi
+            installed: true
     rocm-step-4:
         check: ROCM_PATH is exported into the container environment as /usr
         stdout: /usr
@@ -54,10 +58,14 @@ rocm:
     rocm-opencl-package:
         check: package=rocm-opencl
         id: rocm-opencl-package
-        package: rocm-opencl
-        installed: true
+        plugin: package
+        plugin_input:
+            package: rocm-opencl
+            installed: true
     rocm-clinfo-package:
         check: package=rocm-clinfo
         id: rocm-clinfo-package
-        package: rocm-clinfo
-        installed: true
+        plugin: package
+        plugin_input:
+            package: rocm-clinfo
+            installed: true

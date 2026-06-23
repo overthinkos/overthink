@@ -69,5 +69,7 @@ tailscale:
     tailscale-package-2:
         check: package=tailscale
         id: tailscale-package
-        package: tailscale
-        installed: true
+        plugin: package
+        plugin_input:
+            package: tailscale
+            installed: true

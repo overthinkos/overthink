@@ -32,5 +32,7 @@ nvenc-headers:
     nvenc-headers-package:
         check: package=ffnvcodec-headers
         id: nvenc-headers-package
-        package: ffnvcodec-headers
-        installed: true
+        plugin: package
+        plugin_input:
+            package: ffnvcodec-headers
+            installed: true

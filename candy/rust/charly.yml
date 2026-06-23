@@ -69,10 +69,12 @@ rust:
     rust-compiler-package:
         check: package=rust
         id: rust-compiler-package
-        package: rust
-        package_map:
-            arch: rust
-            fedora: rust
-            debian: rustc
-            ubuntu: rustc
-        installed: true
+        plugin: package
+        plugin_input:
+            package: rust
+            package_map:
+                arch: rust
+                fedora: rust
+                debian: rustc
+                ubuntu: rustc
+            installed: true

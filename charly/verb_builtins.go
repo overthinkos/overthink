@@ -18,25 +18,19 @@ func (fileVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runFile(ctx, op)
 }
 
-type packageVerb struct{ builtinVerbBase }
-
-func (packageVerb) Reserved() string { return "package" }
-func (packageVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runPackage(ctx, op)
-}
-
-// command / service / user / unix_group / kernel-param / mount are NOT here — each is an
-// extracted verb, a dedicated plugin UNIT (plugin_verb_command.go / plugin_verb_service.go /
-// plugin_user.go / plugin_unix_group.go / plugin_kernel_param.go / plugin_mount.go) that
-// self-registers via RegisterBuiltinPluginUnit (absent from both builtinProviderInstances
-// and the providers: manifest). user/unix_group/kernel-param/mount are BOTH a
-// CheckVerbProvider AND a ProvisionActor (useradd / groupadd / sysctl-write / mount at
-// install emit + runtime act). `service` is the TYPED-STEP outlier — a CheckVerbProvider
-// AND a TypedStepProvider (its act lowers to a ServicePackagedStep with load-bearing
-// reversals, NOT a RenderProvisionScript) AND a ProvisionActor (the runtime live-act
-// path). `command` is a CheckVerbProvider ONLY — its act is the dedicated install-task
-// emitCmd branch (`plugin == "command"` in emitTasks/renderOpCommand), NOT a
-// ProvisionActor.
+// package / command / service / user / unix_group / kernel-param / mount are NOT here —
+// each is an extracted verb, a dedicated plugin UNIT (plugin_verb_package.go /
+// plugin_verb_command.go / plugin_verb_service.go / plugin_user.go / plugin_unix_group.go /
+// plugin_kernel_param.go / plugin_mount.go) that self-registers via
+// RegisterBuiltinPluginUnit (absent from both builtinProviderInstances and the providers:
+// manifest). user/unix_group/kernel-param/mount are BOTH a CheckVerbProvider AND a
+// ProvisionActor (useradd / groupadd / sysctl-write / mount at install emit + runtime act).
+// `package` and `service` are the TYPED-STEP verbs — each a CheckVerbProvider AND a
+// TypedStepProvider (its act lowers to a SystemPackagesStep / ServicePackagedStep with
+// load-bearing reversals, NOT a RenderProvisionScript) AND a ProvisionActor (the
+// runtime/box-build live-act path); `package` is the simpler one (no PriorEnabled state).
+// `command` is a CheckVerbProvider ONLY — its act is the dedicated install-task emitCmd
+// branch (`plugin == "command"` in emitTasks/renderOpCommand), NOT a ProvisionActor.
 
 type cdpVerb struct{ builtinVerbBase }
 

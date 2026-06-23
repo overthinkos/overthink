@@ -88,5 +88,7 @@ waybar-labwc:
     waybar-package:
         check: package=waybar
         id: waybar-package
-        package: waybar
-        installed: true
+        plugin: package
+        plugin_input:
+            package: waybar
+            installed: true

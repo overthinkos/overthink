@@ -37,8 +37,10 @@ debootstrap-builder:
         exists: true
     debootstrap-builder-step-1:
         check: the debootstrap package is registered in the dpkg database
-        package: debootstrap
-        installed: true
+        plugin: package
+        plugin_input:
+            package: debootstrap
+            installed: true
     debootstrap-builder-step-2:
         check: qemu-img is available to create and convert the VM disk image
         file: /usr/bin/qemu-img
@@ -59,15 +61,21 @@ debootstrap-builder:
         exists: true
     debootstrap-builder-step-6:
         check: efibootmgr is installed to register the EFI boot entry
-        package: efibootmgr
-        installed: true
+        plugin: package
+        plugin_input:
+            package: efibootmgr
+            installed: true
     debootstrap-builder-e2fsprogs-package:
         check: package=e2fsprogs
         id: debootstrap-builder-e2fsprogs-package
-        package: e2fsprogs
-        installed: true
+        plugin: package
+        plugin_input:
+            package: e2fsprogs
+            installed: true
     debootstrap-builder-dosfstools-package:
         check: package=dosfstools
         id: debootstrap-builder-dosfstools-package
-        package: dosfstools
-        installed: true
+        plugin: package
+        plugin_input:
+            package: dosfstools
+            installed: true

@@ -106,8 +106,10 @@ java-openjdk:
     java-openjdk-package:
         check: package=openjdk-21-jdk-headless
         id: java-openjdk-package
-        package: openjdk-21-jdk-headless
-        package_map:
-            fedora: java-21-openjdk-headless
-            arch: jdk21-openjdk
-        installed: true
+        plugin: package
+        plugin_input:
+            package: openjdk-21-jdk-headless
+            package_map:
+                fedora: java-21-openjdk-headless
+                arch: jdk21-openjdk
+            installed: true

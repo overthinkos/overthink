@@ -242,8 +242,10 @@ mcp-layer:
         exists: true
     mcp-layer-step-4:
         check: the python3 package providing the interpreter is installed
-        package: python3
-        installed: true
+        plugin: package
+        plugin_input:
+            package: python3
+            installed: true
     mcp-layer-step-5:
         check: the running fixture answers an MCP ping over its Streamable HTTP endpoint
         mcp: ping

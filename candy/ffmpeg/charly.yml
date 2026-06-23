@@ -47,5 +47,7 @@ ffmpeg:
     ffmpeg-package:
         check: package=ffmpeg
         id: ffmpeg-package
-        package: ffmpeg
-        installed: true
+        plugin: package
+        plugin_input:
+            package: ffmpeg
+            installed: true

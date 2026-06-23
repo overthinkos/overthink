@@ -45,7 +45,9 @@ gnupg:
     gnupg-package:
         check: package=gnupg
         id: gnupg-package
-        package: gnupg
-        package_map:
-            fedora: gnupg2
-        installed: true
+        plugin: package
+        plugin_input:
+            package: gnupg
+            package_map:
+                fedora: gnupg2
+            installed: true

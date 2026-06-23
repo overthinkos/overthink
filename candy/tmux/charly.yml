@@ -18,8 +18,10 @@ tmux:
         exists: true
     tmux-step-1:
         check: the tmux package is registered with the system package manager
-        package: tmux
-        installed: true
+        plugin: package
+        plugin_input:
+            package: tmux
+            installed: true
     tmux-step-2:
         check: invoking tmux -V exits cleanly and prints a tmux version banner
         exit_status: 0

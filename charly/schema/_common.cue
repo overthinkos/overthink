@@ -17,7 +17,6 @@
 // the `--- verb discriminators ---` group in #Op.
 #OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" |
 	"command" | "file" | "package" | "service" |
-	"user" | "kernel-param" | "mount" |
 	"cdp" | "wl" | "dbus" | "vnc" | "mcp" | "record" | "spice" |
 	"libvirt" | "kube" | "adb" | "appium" | "summarize" | "kill" | "plugin") @go(-)
 
@@ -53,9 +52,6 @@
 	package?:        string
 	service?:        string
 	command?:        string
-	user?:           string
-	"kernel-param"?: string @go(KernelParam)
-	mount?:          string
 	mkdir?:          string
 	copy?:           string
 	write?:          string
@@ -208,22 +204,14 @@
 	method?:       string
 	request_body?: string @go(RequestBody)
 
-	// --- user ---
-	// gid STAYS in #Op (read by the `user` verb's getent-passwd assertion). The
-	// `unix_group` verb left #Op for its own builtin plugin unit
-	// (plugin/builtins/unix_group) and reproduces gid standalone in #UnixGroupInput
-	// (a self-contained copy, NOT a move — gid still has a non-extracted #Op consumer).
-	uid?:   int & >=0 @go(UID,type=*int)
-	gid?:   int & >=0 @go(GID,type=*int)
-	home?:  string
-	shell?: string
+	// --- residual state-provision modifier ---
+	// groups — the `unix_group` verb's supplementary-members modifier. It has NO remaining
+	// #Op reader: `unix_group` extracted to its builtin plugin unit (its #UnixGroupInput
+	// reproduces only `unix_group`+`gid`, not members), and the `user`/`kernel-param`/`mount`
+	// verbs likewise left #Op for their units — taking `uid`/`gid`/`home`/`shell`, `value`,
+	// and `mount_source`/`filesystem`/`opt` into their own #*Input defs. groups is a dormant
+	// modifier (no current consumer), tracked for a follow-up.
 	groups?: [...string]
-
-	// --- kernel-param / mount ---
-	value?:        #MatcherList
-	mount_source?: string @go(MountSource)
-	filesystem?:   string
-	opt?:          #MatcherList @go(Opts)
 
 	// --- cdp / wl / dbus / vnc / spice modifiers ---
 	tab?:        string

@@ -124,14 +124,17 @@ func TestRunner_DNSPlugin(t *testing.T) {
 	})
 }
 
-// user verb — getent output parsing.
+// user verb — getent output parsing. Now an extracted state-provision verb, a dedicated
+// builtin plugin unit dispatched IN-PROCESS via the CheckVerbProvider RunVerb path (TestMain
+// loads its schema); authored as plugin: user + plugin_input.
 func TestRunner_User(t *testing.T) {
 	r, fake := newFakeRunner(t, RunModeLive)
 	fake.responses = []fakeResponse{
 		{matchPrefix: "getent passwd 'alice'", stdout: "alice:x:1000:1000:Alice:/home/alice:/bin/bash\n", exit: 0},
 	}
-	uid := 1000
-	res := r.Run(context.Background(), []Op{{User: "alice", UID: &uid, Home: "/home/alice"}})
+	res := r.Run(context.Background(), []Op{
+		{Plugin: "user", PluginInput: map[string]any{"user": "alice", "uid": 1000, "home": "/home/alice"}},
+	})
 	if res[0].Status != TestPass {
 		t.Errorf("expected pass, got %+v", res[0])
 	}
@@ -142,8 +145,9 @@ func TestRunner_User_UIDMismatch(t *testing.T) {
 	fake.responses = []fakeResponse{
 		{matchPrefix: "getent passwd 'alice'", stdout: "alice:x:1500:1500:Alice:/home/alice:/bin/bash\n", exit: 0},
 	}
-	uid := 1000
-	res := r.Run(context.Background(), []Op{{User: "alice", UID: &uid}})
+	res := r.Run(context.Background(), []Op{
+		{Plugin: "user", PluginInput: map[string]any{"user": "alice", "uid": 1000}},
+	})
 	if res[0].Status != TestFail {
 		t.Errorf("expected fail, got %+v", res[0])
 	}
@@ -182,21 +186,26 @@ func TestRunner_Interface(t *testing.T) {
 	}
 }
 
-// kernel-param verb — scalar match via Matching.
+// kernel-param verb — scalar match via the value matcher. Now an extracted state-provision
+// verb, a dedicated builtin plugin unit dispatched IN-PROCESS via the CheckVerbProvider
+// RunVerb path (TestMain loads its schema); authored as plugin: kernel-param + plugin_input.
+// The CHECK reads /proc/sys/<key-as-slashes> directly (no procps-ng `sysctl` dependency).
 func TestRunner_KernelParam(t *testing.T) {
 	r, fake := newFakeRunner(t, RunModeLive)
 	fake.responses = []fakeResponse{
-		{matchPrefix: "sysctl -n 'net.ipv4.ip_forward'", stdout: "1\n", exit: 0},
+		{matchPrefix: "cat '/proc/sys/net/ipv4/ip_forward'", stdout: "1\n", exit: 0},
 	}
 	res := r.Run(context.Background(), []Op{
-		{KernelParam: "net.ipv4.ip_forward", Value: MatcherList{{Op: "equals", Value: "1"}}},
+		{Plugin: "kernel-param", PluginInput: map[string]any{"kernel-param": "net.ipv4.ip_forward", "value": "1"}},
 	})
 	if res[0].Status != TestPass {
 		t.Errorf("got %+v", res[0])
 	}
 }
 
-// mount verb — findmnt parsing + filesystem check.
+// mount verb — findmnt parsing + filesystem check. Now an extracted state-provision verb,
+// a dedicated builtin plugin unit dispatched IN-PROCESS via the CheckVerbProvider RunVerb
+// path (TestMain loads its schema); authored as plugin: mount + plugin_input.
 func TestRunner_Mount(t *testing.T) {
 	r, fake := newFakeRunner(t, RunModeLive)
 	fake.responses = []fakeResponse{
@@ -204,7 +213,7 @@ func TestRunner_Mount(t *testing.T) {
 			stdout: "/dev/sda1 ext4 rw,relatime\n", exit: 0},
 	}
 	res := r.Run(context.Background(), []Op{
-		{Mount: "/data", Filesystem: "ext4", MountSource: "/dev/sda1"},
+		{Plugin: "mount", PluginInput: map[string]any{"mount": "/data", "filesystem": "ext4", "mount_source": "/dev/sda1"}},
 	})
 	if res[0].Status != TestPass {
 		t.Errorf("got %+v", res[0])

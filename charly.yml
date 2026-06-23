@@ -1,4 +1,4 @@
-version: 2026.174.0100
+version: 2026.174.0300
 # Canonical repo identity. After the 2026-06 box inversion main imports the three
 # active distro submodules (arch / cachyos / fedora) ONE-DIRECTIONALLY to reference
 # their relocated boxes; the submodules no longer import main as a namespace (they
@@ -664,8 +664,10 @@ default:
                 running: true
         default-step-4:
             check: the predetermined user account is present in the user database
-            user: root
-            uid: 0
+            plugin: user
+            plugin_input:
+                user: root
+                uid: 0
         default-step-5:
             check: the predetermined group is present in the group database
             plugin: unix_group
@@ -674,12 +676,16 @@ default:
                 gid: 0
         default-step-6:
             check: the predetermined mountpoint is listed in the mount table
-            mount: /proc
-            filesystem: proc
+            plugin: mount
+            plugin_input:
+                mount: /proc
+                filesystem: proc
         default-step-7:
             check: the predetermined kernel parameter is readable from sysctl
-            kernel-param: kernel.hostname
-            value: {matches: "."}
+            plugin: kernel-param
+            plugin_input:
+                kernel-param: kernel.hostname
+                value: {matches: "."}
         default-step-8:
             check: the loopback interface is present
             plugin: interface

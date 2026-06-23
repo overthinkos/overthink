@@ -36,12 +36,13 @@ func TestRenderProvisionScript(t *testing.T) {
 		{"package", Op{Package: "redis"}, "package", true, "install"},
 		{"service", Op{Service: "sshd"}, "service", true, "enable --now"},
 		{"file-content", Op{File: "/etc/x.conf", Content: "hi\n", Mode: "0644"}, "file", true, "chmod '0644'"},
-		{"user", Op{User: "bob"}, "user", true, "useradd"},
-		// unix_group is the FIRST extracted state-provision verb: a builtin plugin unit
-		// whose provider is a ProvisionActor reading plugin_input (not the removed
-		// Op.UnixGroup/Op.GID fields).
+		// unix_group / user / kernel-param / mount are extracted state-provision verbs:
+		// builtin plugin units whose providers are ProvisionActors reading plugin_input (not
+		// the removed Op.UnixGroup/User/KernelParam/Mount/… fields).
 		{"unix_group", Op{Plugin: "unix_group", PluginInput: map[string]any{"unix_group": "devs"}}, "unix_group", true, "groupadd"},
-		{"kernel-param", Op{KernelParam: "vm.swappiness", Value: MatcherList{{Op: "equals", Value: "10"}}}, "kernel-param", true, "sysctl -w 'vm.swappiness'='10'"},
+		{"user", Op{Plugin: "user", PluginInput: map[string]any{"user": "bob"}}, "user", true, "useradd"},
+		{"kernel-param", Op{Plugin: "kernel-param", PluginInput: map[string]any{"kernel-param": "vm.swappiness", "value": "10"}}, "kernel-param", true, "sysctl -w 'vm.swappiness'='10'"},
+		{"mount", Op{Plugin: "mount", PluginInput: map[string]any{"mount": "/mnt/data", "mount_source": "/dev/sdb1", "filesystem": "ext4"}}, "mount", true, "mount -t 'ext4' '/dev/sdb1' '/mnt/data'"},
 		// An observe-only verb has no act form → ok=false (falls to the probe handler).
 		// addr is now a builtin plugin verb (authored plugin: addr + plugin_input); its
 		// provider is a CheckVerbProvider, not a ProvisionActor, so it still has no act form.

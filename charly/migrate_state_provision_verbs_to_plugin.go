@@ -4,11 +4,13 @@ package main
 // extraction.
 //
 // A STATE-PROVISION verb is DUAL-NATURED — it carries BOTH a check (do:assert probe) AND
-// an act (do:act provision). `unix_group` (getent-group probe + groupadd) is the first
-// extracted: it left the closed `#Op`/`spec.OpVerbs` and became a BUILTIN plugin unit
-// (plugin/builtins/unix_group) whose provider is BOTH a CheckVerbProvider AND a
-// ProvisionActor. A plan step that authored it inline now authors the generic plugin step
-// `plugin: unix_group` + a typed `plugin_input:` validated against #UnixGroupInput.
+// an act (do:act provision). `unix_group` (getent-group probe + groupadd) was the first
+// extracted; `user` (getent-passwd + useradd), `kernel-param` (sysctl read + write) and
+// `mount` (findmnt + mount) followed. Each left the closed `#Op`/`spec.OpVerbs` and became
+// a BUILTIN plugin unit (plugin/builtins/{unix_group,user,kernel_param,mount}) whose
+// provider is BOTH a CheckVerbProvider AND a ProvisionActor. A plan step that authored one
+// inline now authors the generic plugin step `plugin: <verb>` + a typed `plugin_input:`
+// validated against the unit's #*Input def.
 //
 // This is the SIBLING of the observe-only goss-verb migrator
 // (migrate_goss_verbs_to_plugin.go), which CONVERTS only a `check:` step and STRIPS the
@@ -35,14 +37,23 @@ package main
 import "gopkg.in/yaml.v3"
 
 // stateProvisionVerbFields maps each EXTRACTED state-provision verb-key to the companion
-// field keys that MOVE with it into plugin_input (in deterministic order). A shared
-// companion (unix_group→gid, which the `user` verb also reads) STAYS in #Op for the
-// non-extracted verb but MOVES here for the extracted verb's step.
+// field keys that MOVE with it into plugin_input (in deterministic order). A step has at
+// most one verb (Op.Kind enforces), so exactly one entry matches any step — `gid` appears
+// in BOTH the unix_group and user field lists, but never on the same step (unix_group XOR
+// user). Each verb's companions are the #Op fields read ONLY by that verb, now relocated
+// into its builtin plugin unit's #*Input def:
+//   - unix_group → gid          (#UnixGroupInput)
+//   - user       → uid/gid/home/shell (#UserInput)
+//   - kernel-param → value      (#KernelParamInput)
+//   - mount      → mount_source/filesystem/opt (#MountInput)
 var stateProvisionVerbFields = []struct {
 	verb   string
 	fields []string
 }{
 	{"unix_group", []string{"gid"}},
+	{"user", []string{"uid", "gid", "home", "shell"}},
+	{"kernel-param", []string{"value"}},
+	{"mount", []string{"mount_source", "filesystem", "opt"}},
 }
 
 // MigrateStateProvisionVerbsToPlugin rewrites every legacy state-provision-verb Op step

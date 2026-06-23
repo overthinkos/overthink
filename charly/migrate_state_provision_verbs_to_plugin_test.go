@@ -9,18 +9,18 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestMigrateStateProvisionVerbsToPlugin proves the FIRST state-provision-verb extraction
-// (unix_group). Because a state-provision verb is DUAL-NATURED, BOTH a `check:` (assert)
-// step AND a `run:` (act) step authoring it are CONVERTED to the generic plugin step
-// (plugin: unix_group + plugin_input{unix_group, gid}) — the distinguishing behaviour
-// versus the OBSERVE-only goss migrator, which strips a run: step's vestigial keys. A
-// verb-less step kind (agent-check/include) has the vestigial keys STRIPPED. The shared
-// `gid` companion MOVES into plugin_input on the unix_group step but STAYS untouched on a
-// `user:` step (the non-extracted verb that still reads it). Comment-preserving + idempotent.
+// TestMigrateStateProvisionVerbsToPlugin proves the state-provision-verb extraction across
+// all four extracted verbs (unix_group, user, kernel-param, mount). Because a
+// state-provision verb is DUAL-NATURED, BOTH a `check:` (assert) step AND a `run:` (act)
+// step authoring it are CONVERTED to the generic plugin step (plugin: <verb> +
+// plugin_input{<verb>, <companions>}) — the distinguishing behaviour versus the OBSERVE-only
+// goss migrator, which strips a run: step's vestigial keys. A verb-less step kind
+// (agent-check/include) has the vestigial keys STRIPPED. Each verb's companion fields MOVE
+// into plugin_input. Comment-preserving + idempotent.
 func TestMigrateStateProvisionVerbsToPlugin(t *testing.T) {
 	dir := t.TempDir()
 	rootYML := "" +
-		"version: 2026.174.0100\n" +
+		"version: 2026.174.0300\n" +
 		"sample:\n" +
 		"    candy: {}\n" +
 		"    plan:\n" +
@@ -35,7 +35,17 @@ func TestMigrateStateProvisionVerbsToPlugin(t *testing.T) {
 		"          gid: 99\n" +
 		"        - check: \"the deploy user is present\"\n" +
 		"          user: \"deploy\"\n" +
+		"          uid: 1000\n" +
 		"          gid: 1000\n" +
+		"          home: \"/home/deploy\"\n" +
+		"          shell: \"/bin/bash\"\n" +
+		"        - check: \"ip_forward is enabled\"\n" +
+		"          kernel-param: \"net.ipv4.ip_forward\"\n" +
+		"          value: \"1\"\n" +
+		"        - run: \"mount the data volume\"\n" +
+		"          mount: \"/mnt/data\"\n" +
+		"          mount_source: \"/dev/sdb1\"\n" +
+		"          filesystem: \"ext4\"\n" +
 		"        - run: \"a plain step\"\n" +
 		"          command: \"echo hi\"\n"
 	rootPath := filepath.Join(dir, "charly.yml")
@@ -61,7 +71,7 @@ func TestMigrateStateProvisionVerbsToPlugin(t *testing.T) {
 		t.Fatalf("re-parse migrated YAML: %v", err)
 	}
 	plan, ok := doc["sample"].(map[string]any)["plan"].([]any)
-	if !ok || len(plan) != 5 {
+	if !ok || len(plan) != 7 {
 		t.Fatalf("plan shape wrong (len=%d): %v", len(plan), doc["sample"])
 	}
 
@@ -108,23 +118,63 @@ func TestMigrateStateProvisionVerbsToPlugin(t *testing.T) {
 		t.Errorf("step 2: plugin: wrongly added to a verb-less step: %v", agentStep)
 	}
 
-	// (d) a user: step (the non-extracted verb that still reads gid) is UNTOUCHED — gid
-	//     STAYS at step level, no plugin added.
+	// (d) a user: step now CONVERTS (user is an extracted state-provision verb) — its
+	//     uid/gid/home/shell companions ALL move into plugin_input.
 	userStep := plan[3].(map[string]any)
-	if userStep["user"] != "deploy" || userStep["gid"] != 1000 {
-		t.Errorf("step 3: user step wrongly modified (gid must stay for the user verb): %v", userStep)
+	if userStep["plugin"] != "user" {
+		t.Errorf("step 3: plugin: user not added, got %v: %v", userStep["plugin"], userStep)
 	}
-	if _, has := userStep["plugin"]; has {
-		t.Errorf("step 3: plugin: wrongly added to a user step: %v", userStep)
+	for _, k := range []string{"user", "uid", "gid", "home", "shell"} {
+		if _, has := userStep[k]; has {
+			t.Errorf("step 3: bare %s: not removed (must move into plugin_input): %v", k, userStep)
+		}
+	}
+	userPI := userStep["plugin_input"].(map[string]any)
+	if userPI["user"] != "deploy" || userPI["uid"] != 1000 || userPI["gid"] != 1000 ||
+		userPI["home"] != "/home/deploy" || userPI["shell"] != "/bin/bash" {
+		t.Errorf("step 3: plugin_input = %v, want {user: deploy, uid: 1000, gid: 1000, home: /home/deploy, shell: /bin/bash}", userPI)
 	}
 
-	// (e) the plain run: command step is untouched.
-	plainStep := plan[4].(map[string]any)
+	// (e) a kernel-param: step CONVERTS — value moves into plugin_input under the (hyphenated)
+	//     kernel-param key.
+	kpStep := plan[4].(map[string]any)
+	if kpStep["plugin"] != "kernel-param" {
+		t.Errorf("step 4: plugin: kernel-param not added, got %v: %v", kpStep["plugin"], kpStep)
+	}
+	if _, has := kpStep["kernel-param"]; has {
+		t.Errorf("step 4: bare kernel-param: not removed: %v", kpStep)
+	}
+	kpPI := kpStep["plugin_input"].(map[string]any)
+	if kpPI["kernel-param"] != "net.ipv4.ip_forward" || kpPI["value"] != "1" {
+		t.Errorf("step 4: plugin_input = %v, want {kernel-param: net.ipv4.ip_forward, value: 1}", kpPI)
+	}
+
+	// (f) a run: mount: step CONVERTS — mount_source/filesystem move into plugin_input, the
+	//     run: keyword preserved.
+	mountStep := plan[5].(map[string]any)
+	if mountStep["plugin"] != "mount" {
+		t.Errorf("step 5: plugin: mount not added, got %v: %v", mountStep["plugin"], mountStep)
+	}
+	if mountStep["run"] != "mount the data volume" {
+		t.Errorf("step 5: the run: keyword must be preserved: %v", mountStep)
+	}
+	for _, k := range []string{"mount", "mount_source", "filesystem"} {
+		if _, has := mountStep[k]; has {
+			t.Errorf("step 5: bare %s: not removed: %v", k, mountStep)
+		}
+	}
+	mountPI := mountStep["plugin_input"].(map[string]any)
+	if mountPI["mount"] != "/mnt/data" || mountPI["mount_source"] != "/dev/sdb1" || mountPI["filesystem"] != "ext4" {
+		t.Errorf("step 5: plugin_input = %v, want {mount: /mnt/data, mount_source: /dev/sdb1, filesystem: ext4}", mountPI)
+	}
+
+	// (g) the plain run: command step is untouched.
+	plainStep := plan[6].(map[string]any)
 	if plainStep["command"] != "echo hi" {
-		t.Errorf("step 4: plain run step mangled: %v", plainStep)
+		t.Errorf("step 6: plain run step mangled: %v", plainStep)
 	}
 
-	// (f) idempotent — a second pass changes nothing (the nested plugin_input keys are not
+	// (h) idempotent — a second pass changes nothing (the nested plugin_input keys are not
 	//     step nodes, so they are never re-processed).
 	again, err := MigrateStateProvisionVerbsToPlugin(dir, false)
 	if err != nil {
@@ -135,19 +185,24 @@ func TestMigrateStateProvisionVerbsToPlugin(t *testing.T) {
 	}
 }
 
-// TestMigrateStateProvisionVerbsToPlugin_NoVerbUntouched proves a config with no
-// unix_group Op anywhere is left byte-for-byte unchanged — even when it carries a `user:`
-// step that uses the shared gid companion.
+// TestMigrateStateProvisionVerbsToPlugin_NoVerbUntouched proves a config with no extracted
+// state-provision-verb Op anywhere is left byte-for-byte unchanged — even when it carries a
+// non-step `user:` field (an SSH deploy user) that shares a key name with the extracted verb.
 func TestMigrateStateProvisionVerbsToPlugin_NoVerbUntouched(t *testing.T) {
 	dir := t.TempDir()
 	rootYML := "" +
-		"version: 2026.174.0100\n" +
+		"version: 2026.174.0300\n" +
+		"via-bastion:\n" +
+		"    local:\n" +
+		"        from: dev-workstation\n" +
+		"        host: target.internal\n" +
+		"        user: ops\n" + // a deploy field named user:, NOT a plan-step verb
 		"sample:\n" +
 		"    candy: {}\n" +
 		"    plan:\n" +
-		"        - check: \"the deploy user is present\"\n" +
-		"          user: \"deploy\"\n" +
-		"          gid: 1000\n" +
+		"        - check: \"the marker file exists\"\n" +
+		"          file: \"/etc/marker\"\n" +
+		"          exists: true\n" +
 		"        - run: \"do a thing\"\n" +
 		"          command: \"echo hi\"\n"
 	rootPath := filepath.Join(dir, "charly.yml")
@@ -161,10 +216,10 @@ func TestMigrateStateProvisionVerbsToPlugin_NoVerbUntouched(t *testing.T) {
 		t.Fatalf("error = %v", err)
 	}
 	if len(rewritten) != 0 {
-		t.Errorf("a config with no unix_group verb was rewritten: %v", rewritten)
+		t.Errorf("a config with no extracted state-provision verb was rewritten: %v", rewritten)
 	}
 	after, _ := os.ReadFile(rootPath)
 	if string(before) != string(after) {
-		t.Errorf("file modified despite no unix_group keys:\nbefore:\n%s\nafter:\n%s", before, after)
+		t.Errorf("file modified despite no state-provision verb keys:\nbefore:\n%s\nafter:\n%s", before, after)
 	}
 }

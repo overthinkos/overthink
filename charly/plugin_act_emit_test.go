@@ -76,6 +76,92 @@ func TestEmitTasks_PluginAct_UnixGroup(t *testing.T) {
 	}
 }
 
+// The other extracted state-provision verbs (user / kernel-param / mount) reach the SAME
+// resolveProvisionScript seam through renderOpCommand — each renders its act shell from
+// plugin_input via its provider's ProvisionActor. One renderOpCommand assertion per verb
+// proves the act half emits at the local/vm deploy seam; the box-build emitTasks seam is
+// verb-agnostic (it calls resolveProvisionScript too — proven generic by
+// TestEmitTasks_PluginAct_UnixGroup and TestEmitTasks_PluginAct_KernelParam below).
+
+// renderOpCommand turns a plugin: user run-Op into the idempotent useradd shell.
+func TestRenderOpCommand_PluginAct_User(t *testing.T) {
+	s := &OpStep{
+		Op:        &Op{Plugin: "user", PluginInput: map[string]any{"user": "svc", "uid": 1500, "home": "/home/svc"}},
+		CandyName: "lyr",
+	}
+	cmd, err := renderOpCommand(s)
+	if err != nil {
+		t.Fatalf("renderOpCommand: %v", err)
+	}
+	for _, want := range []string{"useradd", "-u 1500", "svc", "-m -d '/home/svc'"} {
+		if !strings.Contains(cmd, want) {
+			t.Errorf("renderOpCommand = %q, want substring %q", cmd, want)
+		}
+	}
+}
+
+// renderOpCommand turns a plugin: mount run-Op into the idempotent mount shell.
+func TestRenderOpCommand_PluginAct_Mount(t *testing.T) {
+	s := &OpStep{
+		Op:        &Op{Plugin: "mount", PluginInput: map[string]any{"mount": "/mnt/data", "mount_source": "/dev/sdb1", "filesystem": "ext4"}},
+		CandyName: "lyr",
+	}
+	cmd, err := renderOpCommand(s)
+	if err != nil {
+		t.Fatalf("renderOpCommand: %v", err)
+	}
+	for _, want := range []string{"findmnt", "mount", "-t 'ext4'", "'/dev/sdb1'", "'/mnt/data'"} {
+		if !strings.Contains(cmd, want) {
+			t.Errorf("renderOpCommand = %q, want substring %q", cmd, want)
+		}
+	}
+}
+
+// renderOpCommand turns a plugin: kernel-param run-Op into the sysctl -w shell. The `value`
+// matcher rides plugin_input and is read via the shared decodeMatcherList + firstMatcherScalar.
+func TestRenderOpCommand_PluginAct_KernelParam(t *testing.T) {
+	s := &OpStep{
+		Op:        &Op{Plugin: "kernel-param", PluginInput: map[string]any{"kernel-param": "vm.swappiness", "value": "10"}},
+		CandyName: "lyr",
+	}
+	cmd, err := renderOpCommand(s)
+	if err != nil {
+		t.Fatalf("renderOpCommand: %v", err)
+	}
+	for _, want := range []string{"sysctl -w", "vm.swappiness", "10"} {
+		if !strings.Contains(cmd, want) {
+			t.Errorf("renderOpCommand = %q, want substring %q", cmd, want)
+		}
+	}
+}
+
+// rawKernelParamOp is the RAW plan op the box build walks straight into emitTasks.
+func rawKernelParamOp() Op {
+	return Op{Plugin: "kernel-param", PluginInput: map[string]any{"kernel-param": "vm.swappiness", "value": "10"}}
+}
+
+// emitTasks (the REAL box-build emit path) must render a RAW plugin: kernel-param run-Op
+// into a Containerfile RUN carrying the sysctl write — proving the box-build `case "plugin"`
+// seam is verb-agnostic across the extracted state-provision verbs (not unix_group-special).
+func TestEmitTasks_PluginAct_KernelParam(t *testing.T) {
+	dir := t.TempDir()
+	layer := &Candy{Name: "lyr"}
+	g := &Generator{BuildDir: dir}
+	var b strings.Builder
+	if _, err := g.emitTasks(&b, layer, testResolvedBox(), []Op{rawKernelParamOp()}, dir, ".build/test-img"); err != nil {
+		t.Fatalf("emitTasks: %v", err)
+	}
+	out := b.String()
+	for _, want := range []string{"RUN", "sysctl -w", "vm.swappiness", "10"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("emitTasks Containerfile = %q, want substring %q", out, want)
+		}
+	}
+	if strings.Contains(out, `unknown verb "plugin"`) {
+		t.Errorf("the raw plugin op was DROPPED as an unknown verb:\n%s", out)
+	}
+}
+
 // emitOp (the OCI pod-overlay path) delegates the same RAW plugin op to emitTasks — proving
 // the pod-overlay build and the box build share the ONE `case "plugin"` seam (no
 // emitOp-local pre-conversion).

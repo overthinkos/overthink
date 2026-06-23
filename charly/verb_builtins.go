@@ -39,32 +39,13 @@ func (serviceVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runService(ctx, op)
 }
 
-type userVerb struct{ builtinVerbBase }
-
-func (userVerb) Reserved() string { return "user" }
-func (userVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runUser(ctx, op)
-}
-
-// unix_group is NOT here — it is the FIRST extracted STATE-PROVISION verb, a dedicated
-// plugin UNIT (plugin_unix_group.go) that self-registers via RegisterBuiltinPluginUnit
-// (absent from both builtinProviderInstances and the providers: manifest). Its provider
-// is BOTH a CheckVerbProvider (getent-group probe) AND a ProvisionActor (groupadd at
-// install emit + runtime act).
-
-type kernelParamVerb struct{ builtinVerbBase }
-
-func (kernelParamVerb) Reserved() string { return "kernel-param" }
-func (kernelParamVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runKernelParam(ctx, op)
-}
-
-type mountVerb struct{ builtinVerbBase }
-
-func (mountVerb) Reserved() string { return "mount" }
-func (mountVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runMount(ctx, op)
-}
+// user / unix_group / kernel-param / mount are NOT here — each is an extracted
+// STATE-PROVISION verb, a dedicated plugin UNIT (plugin_user.go / plugin_unix_group.go /
+// plugin_kernel_param.go / plugin_mount.go) that self-registers via
+// RegisterBuiltinPluginUnit (absent from both builtinProviderInstances and the providers:
+// manifest). Each provider is BOTH a CheckVerbProvider (getent-passwd / getent-group /
+// sysctl-read / findmnt probe) AND a ProvisionActor (useradd / groupadd / sysctl-write /
+// mount at install emit + runtime act).
 
 type cdpVerb struct{ builtinVerbBase }
 

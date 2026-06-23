@@ -26,14 +26,14 @@ import (
 // registered (deploy/step have a gate; builders have none). See plugin_deploy_local.go,
 // plugin_step_reboot.go, plugin_builder_cargo.go.
 var builtinProviderInstances = []Provider{
-	// verbs (ClassVerb) — http/interface/addr/unix_group are NOT here: each is a dedicated
-	// plugin UNIT (plugin_http.go / plugin_interface.go / plugin_addr.go /
-	// plugin_unix_group.go) that self-registers via RegisterBuiltinPluginUnit, absent from
-	// both this slice and the providers: manifest (the goss-verb→plugin + the first
-	// state-provision-verb→plugin extractions, like process/port/dns).
+	// verbs (ClassVerb) — http/interface/addr/unix_group/user/kernel-param/mount are NOT
+	// here: each is a dedicated plugin UNIT (plugin_http.go / plugin_interface.go /
+	// plugin_addr.go / plugin_unix_group.go / plugin_user.go / plugin_kernel_param.go /
+	// plugin_mount.go) that self-registers via RegisterBuiltinPluginUnit, absent from both
+	// this slice and the providers: manifest (the goss-verb→plugin + the state-provision-
+	// verb→plugin extractions, like process/port/dns).
 	fileVerb{}, commandVerb{}, packageVerb{}, serviceVerb{},
-	userVerb{}, kernelParamVerb{},
-	mountVerb{}, cdpVerb{}, wlVerb{}, dbusVerb{}, vncVerb{},
+	cdpVerb{}, wlVerb{}, dbusVerb{}, vncVerb{},
 	mcpVerb{}, recordVerb{}, spiceVerb{}, libvirtVerb{}, kubeVerb{}, adbVerb{}, appiumVerb{},
 	summarizeVerb{}, killVerb{}, pluginVerb{},
 	// kinds (ClassKind) — agent + module + sidecar + package-group are NOT here: each

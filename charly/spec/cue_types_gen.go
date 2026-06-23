@@ -18,12 +18,6 @@ type Op struct {
 
 	Command string `yaml:"command,omitempty" json:"command,omitempty"`
 
-	User string `yaml:"user,omitempty" json:"user,omitempty"`
-
-	KernelParam string `yaml:"kernel-param,omitempty" json:"kernel-param,omitempty"`
-
-	Mount string `yaml:"mount,omitempty" json:"mount,omitempty"`
-
 	Mkdir string `yaml:"mkdir,omitempty" json:"mkdir,omitempty"`
 
 	Copy string `yaml:"copy,omitempty" json:"copy,omitempty"`
@@ -253,29 +247,14 @@ type Op struct {
 
 	RequestBody string `yaml:"request_body,omitempty" json:"request_body,omitempty"`
 
-	// --- user ---
-	// gid STAYS in #Op (read by the `user` verb's getent-passwd assertion). The
-	// `unix_group` verb left #Op for its own builtin plugin unit
-	// (plugin/builtins/unix_group) and reproduces gid standalone in #UnixGroupInput
-	// (a self-contained copy, NOT a move — gid still has a non-extracted #Op consumer).
-	UID *int `yaml:"uid,omitempty" json:"uid,omitempty"`
-
-	GID *int `yaml:"gid,omitempty" json:"gid,omitempty"`
-
-	Home string `yaml:"home,omitempty" json:"home,omitempty"`
-
-	Shell string `yaml:"shell,omitempty" json:"shell,omitempty"`
-
+	// --- residual state-provision modifier ---
+	// groups — the `unix_group` verb's supplementary-members modifier. It has NO remaining
+	// #Op reader: `unix_group` extracted to its builtin plugin unit (its #UnixGroupInput
+	// reproduces only `unix_group`+`gid`, not members), and the `user`/`kernel-param`/`mount`
+	// verbs likewise left #Op for their units — taking `uid`/`gid`/`home`/`shell`, `value`,
+	// and `mount_source`/`filesystem`/`opt` into their own #*Input defs. groups is a dormant
+	// modifier (no current consumer), tracked for a follow-up.
 	Groups []string `yaml:"groups,omitempty" json:"groups,omitempty"`
-
-	// --- kernel-param / mount ---
-	Value MatcherList `yaml:"value,omitempty" json:"value,omitempty"`
-
-	MountSource string `yaml:"mount_source,omitempty" json:"mount_source,omitempty"`
-
-	Filesystem string `yaml:"filesystem,omitempty" json:"filesystem,omitempty"`
-
-	Opts MatcherList `yaml:"opt,omitempty" json:"opt,omitempty"`
 
 	// --- cdp / wl / dbus / vnc / spice modifiers ---
 	Tab string `yaml:"tab,omitempty" json:"tab,omitempty"`

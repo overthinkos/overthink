@@ -292,18 +292,15 @@ var VerbCatalog = map[string]VerbSpec{
 
 	// system-state probe/provision — assert by default; the act-capable subset
 	// lowers into existing reversible InstallPlan step kinds.
-	"file":         {ctxBuildDeployRuntime, DoAssert, true, ""}, // probe; file-creation is the write/copy verbs (act → runtime executor)
-	"package":      {ctxBuildDeployRuntime, DoAssert, true, StepKindSystemPackages},
-	"service":      {ctxBuildDeployRuntime, DoAssert, true, StepKindServicePackaged}, // act → enable the named packaged unit
-	"user":         {ctxBuildDeployRuntime, DoAssert, true, ""},                      // act → useradd (+ ReverseOpUserRemove)
-	"kernel-param": {ctxBuildDeployRuntime, DoAssert, true, ""},                      // act → sysctl (+ ReverseOpSysctlRestore)
-	"mount":        {ctxDeployRuntime, DoAssert, true, ""},                           // act → mount (+ ReverseOpUmount)
-	// unix_group is the FIRST extracted STATE-PROVISION verb — BOTH a check (getent-group)
-	// AND an act (groupadd). It left #Op/spec.OpVerbs for its builtin plugin unit
-	// (charly/plugin/builtins/unix_group) and dispatches via the generic `plugin:` verb, so
-	// it has no VerbCatalog entry; its act renders at install emit via the act-emit enabler
-	// (resolveProvisionScript). http / interface / addr are observe-only goss verbs likewise
-	// extracted to builtin plugin units (charly/plugin/builtins/{http,interface,addr}).
+	"file":    {ctxBuildDeployRuntime, DoAssert, true, ""}, // probe; file-creation is the write/copy verbs (act → runtime executor)
+	"package": {ctxBuildDeployRuntime, DoAssert, true, StepKindSystemPackages},
+	"service": {ctxBuildDeployRuntime, DoAssert, true, StepKindServicePackaged}, // act → enable the named packaged unit
+	// unix_group / user / kernel-param / mount are extracted STATE-PROVISION verbs — each
+	// BOTH a check AND an act. They left #Op/spec.OpVerbs for their builtin plugin units
+	// (charly/plugin/builtins/{unix_group,user,kernel_param,mount}) and dispatch via the
+	// generic `plugin:` verb, so they have no VerbCatalog entry; each act renders at install
+	// emit via the act-emit enabler (resolveProvisionScript). http / interface / addr are
+	// observe-only goss verbs likewise extracted (charly/plugin/builtins/{http,interface,addr}).
 
 	// live-container — runtime only; act drives UI/config, reversed via plan
 	// teardown (never the ledger). kube also legal at deploy (apply manifest).

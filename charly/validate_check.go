@@ -85,12 +85,13 @@ func validateCheck(c *Op, loc string, errs *ValidationError) {
 
 	// A do:act op must have a real install path in each build/deploy context
 	// it claims — otherwise the compiler would silently drop it. Runtime-only
-	// act verbs (file/user/kernel-param/mount/http/dbus/cdp/…) act via the check
-	// Runner's executor; in build/deploy the install verbs + command + package/
-	// service are the act surface (file creation = write/copy). A plugin verb
-	// (plugin: <word>) acts in build/deploy when its provider is a ProvisionActor —
-	// the act-emit enabler renders RenderProvisionScript at install emit
-	// (e.g. plugin: unix_group → groupadd).
+	// act verbs (file/dbus/cdp/…) act via the check Runner's executor; in
+	// build/deploy the install verbs + command + package/service are the act
+	// surface (file creation = write/copy). A plugin verb (plugin: <word>) acts
+	// in build/deploy when its provider is a ProvisionActor — the act-emit enabler
+	// renders RenderProvisionScript at install emit (e.g. the extracted
+	// plugin: user / unix_group / kernel-param / mount → useradd / groupadd /
+	// sysctl / mount).
 	if opEffectiveDo(c) == DoAct && !opActsInBuildDeploy(c, verb) {
 		for _, ctx := range opEffectiveContexts(c) {
 			if ctx == CtxBuild || ctx == CtxDeploy {

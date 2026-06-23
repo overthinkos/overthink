@@ -182,9 +182,12 @@ func (r *Runner) runDNS(ctx context.Context, c *Op, dns string, resolvable *bool
 	return passf(c, fmt.Sprintf("resolvable=%v", isResolvable))
 }
 
-// runUser: getent passwd. Parses uid/gid/home/shell for optional matching.
-func (r *Runner) runUser(ctx context.Context, c *Op) CheckResult {
-	probe := fmt.Sprintf(`getent passwd %s`, shellSingleQuote(c.User))
+// runUser: getent passwd. Parses uid/gid/home/shell for optional matching. The account
+// name + expected uid/gid/home/shell come from the `user` plugin's decoded plugin_input
+// (the verb left #Op for its dedicated builtin plugin unit) — c is retained for failf/passf
+// reporting context.
+func (r *Runner) runUser(ctx context.Context, c *Op, user string, wantUID, wantGID *int, wantHome, wantShell string) CheckResult {
+	probe := fmt.Sprintf(`getent passwd %s`, shellSingleQuote(user))
 	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
 		return failf(c, "probe: %v", err)
@@ -200,17 +203,17 @@ func (r *Runner) runUser(ctx context.Context, c *Op) CheckResult {
 	uid, _ := strconv.Atoi(parts[2])
 	gid, _ := strconv.Atoi(parts[3])
 	home, shell := parts[5], parts[6]
-	if c.UID != nil && uid != *c.UID {
-		return failf(c, "uid=%d, want %d", uid, *c.UID)
+	if wantUID != nil && uid != *wantUID {
+		return failf(c, "uid=%d, want %d", uid, *wantUID)
 	}
-	if c.GID != nil && gid != *c.GID {
-		return failf(c, "gid=%d, want %d", gid, *c.GID)
+	if wantGID != nil && gid != *wantGID {
+		return failf(c, "gid=%d, want %d", gid, *wantGID)
 	}
-	if c.Home != "" && home != c.Home {
-		return failf(c, "home=%s, want %s", home, c.Home)
+	if wantHome != "" && home != wantHome {
+		return failf(c, "home=%s, want %s", home, wantHome)
 	}
-	if c.Shell != "" && shell != c.Shell {
-		return failf(c, "shell=%s, want %s", shell, c.Shell)
+	if wantShell != "" && shell != wantShell {
+		return failf(c, "shell=%s, want %s", shell, wantShell)
 	}
 	return passf(c, fmt.Sprintf("uid=%d gid=%d", uid, gid))
 }
@@ -275,10 +278,18 @@ func (r *Runner) runInterface(ctx context.Context, c *Op, iface string, mtu *int
 	return passf(c, "ok")
 }
 
-// runKernelParam: `sysctl -n <key>`. Matches via the Matching attribute
-// (treated as an expected exact value when scalar, or matcher when map).
-func (r *Runner) runKernelParam(ctx context.Context, c *Op) CheckResult {
-	probe := fmt.Sprintf(`sysctl -n %s 2>/dev/null`, shellSingleQuote(c.KernelParam))
+// runKernelParam reads a sysctl value and matches it via the value matchers. `sysctl -n
+// <key>` is exactly the contents of /proc/sys/<key-with-dots-as-slashes>, so the probe reads
+// that file DIRECTLY (inside the target, via r.Exec — kernel params are netns-scoped, so the
+// container's/VM's /proc/sys is the source of truth, NOT the host's). Reading the file needs
+// no procps-ng (`sysctl`), which minimal images like fedora-minimal omit — only coreutils
+// `cat`, which every base ships. The act half (RenderProvisionScript) keeps `sysctl -w`: it
+// runs in a deploy/runtime provisioning context where procps-ng is present. The key + value
+// matchers come from the `kernel-param` plugin's decoded plugin_input (the verb left #Op for
+// its dedicated builtin plugin unit) — c is retained for failf/passf reporting context.
+func (r *Runner) runKernelParam(ctx context.Context, c *Op, param string, want MatcherList) CheckResult {
+	path := "/proc/sys/" + strings.ReplaceAll(param, ".", "/")
+	probe := fmt.Sprintf(`cat %s 2>/dev/null`, shellSingleQuote(path))
 	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
 		return failf(c, "probe: %v", err)
@@ -287,19 +298,21 @@ func (r *Runner) runKernelParam(ctx context.Context, c *Op) CheckResult {
 		return failf(c, "kernel param not readable (exit %d)", exit)
 	}
 	value := strings.TrimSpace(out)
-	if len(c.Value) == 0 {
+	if len(want) == 0 {
 		return passf(c, fmt.Sprintf("value=%s", value))
 	}
-	if err := sdk.MatchAll(value, c.Value); err != nil {
+	if err := sdk.MatchAll(value, want); err != nil {
 		return failf(c, "value=%s: %v", value, err)
 	}
 	return passf(c, fmt.Sprintf("value=%s", value))
 }
 
-// runMount: `findmnt -J <path>` — present ⇒ mounted. Optional source,
-// filesystem, and opts matching.
-func (r *Runner) runMount(ctx context.Context, c *Op) CheckResult {
-	mp := shellSingleQuote(c.Mount)
+// runMount: `findmnt -J <path>` — present ⇒ mounted. Optional source, filesystem, and opts
+// matching. The mountpoint + expected source/filesystem/opt matchers come from the `mount`
+// plugin's decoded plugin_input (the verb left #Op for its dedicated builtin plugin unit) —
+// c is retained for failf/passf reporting context.
+func (r *Runner) runMount(ctx context.Context, c *Op, mountPath, wantSource, wantFstype string, wantOpts MatcherList) CheckResult {
+	mp := shellSingleQuote(mountPath)
 	probe := fmt.Sprintf(`findmnt -n -o SOURCE,FSTYPE,OPTIONS %s 2>/dev/null`, mp)
 	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
@@ -313,14 +326,14 @@ func (r *Runner) runMount(ctx context.Context, c *Op) CheckResult {
 		return failf(c, "unexpected findmnt output: %q", out)
 	}
 	source, fstype, opts := fields[0], fields[1], fields[2]
-	if c.MountSource != "" && source != c.MountSource {
-		return failf(c, "source=%s, want %s", source, c.MountSource)
+	if wantSource != "" && source != wantSource {
+		return failf(c, "source=%s, want %s", source, wantSource)
 	}
-	if c.Filesystem != "" && fstype != c.Filesystem {
-		return failf(c, "filesystem=%s, want %s", fstype, c.Filesystem)
+	if wantFstype != "" && fstype != wantFstype {
+		return failf(c, "filesystem=%s, want %s", fstype, wantFstype)
 	}
-	if len(c.Opts) > 0 {
-		if err := sdk.MatchAll(opts, c.Opts); err != nil {
+	if len(wantOpts) > 0 {
+		if err := sdk.MatchAll(opts, wantOpts); err != nil {
 			return failf(c, "opts %q: %v", opts, err)
 		}
 	}

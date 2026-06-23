@@ -79,15 +79,6 @@ func (c *Op) VerbsSet() []string {
 	if c.Command != "" && !hasCharlyVerb {
 		set = append(set, "command")
 	}
-	if c.User != "" {
-		set = append(set, "user")
-	}
-	if c.KernelParam != "" {
-		set = append(set, "kernel-param")
-	}
-	if c.Mount != "" {
-		set = append(set, "mount")
-	}
 	if c.Cdp != "" {
 		set = append(set, "cdp")
 	}
@@ -138,13 +129,9 @@ func (c *Op) VerbsSet() []string {
 func (c *Op) StringFields() []*string {
 	return []*string{
 		&c.File, &c.Package, &c.Service, &c.Command,
-		&c.User,
-		&c.KernelParam, &c.Mount,
 		&c.ID, &c.Description, &c.Timeout,
 		&c.Mode, &c.Owner, &c.GroupOf, &c.Filetype, &c.Sha256,
 		&c.Method, &c.RequestBody,
-		&c.Home, &c.Shell,
-		&c.MountSource, &c.Filesystem,
 		// Test-mode live-container verb discriminators + modifiers.
 		&c.Cdp, &c.Wl, &c.Dbus, &c.Vnc, &c.Mcp,
 		&c.Record, &c.Spice, &c.Libvirt, &c.Kube,

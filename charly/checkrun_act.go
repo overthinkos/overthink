@@ -123,46 +123,12 @@ func (serviceVerb) RenderProvisionScript(c *Op, _ []string) (string, bool) {
 		`else echo "no service manager" >&2; exit 1; fi`, svc), true
 }
 
-func (userVerb) RenderProvisionScript(c *Op, _ []string) (string, bool) {
-	flags := ""
-	if c.UID != nil {
-		flags += fmt.Sprintf(" -u %d", *c.UID)
-	}
-	if c.Home != "" {
-		flags += " -m -d " + shellSingleQuote(c.Home)
-	}
-	if c.Shell != "" {
-		flags += " -s " + shellSingleQuote(c.Shell)
-	}
-	name := shellSingleQuote(c.User)
-	return fmt.Sprintf("id %[1]s >/dev/null 2>&1 || useradd%[2]s %[1]s", name, flags), true
-}
-
-// unix_group's RenderProvisionScript (the do:act half) lives with its dedicated plugin
-// unit (plugin_unix_group.go) — it decodes plugin_input rather than the removed
-// Op.UnixGroup/Op.GID fields.
-
-func (kernelParamVerb) RenderProvisionScript(c *Op, _ []string) (string, bool) {
-	if v, ok := firstMatcherScalar(c.Value); ok {
-		return fmt.Sprintf("sysctl -w %s=%s", shellSingleQuote(c.KernelParam), shellSingleQuote(v)), true
-	}
-	return "", false // act with no desired value is meaningless
-}
-
-func (mountVerb) RenderProvisionScript(c *Op, _ []string) (string, bool) {
-	var args []string
-	if c.Filesystem != "" {
-		args = append(args, "-t "+shellSingleQuote(c.Filesystem))
-	}
-	if v, ok := firstMatcherScalar(c.Opts); ok && v != "" {
-		args = append(args, "-o "+shellSingleQuote(v))
-	}
-	if c.MountSource == "" {
-		return "", false // need a source to mount
-	}
-	return fmt.Sprintf("findmnt %[1]s >/dev/null 2>&1 || mount %[2]s %[3]s %[1]s",
-		shellSingleQuote(c.Mount), strings.Join(args, " "), shellSingleQuote(c.MountSource)), true
-}
+// user / unix_group / kernel-param / mount RenderProvisionScript (the do:act halves) live
+// with their dedicated plugin units (plugin_user.go / plugin_unix_group.go /
+// plugin_kernel_param.go / plugin_mount.go) — each decodes plugin_input rather than the
+// removed Op.User/UID/Home/Shell / Op.UnixGroup/GID / Op.KernelParam/Value /
+// Op.Mount/MountSource/Filesystem/Opts fields. They still reuse the package-level
+// firstMatcherScalar (below) + shellSingleQuote via the shared decodeMatcherList codec.
 
 // firstMatcherScalar returns the first matcher's value rendered as a string,
 // used by the act renderers to read a desired scalar (sysctl value, mount

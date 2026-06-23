@@ -175,24 +175,26 @@ container-nesting:
                 echo "${uid1000}:1001:64535"
               } >> /etc/subgid
             fi
-        command: |
-            touch /etc/subuid /etc/subgid
-            sed -i "/^root:/d" /etc/subuid /etc/subgid
-            echo "root:1:65535" >> /etc/subuid
-            echo "root:1:65535" >> /etc/subgid
-            uid1000=$(getent passwd 1000 2>/dev/null | cut -d: -f1 || true)
-            if [ -n "${uid1000}" ] && [ "${uid1000}" != "root" ]; then
-              sed -i "/^${uid1000}:/d" /etc/subuid /etc/subgid
-              {
-                echo "${uid1000}:1:999"
-                echo "${uid1000}:1001:64535"
-              } >> /etc/subuid
-              {
-                echo "${uid1000}:1:999"
-                echo "${uid1000}:1001:64535"
-              } >> /etc/subgid
-            fi
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                touch /etc/subuid /etc/subgid
+                sed -i "/^root:/d" /etc/subuid /etc/subgid
+                echo "root:1:65535" >> /etc/subuid
+                echo "root:1:65535" >> /etc/subgid
+                uid1000=$(getent passwd 1000 2>/dev/null | cut -d: -f1 || true)
+                if [ -n "${uid1000}" ] && [ "${uid1000}" != "root" ]; then
+                  sed -i "/^${uid1000}:/d" /etc/subuid /etc/subgid
+                  {
+                    echo "${uid1000}:1:999"
+                    echo "${uid1000}:1001:64535"
+                  } >> /etc/subuid
+                  {
+                    echo "${uid1000}:1:999"
+                    echo "${uid1000}:1001:64535"
+                  } >> /etc/subgid
+                fi
     container-nesting-step-1:
         run: |
             grant cap_setuid/cap_setgid to newuidmap/newgidmap AND strip the
@@ -203,13 +205,15 @@ container-nesting:
             ship them cap-only (no setuid bit), so `chmod u-s` makes every distro
             match that working posture and is a no-op where the bit is already
             absent. RDD-confirmed 2026-06-16.
-        command: |
-            if [ -f /usr/bin/newuidmap ]; then
-              setcap cap_setuid=ep /usr/bin/newuidmap
-              setcap cap_setgid=ep /usr/bin/newgidmap
-              chmod u-s /usr/bin/newuidmap /usr/bin/newgidmap
-            fi
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                if [ -f /usr/bin/newuidmap ]; then
+                  setcap cap_setuid=ep /usr/bin/newuidmap
+                  setcap cap_setgid=ep /usr/bin/newgidmap
+                  chmod u-s /usr/bin/newuidmap /usr/bin/newgidmap
+                fi
     container-nesting-step-2:
         run: mkdir=/etc/containers
         mkdir: /etc/containers
@@ -298,42 +302,56 @@ container-nesting:
         exists: true
     container-nesting-step-13:
         check: containers.conf pins userns=host so the inner /proc mount is not rejected by the kernel mount_too_revealing check
-        command: grep -E '^userns\s*=\s*"host"' /etc/containers/containers.conf
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: grep -E '^userns\s*=\s*"host"' /etc/containers/containers.conf
     container-nesting-step-14:
         check: policy.json is present so podman pull/run accepts an image signature policy
         file: /etc/containers/policy.json
         exists: true
     container-nesting-step-15:
         check: newuidmap carries the cap_setuid file capability so a nested user namespace can be delegated
-        command: getcap /usr/bin/newuidmap | grep -c cap_setuid
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: getcap /usr/bin/newuidmap | grep -c cap_setuid
     newuidmap-not-setuid:
         check: newuidmap is NOT setuid-root — only the cap_setuid file capability remains; a binary that is BOTH setuid-root (Debian/Ubuntu's uidmap default) AND cap-bearing fails to write uid_map inside a nested rootless user namespace
         id: newuidmap-not-setuid
-        command: test ! -u /usr/bin/newuidmap
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: test ! -u /usr/bin/newuidmap
     container-nesting-step-17:
         check: /etc/subuid declares the username:start:count delegation ranges the inner podman maps from
-        command: grep -cE '^[a-z0-9_-]+:[0-9]+:[0-9]+$' /etc/subuid
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: grep -cE '^[a-z0-9_-]+:[0-9]+:[0-9]+$' /etc/subuid
     container-nesting-step-18:
         agent-check: a fresh rootless `podman run` of an inner container succeeds end-to-end with no added capabilities and no --privileged
     podman-version:
         check: command=/usr/bin/podman --version
         id: podman-version
-        command: /usr/bin/podman --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/bin/podman --version
     buildah-version:
         check: command=/usr/bin/buildah --version
         id: buildah-version
-        command: /usr/bin/buildah --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/bin/buildah --version
     skopeo-version:
         check: command=/usr/bin/skopeo --version
         id: skopeo-version
-        command: /usr/bin/skopeo --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/bin/skopeo --version
     newuidmap-binary:
         check: file=/usr/bin/newuidmap
         id: newuidmap-binary
@@ -352,35 +370,47 @@ container-nesting:
     tailscale-version:
         check: command=/usr/bin/tailscale version
         id: tailscale-version
-        command: /usr/bin/tailscale version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/bin/tailscale version
     subuid-user-two-ranges:
         check: the uid-1000 user has exactly two subuid delegation ranges (cross-distro — the user is `user` on fedora/arch but `ubuntu`/`debian` under adopt user-policy, so resolve the name via getent rather than hardcoding `user:`)
         id: subuid-user-two-ranges
-        command: 'u=$(getent passwd 1000 | cut -d: -f1); grep -cE "^${u}:[0-9]+:[0-9]+$" /etc/subuid'
         exit_status: 0
         stdout:
             - matches: ^2
+        plugin: command
+        plugin_input:
+            command: 'u=$(getent passwd 1000 | cut -d: -f1); grep -cE "^${u}:[0-9]+:[0-9]+$" /etc/subuid'
     user-containers-conf-userns-host:
         check: command=grep -E '^userns\s*=\s*"host"' ${HOME}/.config/containers/containers.conf
         id: user-containers-conf-userns-host
-        command: grep -E '^userns\s*=\s*"host"' ${HOME}/.config/containers/containers.conf
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: grep -E '^userns\s*=\s*"host"' ${HOME}/.config/containers/containers.conf
     env-containers-userns-configured:
         check: command=sh -c 'env | grep -q "^_CONTAINERS_USERNS_CONFIGURED="'
         id: env-containers-userns-configured
-        command: sh -c 'env | grep -q "^_CONTAINERS_USERNS_CONFIGURED="'
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: sh -c 'env | grep -q "^_CONTAINERS_USERNS_CONFIGURED="'
     env-buildah-isolation:
         check: command=sh -c 'env | grep -qx "BUILDAH_ISOLATION=chroot"'
         id: env-buildah-isolation
-        command: sh -c 'env | grep -qx "BUILDAH_ISOLATION=chroot"'
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: sh -c 'env | grep -qx "BUILDAH_ISOLATION=chroot"'
     nested-podman-run:
         check: command=podman run --rm quay.io/libpod/alpine:latest /bin/true
         id: nested-podman-run
-        command: podman run --rm quay.io/libpod/alpine:latest /bin/true
         timeout: 60s
-        in_container: true
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: podman run --rm quay.io/libpod/alpine:latest /bin/true
+            in_container: true

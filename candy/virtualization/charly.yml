@@ -159,11 +159,13 @@ virtualization:
             command=if getent group libvirt >/dev/null && id -u "${USER:-user}" >/dev/null 2>&1; then
               usermod -aG libvirt "$(getent passwd 1000 | cut -d: -f1)"
             fi
-        command: |
-            if getent group libvirt >/dev/null && id -u "${USER:-user}" >/dev/null 2>&1; then
-              usermod -aG libvirt "$(getent passwd 1000 | cut -d: -f1)"
-            fi
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                if getent group libvirt >/dev/null && id -u "${USER:-user}" >/dev/null 2>&1; then
+                  usermod -aG libvirt "$(getent passwd 1000 | cut -d: -f1)"
+                fi
     virtualization-step-1:
         check: the libvirt client virsh is installed at its fixed path
         file: /usr/bin/virsh
@@ -187,11 +189,13 @@ virtualization:
         installed: true
     virtualization-step-5:
         check: virsh reaches the rootless qemu:///session daemon and lists domains
-        command: virsh -c qemu:///session list --all
-        in_container: true
         exit_status: 0
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: virsh -c qemu:///session list --all
+            in_container: true
     virtualization-step-6:
         agent-check: the same virtqemud and virtnetworkd daemons come up under whichever init system the target runs (supervisord in containers, systemd on host/bootc) with no virtualization-host sibling candy
     libvirt-qemu-driver-package:

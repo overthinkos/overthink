@@ -22,19 +22,23 @@ wacli:
         run: |
             command=go install github.com/openclaw/wacli/cmd/wacli@latest
             go clean -cache
-        command: |
-            go install github.com/openclaw/wacli/cmd/wacli@latest
-            go clean -cache
         run_as: "${USER}"
+        plugin: command
+        plugin_input:
+            command: |
+                go install github.com/openclaw/wacli/cmd/wacli@latest
+                go clean -cache
     wacli-step-1:
         check: the wacli WhatsApp CLI binary is installed in the user's Go bin directory
         file: ${HOME}/go/bin/wacli
         exists: true
     wacli-step-2:
         check: the installed wacli binary carries the executable bit and can be invoked
-        command: test -x ${HOME}/go/bin/wacli
         exit_status: 0
-        in_container: true
+        plugin: command
+        plugin_input:
+            command: test -x ${HOME}/go/bin/wacli
+            in_container: true
     wacli-step-3:
         agent-check: invoking wacli in the running deployment presents its WhatsApp command interface (login/pairing prompt) instead of crashing
     wacli-go-toolchain:

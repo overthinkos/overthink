@@ -26,6 +26,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	commandparams "github.com/overthinkos/overthink/charly/plugin/builtins/command/params"
 )
 
 // LocalDeployTarget executes plans on the host.
@@ -654,18 +656,19 @@ func renderOpCommand(s *OpStep) (string, error) {
 
 	switch {
 	case task.Command != "":
-		body := task.Command
-		if ctxPath != "" {
-			body = strings.ReplaceAll(body, "/ctx/", ctxPath+"/")
-		}
-		// Prepend BUILD_ARCH/ARCH + candy.vars exports so cmd bodies
-		// templating ${ARCH} / ${MY_CANDY_VAR} resolve at deploy-time
-		// the same as they do at build-time. Build-time gets these
-		// from BuildKit's TARGETARCH ENV + emitVarsEnv ENV directives.
-		if preamble := taskShellPreamble(s); preamble != "" {
-			body = preamble + body
-		}
-		return body, nil
+		// Defensive fallback for a directly-constructed Op{Command} OpStep. The
+		// compiled deploy path renders command via `plugin: command` (below); a
+		// literal command verb no longer reaches here from authored config.
+		return renderTaskCommandBody(task.Command, ctxPath, s), nil
+	case task.Plugin == "command":
+		// `plugin: command` is the ONE install-task plugin verb — the deploy mirror of
+		// emitTasks' command branch (preserve the command body, NOT a
+		// RenderProvisionScript). Rehydrate plugin_input.command and render it EXACTLY
+		// as the literal command case (taskShellPreamble + /ctx/ rewrite) via the shared
+		// helper (R3). Must precede the generic `case task.Plugin != "":` below.
+		var in commandparams.CommandInput
+		decodePluginInput(task.PluginInput, &in)
+		return renderTaskCommandBody(in.Command, ctxPath, s), nil
 	case task.Mkdir != "":
 		mode := task.Mode
 		if mode == "" {
@@ -708,6 +711,22 @@ func renderOpCommand(s *OpStep) (string, error) {
 		return script, nil
 	}
 	return "", fmt.Errorf("task has no supported verb: %+v", task)
+}
+
+// renderTaskCommandBody renders a command body for a deploy OpStep: prepend the
+// BUILD_ARCH/ARCH + candy.vars exports (taskShellPreamble) so cmd bodies templating
+// ${ARCH} / ${MY_CANDY_VAR} resolve at deploy-time the same as build-time (BuildKit's
+// TARGETARCH ENV + emitVarsEnv), and rewrite /ctx/ to the staged candy dir. Shared by
+// the literal command fallback AND the `plugin: command` install-task verb (R3).
+func renderTaskCommandBody(command, ctxPath string, s *OpStep) string {
+	body := command
+	if ctxPath != "" {
+		body = strings.ReplaceAll(body, "/ctx/", ctxPath+"/")
+	}
+	if preamble := taskShellPreamble(s); preamble != "" {
+		body = preamble + body
+	}
+	return body
 }
 
 // parseTaskMode parses a candy task mode string ("0644", "0o755") into a
@@ -1257,8 +1276,15 @@ func (t *LocalDeployTarget) noteStep(rec *CandyRecord, kind StepKind, scope Scop
 func taskSummary(task *Op) string {
 	var b bytes.Buffer
 	switch {
-	case task.Command != "":
+	case task.Command != "", task.Plugin == "command":
+		// Literal command OR the `plugin: command` install-task verb (command rides
+		// plugin_input after the extraction). Show the command body either way.
 		body := task.Command
+		if body == "" && task.Plugin == "command" {
+			var in commandparams.CommandInput
+			decodePluginInput(task.PluginInput, &in)
+			body = in.Command
+		}
 		if len(body) > 40 {
 			body = body[:40] + "…"
 		}

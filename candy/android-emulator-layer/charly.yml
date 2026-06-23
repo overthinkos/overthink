@@ -117,25 +117,27 @@ android-emulator-layer:
             if getent group nobody >/dev/null 2>&1; then
               usermod -aG nobody "${USERNAME}"
             fi
-        command: |
-            set -e
-            USERNAME="$(getent passwd 1000 | cut -d: -f1)"
-            # Add user to BOTH the container's kvm group (satisfies the emulator's
-            # naive /etc/group preflight check that prints "The KVM line in
-            # /etc/group is: [kvm:x:36:user]") AND the nobody group (gid 65534).
-            # /dev/kvm inside a rootless container is owned by nobody:nobody
-            # because the host's kvm group (gid 990) maps through subgid to the
-            # overflow gid 65534. supervisord's setuid+initgroups drops the
-            # supplementary groups crun-keep-groups provided at container start,
-            # so user must be listed in /etc/group for both groups to retain
-            # access across the setuid boundary.
-            if getent group kvm >/dev/null 2>&1; then
-              usermod -aG kvm "${USERNAME}"
-            fi
-            if getent group nobody >/dev/null 2>&1; then
-              usermod -aG nobody "${USERNAME}"
-            fi
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                set -e
+                USERNAME="$(getent passwd 1000 | cut -d: -f1)"
+                # Add user to BOTH the container's kvm group (satisfies the emulator's
+                # naive /etc/group preflight check that prints "The KVM line in
+                # /etc/group is: [kvm:x:36:user]") AND the nobody group (gid 65534).
+                # /dev/kvm inside a rootless container is owned by nobody:nobody
+                # because the host's kvm group (gid 990) maps through subgid to the
+                # overflow gid 65534. supervisord's setuid+initgroups drops the
+                # supplementary groups crun-keep-groups provided at container start,
+                # so user must be listed in /etc/group for both groups to retain
+                # access across the setuid boundary.
+                if getent group kvm >/dev/null 2>&1; then
+                  usermod -aG kvm "${USERNAME}"
+                fi
+                if getent group nobody >/dev/null 2>&1; then
+                  usermod -aG nobody "${USERNAME}"
+                fi
     android-emulator-layer-step-1:
         run: copy=start-emulator
         copy: start-emulator

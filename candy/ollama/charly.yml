@@ -63,10 +63,12 @@ ollama:
             status: 200
     ollama-step-3:
         check: the ollama CLI reports an "ollama version" string
-        command: ollama --version
         stdout:
             - matches: "^ollama version"
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: ollama --version
     ollama-step-4:
         agent-check: models pulled via `ollama pull` are stored under the ~/.ollama models volume and survive a service restart

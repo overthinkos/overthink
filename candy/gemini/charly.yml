@@ -22,7 +22,9 @@ gemini:
         exists: true
     gemini-step-2:
         check: running gemini --version exits cleanly and prints a semantic version
-        command: ${HOME}/.npm-global/bin/gemini --version
         exit_status: 0
         stdout:
             - matches: "[0-9]+\\.[0-9]+"
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.npm-global/bin/gemini --version

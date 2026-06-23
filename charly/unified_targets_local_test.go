@@ -280,8 +280,8 @@ func TestHostUnifiedTarget_Test_EmptyChecks(t *testing.T) {
 func TestHostUnifiedTarget_Test_OnlyIDsFilter(t *testing.T) {
 	target := &LocalUnifiedTarget{NodeName: "host"}
 	checks := []Op{
-		{ID: "match", Command: "true"},
-		{ID: "fail", Command: "false"},
+		{ID: "match", Plugin: "command", PluginInput: map[string]any{"command": "true"}},
+		{ID: "fail", Plugin: "command", PluginInput: map[string]any{"command": "false"}},
 	}
 	if err := target.Test(context.Background(), checks, TestOpts{OnlyIDs: []string{"match"}}); err != nil {
 		t.Errorf("Test(OnlyIDs): expected no failures (filter excluded `fail`), got: %v", err)

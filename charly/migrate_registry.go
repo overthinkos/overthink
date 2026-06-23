@@ -71,7 +71,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.174.0300")
+var latestSchemaVersion = mustCalVer("2026.174.0500")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -479,8 +479,9 @@ func migrationSteps() []MigrationStep {
 		// reachability), `dns` (resolve) — landed at this step's CalVer; the SECOND wave —
 		// `http` (request), `interface` (`ip addr`), `addr` (TCP dial) — extends the same
 		// gossVerbFields set here (the goal "every observe verb a plugin" is one cutover,
-		// completed in two waves; `command` is NOT here — it carries an act/install-lowering
-		// path the check-only plugin model does not cover, like package/service). A plan
+		// completed in two waves; `command` is handled by the state-provision migrator below
+		// — its act IS the install-task emitCmd path, a dedicated `plugin == "command"` emit
+		// branch, not the check-only model these observe verbs use). A plan
 		// step authoring such a verb inline now authors the generic plugin step
 		// `plugin: <verb>` + a typed `plugin_input:`. This step CONVERTS a deterministic
 		// `check:` step (verb + companion fields → plugin: <verb> + plugin_input:) and STRIPS
@@ -500,24 +501,31 @@ func migrationSteps() []MigrationStep {
 			return len(w) > 0, err
 		}},
 		// 2026-06 state-provision-verb extraction: the DUAL-NATURED `unix_group` (getent-group
-		// + groupadd), `user` (getent-passwd + useradd), `kernel-param` (sysctl read + write)
-		// and `mount` (findmnt + mount) verbs left the closed `#Op`/`spec.OpVerbs` and became
-		// BUILTIN plugin units (plugin/builtins/{unix_group,user,kernel_param,mount}) whose
-		// providers are BOTH a CheckVerbProvider AND a ProvisionActor — the check half
-		// dispatches via the generic `plugin:` verb, the act half renders at install emit via
-		// the act-emit enabler. A plan step authoring `<verb>: <value>` (+ its companions) now
-		// authors the generic plugin step `plugin: <verb>` + a typed `plugin_input:`. Unlike the
-		// OBSERVE-only goss migrator (which strips a `run:` step's vestigial keys), a
-		// state-provision verb's `run:` step is REAL (the act timeline), so this step CONVERTS a
-		// `check:` OR a `run:` step and STRIPS only on a verb-less step kind (agent-*/include).
-		// Each verb's companion fields (gid; uid/gid/home/shell; value; mount_source/filesystem/
-		// opt) MOVE into plugin_input — they were read ONLY by their own verb and leave #Op
-		// entirely. Gated on isStepNode so a Calamares group's / a published port's / an SSH
-		// user: field is never rewritten, and a migrated config's nested plugin_input is a no-op
-		// (idempotent). Raises HEAD (a closed `#Op` rejects the `unix_group:`/`user:`/
-		// `kernel-param:`/`mount:` step keys). TouchesHost false → remote-cache auto-migration
-		// applies it to fetched candy manifests. See
-		// migrate_state_provision_verbs_to_plugin.go + CHANGELOG/.
+		// + groupadd), `user` (getent-passwd + useradd), `kernel-param` (sysctl read + write),
+		// `mount` (findmnt + mount) AND `command` (exec probe + install-task RUN) verbs left the
+		// closed `#Op`/`spec.OpVerbs` and became
+		// BUILTIN plugin units (plugin/builtins/{unix_group,user,kernel_param,mount,command})
+		// whose providers are a CheckVerbProvider (+ a ProvisionActor for the first four; for
+		// `command` the act IS the dedicated install-task emitCmd branch in emitTasks/
+		// renderOpCommand, NOT a ProvisionActor) — the check half dispatches via the generic
+		// `plugin:` verb, the act half renders at install emit. A plan step authoring
+		// `<verb>: <value>` (+ its companions) now authors the generic plugin step
+		// `plugin: <verb>` + a typed `plugin_input:`. Unlike the OBSERVE-only goss migrator
+		// (which strips a `run:` step's vestigial keys), a state-provision verb's `run:` step is
+		// REAL (the act timeline), so this step CONVERTS a `check:` OR a `run:` step and STRIPS
+		// only on a verb-less step kind (agent-*/include). Each verb's companion fields (gid;
+		// uid/gid/home/shell; value; mount_source/filesystem/opt) MOVE into plugin_input — they
+		// were read ONLY by their own verb and leave #Op entirely. `command` is the FIELD-SPLIT
+		// case: only the command-EXCLUSIVE background/from_host/in_container move; the matchers
+		// exit_status/stdout/stderr STAY at step level (#Op, shared via matchAll), and `command`
+		// is converted ONLY when no charly-verb is present (else it is a wl/libvirt argv
+		// modifier — stepHasCharlyVerb). Gated on isStepNode so a Calamares group's / a published
+		// port's / an SSH user: field is never rewritten, and a migrated config's nested
+		// plugin_input is a no-op (idempotent). The command extraction RAISES HEAD to
+		// 2026.174.0500 (the calver-schema stamp below) — a closed `#Op` rejecting the
+		// command-exclusive in_container/background/from_host step keys forces a re-migrate.
+		// TouchesHost false → remote-cache auto-migration applies it to fetched candy manifests.
+		// See migrate_state_provision_verbs_to_plugin.go + CHANGELOG/.
 		{mustCalVer("2026.174.0050"), "state-provision-verbs-to-plugin", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateStateProvisionVerbsToPlugin(c.Dir, c.DryRun)
 			return len(w) > 0, err
@@ -528,7 +536,7 @@ func migrationSteps() []MigrationStep {
 		// TouchesHost is false so it ALSO runs in project-only mode (remote-cache
 		// auto-migration); its host-file stamping is gated on ctx.HostDeployPath,
 		// which the project-only runner leaves empty.
-		{mustCalVer("2026.174.0300"), "calver-schema", false, func(c *MigrateContext) (bool, error) {
+		{mustCalVer("2026.174.0500"), "calver-schema", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateCalverSchema(c.Dir, c.HostDeployPath, latestSchemaVersion, c.DryRun)
 			return len(w) > 0, err
 		}},

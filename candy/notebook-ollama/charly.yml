@@ -23,12 +23,14 @@ notebook-ollama:
             - runtime
     notebook-ollama-step-1:
         check: the Ollama_Requests producer notebook is present
-        command: ls ${VOLUME_CONTAINER_PATH:workspace}/ollama/
         exit_status: 0
         stdout:
             - matches: "Ollama_Requests"
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: ls ${VOLUME_CONTAINER_PATH:workspace}/ollama/
     notebook-ollama-step-2:
         check: the Ollama_Requests producer notebook is staged in the image data tree
         file: /data/workspace/ollama/00_Ollama_Requests.ipynb
@@ -39,8 +41,10 @@ notebook-ollama:
         exists: true
     notebook-ollama-step-4:
         check: a substantial collection of integration notebooks is staged, not just the producer
-        command: test "$(find /data/workspace/ollama -maxdepth 1 -name '*.ipynb' | wc -l)" -ge 6
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: test "$(find /data/workspace/ollama -maxdepth 1 -name '*.ipynb' | wc -l)" -ge 6
     notebook-ollama-step-5:
         agent-check: the notebooks span the documented client libraries (requests, OpenAI-compatible, native ollama, HuggingFace, Anthropic-style) as runnable examples
     notebook-ollama-staged-dir:

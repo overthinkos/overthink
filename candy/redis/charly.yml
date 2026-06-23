@@ -57,10 +57,12 @@ redis:
         installed: true
     redis-step-4:
         check: redis-cli ping returns PONG against the supervised redis-server
-        command: redis-cli -h 127.0.0.1 -p 6379 ping
         stdout: PONG
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: redis-cli -h 127.0.0.1 -p 6379 ping
     redis-step-5:
         check: the redis port accepts a TCP connection from the host
         context:
@@ -74,11 +76,13 @@ redis:
     redis-responds:
         check: redis answers PONG to redis-cli inside the container (host-independent probe)
         id: redis-responds
-        command: redis-cli -h 127.0.0.1 -p 6379 ping
         stdout: PONG
-        in_container: true
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: redis-cli -h 127.0.0.1 -p 6379 ping
+            in_container: true
     redis-port-open:
         check: addr=127.0.0.1:${HOST_PORT:6379}
         id: redis-port-open

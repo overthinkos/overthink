@@ -48,5 +48,7 @@ steam:
         installed: true
     steam-step-4:
         check: STEAM_RUNTIME_PREFER_HOST_LIBRARIES is pinned to 0 so Steam uses its bundled runtime
-        command: printenv STEAM_RUNTIME_PREFER_HOST_LIBRARIES
         stdout: "0"
+        plugin: command
+        plugin_input:
+            command: printenv STEAM_RUNTIME_PREFER_HOST_LIBRARIES

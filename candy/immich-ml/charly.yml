@@ -55,22 +55,26 @@ immich-ml:
         run: |
             command=curl -L "https://github.com/immich-app/immich/archive/refs/tags/${IMMICH_VERSION}.tar.gz" | tar xz -C /tmp
             mv /tmp/immich-$(echo ${IMMICH_VERSION} | sed 's/^v//') /tmp/immich
-        command: |
-            curl -L "https://github.com/immich-app/immich/archive/refs/tags/${IMMICH_VERSION}.tar.gz" | tar xz -C /tmp
-            mv /tmp/immich-$(echo ${IMMICH_VERSION} | sed 's/^v//') /tmp/immich
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                curl -L "https://github.com/immich-app/immich/archive/refs/tags/${IMMICH_VERSION}.tar.gz" | tar xz -C /tmp
+                mv /tmp/immich-$(echo ${IMMICH_VERSION} | sed 's/^v//') /tmp/immich
     immich-ml-step-2:
         run: |
             command=uv venv /opt/immich/machine-learning/.venv
             cd /tmp/immich/machine-learning && VIRTUAL_ENV=/opt/immich/machine-learning/.venv uv pip install ".[cpu]"
             cp -r /tmp/immich/machine-learning/immich_ml /opt/immich/machine-learning/
             rm -rf /tmp/immich
-        command: |
-            uv venv /opt/immich/machine-learning/.venv
-            cd /tmp/immich/machine-learning && VIRTUAL_ENV=/opt/immich/machine-learning/.venv uv pip install ".[cpu]"
-            cp -r /tmp/immich/machine-learning/immich_ml /opt/immich/machine-learning/
-            rm -rf /tmp/immich
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                uv venv /opt/immich/machine-learning/.venv
+                cd /tmp/immich/machine-learning && VIRTUAL_ENV=/opt/immich/machine-learning/.venv uv pip install ".[cpu]"
+                cp -r /tmp/immich/machine-learning/immich_ml /opt/immich/machine-learning/
+                rm -rf /tmp/immich
     immich-ml-step-3:
         run: mkdir=${HOME}/.immich/models
         mkdir: "${HOME}/.immich/models"
@@ -103,13 +107,15 @@ immich-ml:
             - runtime
     immich-ml-step-10:
         check: the ML inference API answers its health probe on port 3003 with pong
-        command: curl -fsS http://127.0.0.1:3003/ping
         exit_status: 0
-        in_container: true
         stdout:
             - contains: pong
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: curl -fsS http://127.0.0.1:3003/ping
+            in_container: true
     immich-ml-service-running:
         check: service=immich-ml
         id: immich-ml-service-running
@@ -120,10 +126,12 @@ immich-ml:
     immich-ml-internal-port:
         check: command=curl -fsS -o /dev/null -w "%{http_code}" http://127.0.0.1:3003/ping
         id: immich-ml-internal-port
-        command: curl -fsS -o /dev/null -w "%{http_code}" http://127.0.0.1:3003/ping
         exit_status: 0
-        in_container: true
         stdout:
             - equals: "200"
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: curl -fsS -o /dev/null -w "%{http_code}" http://127.0.0.1:3003/ping
+            in_container: true

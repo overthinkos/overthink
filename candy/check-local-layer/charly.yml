@@ -25,17 +25,21 @@ check-local-layer:
             - contains: "check-local v1"
     check-local-layer-step-3:
         check: after the check-local kind:local apply, the marker resolves on the host filesystem outside any container
-        command: "test -f /etc/check-local-marker"
-        in_container: false
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: "test -f /etc/check-local-marker"
+            in_container: false
     check-local-marker-host-content:
         check: command=grep -q 'check-local v1' /etc/check-local-marker
         id: check-local-marker-host-content
-        command: "grep -q 'check-local v1' /etc/check-local-marker"
-        in_container: false
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: "grep -q 'check-local v1' /etc/check-local-marker"
+            in_container: false
     check-local-marker-build:
         check: file=/etc/check-local-marker
         id: check-local-marker-build

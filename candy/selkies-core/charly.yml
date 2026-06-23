@@ -87,17 +87,19 @@ selkies-core:
             - runtime
     selkies-core-step-3:
         check: 25s after deploy Chrome is still alive and its internal CDP endpoint on 9223 answers in-container, proving supervisord relaunched the browser past the nested-compositor self-exit instead of the bed merely racing its brief alive window
-        command: |
-            sleep 25
-            pgrep -f "/opt/google/chrome/chrome" >/dev/null 2>&1 || { echo "FAIL: chrome not running 25s after deploy"; exit 1; }
-            curl -sf --max-time 5 http://127.0.0.1:9223/json/version >/dev/null 2>&1 || { echo "FAIL: chrome CDP not responding"; exit 1; }
-            echo "ok: chrome supervised + alive + CDP responsive"
         exit_status: 0
-        in_container: true
         stdout:
             - contains: "ok: chrome supervised"
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: |
+                sleep 25
+                pgrep -f "/opt/google/chrome/chrome" >/dev/null 2>&1 || { echo "FAIL: chrome not running 25s after deploy"; exit 1; }
+                curl -sf --max-time 5 http://127.0.0.1:9223/json/version >/dev/null 2>&1 || { echo "FAIL: chrome CDP not responding"; exit 1; }
+                echo "ok: chrome supervised + alive + CDP responsive"
+            in_container: true
     selkies-chrome-supervisor-baked:
         check: file=/etc/supervisord.conf
         id: selkies-chrome-supervisor-baked
@@ -108,22 +110,24 @@ selkies-core:
     selkies-core-chrome-launch-flags:
         check: the supervised Chrome browser launched with --no-first-run (the first-run "welcome / make Chrome default" dialog is suppressed) and --start-maximized
         id: selkies-core-chrome-launch-flags
-        command: |
-            for pid in $(pgrep -x chrome); do
-              cmd=$(tr '\0' ' ' < /proc/$pid/cmdline 2>/dev/null)
-              case "$cmd" in *--type=*) continue ;; esac
-              case "$cmd" in *--no-first-run*) ;; *) continue ;; esac
-              case "$cmd" in *--start-maximized*) echo "ok: browser pid $pid carries --no-first-run + --start-maximized"; exit 0 ;; esac
-            done
-            echo "FAIL: no Chrome browser process carrying --no-first-run + --start-maximized"; exit 1
         exit_status: 0
-        in_container: true
         eventually: 45s
         retry_interval: 3s
         stdout:
             - contains: "ok: browser"
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: |
+                for pid in $(pgrep -x chrome); do
+                  cmd=$(tr '\0' ' ' < /proc/$pid/cmdline 2>/dev/null)
+                  case "$cmd" in *--type=*) continue ;; esac
+                  case "$cmd" in *--no-first-run*) ;; *) continue ;; esac
+                  case "$cmd" in *--start-maximized*) echo "ok: browser pid $pid carries --no-first-run + --start-maximized"; exit 0 ;; esac
+                done
+                echo "FAIL: no Chrome browser process carrying --no-first-run + --start-maximized"; exit 1
+            in_container: true
     selkies-core-chrome-maximized:
         check: the supervised Chrome window actually fills the streamed virtual screen (maximize took effect, not merely the flag)
         id: selkies-core-chrome-maximized

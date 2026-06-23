@@ -28,14 +28,18 @@ cue:
         exists: true
     cue-step-2:
         check: cue reports the pinned v0.16.1 release on stdout
-        command: cue version
         exit_status: 0
         stdout:
             - matches: "cue version v0.16.1"
+        plugin: command
+        plugin_input:
+            command: cue version
     cue-step-3:
         check: cue actually evaluates CUE (exports a computed field, proving the binary works)
-        command: |
-            printf 'x: 21\ny: x*2\n' > /tmp/charly-cue-check.cue && cue export -e y /tmp/charly-cue-check.cue
         exit_status: 0
         stdout:
             - contains: "42"
+        plugin: command
+        plugin_input:
+            command: |
+                printf 'x: 21\ny: x*2\n' > /tmp/charly-cue-check.cue && cue export -e y /tmp/charly-cue-check.cue

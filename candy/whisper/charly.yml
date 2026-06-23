@@ -18,13 +18,17 @@ whisper:
         exists: true
     whisper-step-1:
         check: the whisper CLI runs and prints its usage
-        command: ${HOME}/.pixi/envs/default/bin/whisper --help
         exit_status: 0
         stdout:
             - contains: "--model"
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.pixi/envs/default/bin/whisper --help
     whisper-step-2:
         check: ffmpeg is available on PATH for audio decoding
-        command: ffmpeg -version
         exit_status: 0
         stdout:
             - contains: ffmpeg
+        plugin: command
+        plugin_input:
+            command: ffmpeg -version

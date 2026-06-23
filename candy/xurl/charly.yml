@@ -15,5 +15,7 @@ xurl:
         exists: true
     xurl-step-1:
         check: the xurl CLI runs and prints its usage
-        command: ${HOME}/.npm-global/bin/xurl --help
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.npm-global/bin/xurl --help

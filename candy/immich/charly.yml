@@ -127,20 +127,24 @@ immich:
         run: |
             command=curl -L "https://github.com/immich-app/immich/archive/refs/tags/${IMMICH_VERSION}.tar.gz" | tar xz -C /tmp
             mv /tmp/immich-$(echo ${IMMICH_VERSION} | sed 's/^v//') /tmp/immich
-        command: |
-            curl -L "https://github.com/immich-app/immich/archive/refs/tags/${IMMICH_VERSION}.tar.gz" | tar xz -C /tmp
-            mv /tmp/immich-$(echo ${IMMICH_VERSION} | sed 's/^v//') /tmp/immich
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                curl -L "https://github.com/immich-app/immich/archive/refs/tags/${IMMICH_VERSION}.tar.gz" | tar xz -C /tmp
+                mv /tmp/immich-$(echo ${IMMICH_VERSION} | sed 's/^v//') /tmp/immich
     immich-step-1:
         run: |
             command=cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm install --frozen-lockfile
             cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm --filter immich build
             cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm --filter immich deploy --prod /opt/immich/server
-        command: |
-            cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm install --frozen-lockfile
-            cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm --filter immich build
-            cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm --filter immich deploy --prod /opt/immich/server
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm install --frozen-lockfile
+                cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm --filter immich build
+                cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm --filter immich deploy --prod /opt/immich/server
     immich-step-2:
         run: |
             command=mkdir -p /build/geodata
@@ -153,26 +157,30 @@ immich:
             echo '{}' > /build/build-lock.json
             mkdir -p /build/corePlugin
             cp /tmp/immich/plugins/manifest.json /build/corePlugin/manifest.json
-        command: |
-            mkdir -p /build/geodata
-            cd /build/geodata
-            curl -sL https://download.geonames.org/export/dump/admin1CodesASCII.txt -o admin1CodesASCII.txt
-            curl -sL https://download.geonames.org/export/dump/admin2Codes.txt -o admin2Codes.txt
-            curl -sL https://download.geonames.org/export/dump/cities500.zip -o cities500.zip && unzip -o cities500.zip && rm cities500.zip
-            curl -sL "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_0_countries.geojson" -o ne_10m_admin_0_countries.geojson
-            date -I > geodata-date.txt
-            echo '{}' > /build/build-lock.json
-            mkdir -p /build/corePlugin
-            cp /tmp/immich/plugins/manifest.json /build/corePlugin/manifest.json
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                mkdir -p /build/geodata
+                cd /build/geodata
+                curl -sL https://download.geonames.org/export/dump/admin1CodesASCII.txt -o admin1CodesASCII.txt
+                curl -sL https://download.geonames.org/export/dump/admin2Codes.txt -o admin2Codes.txt
+                curl -sL https://download.geonames.org/export/dump/cities500.zip -o cities500.zip && unzip -o cities500.zip && rm cities500.zip
+                curl -sL "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_0_countries.geojson" -o ne_10m_admin_0_countries.geojson
+                date -I > geodata-date.txt
+                echo '{}' > /build/build-lock.json
+                mkdir -p /build/corePlugin
+                cp /tmp/immich/plugins/manifest.json /build/corePlugin/manifest.json
     immich-step-3:
         run: |
             command=cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm --filter @immich/sdk --filter immich-web build
             cp -r /tmp/immich/web/build /build/www
-        command: |
-            cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm --filter @immich/sdk --filter immich-web build
-            cp -r /tmp/immich/web/build /build/www
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm --filter @immich/sdk --filter immich-web build
+                cp -r /tmp/immich/web/build /build/www
     immich-step-4:
         run: |
             command=EXTISM_JS_VERSION=1.6.0
@@ -194,31 +202,35 @@ immich:
             cp -r dist/* /build/corePlugin/dist/
 
             rm -f /usr/local/bin/extism-js /usr/local/bin/wasm-opt /usr/local/bin/wasm-merge /usr/local/bin/wasm-as /usr/local/bin/wasm-dis /usr/local/bin/wasm-ctor-check /usr/local/bin/wasm-emscripten-finalize /usr/local/bin/wasm-metadce /usr/local/bin/wasm-reduce /usr/local/bin/wasm-shell /usr/local/bin/wasm-split /usr/local/bin/wasm2js
-        command: |
-            EXTISM_JS_VERSION=1.6.0
-            BINARYEN_VERSION=124
-            ARCH=$(uname -m)
-
-            curl -sL "https://github.com/extism/js-pdk/releases/download/v${EXTISM_JS_VERSION}/extism-js-${ARCH}-linux-v${EXTISM_JS_VERSION}.gz" | gunzip > /usr/local/bin/extism-js
-            chmod +x /usr/local/bin/extism-js
-
-            curl -sL "https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/binaryen-version_${BINARYEN_VERSION}-${ARCH}-linux.tar.gz" | tar xz -C /tmp
-            cp /tmp/binaryen-version_${BINARYEN_VERSION}/bin/* /usr/local/bin/
-            rm -rf /tmp/binaryen-version_${BINARYEN_VERSION}
-
-            cd /tmp/immich/plugins
-            npm_config_cache=/tmp/npm-root-cache pnpm install --frozen-lockfile
-            npm_config_cache=/tmp/npm-root-cache pnpm run build
-
-            mkdir -p /build/corePlugin/dist
-            cp -r dist/* /build/corePlugin/dist/
-
-            rm -f /usr/local/bin/extism-js /usr/local/bin/wasm-opt /usr/local/bin/wasm-merge /usr/local/bin/wasm-as /usr/local/bin/wasm-dis /usr/local/bin/wasm-ctor-check /usr/local/bin/wasm-emscripten-finalize /usr/local/bin/wasm-metadce /usr/local/bin/wasm-reduce /usr/local/bin/wasm-shell /usr/local/bin/wasm-split /usr/local/bin/wasm2js
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                EXTISM_JS_VERSION=1.6.0
+                BINARYEN_VERSION=124
+                ARCH=$(uname -m)
+
+                curl -sL "https://github.com/extism/js-pdk/releases/download/v${EXTISM_JS_VERSION}/extism-js-${ARCH}-linux-v${EXTISM_JS_VERSION}.gz" | gunzip > /usr/local/bin/extism-js
+                chmod +x /usr/local/bin/extism-js
+
+                curl -sL "https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/binaryen-version_${BINARYEN_VERSION}-${ARCH}-linux.tar.gz" | tar xz -C /tmp
+                cp /tmp/binaryen-version_${BINARYEN_VERSION}/bin/* /usr/local/bin/
+                rm -rf /tmp/binaryen-version_${BINARYEN_VERSION}
+
+                cd /tmp/immich/plugins
+                npm_config_cache=/tmp/npm-root-cache pnpm install --frozen-lockfile
+                npm_config_cache=/tmp/npm-root-cache pnpm run build
+
+                mkdir -p /build/corePlugin/dist
+                cp -r dist/* /build/corePlugin/dist/
+
+                rm -f /usr/local/bin/extism-js /usr/local/bin/wasm-opt /usr/local/bin/wasm-merge /usr/local/bin/wasm-as /usr/local/bin/wasm-dis /usr/local/bin/wasm-ctor-check /usr/local/bin/wasm-emscripten-finalize /usr/local/bin/wasm-metadce /usr/local/bin/wasm-reduce /usr/local/bin/wasm-shell /usr/local/bin/wasm-split /usr/local/bin/wasm2js
     immich-step-5:
         run: command=rm -rf /tmp/immich
-        command: rm -rf /tmp/immich
         run_as: root
+        plugin: command
+        plugin_input:
+            command: rm -rf /tmp/immich
     immich-step-6:
         run: write=/docker-entrypoint-initdb.d/01-immich-extensions.sql
         write: /docker-entrypoint-initdb.d/01-immich-extensions.sql

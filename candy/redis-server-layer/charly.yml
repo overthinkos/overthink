@@ -43,11 +43,13 @@ redis-server-layer:
         installed: true
     redis-server-layer-step-4:
         check: the running redis-server answers PING with PONG on port 6379
-        command: redis-cli -h 127.0.0.1 -p 6379 ping
         stdout: PONG
-        in_container: true
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: redis-cli -h 127.0.0.1 -p 6379 ping
+            in_container: true
     redis-server-layer-step-5:
         check: the published redis TCP port is reachable from the host
         context:

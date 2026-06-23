@@ -69,7 +69,7 @@ func TestCompileOpSteps_FoldsBuildContextRunStepNotCheck(t *testing.T) {
 // plan — the check Runner executes it live, so folding would double-run.
 func TestCompileOpSteps_DoesNotFoldRuntimeOnlyRunStep(t *testing.T) {
 	layer := &Candy{Name: "x", plan: []Step{
-		{Run: "run", Op: Op{Command: "echo hi", Context: []string{"runtime"}}},
+		{Run: "run", Op: Op{Plugin: "command", PluginInput: map[string]any{"command": "echo hi"}, Context: []string{"runtime"}}},
 	}}
 	if steps := compileOpSteps(layer, testResolvedBox()); len(steps) != 0 {
 		t.Fatalf("runtime-only run: step must not be folded into the build plan, got %d steps", len(steps))
@@ -79,13 +79,13 @@ func TestCompileOpSteps_DoesNotFoldRuntimeOnlyRunStep(t *testing.T) {
 // A run: command step (the install timeline; the former task: list) lowers to an
 // OpStep — it must NOT be dropped, and the run-as user drives scope.
 func TestCompileOpSteps_RunCommandLowersToOpStep(t *testing.T) {
-	layer := &Candy{Name: "x", plan: []Step{{Run: "run cmd", Op: Op{Command: "echo hi", RunAs: "root"}}}}
+	layer := &Candy{Name: "x", plan: []Step{{Run: "run cmd", Op: Op{Plugin: "command", PluginInput: map[string]any{"command": "echo hi"}, RunAs: "root"}}}}
 	steps := compileOpSteps(layer, testResolvedBox())
 	if len(steps) != 1 {
 		t.Fatalf("run: command dropped: %d steps", len(steps))
 	}
 	op, ok := steps[0].(*OpStep)
-	if !ok || op.Op.Command != "echo hi" {
+	if !ok || op.Op.Plugin != "command" || op.Op.PluginInput["command"] != "echo hi" {
 		t.Fatalf("run: command not compiled as an OpStep: %#v", steps[0])
 	}
 	// The run-as user (not the user verb) drives scope — root → system.

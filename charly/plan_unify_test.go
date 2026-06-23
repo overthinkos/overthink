@@ -40,7 +40,7 @@ func TestPlanUnify_VerifyOnlySkipsRun(t *testing.T) {
 	set := &LabelDescriptionSet{Candy: []LabeledDescription{{
 		Origin: "candy:x",
 		Plan: []Step{
-			{Run: "mutate the world", Op: Op{Command: "echo should-not-run"}},
+			{Run: "mutate the world", Op: cmdOp("echo should-not-run")},
 			{Check: "the marker resolves", Op: Op{
 				Plugin:      "matching",
 				PluginInput: map[string]any{"matching": "m", "contains": map[string]any{"contains": "m"}},
@@ -77,7 +77,7 @@ func TestPlanUnify_SkipDeterministicRunSkipsInstall(t *testing.T) {
 	set := &LabelDescriptionSet{Candy: []LabeledDescription{{
 		Origin: "candy:x",
 		Plan: []Step{
-			{Run: "pip install /ctx/pkg", Op: Op{Command: "false"}}, // would FAIL if executed
+			{Run: "pip install /ctx/pkg", Op: cmdOp("false")}, // would FAIL if executed
 			{Check: "the marker resolves", Op: Op{
 				Plugin:      "matching",
 				PluginInput: map[string]any{"matching": "m", "contains": map[string]any{"contains": "m"}},
@@ -117,7 +117,7 @@ func TestPlanUnify_ValidateRejectsNoCheckStep(t *testing.T) {
 			Name:        "x",
 			Version:     "2026.001.0001",
 			Description: "a candy with run: but no check:",
-			plan:        []Step{{Run: "install", Op: Op{Command: "true"}}}, // run only, no check
+			plan:        []Step{{Run: "install", Op: cmdOp("true")}}, // run only, no check
 		},
 	}
 	errs := &ValidationError{}
@@ -237,7 +237,7 @@ score:
 func TestPlanUnify_IncludeSplicesCandyPlan(t *testing.T) {
 	layers := map[string]*Candy{
 		"redis": {Name: "redis", plan: []Step{
-			{Check: "redis answers ping", Op: Op{Command: "redis-cli ping", Stdout: MatcherList{{Op: "equals", Value: "PONG"}}}},
+			{Check: "redis answers ping", Op: Op{Plugin: "command", PluginInput: map[string]any{"command": "redis-cli ping"}, Stdout: MatcherList{{Op: "equals", Value: "PONG"}}}},
 			{Check: "redis binary present", Op: Op{File: "/usr/bin/redis-server"}},
 		}},
 	}

@@ -41,11 +41,13 @@ workspace-mount:
             command=systemctl daemon-reload || true
             systemctl enable workspace.mount || true
             systemctl start workspace.mount || true
-        command: |
-            systemctl daemon-reload || true
-            systemctl enable workspace.mount || true
-            systemctl start workspace.mount || true
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                systemctl daemon-reload || true
+                systemctl enable workspace.mount || true
+                systemctl start workspace.mount || true
     workspace-mount-step-3:
         check: the systemd .mount unit is installed and declares the virtiofs type
         file: /etc/systemd/system/workspace.mount
@@ -71,25 +73,27 @@ workspace-mount:
               exit 1
             fi
         id: workspace-virtiofs-rw
-        # Skip-aware: the share is attached only on a running VM that declares
-        # it (N/A at image build / no-device targets — mirrors the GPU gate).
-        # When mounted it MUST be virtiofs and writable.
-        command: |
-            if ! findmnt -n /workspace >/dev/null 2>&1; then
-              echo "WORKSPACE-OK (N/A: no /workspace share attached to this target)"
-              exit 0
-            fi
-            fstype=$(findmnt -n -o FSTYPE /workspace)
-            if [ "$fstype" != "virtiofs" ]; then
-              echo "FAIL: /workspace is $fstype, expected virtiofs"
-              exit 1
-            fi
-            probe=/workspace/.charly-workspace-write-probe
-            if touch "$probe" 2>/dev/null && rm -f "$probe" 2>/dev/null; then
-              echo "WORKSPACE-OK (virtiofs read-write at /workspace)"
-            else
-              echo "FAIL: /workspace virtiofs share is not writable"
-              exit 1
-            fi
         stdout:
             contains: WORKSPACE-OK
+        plugin: command
+        plugin_input:
+            # Skip-aware: the share is attached only on a running VM that declares
+            # it (N/A at image build / no-device targets — mirrors the GPU gate).
+            # When mounted it MUST be virtiofs and writable.
+            command: |
+                if ! findmnt -n /workspace >/dev/null 2>&1; then
+                  echo "WORKSPACE-OK (N/A: no /workspace share attached to this target)"
+                  exit 0
+                fi
+                fstype=$(findmnt -n -o FSTYPE /workspace)
+                if [ "$fstype" != "virtiofs" ]; then
+                  echo "FAIL: /workspace is $fstype, expected virtiofs"
+                  exit 1
+                fi
+                probe=/workspace/.charly-workspace-write-probe
+                if touch "$probe" 2>/dev/null && rm -f "$probe" 2>/dev/null; then
+                  echo "WORKSPACE-OK (virtiofs read-write at /workspace)"
+                else
+                  echo "FAIL: /workspace virtiofs share is not writable"
+                  exit 1
+                fi

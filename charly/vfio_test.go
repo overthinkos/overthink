@@ -327,7 +327,7 @@ func TestVmExecTaskCopyStagesViaPutFile(t *testing.T) {
 func TestVmExecTaskCmdUsesSharedRenderer(t *testing.T) {
 	fe := &fakeGuestExec{}
 	tgt := &VmDeployTarget{Exec: fe}
-	s := &OpStep{Op: &Op{Command: "echo hi"}, ResolvedUser: "root"}
+	s := &OpStep{Op: cmdOpP("echo hi"), ResolvedUser: "root"}
 	if err := tgt.execOp(context.Background(), s, &InstallPlan{}, EmitOpts{}); err != nil {
 		t.Fatalf("execTask cmd: %v", err)
 	}

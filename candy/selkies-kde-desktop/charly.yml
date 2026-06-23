@@ -54,15 +54,19 @@ selkies-kde-desktop:
         exists: true
     selkies-kde-desktop-step-6:
         check: the composed nested KDE Plasma session reaches RUNNING under supervisord without crash-looping
-        command: |
-            sleep 20
-            supervisorctl status kde-selkies-session
         stdout:
             - matches: "RUNNING"
-        in_container: true
+        plugin: command
+        plugin_input:
+            command: |
+                sleep 20
+                supervisorctl status kde-selkies-session
+            in_container: true
     selkies-kde-desktop-step-7:
         check: the selkies web UI streams the live KDE Plasma desktop over HTTPS on port 3000
         timeout: 10s
+        context:
+            - runtime
         plugin: http
         plugin_input:
             http: https://127.0.0.1:${HOST_PORT:3000}/

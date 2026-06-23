@@ -110,10 +110,12 @@ github-runner:
         run: |
             command=rh=$(getent passwd 1000 | cut -d: -f6)
             chown -R 1000:1000 "${rh}/actions-runner"
-        command: |
-            rh=$(getent passwd 1000 | cut -d: -f6)
-            chown -R 1000:1000 "${rh}/actions-runner"
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                rh=$(getent passwd 1000 | cut -d: -f6)
+                chown -R 1000:1000 "${rh}/actions-runner"
     github-runner-step-3:
         run: mkdir=${HOME}/.config/containers/registries.conf.d
         mkdir: "${HOME}/.config/containers/registries.conf.d"
@@ -140,52 +142,70 @@ github-runner:
         exists: true
     github-runner-step-7:
         check: config.sh executes, proving the .NET native deps (icu/krb5/openssl/libunwind/lttng-ust) resolved on this distro
-        command: "${HOME}/actions-runner/config.sh --version"
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: "${HOME}/actions-runner/config.sh --version"
     github-runner-step-8:
         check: skopeo (rootless image copy) reports its version
-        command: skopeo --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: skopeo --version
     github-runner-step-9:
         check: buildah (rootless image build) reports its version
-        command: buildah --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: buildah --version
     github-runner-step-10:
         check: cosign (image signing) reports its version
-        command: cosign version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: cosign version
     github-runner-step-11:
         check: the go toolchain used by CI jobs reports its version
-        command: go version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: go version
     github-runner-step-12:
         check: the aarch64 qemu interpreter is installed so jobs can cross-build for arm64 via binfmt
         file: /usr/bin/qemu-aarch64-static
         exists: true
     github-runner-step-13:
         check: the runner service process runs as the unprivileged uid 1000, never root
-        command: id
         stdout:
             - contains: "uid=1000"
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: id
     github-runner-step-14:
         check: rootless nested podman works inside the box (no mount_too_revealing EPERM)
-        command: podman info
         exit_status: 0
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: podman info
     github-runner-step-15:
         check: a CI job can actually pull and run a container image rootless
-        command: "podman run --rm quay.io/libpod/alpine:latest true"
         exit_status: 0
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: "podman run --rm quay.io/libpod/alpine:latest true"
     gr-git:
         check: command=git --version
         id: gr-git
-        command: git --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: git --version
     gr-go-pkg:
         check: package=golang
         id: gr-go-pkg
@@ -228,8 +248,10 @@ github-runner:
     gr-newuidmap-cap:
         check: command=getcap /usr/bin/newuidmap
         id: gr-newuidmap-cap
-        command: getcap /usr/bin/newuidmap
         stdout:
             - contains: cap_setuid
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: getcap /usr/bin/newuidmap

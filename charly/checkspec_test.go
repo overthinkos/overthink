@@ -19,7 +19,11 @@ func TestCheck_Kind(t *testing.T) {
 	}{
 		{"file", Op{File: "/usr/bin/redis"}, "file", ""},
 		{"service", Op{Service: "redis"}, "service", ""},
-		{"command", Op{Command: "redis-cli ping"}, "command", ""},
+		// `command` is NO LONGER a verb — it left #OpVerb in the command→plugin
+		// extraction and is now a shared #Op modifier (wl/libvirt argv). A bare
+		// Op.Command therefore yields NO verb; the command CHECK is `plugin: command`.
+		{"command-modifier-not-verb", Op{Command: "redis-cli ping"}, "", "no verb"},
+		{"command-as-plugin", Op{Plugin: "command", PluginInput: map[string]any{"command": "redis-cli ping"}}, "plugin", ""},
 		{"plugin", Op{Plugin: "matching"}, "plugin", ""},
 		{"none", Op{}, "", "no verb"},
 		{"two", Op{File: "/x", Service: "redis"}, "", "multiple verbs"},
@@ -54,7 +58,9 @@ func TestCheck_UnmarshalYAMLList(t *testing.T) {
   plugin_input:
     port: 6379
     listening: true
-- command: redis-cli ping
+- plugin: command
+  plugin_input:
+    command: redis-cli ping
   stdout: PONG
 - plugin: http
   plugin_input:
@@ -64,9 +70,11 @@ func TestCheck_UnmarshalYAMLList(t *testing.T) {
       - contains: "ready"
 - id: redis-responds
   context: [deploy]
-  command: redis-cli -h ${CONTAINER_IP} -p ${HOST_PORT:6379} ping
+  plugin: command
+  plugin_input:
+    command: redis-cli -h ${CONTAINER_IP} -p ${HOST_PORT:6379} ping
+    in_container: false
   stdout: PONG
-  in_container: false
 `
 	var got []Op
 	if err := decodeViaCUEForTest(t, src, &got); err != nil {
@@ -96,9 +104,14 @@ func TestCheck_UnmarshalYAMLList(t *testing.T) {
 		t.Errorf("plugin_input = %v, want a map with listening:true", got[1].PluginInput)
 	}
 
-	// 2: command with stdout matcher
-	if got[2].Command != "redis-cli ping" {
-		t.Errorf("command = %q", got[2].Command)
+	// 2: command with stdout matcher — now the `command` plugin verb (authored as
+	// plugin: command + plugin_input.command); the stdout MATCHER stays at step level
+	// (#Op), shared with the live verbs via matchAll.
+	if got[2].Plugin != "command" {
+		t.Errorf("plugin = %q, want command", got[2].Plugin)
+	}
+	if got[2].PluginInput == nil || got[2].PluginInput["command"] != "redis-cli ping" {
+		t.Errorf("plugin_input.command = %v, want the cmd", got[2].PluginInput)
 	}
 	if len(got[2].Stdout) != 1 || got[2].Stdout[0].Op != "equals" || got[2].Stdout[0].Value != "PONG" {
 		t.Errorf("stdout[0] = %+v, want {equals PONG}", got[2].Stdout)
@@ -123,11 +136,15 @@ func TestCheck_UnmarshalYAMLList(t *testing.T) {
 	if len(got[4].Context) != 1 || got[4].Context[0] != "deploy" {
 		t.Errorf("context = %v, want [deploy]", got[4].Context)
 	}
-	if got[4].InContainer == nil || *got[4].InContainer {
-		t.Errorf("in_container should be pointer-to-false")
+	if got[4].Plugin != "command" {
+		t.Errorf("plugin = %q, want command", got[4].Plugin)
 	}
-	if !strings.Contains(got[4].Command, "${HOST_PORT:6379}") {
-		t.Errorf("command should preserve parameterized var ref: %q", got[4].Command)
+	if got[4].PluginInput == nil || got[4].PluginInput["in_container"] != false {
+		t.Errorf("plugin_input.in_container should be false, got %v", got[4].PluginInput)
+	}
+	cmd4, _ := got[4].PluginInput["command"].(string)
+	if !strings.Contains(cmd4, "${HOST_PORT:6379}") {
+		t.Errorf("plugin_input.command should preserve parameterized var ref: %q", cmd4)
 	}
 }
 

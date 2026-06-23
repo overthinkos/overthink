@@ -68,8 +68,10 @@ chrome:
               path: "~/.chrome-debug"
     chrome-step-0:
         run: command=BROWSER= xdg-settings set default-web-browser google-chrome.desktop || true
-        command: BROWSER= xdg-settings set default-web-browser google-chrome.desktop || true
         run_as: "${USER}"
+        plugin: command
+        plugin_input:
+            command: BROWSER= xdg-settings set default-web-browser google-chrome.desktop || true
     chrome-step-1:
         check: the google-chrome-stable binary is present at its canonical path
         file: /usr/bin/google-chrome-stable

@@ -57,11 +57,13 @@ postgresql:
             command=mkdir -p /home/user/.postgresql
             chown 1000:1000 /home/user/.postgresql
             mkdir -p /docker-entrypoint-initdb.d
-        command: |
-            mkdir -p /home/user/.postgresql
-            chown 1000:1000 /home/user/.postgresql
-            mkdir -p /docker-entrypoint-initdb.d
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                mkdir -p /home/user/.postgresql
+                chown 1000:1000 /home/user/.postgresql
+                mkdir -p /docker-entrypoint-initdb.d
     postgresql-step-1:
         run: write=/usr/local/bin/postgresql-entrypoint.sh
         write: /usr/local/bin/postgresql-entrypoint.sh
@@ -176,18 +178,22 @@ postgresql:
         installed: true
     postgresql-step-8:
         check: the entrypoint initialized the cluster data directory on first run
-        command: test -f ${HOME}/.postgresql/data/PG_VERSION
         exit_status: 0
-        in_container: true
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: test -f ${HOME}/.postgresql/data/PG_VERSION
+            in_container: true
     postgresql-step-9:
         check: the running server reports ready on its unix socket
-        command: pg_isready -h ${HOME}/.postgresql
         exit_status: 0
-        in_container: true
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: pg_isready -h ${HOME}/.postgresql
+            in_container: true
     postgresql-package:
         check: package=postgresql-server
         id: postgresql-package

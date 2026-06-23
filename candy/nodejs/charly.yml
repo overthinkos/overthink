@@ -61,39 +61,47 @@ nodejs:
             esac
             curl -fsSL "https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/pnpm-linux-${PNPM_ARCH}" -o /usr/local/bin/pnpm
             chmod 0755 /usr/local/bin/pnpm
-        command: |
-            case "${BUILD_ARCH}" in
-              x86_64)  PNPM_ARCH="x64" ;;
-              aarch64) PNPM_ARCH="arm64" ;;
-              *) echo "Unsupported arch: ${BUILD_ARCH}"; exit 1 ;;
-            esac
-            curl -fsSL "https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/pnpm-linux-${PNPM_ARCH}" -o /usr/local/bin/pnpm
-            chmod 0755 /usr/local/bin/pnpm
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                case "${BUILD_ARCH}" in
+                  x86_64)  PNPM_ARCH="x64" ;;
+                  aarch64) PNPM_ARCH="arm64" ;;
+                  *) echo "Unsupported arch: ${BUILD_ARCH}"; exit 1 ;;
+                esac
+                curl -fsSL "https://github.com/pnpm/pnpm/releases/download/v${PNPM_VERSION}/pnpm-linux-${PNPM_ARCH}" -o /usr/local/bin/pnpm
+                chmod 0755 /usr/local/bin/pnpm
     nodejs-step-1:
         check: the node interpreter is installed at /usr/bin/node
         file: /usr/bin/node
         exists: true
     nodejs-step-2:
         check: node reports its version and exits cleanly
-        command: /usr/bin/node --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/bin/node --version
     nodejs-step-3:
         check: the npm package manager is installed at /usr/bin/npm
         file: /usr/bin/npm
         exists: true
     nodejs-step-4:
         check: npm reports its version and exits cleanly
-        command: /usr/bin/npm --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/bin/npm --version
     nodejs-step-5:
         check: the self-contained pnpm binary lands on the system PATH at /usr/local/bin/pnpm
         file: /usr/local/bin/pnpm
         exists: true
     nodejs-step-6:
         check: pnpm runs and reports its version
-        command: pnpm --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: pnpm --version
     nodejs-package-2:
         check: package=nodejs
         id: nodejs-package

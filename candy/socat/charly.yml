@@ -40,8 +40,10 @@ socat:
         exists: true
     socat-step-2:
         check: socat reports its version and exits zero
-        command: /usr/bin/socat -V
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/bin/socat -V
     socat-step-3:
         check: the relay-wrapper script is installed executable at /usr/local/bin/relay-wrapper
         file: /usr/local/bin/relay-wrapper
@@ -49,10 +51,12 @@ socat:
         mode: "0755"
     socat-step-4:
         check: invoking relay-wrapper with no port argument prints a usage error and exits non-zero
-        command: /usr/local/bin/relay-wrapper
         exit_status: 1
         stderr:
             - contains: "Usage"
+        plugin: command
+        plugin_input:
+            command: /usr/local/bin/relay-wrapper
     socat-step-5:
         check: the iproute package providing the ip command the relay uses is installed
         package: iproute

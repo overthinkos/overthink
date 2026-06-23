@@ -119,20 +119,24 @@ labwc:
     labwc-wayland-socket:
         check: command=test -e /tmp/wayland-0
         id: labwc-wayland-socket
-        command: test -e /tmp/wayland-0
         exit_status: 0
-        in_container: true
         eventually: 60s
         retry_interval: 3s
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: test -e /tmp/wayland-0
+            in_container: true
     labwc-stable:
         check: command=supervisorctl status labwc | awk '/RUNNING/{n=split($NF,a,":"); s=a[n]+a[n-1]*60+a[n-2]*3600; if(s>=20){f=1}} END{exit !f}'
         id: labwc-stable
-        in_container: true
         exit_status: 0
         eventually: 120s
         retry_interval: 5s
-        command: "supervisorctl status labwc | awk '/RUNNING/{n=split($NF,a,\":\"); s=a[n]+a[n-1]*60+a[n-2]*3600; if(s>=20){f=1}} END{exit !f}'"
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: "supervisorctl status labwc | awk '/RUNNING/{n=split($NF,a,\":\"); s=a[n]+a[n-1]*60+a[n-2]*3600; if(s>=20){f=1}} END{exit !f}'"
+            in_container: true

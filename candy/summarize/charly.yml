@@ -27,7 +27,9 @@ summarize:
         exists: true
     summarize-step-3:
         check: running summarize --version prints a version and exits cleanly
-        command: ${HOME}/.npm-global/bin/summarize --version
         exit_status: 0
         stdout:
             - matches: "[0-9]+\\.[0-9]+"
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.npm-global/bin/summarize --version

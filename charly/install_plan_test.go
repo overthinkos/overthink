@@ -176,7 +176,7 @@ func TestTaskStepScopeFromResolvedUser(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.user, func(t *testing.T) {
-			s := &OpStep{ResolvedUser: tc.user, Op: &Op{Command: "true"}}
+			s := &OpStep{ResolvedUser: tc.user, Op: cmdOpP("true")}
 			if got := s.Scope(); got != tc.want {
 				t.Errorf("Scope() = %v, want %v", got, tc.want)
 			}
@@ -186,7 +186,7 @@ func TestTaskStepScopeFromResolvedUser(t *testing.T) {
 
 func TestTaskStepCmdGate(t *testing.T) {
 	// root cmd task is gated
-	s := &OpStep{ResolvedUser: "root", Op: &Op{Command: "dnf install -y foo"}}
+	s := &OpStep{ResolvedUser: "root", Op: cmdOpP("dnf install -y foo")}
 	if got := s.RequiresGate(); got != GateAllowRootTasks {
 		t.Errorf("root cmd gate = %v, want allow-root-tasks", got)
 	}
@@ -196,7 +196,7 @@ func TestTaskStepCmdGate(t *testing.T) {
 		t.Errorf("root mkdir gate = %v, want none", got)
 	}
 	// user cmd task is NOT gated
-	s = &OpStep{ResolvedUser: "1000:1000", Op: &Op{Command: "pixi install"}}
+	s = &OpStep{ResolvedUser: "1000:1000", Op: cmdOpP("pixi install")}
 	if got := s.RequiresGate(); got != GateNone {
 		t.Errorf("user cmd gate = %v, want none", got)
 	}

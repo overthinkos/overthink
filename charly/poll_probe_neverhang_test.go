@@ -43,8 +43,8 @@ func TestRunner_PerProbeNeverHang(t *testing.T) {
 	r.ProbeTimeout = 100 * time.Millisecond // a tight per-probe bound for the test
 
 	checks := []Op{
-		{Command: "WEDGEPROBE check"},                      // wedges → must be cancelled at ProbeTimeout
-		{Command: "echo healthy", Stdout: matcherEq("ok")}, // must still run after the wedge
+		{Plugin: "command", PluginInput: map[string]any{"command": "WEDGEPROBE check"}},                      // wedges → must be cancelled at ProbeTimeout
+		{Plugin: "command", PluginInput: map[string]any{"command": "echo healthy"}, Stdout: matcherEq("ok")}, // must still run after the wedge
 	}
 
 	done := make(chan []CheckResult, 1)

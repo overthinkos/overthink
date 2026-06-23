@@ -17,13 +17,17 @@ python:
         exists: true
     python-step-1:
         check: the interpreter reports a CPython 3.13 version
-        command: ${HOME}/.pixi/envs/default/bin/python --version
         exit_status: 0
         stdout:
             - contains: "3.13"
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.pixi/envs/default/bin/python --version
     python-step-2:
         check: the interpreter executes a standard-library snippet (incl. the sqlite3 C extension) and reports major.minor 3 13
-        command: ${HOME}/.pixi/envs/default/bin/python -c "import sys, json, sqlite3; print(sys.version_info.major, sys.version_info.minor)"
         exit_status: 0
         stdout:
             - contains: "3 13"
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.pixi/envs/default/bin/python -c "import sys, json, sqlite3; print(sys.version_info.major, sys.version_info.minor)"

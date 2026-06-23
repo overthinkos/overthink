@@ -91,11 +91,13 @@ check-stack-layer:
     check-ss-listening:
         check: command=ss -tlnp 2>/dev/null | grep ':18794'
         id: check-ss-listening
-        command: "ss -tlnp 2>/dev/null | grep ':18794'"
         exit_status: 0
-        in_container: true
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: "ss -tlnp 2>/dev/null | grep ':18794'"
+            in_container: true
     check-service-running:
         check: service=check-sleep
         id: check-service-running

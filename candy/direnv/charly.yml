@@ -33,8 +33,10 @@ direnv:
         exists: true
     direnv-step-1:
         check: direnv reports its version without error
-        command: /usr/bin/direnv version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/bin/direnv version
     direnv-step-2:
         check: the bash shell-init drop-in EVALs the direnv hook so .envrc loads on directory change (a check-for-eval typo would silently break the hook and spam every login shell with a command-not-found error)
         file: /etc/profile.d/charly-direnv-bash.sh
@@ -44,9 +46,11 @@ direnv:
     direnv-hook-sources-clean:
         check: sourcing the bash direnv drop-in installs the hook cleanly, with no command-not-found error from a malformed check-for-eval hook body
         id: direnv-hook-sources-clean
-        command: bash -c '. /etc/profile.d/charly-direnv-bash.sh 2>&1' | grep -c 'command not found' || true
         stdout:
             - equals: "0"
+        plugin: command
+        plugin_input:
+            command: bash -c '. /etc/profile.d/charly-direnv-bash.sh 2>&1' | grep -c 'command not found' || true
     direnv-step-4:
         check: the fish shell-init drop-in is baked into its conf.d and sources the direnv fish hook
         file: /etc/fish/conf.d/charly-direnv.fish
@@ -61,7 +65,9 @@ direnv:
     direnv-version:
         check: command=/usr/bin/direnv version
         id: direnv-version
-        command: /usr/bin/direnv version
         exit_status: 0
         stdout:
             - matches: "[0-9]+\\.[0-9]+"
+        plugin: command
+        plugin_input:
+            command: /usr/bin/direnv version

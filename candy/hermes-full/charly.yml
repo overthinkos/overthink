@@ -56,22 +56,28 @@ hermes-full:
         exists: true
     hermes-full-step-8:
         check: the tmux multiplexer binary is on PATH and reports its version
-        command: /usr/bin/tmux -V
         exit_status: 0
         stdout:
             - matches: "^tmux"
+        plugin: command
+        plugin_input:
+            command: /usr/bin/tmux -V
     hermes-full-step-9:
         check: the AWS CLI v2 binary from devops-tools is installed under /usr/local/bin
         file: /usr/local/bin/aws
         exists: true
     hermes-full-step-10:
         check: OpenTofu from devops-tools runs and reports its version
-        command: /usr/local/bin/tofu version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/local/bin/tofu version
     hermes-full-step-11:
         check: jq from devops-tools runs and reports its version
-        command: /usr/bin/jq --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/bin/jq --version
     hermes-full-step-12:
         check: the supervised hermes agent service is running on the live deployment
         service: hermes

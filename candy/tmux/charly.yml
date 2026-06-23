@@ -22,11 +22,15 @@ tmux:
         installed: true
     tmux-step-2:
         check: invoking tmux -V exits cleanly and prints a tmux version banner
-        command: /usr/bin/tmux -V
         exit_status: 0
         stdout:
             - matches: "^tmux"
+        plugin: command
+        plugin_input:
+            command: /usr/bin/tmux -V
     tmux-step-3:
         check: tmux starts a detached session with no TTY, confirms it is live, then tears it down
-        command: tmux new-session -d -s charly-ade-probe && tmux has-session -t charly-ade-probe && tmux kill-session -t charly-ade-probe
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: tmux new-session -d -s charly-ade-probe && tmux has-session -t charly-ade-probe && tmux kill-session -t charly-ade-probe

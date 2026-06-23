@@ -169,7 +169,7 @@ func TestRunner_CommandVerb(t *testing.T) {
 			{matchPrefix: "redis-cli ping", stdout: "PONG\n", exit: 0},
 		}
 		res := r.Run(context.Background(), []Op{
-			{Command: "redis-cli ping", Stdout: MatcherList{{Op: "equals", Value: "PONG"}}},
+			{Plugin: "command", PluginInput: map[string]any{"command": "redis-cli ping"}, Stdout: MatcherList{{Op: "equals", Value: "PONG"}}},
 		})
 		if res[0].Status != TestPass {
 			t.Errorf("expected pass, got %+v", res[0])
@@ -182,7 +182,7 @@ func TestRunner_CommandVerb(t *testing.T) {
 			{matchPrefix: "status", stdout: "ready ok running", exit: 0},
 		}
 		res := r.Run(context.Background(), []Op{
-			{Command: "status", Stdout: MatcherList{{Op: "contains", Value: []any{"ready", "ok"}}}},
+			{Plugin: "command", PluginInput: map[string]any{"command": "status"}, Stdout: MatcherList{{Op: "contains", Value: []any{"ready", "ok"}}}},
 		})
 		if res[0].Status != TestPass {
 			t.Errorf("expected pass, got %+v", res[0])
@@ -194,7 +194,7 @@ func TestRunner_CommandVerb(t *testing.T) {
 		fake.responses = []fakeResponse{
 			{matchPrefix: "fail-cmd", exit: 2},
 		}
-		res := r.Run(context.Background(), []Op{{Command: "fail-cmd"}})
+		res := r.Run(context.Background(), []Op{cmdOp("fail-cmd")})
 		if res[0].Status != TestFail || !strings.Contains(res[0].Message, "exit=2") {
 			t.Errorf("expected exit failure, got %+v", res[0])
 		}
@@ -206,7 +206,7 @@ func TestRunner_CommandVerb(t *testing.T) {
 			{matchPrefix: "uptime", stdout: "load average: 0.12 0.34 0.56\n", exit: 0},
 		}
 		res := r.Run(context.Background(), []Op{
-			{Command: "uptime", Stdout: MatcherList{{Op: "matches", Value: `load average: [\d.]+`}}},
+			{Plugin: "command", PluginInput: map[string]any{"command": "uptime"}, Stdout: MatcherList{{Op: "matches", Value: `load average: [\d.]+`}}},
 		})
 		if res[0].Status != TestPass {
 			t.Errorf("expected pass, got %+v", res[0])
@@ -276,7 +276,7 @@ func TestRunner_VariableExpansion(t *testing.T) {
 		}
 		r := NewRunner(fake, &CheckVarResolver{Env: map[string]string{"HOST_PORT:6379": "16379"}}, RunModeLive)
 		res := r.Run(context.Background(), []Op{
-			{Command: "redis-cli -p ${HOST_PORT:6379}", Stdout: MatcherList{{Op: "equals", Value: "PONG"}}},
+			{Plugin: "command", PluginInput: map[string]any{"command": "redis-cli -p ${HOST_PORT:6379}"}, Stdout: MatcherList{{Op: "equals", Value: "PONG"}}},
 		})
 		if res[0].Status != TestPass {
 			t.Errorf("expected pass, got %+v. fake calls: %v", res[0], fake.calls)
@@ -286,7 +286,7 @@ func TestRunner_VariableExpansion(t *testing.T) {
 	t.Run("unresolved → skip", func(t *testing.T) {
 		r, _ := newFakeRunner(t, RunModeLive)
 		res := r.Run(context.Background(), []Op{
-			{Command: "redis-cli -p ${HOST_PORT:6379}"},
+			{Plugin: "command", PluginInput: map[string]any{"command": "redis-cli -p ${HOST_PORT:6379}"}},
 		})
 		if res[0].Status != TestSkip || !strings.Contains(res[0].Message, "unresolved") {
 			t.Errorf("expected skip with unresolved, got %+v", res[0])
@@ -297,7 +297,7 @@ func TestRunner_VariableExpansion(t *testing.T) {
 // Skip:true short-circuits before any execution.
 func TestRunner_SkipFlag(t *testing.T) {
 	r, _ := newFakeRunner(t, RunModeLive)
-	res := r.Run(context.Background(), []Op{{Command: "anything", Skip: true}})
+	res := r.Run(context.Background(), []Op{{Plugin: "command", PluginInput: map[string]any{"command": "anything"}, Skip: true}})
 	if res[0].Status != TestSkip {
 		t.Errorf("expected skip, got %+v", res[0])
 	}
@@ -318,7 +318,7 @@ func TestFormatResultsText(t *testing.T) {
 	results := []CheckResult{
 		{Op: &Op{File: "/x"}, Verb: "file", Status: TestPass, Message: "ok"},
 		{Op: &Op{Plugin: "addr", PluginInput: map[string]any{"addr": "127.0.0.1:6379"}}, Verb: "addr", Status: TestFail, Message: "not reachable", Elapsed: 5 * time.Millisecond},
-		{Op: &Op{Command: "a"}, Verb: "command", Status: TestSkip, Message: "skipped"},
+		{Op: cmdOpP("a"), Verb: "command", Status: TestSkip, Message: "skipped"},
 	}
 	var buf bytes.Buffer
 	fails := FormatResultsText(&buf, results)

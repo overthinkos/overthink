@@ -61,10 +61,12 @@ valkey:
         installed: true
     valkey-step-4:
         check: valkey-cli ping returns PONG against the supervised valkey-server
-        command: valkey-cli -h 127.0.0.1 -p 6379 ping
         stdout: PONG
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: valkey-cli -h 127.0.0.1 -p 6379 ping
     valkey-step-5:
         check: the valkey port accepts a TCP connection from the host
         context:
@@ -75,27 +77,33 @@ valkey:
             reachable: true
     valkey-step-6:
         check: a value written with SET can be read back with GET, proving the store really persists key-value pairs
-        command: valkey-cli -h 127.0.0.1 -p 6379 set charly-check-key charly-check-val && valkey-cli -h 127.0.0.1 -p 6379 get charly-check-key
         stdout:
             - contains: charly-check-val
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: valkey-cli -h 127.0.0.1 -p 6379 set charly-check-key charly-check-val && valkey-cli -h 127.0.0.1 -p 6379 get charly-check-key
     valkey-step-7:
         agent-check: the supervised valkey service is running and keeps answering clients, restarting automatically (restart=always) if the valkey-server process exits
     valkey-responds:
         check: command=valkey-cli -h 127.0.0.1 -p 6379 ping
         id: valkey-responds
-        command: valkey-cli -h 127.0.0.1 -p 6379 ping
         stdout: PONG
-        in_container: true
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: valkey-cli -h 127.0.0.1 -p 6379 ping
+            in_container: true
     valkey-set-get:
         check: command=valkey-cli -h 127.0.0.1 -p 6379 set charly-check-probe charly-check-ok && valkey-cli -h 127.0.0.1 -p 6379 get charly-check-probe
         id: valkey-set-get
-        command: valkey-cli -h 127.0.0.1 -p 6379 set charly-check-probe charly-check-ok && valkey-cli -h 127.0.0.1 -p 6379 get charly-check-probe
         stdout:
             - contains: charly-check-ok
-        in_container: true
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: valkey-cli -h 127.0.0.1 -p 6379 set charly-check-probe charly-check-ok && valkey-cli -h 127.0.0.1 -p 6379 get charly-check-probe
+            in_container: true

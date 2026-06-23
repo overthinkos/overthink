@@ -27,9 +27,11 @@ libnotify:
         installed: true
     libnotify-step-2:
         check: notify-send --version runs cleanly and prints its version string
-        command: notify-send --version 2>&1
         exit_status: 0
         stdout:
             - contains: notify-send
+        plugin: command
+        plugin_input:
+            command: notify-send --version 2>&1
     libnotify-step-3:
         agent-check: a notification sent with notify-send appears in the running notification daemon on the desktop

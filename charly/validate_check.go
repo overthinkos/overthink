@@ -225,13 +225,25 @@ func validWxH(s string) bool {
 func collectCheckRefs(c *Op) []string {
 	seen := map[string]bool{}
 	var out []string
-	for _, p := range c.StringFields() {
-		for _, r := range TestVarRefs(*p) {
+	add := func(s string) {
+		for _, r := range TestVarRefs(s) {
 			if !seen[r] {
 				seen[r] = true
 				out = append(out, r)
 			}
 		}
+	}
+	for _, p := range c.StringFields() {
+		add(*p)
+	}
+	// Plugin verbs author their fields in the opaque PluginInput map (NOT StringFields)
+	// — e.g. `plugin: command` carries the cmd body in plugin_input.command, `plugin: http`
+	// the URL in plugin_input.http. Scan them too so a build-context op referencing a
+	// runtime-only var inside plugin_input is flagged uniformly with the StringFields scan
+	// (R3); the read-only collectAnyStrings walk is the same one ${HOST:…} cross-member
+	// collection uses.
+	for _, s := range collectAnyStrings(c.PluginInput) {
+		add(s)
 	}
 	return out
 }

@@ -37,24 +37,30 @@ hermes-playwright:
             shm_size: "1g"
     hermes-playwright-step-0:
         run: command=HOME=/tmp npx playwright install chromium
-        command: HOME=/tmp npx playwright install chromium
         run_as: "${USER}"
+        plugin: command
+        plugin_input:
+            command: HOME=/tmp npx playwright install chromium
     hermes-playwright-step-1:
         check: the Playwright browsers cache directory is baked into the image
         file: /tmp/.cache/ms-playwright
         exists: true
     hermes-playwright-step-2:
         check: a Chromium build directory is present under the cache path
-        command: ls /tmp/.cache/ms-playwright
         stdout:
             - contains: chromium
+        plugin: command
+        plugin_input:
+            command: ls /tmp/.cache/ms-playwright
     hermes-playwright-step-3:
         check: the installed Chromium browser binary is executable
-        command: |
-            bin=$(ls /tmp/.cache/ms-playwright/chromium-*/chrome-linux/chrome /tmp/.cache/ms-playwright/chromium_headless_shell-*/chrome-linux/headless_shell 2>/dev/null | head -1)
-            test -x "$bin" && echo "EXEC_OK:$bin"
         stdout:
             - contains: EXEC_OK
+        plugin: command
+        plugin_input:
+            command: |
+                bin=$(ls /tmp/.cache/ms-playwright/chromium-*/chrome-linux/chrome /tmp/.cache/ms-playwright/chromium_headless_shell-*/chrome-linux/headless_shell 2>/dev/null | head -1)
+                test -x "$bin" && echo "EXEC_OK:$bin"
     hermes-playwright-step-4:
         check: the NSS library Chromium links against is installed
         package: nss

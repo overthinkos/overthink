@@ -34,7 +34,7 @@ func TestFlattenBundleVenues_StampsAndHoists(t *testing.T) {
 					Target:           "pod",
 					AgentProvisioned: true,
 					Plan: []Step{
-						{Check: "migration ran", Op: Op{Command: "test -f /done"}},
+						{Check: "migration ran", Op: cmdOp("test -f /done")},
 					},
 				},
 			},
@@ -82,7 +82,7 @@ func TestFlattenBundleVenues_GroupDirectStepRejected(t *testing.T) {
 		"grp": {
 			Target: "", // group, but carries a direct step → illegal
 			Plan: []Step{
-				{Check: "stray", Op: Op{Command: "true"}},
+				{Check: "stray", Op: cmdOp("true")},
 			},
 		},
 	}}

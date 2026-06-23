@@ -24,20 +24,24 @@ notebook-llm-on-supercomputers:
             - runtime
     notebook-llm-on-supercomputers-step-1:
         check: at least one course notebook (D0_* prefix) is present
-        command: ls ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers/
         exit_status: 0
         stdout:
             - matches: "D0_"
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: ls ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers/
     notebook-llm-on-supercomputers-step-2:
         check: a D3 fine-tuning-day notebook is present, proving the curriculum spans more than the setup day
-        command: ls ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers/
         exit_status: 0
         stdout:
             - matches: "D3_"
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: ls ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers/
     notebook-llm-on-supercomputers-step-3:
         check: the supporting datasets subdirectory ships alongside the notebooks
         file: ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers/datasets
@@ -46,9 +50,11 @@ notebook-llm-on-supercomputers:
             - runtime
     notebook-llm-on-supercomputers-step-4:
         check: the booking-queries classification CSV is present for the RAG and evaluation notebooks
-        command: ls ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers/datasets/
         exit_status: 0
         stdout:
             - matches: "booking_queries_dataset.csv"
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: ls ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers/datasets/

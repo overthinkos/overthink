@@ -91,7 +91,7 @@ func TestCheckToProbe_File(t *testing.T) {
 
 // TestCheckToProbe_Command covers command: → exec sh -c.
 func TestCheckToProbe_Command(t *testing.T) {
-	got := checkToProbe(&Op{Command: "redis-cli ping | grep PONG"})
+	got := checkToProbe(cmdOpP("redis-cli ping | grep PONG"))
 	want := map[string]any{"exec": map[string]any{"command": []string{"sh", "-c", "redis-cli ping | grep PONG"}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)

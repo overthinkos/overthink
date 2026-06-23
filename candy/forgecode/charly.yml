@@ -22,5 +22,7 @@ forgecode:
         exists: true
     forgecode-step-2:
         check: running forge --version exits cleanly
-        command: ${HOME}/.npm-global/bin/forge --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.npm-global/bin/forge --version

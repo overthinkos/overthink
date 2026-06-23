@@ -29,7 +29,7 @@ func TestSplitHostKey(t *testing.T) {
 func TestCollectHostRefs(t *testing.T) {
 	checks := []Op{
 		{Cdp: "open", URL: "http://${HOST:web}:8080"},
-		{Command: "curl http://${HOST:web:8080}/health"},
+		{Plugin: "command", PluginInput: map[string]any{"command": "curl http://${HOST:web:8080}/health"}},
 		// addr/http are plugin verbs now — their refs live in plugin_input (collectHostRefs
 		// scans it via collectAnyStrings). The addr HOST_PORT is NOT a cross-member ref; the
 		// http ${HOST:web} is a duplicate of the cdp one.
@@ -105,12 +105,12 @@ func TestRunOne_UnresolvedHostVarFails(t *testing.T) {
 	r := &Runner{Resolver: &CheckVarResolver{Env: map[string]string{}}}
 	// ${HOST:absent:80} can't be resolved → the cross-member probe's premise
 	// failed → FAIL (never reaches the curl; returns at the var-resolution gate).
-	hostCheck := &Op{Command: "curl -fsS http://${HOST:absent:80}/"}
+	hostCheck := cmdOpP("curl -fsS http://${HOST:absent:80}/")
 	if res := r.runOne(context.Background(), hostCheck); res.Status != TestFail {
 		t.Errorf("unresolved ${HOST:…} → status %v (%q), want TestFail", res.Status, res.Message)
 	}
 	// A non-host unresolved var is a legitimate SKIP (input genuinely N/A here).
-	otherCheck := &Op{Command: "echo ${SOME_UNSET_VAR}"}
+	otherCheck := cmdOpP("echo ${SOME_UNSET_VAR}")
 	if res := r.runOne(context.Background(), otherCheck); res.Status != TestSkip {
 		t.Errorf("unresolved non-host var → status %v (%q), want TestSkip", res.Status, res.Message)
 	}

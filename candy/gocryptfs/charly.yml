@@ -20,10 +20,12 @@ gocryptfs:
         exists: true
     gocryptfs-step-1:
         check: gocryptfs runs and prints a version string (gocryptfs X.Y.Z) on stdout
-        command: /usr/bin/gocryptfs -version
         exit_status: 0
         stdout:
             - matches: "gocryptfs v?[0-9]"
+        plugin: command
+        plugin_input:
+            command: /usr/bin/gocryptfs -version
     gocryptfs-package-2:
         check: package=gocryptfs
         id: gocryptfs-package

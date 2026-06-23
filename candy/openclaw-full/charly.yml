@@ -49,10 +49,12 @@ openclaw-full:
         exists: true
     openclaw-full-step-1:
         check: claude --version exits cleanly and prints the Claude Code banner
-        command: ${HOME}/.npm-global/bin/claude --version
         exit_status: 0
         stdout:
             - contains: "Claude Code"
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.npm-global/bin/claude --version
     openclaw-full-step-2:
         check: the mcporter MCP CLI is composed into the image
         file: ${HOME}/.npm-global/bin/mcporter

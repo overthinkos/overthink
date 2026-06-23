@@ -12,34 +12,44 @@ jupyter-mcp:
             the Streamable HTTP MCP server routing /mcp — are all verifiable.
     jupyter-mcp-step-0:
         run: command=~/.pixi/envs/default/bin/pip install "fastmcp>=3.2.0"
-        command: ~/.pixi/envs/default/bin/pip install "fastmcp>=3.2.0"
         run_as: "${USER}"
+        plugin: command
+        plugin_input:
+            command: ~/.pixi/envs/default/bin/pip install "fastmcp>=3.2.0"
     jupyter-mcp-step-1:
         run: command=~/.pixi/envs/default/bin/pip install --no-deps /ctx/jupyter_mcp
-        command: ~/.pixi/envs/default/bin/pip install --no-deps /ctx/jupyter_mcp
         run_as: "${USER}"
+        plugin: command
+        plugin_input:
+            command: ~/.pixi/envs/default/bin/pip install --no-deps /ctx/jupyter_mcp
     jupyter-mcp-step-2:
         run: |
             command=JUPYTER_CONFIG_DIR=~/.pixi/envs/default/etc/jupyter/jupyter_server_config.d
             mkdir -p "$JUPYTER_CONFIG_DIR"
             echo '{"ServerApp": {"jpserver_extensions": {"jupyter_mcp": true}}}' > \
               "$JUPYTER_CONFIG_DIR/jupyter_mcp.json"
-        command: |
-            JUPYTER_CONFIG_DIR=~/.pixi/envs/default/etc/jupyter/jupyter_server_config.d
-            mkdir -p "$JUPYTER_CONFIG_DIR"
-            echo '{"ServerApp": {"jpserver_extensions": {"jupyter_mcp": true}}}' > \
-              "$JUPYTER_CONFIG_DIR/jupyter_mcp.json"
         run_as: "${USER}"
+        plugin: command
+        plugin_input:
+            command: |
+                JUPYTER_CONFIG_DIR=~/.pixi/envs/default/etc/jupyter/jupyter_server_config.d
+                mkdir -p "$JUPYTER_CONFIG_DIR"
+                echo '{"ServerApp": {"jpserver_extensions": {"jupyter_mcp": true}}}' > \
+                  "$JUPYTER_CONFIG_DIR/jupyter_mcp.json"
     jupyter-mcp-step-3:
         check: fastmcp is installed in the parent pixi default environment
-        command: ${HOME}/.pixi/envs/default/bin/pip show fastmcp
         exit_status: 0
         stdout:
             - contains: "Name: fastmcp"
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.pixi/envs/default/bin/pip show fastmcp
     jupyter-mcp-step-4:
         check: the in-tree jupyter_mcp extension package imports from the pixi env
-        command: ${HOME}/.pixi/envs/default/bin/python -c "import jupyter_mcp"
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.pixi/envs/default/bin/python -c "import jupyter_mcp"
     jupyter-mcp-step-5:
         check: the Jupyter Server config drop-in enables the jupyter_mcp extension
         file: ${HOME}/.pixi/envs/default/etc/jupyter/jupyter_server_config.d/jupyter_mcp.json

@@ -16,7 +16,7 @@
 // VerbCatalog entry (the registry bijection gate proves it). Keep in lockstep with
 // the `--- verb discriminators ---` group in #Op.
 #OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" |
-	"command" | "file" | "package" | "service" |
+	"file" | "package" | "service" |
 	"cdp" | "wl" | "dbus" | "vnc" | "mcp" | "record" | "spice" |
 	"libvirt" | "kube" | "adb" | "appium" | "summarize" | "kill" | "plugin") @go(-)
 
@@ -51,7 +51,6 @@
 	file?:           string
 	package?:        string
 	service?:        string
-	command?:        string
 	mkdir?:          string
 	copy?:           string
 	write?:          string
@@ -99,11 +98,19 @@
 	json?:          bool   @go(JSON)
 
 	// --- shared modifiers ---
-	id?:           string @go(ID)
-	description?:  string
-	skip?:         bool
-	timeout?:      #Duration
-	in_container?: bool @go(InContainer,type=*bool)
+	id?:          string @go(ID)
+	description?: string
+	skip?:        bool
+	timeout?:     #Duration
+	// command — a SHARED exec-string modifier (NOT a verb): the live-container verbs
+	// `wl: exec` / `wl: sway-msg` / `libvirt: guest-exec` read it as their argv, and
+	// the `command` plugin verb's INSTALL-EMIT rehydrates it onto an OpStep for emitCmd
+	// (build) / renderOpCommand (deploy). It LEFT #OpVerb in the command→plugin
+	// extraction (the command CHECK verb is now `plugin: command` + #CommandInput), so
+	// Op.Kind() no longer treats it as a verb; it stays here as a modifier the other
+	// verbs + the act-emit seam read off the step Op. `in_container`/`background`/
+	// `from_host` were command-EXCLUSIVE and moved into #CommandInput.
+	command?: string
 	context?: [...#Context]
 	// `pod:` (per-step container venue) is RETIRED — a step's execution venue is
 	// derived ENTIRELY from its position in the bundle tree (flattenBundleVenues
@@ -138,10 +145,9 @@
 	tag?: [...string]
 
 	// --- concurrency ---
-	parallel?:   string
-	count?:      int & >=0 @go(,type=int)
-	index_var?:  string    @go(IndexVar)
-	background?: bool
+	parallel?:  string
+	count?:     int & >=0 @go(,type=int)
+	index_var?: string    @go(IndexVar)
 
 	// --- aggregation (summarize) ---
 	over_id?: [...string] @go(OverIDs)
@@ -191,11 +197,13 @@
 	enabled?: bool @go(,type=*bool)
 	running?: bool @go(,type=*bool)
 
-	// --- command ---
+	// --- command-verb matchers (SHARED via matchAll: the `command` plugin verb +
+	// the 11 live-container verbs assert exit_status/stdout/stderr off the step Op,
+	// so they STAY in #Op; only the command-EXCLUSIVE command/in_container/background/
+	// from_host moved into #CommandInput) ---
 	exit_status?: int @go(ExitStatus,type=*int)
 	stdout?:      #MatcherList
 	stderr?:      #MatcherList
-	from_host?:   bool @go(FromHost)
 
 	// --- shared request modifiers (the http plugin verb + the live cdp/dbus/libvirt
 	// verbs read these off the step Op; they are NOT carried in the http plugin's

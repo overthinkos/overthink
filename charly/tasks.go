@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	commandparams "github.com/overthinkos/overthink/charly/plugin/builtins/command/params"
 )
 
 // Auto-exported variable names reserved for the generator.
@@ -661,9 +663,6 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 				return runningUser, err
 			}
 
-		case "command":
-			emitCmd(b, t, layer.Name, img, runningUser == "0" || runningUser == "root")
-
 		case "build":
 			// Builders are emitted by the existing builder block in
 			// writeCandySteps; this is a marker the orchestrator honours by
@@ -676,17 +675,31 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 			b.WriteString("# build: " + t.Build + " (handled by builder stage)\n")
 
 		case "plugin":
-			// THE box-build act-emit enabler. A run: step whose verb is a state-provision
-			// plugin (plugin: <verb> + plugin_input, the provider implementing
-			// ProvisionActor) has no per-verb emitter — render its act shell via the
-			// provider's ProvisionActor (resolveProvisionScript: the ONE Op→act-shell seam
+			// `plugin: command` is the ONE install-task plugin verb: its act IS the full
+			// emitCmd path (an install-task RUN), NOT a RenderProvisionScript. Rehydrate the
+			// command-EXCLUSIVE plugin_input.command back onto an Op (command stays an #Op
+			// modifier field) alongside the step-level RunAs/Cache/Env (which never moved),
+			// then emit via the SAME emitCmd the literal command verb used. Localized special
+			// case (the others below are RenderProvisionScript or pure-check) — NOT
+			// duplication. in_container/background/from_host are check/runtime-only and play
+			// no part in a Containerfile RUN, so they are intentionally not rehydrated here.
+			if t.Plugin == "command" {
+				var in commandparams.CommandInput
+				decodePluginInput(t.PluginInput, &in)
+				emitCmd(b, Op{Command: in.Command, RunAs: t.RunAs, Cache: t.Cache, Env: t.Env},
+					layer.Name, img, runningUser == "0" || runningUser == "root")
+				break
+			}
+			// Every OTHER state-provision plugin (plugin: <verb> + plugin_input, the provider
+			// implementing ProvisionActor) has no per-verb emitter — render its act shell via
+			// the provider's ProvisionActor (resolveProvisionScript: the ONE Op→act-shell seam
 			// shared by the runtime act path runProvisionAct AND the local/vm deploy emit
-			// renderOpCommand, R3) and emit it as a command RUN via the SAME emitCmd the
-			// `command` verb uses. writeCandySteps→emitTasks is the REAL box-build path
-			// (OCITarget.emitOp for pod overlays delegates here too), so handling it HERE —
-			// not in emitOp — is the single seam every Containerfile emit flows through.
-			// ok=false ⇒ the plugin verb is not act-capable: a run: step with no install
-			// path, a loud error, never silently dropped (R4).
+			// renderOpCommand, R3) and emit it as a command RUN via the SAME emitCmd.
+			// writeCandySteps→emitTasks is the REAL box-build path (OCITarget.emitOp for pod
+			// overlays delegates here too), so handling it HERE — not in emitOp — is the single
+			// seam every Containerfile emit flows through. ok=false ⇒ the plugin verb is not
+			// act-capable: a run: step with no install path, a loud error, never silently
+			// dropped (R4).
 			script, ok := resolveProvisionScript(&t, img.Tags)
 			if !ok {
 				return runningUser, fmt.Errorf("run: plugin verb %q is not act-capable (no ProvisionActor)", t.Plugin)

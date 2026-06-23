@@ -61,16 +61,18 @@ unsloth-studio:
               scope: system
     unsloth-studio-step-0:
         run: install the Unsloth Studio CLI and bootstrap its runtime venv via the official installer
-        command: |
-            set -e
-            curl -fsSL https://unsloth.ai/install.sh | sh
-            # Fail the build loudly if the launcher did not land (a silent install
-            # failure would otherwise only surface as the supervisord FATAL
-            # "can't find command 'unsloth'" at deploy time).
-            test -x "${HOME}/.local/bin/unsloth"
         run_as: "${USER}"
         cache:
             - ${HOME}/.cache/uv
+        plugin: command
+        plugin_input:
+            command: |
+                set -e
+                curl -fsSL https://unsloth.ai/install.sh | sh
+                # Fail the build loudly if the launcher did not land (a silent install
+                # failure would otherwise only surface as the supervisord FATAL
+                # "can't find command 'unsloth'" at deploy time).
+                test -x "${HOME}/.local/bin/unsloth"
     unsloth-cli-present:
         check: the Unsloth Studio CLI launcher is installed by the official installer (the `unsloth` console-script is NOT in the pixi env — it comes from install.sh)
         id: unsloth-cli-present
@@ -82,9 +84,11 @@ unsloth-studio:
         exists: true
     unsloth-studio-step-3:
         check: PyTorch imports successfully inside that environment
-        command: ${HOME}/.pixi/envs/default/bin/python -c "import torch; print('torch', torch.__version__)"
         stdout:
             - contains: torch
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.pixi/envs/default/bin/python -c "import torch; print('torch', torch.__version__)"
     unsloth-studio-step-4:
         check: the composed llama.cpp CLI binary is present so fine-tuned models can be exported to GGUF
         file: ${HOME}/llama.cpp/llama-cli
@@ -94,9 +98,11 @@ unsloth-studio:
     unsloth-studio-finetuning-stack:
         check: command=${HOME}/.pixi/envs/default/bin/python -c "import transformers, peft, trl; print('finetune-stack-ok')"
         id: unsloth-studio-finetuning-stack
-        command: ${HOME}/.pixi/envs/default/bin/python -c "import transformers, peft, trl; print('finetune-stack-ok')"
         stdout:
             - contains: finetune-stack-ok
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.pixi/envs/default/bin/python -c "import transformers, peft, trl; print('finetune-stack-ok')"
     unsloth-studio-service-running:
         check: service=unsloth-studio
         id: unsloth-studio-service-running

@@ -71,14 +71,11 @@ func (c *Op) VerbsSet() []string {
 	if c.Service != "" {
 		set = append(set, "service")
 	}
-	// Treat `command:` as a verb only when no charly-verb is set; otherwise it's
-	// a modifier (e.g. argv for libvirt:guest/exec).
-	hasCharlyVerb := c.Cdp != "" || c.Wl != "" || c.Dbus != "" || c.Vnc != "" ||
-		c.Mcp != "" || c.Record != "" || c.Spice != "" || c.Libvirt != "" ||
-		c.Kube != "" || c.Adb != "" || c.Appium != ""
-	if c.Command != "" && !hasCharlyVerb {
-		set = append(set, "command")
-	}
+	// `command` is NO LONGER a verb — it left #OpVerb in the command→plugin extraction
+	// (a command check/run is now `plugin: command` + #CommandInput). It stays an #Op
+	// modifier ONLY: the live-container verbs wl/libvirt read it as their argv, and the
+	// command plugin's install-emit rehydrates it onto an OpStep for emitCmd. So Op.Command
+	// never contributes a verb here.
 	if c.Cdp != "" {
 		set = append(set, "cdp")
 	}

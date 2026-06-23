@@ -31,16 +31,20 @@ check-cross-local-driver-layer:
     cross-local-driver-marker:
         check: command=test -f ${HOME}/.cache/charly-cross-local-driver-marker
         id: cross-local-driver-marker
-        command: "test -f ${HOME}/.cache/charly-cross-local-driver-marker"
-        in_container: false
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: "test -f ${HOME}/.cache/charly-cross-local-driver-marker"
+            in_container: false
     cross-local-driver-marker-content:
         check: command=cat ${HOME}/.cache/charly-cross-local-driver-marker
         id: cross-local-driver-marker-content
-        command: "cat ${HOME}/.cache/charly-cross-local-driver-marker"
-        in_container: false
         stdout:
             - contains: charly-cross-local-driver v1
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: "cat ${HOME}/.cache/charly-cross-local-driver-marker"
+            in_container: false

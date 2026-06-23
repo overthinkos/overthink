@@ -45,7 +45,7 @@ func TestValidateOps_MultiVerbRejected(t *testing.T) {
 func TestValidateOps_RuntimeVarInBuildContext(t *testing.T) {
 	layers := map[string]*Candy{
 		"lyr": opsCandy("lyr",
-			Op{Command: "redis-cli -p ${HOST_PORT:6379}"},
+			Op{Plugin: "command", PluginInput: map[string]any{"command": "redis-cli -p ${HOST_PORT:6379}"}},
 		),
 	}
 	cfg := &Config{Box: map[string]BoxConfig{}}
@@ -59,7 +59,7 @@ func TestValidateOps_RuntimeVarInBuildContext(t *testing.T) {
 func TestValidateOps_RuntimeVarInDeployContext(t *testing.T) {
 	layers := map[string]*Candy{
 		"lyr": opsCandy("lyr",
-			Op{Command: "redis-cli -p ${HOST_PORT:6379}", Context: []string{"deploy"}},
+			Op{Plugin: "command", PluginInput: map[string]any{"command": "redis-cli -p ${HOST_PORT:6379}"}, Context: []string{"deploy"}},
 		),
 	}
 	cfg := &Config{Box: map[string]BoxConfig{}}
@@ -263,7 +263,7 @@ func TestValidateOps_Clean(t *testing.T) {
 		"redis": opsCandy("redis",
 			Op{File: "/usr/bin/redis-server", Exists: new(true), Mode: "0755"},
 			Op{Plugin: "port", PluginInput: map[string]any{"port": 6379, "listening": true}},
-			Op{Command: "redis-cli -p ${HOST_PORT:6379} ping", Context: []string{"deploy"}, InContainer: new(false)},
+			Op{Plugin: "command", PluginInput: map[string]any{"command": "redis-cli -p ${HOST_PORT:6379} ping", "in_container": false}, Context: []string{"deploy"}},
 		),
 	}
 	cfg := &Config{Box: map[string]BoxConfig{
@@ -271,7 +271,7 @@ func TestValidateOps_Clean(t *testing.T) {
 			Enabled: new(true),
 			Candy:   []string{"redis"},
 			Plan: []Step{
-				{Check: "version", Op: Op{ID: "version", Command: "redis-server --version"}},
+				{Check: "version", Op: Op{ID: "version", Plugin: "command", PluginInput: map[string]any{"command": "redis-server --version"}}},
 				{Check: "routed", Op: Op{ID: "routed", Plugin: "http", PluginInput: map[string]any{"http": "https://${DNS}/health", "status": 200}}},
 			},
 		},
@@ -304,7 +304,7 @@ func TestValidateOps_LowercaseCheckVarInClusterField(t *testing.T) {
 	}
 
 	shell := map[string]*Candy{
-		"lyr": opsCandy("lyr", Op{Command: `for v in ${name}; do echo "$v"; done`, Context: []string{"deploy"}}),
+		"lyr": opsCandy("lyr", Op{Plugin: "command", PluginInput: map[string]any{"command": `for v in ${name}; do echo "$v"; done`}, Context: []string{"deploy"}}),
 	}
 	if got := runValidateOps(t, cfg, shell); strings.Contains(got, "UPPERCASE") {
 		t.Errorf("lowercase shell var in command must NOT be flagged: %s", got)

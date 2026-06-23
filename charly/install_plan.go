@@ -492,8 +492,10 @@ func (s *OpStep) Venue() Venue { return VenueHostNative }
 func (s *OpStep) RequiresGate() Gate {
 	// Free-form cmd bodies running as root can do anything; gate them.
 	// Structured verbs (mkdir/copy/write/link/download/setcap) are
-	// inspectable and don't need the gate.
-	if s.Scope() == ScopeSystem && s.Op != nil && s.Op.Command != "" {
+	// inspectable and don't need the gate. A command step is authored as
+	// `plugin: command` (command rides plugin_input) after the extraction, so gate
+	// that shape too — it renders the SAME free-form shell body via emitCmd.
+	if s.Scope() == ScopeSystem && s.Op != nil && (s.Op.Command != "" || s.Op.Plugin == "command") {
 		return GateAllowRootTasks
 	}
 	return GateNone

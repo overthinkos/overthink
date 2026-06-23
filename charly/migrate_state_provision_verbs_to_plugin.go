@@ -3,14 +3,17 @@ package main
 // migrate_state_provision_verbs_to_plugin.go — the 2026-06 FIRST state-provision-verb
 // extraction.
 //
-// A STATE-PROVISION verb is DUAL-NATURED — it carries BOTH a check (do:assert probe) AND
-// an act (do:act provision). `unix_group` (getent-group probe + groupadd) was the first
-// extracted; `user` (getent-passwd + useradd), `kernel-param` (sysctl read + write) and
-// `mount` (findmnt + mount) followed. Each left the closed `#Op`/`spec.OpVerbs` and became
-// a BUILTIN plugin unit (plugin/builtins/{unix_group,user,kernel_param,mount}) whose
-// provider is BOTH a CheckVerbProvider AND a ProvisionActor. A plan step that authored one
-// inline now authors the generic plugin step `plugin: <verb>` + a typed `plugin_input:`
-// validated against the unit's #*Input def.
+// A STATE-PROVISION verb carries BOTH a check (do:assert probe) AND an act (do:act
+// provision). `unix_group` (getent-group probe + groupadd) was the first extracted;
+// `user` (getent-passwd + useradd), `kernel-param` (sysctl read + write), `mount`
+// (findmnt + mount) and finally `command` (exec probe + install-task RUN) followed. Each
+// left the closed `#Op`/`spec.OpVerbs` and became a BUILTIN plugin unit
+// (plugin/builtins/{unix_group,user,kernel_param,mount,command}). For the first four the
+// provider is BOTH a CheckVerbProvider AND a ProvisionActor; `command` is a
+// CheckVerbProvider ONLY — its act IS the dedicated install-task emitCmd branch
+// (`plugin == "command"` in emitTasks/renderOpCommand), NOT a RenderProvisionScript. A
+// plan step that authored one inline now authors the generic plugin step `plugin: <verb>`
+// + a typed `plugin_input:` validated against the unit's #*Input def.
 //
 // This is the SIBLING of the observe-only goss-verb migrator
 // (migrate_goss_verbs_to_plugin.go), which CONVERTS only a `check:` step and STRIPS the
@@ -46,6 +49,11 @@ import "gopkg.in/yaml.v3"
 //   - user       → uid/gid/home/shell (#UserInput)
 //   - kernel-param → value      (#KernelParamInput)
 //   - mount      → mount_source/filesystem/opt (#MountInput)
+//   - command    → background/from_host/in_container (#CommandInput) — the FIELD-SPLIT
+//     case: ONLY the command-EXCLUSIVE fields move; the matchers exit_status/stdout/
+//     stderr (shared via matchAll) and the general timeout/method/env STAY at step level
+//     (#Op). `command` itself is ALSO a shared modifier (wl/libvirt argv), so it is the
+//     command VERB only when no charly-verb is set — see migrateStateProvisionVerbStep.
 var stateProvisionVerbFields = []struct {
 	verb   string
 	fields []string
@@ -54,6 +62,26 @@ var stateProvisionVerbFields = []struct {
 	{"user", []string{"uid", "gid", "home", "shell"}},
 	{"kernel-param", []string{"value"}},
 	{"mount", []string{"mount_source", "filesystem", "opt"}},
+	{"command", []string{"background", "from_host", "in_container"}},
+}
+
+// charlyVerbKeys are the live-container verb discriminators (cdp/wl/dbus/…). When any is
+// present on a step, a sibling `command:` key is that verb's argv MODIFIER (wl: exec /
+// libvirt: guest-exec), NOT the command verb — mirroring Op.VerbsSet's hasCharlyVerb
+// guard. The command→plugin migration must then leave the `command:` key in place.
+var charlyVerbKeys = []string{
+	"cdp", "wl", "dbus", "vnc", "mcp", "record", "spice", "libvirt", "kube", "adb", "appium",
+}
+
+// stepHasCharlyVerb reports whether a plan step carries a live-container verb key, in
+// which case a sibling `command:` is a modifier (argv), not the command verb.
+func stepHasCharlyVerb(step *yaml.Node) bool {
+	for _, v := range charlyVerbKeys {
+		if k, _ := mappingEntry(step, v); k != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // MigrateStateProvisionVerbsToPlugin rewrites every legacy state-provision-verb Op step
@@ -103,6 +131,12 @@ func migrateStateProvisionVerbStep(step *yaml.Node) bool {
 	for _, gv := range stateProvisionVerbFields {
 		verbKey, verbVal := mappingEntry(step, gv.verb)
 		if verbKey == nil {
+			continue
+		}
+		// `command` is a SHARED #Op modifier: when a live-container verb is also present
+		// (wl: exec / libvirt: guest-exec), the `command:` key is that verb's argv, NOT the
+		// command verb — leave it in place (mirrors Op.VerbsSet's hasCharlyVerb guard).
+		if gv.verb == "command" && stepHasCharlyVerb(step) {
 			continue
 		}
 		// Capture the companion field pairs (if present) before removal — removeMappingKey

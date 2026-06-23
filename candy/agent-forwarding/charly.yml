@@ -56,12 +56,16 @@ agent-forwarding:
     agent-forwarding-gpg-runs:
         check: command=/usr/bin/gpg --version
         id: agent-forwarding-gpg-runs
-        command: /usr/bin/gpg --version
         exit_status: 0
         stdout:
             - contains: "gpg (GnuPG)"
+        plugin: command
+        plugin_input:
+            command: /usr/bin/gpg --version
     agent-forwarding-direnv-runs:
         check: command=/usr/bin/direnv version
         id: agent-forwarding-direnv-runs
-        command: /usr/bin/direnv version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/bin/direnv version

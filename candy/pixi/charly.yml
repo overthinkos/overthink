@@ -35,12 +35,16 @@ pixi:
         exists: true
     pixi-step-2:
         check: running pixi --version reports the pinned v0.70.2 release
-        command: /usr/local/bin/pixi --version
         exit_status: 0
         stdout:
             - matches: "0\\.70\\.2"
+        plugin: command
+        plugin_input:
+            command: /usr/local/bin/pixi --version
     pixi-version:
         check: command=/usr/local/bin/pixi --version
         id: pixi-version
-        command: /usr/local/bin/pixi --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/local/bin/pixi --version

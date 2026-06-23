@@ -37,11 +37,13 @@ check-keepalive:
         exists: true
     check-keepalive-step-3:
         check: supervisord reports the keepalive program RUNNING on the live pod
-        command: supervisorctl status keepalive
         stdout:
             contains: RUNNING
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: supervisorctl status keepalive
     keepalive-program-registered:
         check: file=/etc/supervisord.conf
         id: keepalive-program-registered

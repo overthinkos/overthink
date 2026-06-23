@@ -76,8 +76,10 @@ qemu-guest-agent:
         filetype: directory
     qemu-guest-agent-step-7:
         check: freezing filesystems with no hooks installed runs the dispatcher and exits 0
-        command: /etc/qemu/fsfreeze-hook freeze
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /etc/qemu/fsfreeze-hook freeze
     qemu-guest-agent-step-8:
         check: the guest-agent config wires in the fsfreeze hook
         file: /etc/qemu/qemu-ga.conf

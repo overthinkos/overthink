@@ -21,7 +21,7 @@ func TestValidateSuccess(t *testing.T) {
 	layers := map[string]*Candy{
 		"pixi": {
 			Name: "pixi",
-			plan: []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan: []Step{{Run: "build", Op: cmdOp("true")}},
 		},
 	}
 
@@ -115,7 +115,7 @@ func TestValidateMissingCandyWithTypo(t *testing.T) {
 		},
 	}
 	layers := map[string]*Candy{
-		"pixi": {Name: "pixi", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
+		"pixi": {Name: "pixi", plan: []Step{{Run: "build", Op: cmdOp("true")}}},
 	}
 
 	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
@@ -172,7 +172,7 @@ func TestValidateCoprWithoutPackages(t *testing.T) {
 	layers := map[string]*Candy{
 		"layer": {
 			Name: "layer",
-			plan: []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan: []Step{{Run: "build", Op: cmdOp("true")}},
 			formatSections: map[string]*PackageSection{
 				"rpm": {FormatName: "rpm", Raw: map[string]any{"copr": []any{"owner/project"}}},
 			},
@@ -195,7 +195,7 @@ func TestValidateReposWithoutPackages(t *testing.T) {
 	layers := map[string]*Candy{
 		"layer": {
 			Name: "layer",
-			plan: []Step{{Run: "build", Op: Op{Command: "true"}}}, // needs some install file
+			plan: []Step{{Run: "build", Op: cmdOp("true")}}, // needs some install file
 			formatSections: map[string]*PackageSection{
 				"rpm": {FormatName: "rpm", Raw: map[string]any{"repo": []any{map[string]any{"name": "test", "url": "http://example.com"}}}},
 			},
@@ -218,7 +218,7 @@ func TestValidateModulesWithoutPackages(t *testing.T) {
 	layers := map[string]*Candy{
 		"layer": {
 			Name: "layer",
-			plan: []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan: []Step{{Run: "build", Op: cmdOp("true")}},
 			formatSections: map[string]*PackageSection{
 				"rpm": {FormatName: "rpm", Raw: map[string]any{"modules": []any{"valkey:remi-9.0"}}},
 			},
@@ -416,7 +416,7 @@ func TestValidateUnknownDependency(t *testing.T) {
 	layers := map[string]*Candy{
 		"layer": {
 			Name:    "layer",
-			plan:    []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan:    []Step{{Run: "build", Op: cmdOp("true")}},
 			Require: toCandyRefs([]string{"unknown"}),
 		},
 	}
@@ -457,9 +457,9 @@ func TestValidateCandyCycle(t *testing.T) {
 		},
 	}
 	layers := map[string]*Candy{
-		"a": {Name: "a", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}, Require: toCandyRefs([]string{"b"})},
-		"b": {Name: "b", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}, Require: toCandyRefs([]string{"c"})},
-		"c": {Name: "c", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}, Require: toCandyRefs([]string{"a"})},
+		"a": {Name: "a", plan: []Step{{Run: "build", Op: cmdOp("true")}}, Require: toCandyRefs([]string{"b"})},
+		"b": {Name: "b", plan: []Step{{Run: "build", Op: cmdOp("true")}}, Require: toCandyRefs([]string{"c"})},
+		"c": {Name: "c", plan: []Step{{Run: "build", Op: cmdOp("true")}}, Require: toCandyRefs([]string{"a"})},
 	}
 
 	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
@@ -534,7 +534,7 @@ func TestValidateRouteWithoutTraefik(t *testing.T) {
 	layers := map[string]*Candy{
 		"svc": {
 			Name:  "svc",
-			plan:  []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan:  []Step{{Run: "build", Op: cmdOp("true")}},
 			route: &RouteConfig{Host: "svc.localhost", Port: "8080"},
 		},
 	}
@@ -559,11 +559,11 @@ func TestValidateRouteWithTraefik(t *testing.T) {
 	layers := map[string]*Candy{
 		"traefik": {
 			Name: "traefik",
-			plan: []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan: []Step{{Run: "build", Op: cmdOp("true")}},
 		},
 		"svc": {
 			Name:  "svc",
-			plan:  []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan:  []Step{{Run: "build", Op: cmdOp("true")}},
 			route: &RouteConfig{Host: "svc.localhost", Port: "8080"},
 		},
 	}
@@ -591,7 +591,7 @@ func TestValidateSkipsDisabledImages(t *testing.T) {
 		},
 	}
 	layers := map[string]*Candy{
-		"pixi": {Name: "pixi", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
+		"pixi": {Name: "pixi", plan: []Step{{Run: "build", Op: cmdOp("true")}}},
 	}
 
 	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
@@ -607,7 +607,7 @@ func TestValidateVolumesValid(t *testing.T) {
 	layers := map[string]*Candy{
 		"svc": {
 			Name:    "svc",
-			plan:    []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan:    []Step{{Run: "build", Op: cmdOp("true")}},
 			volumes: []VolumeYAML{{Name: "data", Path: "~/.myapp"}},
 		},
 	}
@@ -625,7 +625,7 @@ func TestValidateVolumesDuplicate(t *testing.T) {
 	layers := map[string]*Candy{
 		"svc": {
 			Name: "svc",
-			plan: []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan: []Step{{Run: "build", Op: cmdOp("true")}},
 			volumes: []VolumeYAML{
 				{Name: "data", Path: "~/.myapp"},
 				{Name: "data", Path: "~/.other"},
@@ -655,7 +655,7 @@ func TestValidateAliasesValid(t *testing.T) {
 	layers := map[string]*Candy{
 		"svc": {
 			Name:    "svc",
-			plan:    []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan:    []Step{{Run: "build", Op: cmdOp("true")}},
 			aliases: []AliasYAML{{Name: "svc-cli", Command: "svc-cli-bin"}},
 		},
 	}
@@ -673,7 +673,7 @@ func TestValidateAliasesDuplicate(t *testing.T) {
 	layers := map[string]*Candy{
 		"svc": {
 			Name: "svc",
-			plan: []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan: []Step{{Run: "build", Op: cmdOp("true")}},
 			aliases: []AliasYAML{
 				{Name: "mycli", Command: "cmd1"},
 				{Name: "mycli", Command: "cmd2"},
@@ -697,7 +697,7 @@ func TestValidateAliasesInvalidName(t *testing.T) {
 	layers := map[string]*Candy{
 		"svc": {
 			Name:    "svc",
-			plan:    []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan:    []Step{{Run: "build", Op: cmdOp("true")}},
 			aliases: []AliasYAML{{Name: "-bad", Command: "cmd"}},
 		},
 	}
@@ -724,7 +724,7 @@ func TestValidateImageAliasesDuplicate(t *testing.T) {
 		},
 	}
 	layers := map[string]*Candy{
-		"svc": {Name: "svc", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
+		"svc": {Name: "svc", plan: []Step{{Run: "build", Op: cmdOp("true")}}},
 	}
 
 	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
@@ -749,7 +749,7 @@ func TestValidateSelfBuilder(t *testing.T) {
 		},
 	}
 	layers := map[string]*Candy{
-		"pixi": {Name: "pixi", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
+		"pixi": {Name: "pixi", plan: []Step{{Run: "build", Op: cmdOp("true")}}},
 	}
 
 	err := Validate(cfg, vCandies(layers), testdataDir, ResolveOpts{})
@@ -773,7 +773,7 @@ func TestValidateBuilderInheritedSelfNotError(t *testing.T) {
 		},
 	}
 	layers := map[string]*Candy{
-		"pixi": {Name: "pixi", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
+		"pixi": {Name: "pixi", plan: []Step{{Run: "build", Op: cmdOp("true")}}},
 	}
 
 	err := Validate(cfg, vCandies(layers), testdataDir, ResolveOpts{})
@@ -795,7 +795,7 @@ func TestValidatePerImageBuilderNotFound(t *testing.T) {
 		},
 	}
 	layers := map[string]*Candy{
-		"pixi": {Name: "pixi", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
+		"pixi": {Name: "pixi", plan: []Step{{Run: "build", Op: cmdOp("true")}}},
 	}
 
 	err := Validate(cfg, vCandies(layers), testdataDir, ResolveOpts{})
@@ -815,8 +815,8 @@ func TestValidateCandyWithIncludesNoInstallFiles(t *testing.T) {
 		},
 	}
 	layers := map[string]*Candy{
-		"pipewire":     {Name: "pipewire", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
-		"wayvnc":       {Name: "wayvnc", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
+		"pipewire":     {Name: "pipewire", plan: []Step{{Run: "build", Op: cmdOp("true")}}},
+		"wayvnc":       {Name: "wayvnc", plan: []Step{{Run: "build", Op: cmdOp("true")}}},
 		"sway-desktop": {Name: "sway-desktop", IncludedCandy: toCandyRefs([]string{"pipewire", "wayvnc"})},
 	}
 
@@ -831,8 +831,8 @@ func TestValidateCandyIncludesCycle(t *testing.T) {
 		Box: map[string]BoxConfig{},
 	}
 	layers := map[string]*Candy{
-		"a": {Name: "a", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}, IncludedCandy: toCandyRefs([]string{"b"})},
-		"b": {Name: "b", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}, IncludedCandy: toCandyRefs([]string{"a"})},
+		"a": {Name: "a", plan: []Step{{Run: "build", Op: cmdOp("true")}}, IncludedCandy: toCandyRefs([]string{"b"})},
+		"b": {Name: "b", plan: []Step{{Run: "build", Op: cmdOp("true")}}, IncludedCandy: toCandyRefs([]string{"a"})},
 	}
 
 	err := Validate(cfg, vCandies(layers), testProjectDir(t), ResolveOpts{})
@@ -887,12 +887,12 @@ func TestValidatePortRelayValid(t *testing.T) {
 		},
 	}
 	layers := map[string]*Candy{
-		"supervisord": {Name: "supervisord", Require: toCandyRefs([]string{"python"}), plan: []Step{{Run: "build", Op: Op{Command: "true"}}}, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"supervisor"}}}},
-		"python":      {Name: "python", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}},
-		"socat":       {Name: "socat", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"socat", "iproute"}}}},
+		"supervisord": {Name: "supervisord", Require: toCandyRefs([]string{"python"}), plan: []Step{{Run: "build", Op: cmdOp("true")}}, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"supervisor"}}}},
+		"python":      {Name: "python", plan: []Step{{Run: "build", Op: cmdOp("true")}}},
+		"socat":       {Name: "socat", plan: []Step{{Run: "build", Op: cmdOp("true")}}, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"socat", "iproute"}}}},
 		"chrome": {
 			Name:           "chrome",
-			plan:           []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan:           []Step{{Run: "build", Op: cmdOp("true")}},
 			ports:          []string{"9222"},
 			portSpecs:      []PortSpec{{Port: 9222, Protocol: "http"}},
 			PortRelayPorts: []int{9222},
@@ -912,7 +912,7 @@ func TestValidatePortRelayNotInPorts(t *testing.T) {
 	layers := map[string]*Candy{
 		"svc": {
 			Name:           "svc",
-			plan:           []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan:           []Step{{Run: "build", Op: cmdOp("true")}},
 			ports:          []string{"8080"},
 			portSpecs:      []PortSpec{{Port: 8080, Protocol: "http"}},
 			PortRelayPorts: []int{9222},
@@ -935,7 +935,7 @@ func TestValidatePortRelayNoPorts(t *testing.T) {
 	layers := map[string]*Candy{
 		"svc": {
 			Name:           "svc",
-			plan:           []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan:           []Step{{Run: "build", Op: cmdOp("true")}},
 			PortRelayPorts: []int{9222},
 		},
 	}
@@ -956,7 +956,7 @@ func TestValidatePortRelayDuplicate(t *testing.T) {
 	layers := map[string]*Candy{
 		"svc": {
 			Name:           "svc",
-			plan:           []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan:           []Step{{Run: "build", Op: cmdOp("true")}},
 			ports:          []string{"9222"},
 			portSpecs:      []PortSpec{{Port: 9222, Protocol: "http"}},
 			PortRelayPorts: []int{9222, 9222},
@@ -981,7 +981,7 @@ func TestValidatePortRelayMissingSocat(t *testing.T) {
 	layers := map[string]*Candy{
 		"chrome": {
 			Name:           "chrome",
-			plan:           []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan:           []Step{{Run: "build", Op: cmdOp("true")}},
 			ports:          []string{"9222"},
 			portSpecs:      []PortSpec{{Port: 9222, Protocol: "http"}},
 			PortRelayPorts: []int{9222},
@@ -1012,7 +1012,7 @@ func TestValidateDataEntryUnknownVolume(t *testing.T) {
 	layers := map[string]*Candy{
 		"jupyter": {
 			Name: "jupyter",
-			plan: []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan: []Step{{Run: "build", Op: cmdOp("true")}},
 			volumes: []VolumeYAML{
 				{Name: "workspace", Path: "~/workspace"},
 			},
@@ -1055,14 +1055,14 @@ func TestValidateDataEntryKnownVolume(t *testing.T) {
 	layers := map[string]*Candy{
 		"jupyter": {
 			Name: "jupyter",
-			plan: []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan: []Step{{Run: "build", Op: cmdOp("true")}},
 			volumes: []VolumeYAML{
 				{Name: "workspace", Path: "~/workspace"},
 			},
 		},
 		"notebook-templates": {
 			Name: "notebook-templates",
-			plan: []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan: []Step{{Run: "build", Op: cmdOp("true")}},
 			data: []DataYAML{
 				{Src: "data/notebooks", Volume: "workspace"},
 			},
@@ -1084,7 +1084,7 @@ func TestValidateDataEntryKnownVolume(t *testing.T) {
 // secretDepsCandy builds a minimal candy with the given secret dependency
 // configuration, for reuse across tests.
 func secretDepsCandy(opts func(l *Candy)) *Candy {
-	l := &Candy{Name: "svc", plan: []Step{{Run: "build", Op: Op{Command: "true"}}}}
+	l := &Candy{Name: "svc", plan: []Step{{Run: "build", Op: cmdOp("true")}}}
 	if opts != nil {
 		opts(l)
 	}
@@ -1278,7 +1278,7 @@ func vCandies(m map[string]*Candy) map[string]*Candy {
 			}
 		}
 		if !hasCheck {
-			l.plan = append(l.plan, Step{Check: "fixture step", Op: Op{Command: "true"}})
+			l.plan = append(l.plan, Step{Check: "fixture step", Op: cmdOp("true")})
 		}
 	}
 	return m

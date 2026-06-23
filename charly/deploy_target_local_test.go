@@ -165,7 +165,7 @@ func TestRenderTaskCommandMkdir(t *testing.T) {
 
 func TestRenderTaskCommandCmdWithCtx(t *testing.T) {
 	ts := &OpStep{
-		Op:      &Op{Command: "cp /ctx/config.json /etc/foo/"},
+		Op:      cmdOpP("cp /ctx/config.json /etc/foo/"),
 		CtxPath: "/home/u/layers/foo",
 	}
 	cmd, _ := renderOpCommand(ts)

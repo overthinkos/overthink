@@ -18,13 +18,6 @@ func (fileVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runFile(ctx, op)
 }
 
-type commandVerb struct{ builtinVerbBase }
-
-func (commandVerb) Reserved() string { return "command" }
-func (commandVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runCommand(ctx, op)
-}
-
 type packageVerb struct{ builtinVerbBase }
 
 func (packageVerb) Reserved() string { return "package" }
@@ -39,13 +32,15 @@ func (serviceVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runService(ctx, op)
 }
 
-// user / unix_group / kernel-param / mount are NOT here — each is an extracted
-// STATE-PROVISION verb, a dedicated plugin UNIT (plugin_user.go / plugin_unix_group.go /
-// plugin_kernel_param.go / plugin_mount.go) that self-registers via
+// command / user / unix_group / kernel-param / mount are NOT here — each is an extracted
+// verb, a dedicated plugin UNIT (plugin_verb_command.go / plugin_user.go /
+// plugin_unix_group.go / plugin_kernel_param.go / plugin_mount.go) that self-registers via
 // RegisterBuiltinPluginUnit (absent from both builtinProviderInstances and the providers:
-// manifest). Each provider is BOTH a CheckVerbProvider (getent-passwd / getent-group /
-// sysctl-read / findmnt probe) AND a ProvisionActor (useradd / groupadd / sysctl-write /
-// mount at install emit + runtime act).
+// manifest). user/unix_group/kernel-param/mount are BOTH a CheckVerbProvider AND a
+// ProvisionActor (useradd / groupadd / sysctl-write / mount at install emit + runtime
+// act). `command` is a CheckVerbProvider ONLY — its act is the dedicated install-task
+// emitCmd branch (`plugin == "command"` in emitTasks/renderOpCommand), NOT a
+// ProvisionActor.
 
 type cdpVerb struct{ builtinVerbBase }
 

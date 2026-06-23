@@ -64,10 +64,12 @@ cloud-init:
         exists: true
     cloud-init-step-3:
         check: cloud-init responds to --version with a version string
-        command: cloud-init --version 2>&1
         exit_status: 0
         stdout:
             - matches: '[0-9]+\.[0-9]'
+        plugin: command
+        plugin_input:
+            command: cloud-init --version 2>&1
     cloud-init-step-4:
         check: the NoCloud datasource drop-in is installed mode 0644
         file: /etc/cloud/cloud.cfg.d/99-nocloud.cfg

@@ -32,12 +32,14 @@ heroic:
             curl -fsSL "https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher/releases/download/v${HEROIC_VERSION}/Heroic-${HEROIC_VERSION}-linux-${ARCH}.rpm" -o /tmp/heroic.rpm
             dnf install -y /tmp/heroic.rpm
             rm -f /tmp/heroic.rpm
-        command: |
-            ARCH=$(uname -m)
-            curl -fsSL "https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher/releases/download/v${HEROIC_VERSION}/Heroic-${HEROIC_VERSION}-linux-${ARCH}.rpm" -o /tmp/heroic.rpm
-            dnf install -y /tmp/heroic.rpm
-            rm -f /tmp/heroic.rpm
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                ARCH=$(uname -m)
+                curl -fsSL "https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher/releases/download/v${HEROIC_VERSION}/Heroic-${HEROIC_VERSION}-linux-${ARCH}.rpm" -o /tmp/heroic.rpm
+                dnf install -y /tmp/heroic.rpm
+                rm -f /tmp/heroic.rpm
     heroic-step-1:
         check: the Heroic Games Launcher binary is installed on PATH
         file: /usr/bin/heroic

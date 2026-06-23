@@ -21,9 +21,11 @@ notebook-templates:
             - runtime
     notebook-templates-step-1:
         check: at least one .ipynb starter template is present in that workspace
-        command: find ${VOLUME_CONTAINER_PATH:workspace} -maxdepth 3 -name "*.ipynb" -print -quit
         exit_status: 0
         stdout:
             - matches: "\\.ipynb"
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: find ${VOLUME_CONTAINER_PATH:workspace} -maxdepth 3 -name "*.ipynb" -print -quit

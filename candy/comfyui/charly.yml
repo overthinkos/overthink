@@ -47,15 +47,17 @@ comfyui:
             mkdir -p models/{photomaker,style_models,text_encoders,unet,upscale_models,vae,vae_approx}
             mkdir -p custom_nodes output input user
             git clone --depth 1 https://github.com/ltdrdata/ComfyUI-Manager.git ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager || true
-        command: |
-            git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git ${HOME}/ComfyUI || true
-            cd ${HOME}/ComfyUI
-            mkdir -p models/{checkpoints,clip,clip_vision,configs,controlnet}
-            mkdir -p models/{diffusers,diffusion_models,embeddings,gligen,hypernetworks,loras}
-            mkdir -p models/{photomaker,style_models,text_encoders,unet,upscale_models,vae,vae_approx}
-            mkdir -p custom_nodes output input user
-            git clone --depth 1 https://github.com/ltdrdata/ComfyUI-Manager.git ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager || true
         run_as: "${USER}"
+        plugin: command
+        plugin_input:
+            command: |
+                git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git ${HOME}/ComfyUI || true
+                cd ${HOME}/ComfyUI
+                mkdir -p models/{checkpoints,clip,clip_vision,configs,controlnet}
+                mkdir -p models/{diffusers,diffusion_models,embeddings,gligen,hypernetworks,loras}
+                mkdir -p models/{photomaker,style_models,text_encoders,unet,upscale_models,vae,vae_approx}
+                mkdir -p custom_nodes output input user
+                git clone --depth 1 https://github.com/ltdrdata/ComfyUI-Manager.git ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager || true
     comfyui-step-1:
         check: the ComfyUI server entrypoint main.py is baked into ~/ComfyUI
         file: ${HOME}/ComfyUI/main.py

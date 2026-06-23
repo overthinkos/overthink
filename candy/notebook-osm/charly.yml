@@ -24,12 +24,14 @@ notebook-osm:
             - runtime
     notebook-osm-step-1:
         check: the osm-monaco-viz notebook is present
-        command: ls ${VOLUME_CONTAINER_PATH:workspace}/notebooks/
         exit_status: 0
         stdout:
             - matches: "osm-monaco-viz"
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: ls ${VOLUME_CONTAINER_PATH:workspace}/notebooks/
     notebook-osm-viz-present:
         check: file=${VOLUME_CONTAINER_PATH:workspace}/notebooks/osm-monaco-viz.py
         id: notebook-osm-viz-present

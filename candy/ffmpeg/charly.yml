@@ -26,20 +26,24 @@ ffmpeg:
         exists: true
     ffmpeg-step-1:
         check: ffmpeg prints its version banner to stdout
-        command: ffmpeg -version
         exit_status: 0
         stdout:
             - contains: ffmpeg version
+        plugin: command
+        plugin_input:
+            command: ffmpeg -version
     ffmpeg-step-2:
         check: the ffprobe media inspector binary is installed at /usr/bin/ffprobe
         file: /usr/bin/ffprobe
         exists: true
     ffmpeg-step-3:
         check: ffprobe prints its version banner to stdout
-        command: ffprobe -version
         exit_status: 0
         stdout:
             - contains: ffprobe version
+        plugin: command
+        plugin_input:
+            command: ffprobe -version
     ffmpeg-package:
         check: package=ffmpeg
         id: ffmpeg-package

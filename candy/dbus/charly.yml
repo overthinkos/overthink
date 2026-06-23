@@ -53,12 +53,14 @@ dbus:
         installed: true
     dbus-step-2:
         check: the DBUS_SESSION_BUS_ADDRESS env var is exported as a unix-socket address
-        command: printenv DBUS_SESSION_BUS_ADDRESS
         exit_status: 0
         stdout:
             - contains: "unix:path="
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: printenv DBUS_SESSION_BUS_ADDRESS
     dbus-step-3:
         check: the supervised dbus session-bus service is running
         service: dbus

@@ -135,7 +135,7 @@ func TestPodUnifiedTarget_Test_NilExecutor(t *testing.T) {
 	// Without any embed, Executor returns a non-nil ShellExecutor
 	// — so Test should run on it. We use a hermetic command:true.
 	target := &PodUnifiedTarget{NodeName: "check-sway-browser-vnc-pod"}
-	checks := []Op{{ID: "ok", Command: "true"}}
+	checks := []Op{{ID: "ok", Plugin: "command", PluginInput: map[string]any{"command": "true"}}}
 	if err := target.Test(context.Background(), checks, TestOpts{}); err != nil {
 		t.Errorf("Test(local fallback): %v", err)
 	}

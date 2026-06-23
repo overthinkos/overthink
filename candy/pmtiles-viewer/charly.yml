@@ -89,38 +89,40 @@ pmtiles-viewer:
             rm -rf /tmp/PMTiles
             # Drop npm cache to shrink image.
             rm -rf /root/.npm
-        command: |
-            set -euo pipefail
-            # Clone shallow + the current tip of main. PMTiles has no
-            # separately-released "viewer" tarball — source build of the
-            # /app/ subdir is the canonical install.
-            git clone --depth 1 https://github.com/protomaps/PMTiles /tmp/PMTiles
-            cd /tmp/PMTiles/app
-            # `npm ci` over `npm install` for deterministic resolution.
-            # --no-audit + --no-fund trim ~5 sec of stderr chatter.
-            npm ci --no-audit --no-fund
-            # Vite (the build tool the PMTiles app uses) defaults to
-            # --base=/ when the package.json `build` script doesn't pin
-            # it, but pass --base=/ explicitly to match the maputnik
-            # layer's lockdown — the asset-base-not-prefixed check below
-            # locks the served HTML to root-relative asset URLs. Forward
-            # the flag through npm via `--`.
-            npm run build -- --base=/
-            # Vite outputs to `dist/` by default. Copy the SPA artifact
-            # and error loudly if the upstream layout changes.
-            if [ -d dist ]; then
-              mkdir -p /opt/pmtiles-viewer
-              cp -r dist /opt/pmtiles-viewer/build
-            else
-              echo "pmtiles-viewer build did not produce ./dist directory" >&2
-              ls -la
-              exit 1
-            fi
-            cd /
-            rm -rf /tmp/PMTiles
-            # Drop npm cache to shrink image.
-            rm -rf /root/.npm
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                set -euo pipefail
+                # Clone shallow + the current tip of main. PMTiles has no
+                # separately-released "viewer" tarball — source build of the
+                # /app/ subdir is the canonical install.
+                git clone --depth 1 https://github.com/protomaps/PMTiles /tmp/PMTiles
+                cd /tmp/PMTiles/app
+                # `npm ci` over `npm install` for deterministic resolution.
+                # --no-audit + --no-fund trim ~5 sec of stderr chatter.
+                npm ci --no-audit --no-fund
+                # Vite (the build tool the PMTiles app uses) defaults to
+                # --base=/ when the package.json `build` script doesn't pin
+                # it, but pass --base=/ explicitly to match the maputnik
+                # layer's lockdown — the asset-base-not-prefixed check below
+                # locks the served HTML to root-relative asset URLs. Forward
+                # the flag through npm via `--`.
+                npm run build -- --base=/
+                # Vite outputs to `dist/` by default. Copy the SPA artifact
+                # and error loudly if the upstream layout changes.
+                if [ -d dist ]; then
+                  mkdir -p /opt/pmtiles-viewer
+                  cp -r dist /opt/pmtiles-viewer/build
+                else
+                  echo "pmtiles-viewer build did not produce ./dist directory" >&2
+                  ls -la
+                  exit 1
+                fi
+                cd /
+                rm -rf /tmp/PMTiles
+                # Drop npm cache to shrink image.
+                rm -rf /root/.npm
     pmtiles-viewer-step-2:
         check: the Vite build artifact directory is present in the image
         file: /opt/pmtiles-viewer/build
@@ -132,8 +134,10 @@ pmtiles-viewer:
         exists: true
     pmtiles-viewer-step-4:
         check: the node toolchain that builds the SPA is installed
-        command: node --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: node --version
     pmtiles-viewer-step-5:
         agent-check: the pmtiles-viewer service serves the built SPA over HTTP, answering GET / with status 200 and root-relative asset URLs that load in the browser
     pmtiles-viewer-running:
@@ -167,9 +171,11 @@ pmtiles-viewer:
         check: |
             command=! curl -fsS http://localhost:8001/ | grep -qE '"/(pmtiles|app)/'
         id: pmtiles-viewer-asset-base-not-prefixed
-        command: |
-            ! curl -fsS http://localhost:8001/ | grep -qE '"/(pmtiles|app)/'
-        in_container: true
         exit_status: 0
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: |
+                ! curl -fsS http://localhost:8001/ | grep -qE '"/(pmtiles|app)/'
+            in_container: true

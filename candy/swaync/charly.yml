@@ -37,10 +37,12 @@ swaync:
         run: |
             command=rm -f /usr/share/dbus-1/services/org.erikreider.swaync.service
             rm -f /usr/share/dbus-1/services/org.erikreider.swaync.cc.service
-        command: |
-            rm -f /usr/share/dbus-1/services/org.erikreider.swaync.service
-            rm -f /usr/share/dbus-1/services/org.erikreider.swaync.cc.service
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                rm -f /usr/share/dbus-1/services/org.erikreider.swaync.service
+                rm -f /usr/share/dbus-1/services/org.erikreider.swaync.cc.service
     swaync-step-1:
         run: mkdir=${HOME}/.local/bin
         mkdir: "${HOME}/.local/bin"

@@ -66,9 +66,11 @@ kde-desktop:
     kde-desktop-step-0:
         run: |
             command=systemctl set-default graphical.target || true
-        command: |
-            systemctl set-default graphical.target || true
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                systemctl set-default graphical.target || true
     kde-desktop-step-1:
         check: the SDDM display-manager binary is installed for the graphical seat
         file: /usr/bin/sddm
@@ -95,12 +97,14 @@ kde-desktop:
         installed: true
     kde-desktop-step-7:
         check: the systemd default target is graphical so SDDM starts a KDE login on the real GPU output
-        command: systemctl get-default
         exit_status: 0
         stdout:
             - matches: "graphical.target"
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: systemctl get-default
     kde-desktop-step-8:
         check: the packaged sddm.service is enabled to start at boot
         service: sddm

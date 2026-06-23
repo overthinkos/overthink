@@ -37,64 +37,76 @@ devops-tools:
             cd /tmp && unzip -q awscliv2.zip
             ./aws/install
             rm -rf /tmp/awscliv2.zip /tmp/aws
-        command: |
-            curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
-            cd /tmp && unzip -q awscliv2.zip
-            ./aws/install
-            rm -rf /tmp/awscliv2.zip /tmp/aws
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+                cd /tmp && unzip -q awscliv2.zip
+                ./aws/install
+                rm -rf /tmp/awscliv2.zip /tmp/aws
     devops-tools-step-1:
         run: |
             command=SCW_URL=$(curl -fsSL https://api.github.com/repos/scaleway/scaleway-cli/releases/latest | grep "browser_download_url.*linux_amd64\"" | grep -v ".sha256" | cut -d'"' -f4)
             [ -z "$SCW_URL" ] && SCW_URL="https://github.com/scaleway/scaleway-cli/releases/download/v2.45.0/scaleway-cli_2.45.0_linux_amd64"
             curl -fsSL "$SCW_URL" -o /usr/local/bin/scw
             chmod +x /usr/local/bin/scw
-        command: |
-            SCW_URL=$(curl -fsSL https://api.github.com/repos/scaleway/scaleway-cli/releases/latest | grep "browser_download_url.*linux_amd64\"" | grep -v ".sha256" | cut -d'"' -f4)
-            [ -z "$SCW_URL" ] && SCW_URL="https://github.com/scaleway/scaleway-cli/releases/download/v2.45.0/scaleway-cli_2.45.0_linux_amd64"
-            curl -fsSL "$SCW_URL" -o /usr/local/bin/scw
-            chmod +x /usr/local/bin/scw
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                SCW_URL=$(curl -fsSL https://api.github.com/repos/scaleway/scaleway-cli/releases/latest | grep "browser_download_url.*linux_amd64\"" | grep -v ".sha256" | cut -d'"' -f4)
+                [ -z "$SCW_URL" ] && SCW_URL="https://github.com/scaleway/scaleway-cli/releases/download/v2.45.0/scaleway-cli_2.45.0_linux_amd64"
+                curl -fsSL "$SCW_URL" -o /usr/local/bin/scw
+                chmod +x /usr/local/bin/scw
     devops-tools-step-2:
         run: |
             command=curl -fsSL "https://raw.githubusercontent.com/ahmetb/kubectx/master/kubectx" -o /usr/local/bin/kubectx
             curl -fsSL "https://raw.githubusercontent.com/ahmetb/kubectx/master/kubens" -o /usr/local/bin/kubens
             chmod +x /usr/local/bin/kubectx /usr/local/bin/kubens
-        command: |
-            curl -fsSL "https://raw.githubusercontent.com/ahmetb/kubectx/master/kubectx" -o /usr/local/bin/kubectx
-            curl -fsSL "https://raw.githubusercontent.com/ahmetb/kubectx/master/kubens" -o /usr/local/bin/kubens
-            chmod +x /usr/local/bin/kubectx /usr/local/bin/kubens
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                curl -fsSL "https://raw.githubusercontent.com/ahmetb/kubectx/master/kubectx" -o /usr/local/bin/kubectx
+                curl -fsSL "https://raw.githubusercontent.com/ahmetb/kubectx/master/kubens" -o /usr/local/bin/kubens
+                chmod +x /usr/local/bin/kubectx /usr/local/bin/kubens
     devops-tools-step-3:
         run: |
             command=curl -fsSL "https://get.opentofu.org/install-opentofu.sh" -o /tmp/install-opentofu.sh
             chmod +x /tmp/install-opentofu.sh
             bash /tmp/install-opentofu.sh --install-method standalone
             rm -f /tmp/install-opentofu.sh
-        command: |
-            curl -fsSL "https://get.opentofu.org/install-opentofu.sh" -o /tmp/install-opentofu.sh
-            chmod +x /tmp/install-opentofu.sh
-            bash /tmp/install-opentofu.sh --install-method standalone
-            rm -f /tmp/install-opentofu.sh
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                curl -fsSL "https://get.opentofu.org/install-opentofu.sh" -o /tmp/install-opentofu.sh
+                chmod +x /tmp/install-opentofu.sh
+                bash /tmp/install-opentofu.sh --install-method standalone
+                rm -f /tmp/install-opentofu.sh
     devops-tools-step-4:
         check: the AWS CLI v2 binary is installed at /usr/local/bin/aws
         file: /usr/local/bin/aws
         exists: true
     devops-tools-step-5:
         check: aws reports its own version string
-        command: /usr/local/bin/aws --version
         exit_status: 0
         stdout:
             - contains: aws-cli
+        plugin: command
+        plugin_input:
+            command: /usr/local/bin/aws --version
     devops-tools-step-6:
         check: the Scaleway CLI binary is installed at /usr/local/bin/scw
         file: /usr/local/bin/scw
         exists: true
     devops-tools-step-7:
         check: OpenTofu is installed and reports its version
-        command: /usr/local/bin/tofu version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/local/bin/tofu version
     devops-tools-step-8:
         check: the kubectx kubectl-context switcher script is installed
         file: /usr/local/bin/kubectx
@@ -105,12 +117,16 @@ devops-tools:
         exists: true
     devops-tools-step-10:
         check: jq is installed and reports its version
-        command: /usr/bin/jq --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/bin/jq --version
     devops-tools-step-11:
         check: the dig DNS lookup tool resolves on PATH from the per-distro bind package
-        command: command -v dig
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: command -v dig
     tofu-binary:
         check: file=/usr/local/bin/tofu
         id: tofu-binary
@@ -124,5 +140,7 @@ devops-tools:
     scw-version:
         check: command=/usr/local/bin/scw version
         id: scw-version
-        command: /usr/local/bin/scw version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/local/bin/scw version

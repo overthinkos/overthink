@@ -174,13 +174,17 @@ marimo:
     marimo-curriculum-imports:
         check: command=${HOME}/.pixi/envs/default/bin/python -c "import marimo, torch, transformers, polars, scipy, altair, plotly, statsmodels, duckdb, sqlalchemy, sqlglot, cvxpy, clarabel, daft, wigglystuff, drawdata, marimo_learn, simpy"
         id: marimo-curriculum-imports
-        command: ${HOME}/.pixi/envs/default/bin/python -c "import marimo, torch, transformers, polars, scipy, altair, plotly, statsmodels, duckdb, sqlalchemy, sqlglot, cvxpy, clarabel, daft, wigglystuff, drawdata, marimo_learn, simpy"
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.pixi/envs/default/bin/python -c "import marimo, torch, transformers, polars, scipy, altair, plotly, statsmodels, duckdb, sqlalchemy, sqlglot, cvxpy, clarabel, daft, wigglystuff, drawdata, marimo_learn, simpy"
     marimo-osm-mcp-imports:
         check: command=${HOME}/.pixi/envs/default/bin/python -c "import geopandas, shapely, fiona, pyproj, quackosm, geoparquet_io, pmtiles, h3, mercantile, folium, contextily, mapclassify, fastmcp, cudf_polars, polars_st, geopolars, geoarrow.pyarrow, geoarrow.pandas, lonboard, freestiler"
         id: marimo-osm-mcp-imports
-        command: ${HOME}/.pixi/envs/default/bin/python -c "import geopandas, shapely, fiona, pyproj, quackosm, geoparquet_io, pmtiles, h3, mercantile, folium, contextily, mapclassify, fastmcp, cudf_polars, polars_st, geopolars, geoarrow.pyarrow, geoarrow.pandas, lonboard, freestiler"
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.pixi/envs/default/bin/python -c "import geopandas, shapely, fiona, pyproj, quackosm, geoparquet_io, pmtiles, h3, mercantile, folium, contextily, mapclassify, fastmcp, cudf_polars, polars_st, geopolars, geoarrow.pyarrow, geoarrow.pandas, lonboard, freestiler"
     marimo-port-reachable:
         check: addr=127.0.0.1:${HOST_PORT:2718}
         id: marimo-port-reachable

@@ -70,9 +70,10 @@ func checkVerbProviderBijection(verbs []string) error {
 	for _, v := range verbs {
 		// Pure-install verbs (mkdir/copy/write/link/download/setcap/build) render
 		// ONLY to install steps — runOne never check-dispatches them (it skips an
-		// install verb authored as a check). `command` is in installVerbs too but
-		// IS check-dispatched (runCommand), so it is NOT skipped here.
-		if installVerbs[v] && v != "command" {
+		// install verb authored as a check), so they need no CheckVerbProvider.
+		// (`command` was the lone check-dispatched installVerb; it left spec.OpVerbs in
+		// the command→plugin extraction, so this loop no longer sees it.)
+		if installVerbs[v] {
 			continue
 		}
 		p, ok := providerRegistry.resolve(ClassVerb, v)

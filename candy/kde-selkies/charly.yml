@@ -87,19 +87,23 @@ kde-selkies:
         exists: true
     kde-selkies-step-8:
         check: the nested KDE Plasma session reaches RUNNING under supervisord without crash-looping
-        command: |
-            sleep 20
-            supervisorctl status kde-selkies-session
         stdout:
             - matches: "RUNNING"
-        in_container: true
         # supervisord + the Plasma session only run in a live deployment, not a
         # disposable `podman run --rm` box (no init, no compositor) — runtime-only.
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: |
+                sleep 20
+                supervisorctl status kde-selkies-session
+            in_container: true
     kde-selkies-step-9:
         check: the selkies web UI streams the live Plasma desktop over HTTPS on port 3000
         timeout: 10s
+        context:
+            - runtime
         plugin: http
         plugin_input:
             http: https://127.0.0.1:${HOST_PORT:3000}/
@@ -112,24 +116,28 @@ kde-selkies:
             command=sleep 20
             supervisorctl status kde-selkies-session
         id: kde-selkies-stable
-        command: |
-            sleep 20
-            supervisorctl status kde-selkies-session
         stdout:
             - matches: "RUNNING"
-        in_container: true
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: |
+                sleep 20
+                supervisorctl status kde-selkies-session
+            in_container: true
     kde-selkies-plasmashell-running:
         check: the Plasma shell (plasmashell — panel + wallpaper) is launched on kwin's wayland-0 and running in the streamed session
         id: kde-selkies-plasmashell-running
-        command: pgrep -x plasmashell
         exit_status: 0
-        in_container: true
         eventually: 60s
         retry_interval: 3s
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: pgrep -x plasmashell
+            in_container: true
     kde-selkies-stream-https:
         check: http=https://127.0.0.1:${HOST_PORT:3000}/
         id: kde-selkies-stream-https

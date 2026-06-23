@@ -134,10 +134,12 @@ openwebui:
             status: 200
     openwebui-step-5:
         check: the mandatory admin email is injected into the running service environment
-        command: printenv WEBUI_ADMIN_EMAIL
         exit_status: 0
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: printenv WEBUI_ADMIN_EMAIL
     openwebui-step-6:
         agent-check: the rendered landing page presents the Open WebUI sign-in experience for the auto-provisioned admin account, ready to start an LLM chat
     openwebui-port-2:

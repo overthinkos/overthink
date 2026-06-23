@@ -16,5 +16,7 @@ codex:
         exists: true
     codex-step-1:
         check: running codex --version exits cleanly
-        command: ${HOME}/.npm-global/bin/codex --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.npm-global/bin/codex --version

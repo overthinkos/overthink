@@ -52,18 +52,22 @@ supervisord:
         filetype: directory
     supervisord-step-5:
         check: XDG_RUNTIME_DIR is exported and points at a /tmp-based per-user runtime dir
-        # supervisord defaults XDG_RUNTIME_DIR to /tmp/xdg-runtime (podman/buildah
-        # compat); wayland/pipewire desktop candies (sway, labwc, dbus, …)
-        # legitimately override it to bare /tmp. Accept either — and test the env
-        # var by EXIT STATUS rather than stdout-matching, which trips on the
-        # trailing newline printenv emits vs a `$`-anchored regex (check Gotcha #6).
-        command: |
-            [ "$XDG_RUNTIME_DIR" = /tmp/xdg-runtime ] || [ "$XDG_RUNTIME_DIR" = /tmp ]
         exit_status: 0
+        plugin: command
+        plugin_input:
+            # supervisord defaults XDG_RUNTIME_DIR to /tmp/xdg-runtime (podman/buildah
+            # compat); wayland/pipewire desktop candies (sway, labwc, dbus, …)
+            # legitimately override it to bare /tmp. Accept either — and test the env
+            # var by EXIT STATUS rather than stdout-matching, which trips on the
+            # trailing newline printenv emits vs a `$`-anchored regex (check Gotcha #6).
+            command: |
+                [ "$XDG_RUNTIME_DIR" = /tmp/xdg-runtime ] || [ "$XDG_RUNTIME_DIR" = /tmp ]
     supervisord-step-6:
         check: supervisord runs as container init and its control socket answers supervisorctl pid
-        command: supervisorctl pid
         exit_status: 0
-        in_container: true
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: supervisorctl pid
+            in_container: true

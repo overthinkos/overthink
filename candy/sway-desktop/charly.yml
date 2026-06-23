@@ -71,22 +71,28 @@ sway-desktop:
         exists: true
     sway-desktop-step-10:
         check: tmux from the composed tmux candy reports its version and exits cleanly
-        command: /usr/bin/tmux -V
         exit_status: 0
         stdout:
             - matches: "^tmux"
+        plugin: command
+        plugin_input:
+            command: /usr/bin/tmux -V
     sway-desktop-step-11:
         check: asciinema from the composed asciinema candy reports its version and exits cleanly
-        command: /usr/bin/asciinema --version
         exit_status: 0
         stdout:
             - contains: asciinema
+        plugin: command
+        plugin_input:
+            command: /usr/bin/asciinema --version
     sway-desktop-step-12:
         check: fastfetch from the composed fastfetch candy reports its version and exits cleanly
-        command: /usr/bin/fastfetch --version 2>&1
         exit_status: 0
         stdout:
             - matches: "[0-9]+\\.[0-9]+"
+        plugin: command
+        plugin_input:
+            command: /usr/bin/fastfetch --version 2>&1
     sway-desktop-step-13:
         agent-check: the composed binaries together form a coherent headless Sway desktop userland (capture, browser, terminal, audio) with no missing member candy
     sway-desktop-wlr-randr-binary:

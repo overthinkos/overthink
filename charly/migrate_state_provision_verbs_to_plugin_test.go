@@ -10,17 +10,20 @@ import (
 )
 
 // TestMigrateStateProvisionVerbsToPlugin proves the state-provision-verb extraction across
-// all four extracted verbs (unix_group, user, kernel-param, mount). Because a
-// state-provision verb is DUAL-NATURED, BOTH a `check:` (assert) step AND a `run:` (act)
-// step authoring it are CONVERTED to the generic plugin step (plugin: <verb> +
+// all five extracted verbs (unix_group, user, kernel-param, mount, command). Because a
+// state-provision verb carries both a check and an act, BOTH a `check:` (assert) step AND a
+// `run:` (act) step authoring it are CONVERTED to the generic plugin step (plugin: <verb> +
 // plugin_input{<verb>, <companions>}) — the distinguishing behaviour versus the OBSERVE-only
 // goss migrator, which strips a run: step's vestigial keys. A verb-less step kind
 // (agent-check/include) has the vestigial keys STRIPPED. Each verb's companion fields MOVE
-// into plugin_input. Comment-preserving + idempotent.
+// into plugin_input — except `command`, the FIELD-SPLIT case (only the EXCLUSIVE
+// background/from_host/in_container move; the matchers exit_status/stdout/stderr STAY at
+// step level), which converts ONLY when no charly-verb is present (else `command` is a
+// wl/libvirt argv modifier). Comment-preserving + idempotent.
 func TestMigrateStateProvisionVerbsToPlugin(t *testing.T) {
 	dir := t.TempDir()
 	rootYML := "" +
-		"version: 2026.174.0300\n" +
+		"version: 2026.174.0500\n" +
 		"sample:\n" +
 		"    candy: {}\n" +
 		"    plan:\n" +
@@ -46,8 +49,17 @@ func TestMigrateStateProvisionVerbsToPlugin(t *testing.T) {
 		"          mount: \"/mnt/data\"\n" +
 		"          mount_source: \"/dev/sdb1\"\n" +
 		"          filesystem: \"ext4\"\n" +
-		"        - run: \"a plain step\"\n" +
-		"          command: \"echo hi\"\n"
+		"        - run: \"install the package\"\n" +
+		"          command: \"dnf install -y foo\"\n" +
+		"          from_host: false\n" +
+		"        - check: \"redis answers ping\"\n" +
+		"          command: \"redis-cli ping\"  # field-split: matchers stay\n" +
+		"          in_container: false\n" +
+		"          stdout: PONG\n" +
+		"          exit_status: 0\n" +
+		"        - check: \"the guest reports its kernel\"\n" +
+		"          libvirt: \"guest/exec\"\n" +
+		"          command: \"uname -r\"\n"
 	rootPath := filepath.Join(dir, "charly.yml")
 	if err := os.WriteFile(rootPath, []byte(rootYML), 0o644); err != nil {
 		t.Fatal(err)
@@ -71,7 +83,7 @@ func TestMigrateStateProvisionVerbsToPlugin(t *testing.T) {
 		t.Fatalf("re-parse migrated YAML: %v", err)
 	}
 	plan, ok := doc["sample"].(map[string]any)["plan"].([]any)
-	if !ok || len(plan) != 7 {
+	if !ok || len(plan) != 9 {
 		t.Fatalf("plan shape wrong (len=%d): %v", len(plan), doc["sample"])
 	}
 
@@ -168,10 +180,57 @@ func TestMigrateStateProvisionVerbsToPlugin(t *testing.T) {
 		t.Errorf("step 5: plugin_input = %v, want {mount: /mnt/data, mount_source: /dev/sdb1, filesystem: ext4}", mountPI)
 	}
 
-	// (g) the plain run: command step is untouched.
-	plainStep := plan[6].(map[string]any)
-	if plainStep["command"] != "echo hi" {
-		t.Errorf("step 6: plain run step mangled: %v", plainStep)
+	// (g) a run: command step CONVERTS — command + the EXCLUSIVE from_host move into
+	//     plugin_input (the install-task act timeline).
+	cmdRun := plan[6].(map[string]any)
+	if cmdRun["plugin"] != "command" {
+		t.Errorf("step 6: plugin: command not added, got %v: %v", cmdRun["plugin"], cmdRun)
+	}
+	if cmdRun["run"] != "install the package" {
+		t.Errorf("step 6: the run: keyword must be preserved: %v", cmdRun)
+	}
+	for _, k := range []string{"command", "from_host"} {
+		if _, has := cmdRun[k]; has {
+			t.Errorf("step 6: bare %s: not removed (must move into plugin_input): %v", k, cmdRun)
+		}
+	}
+	cmdRunPI := cmdRun["plugin_input"].(map[string]any)
+	if cmdRunPI["command"] != "dnf install -y foo" || cmdRunPI["from_host"] != false {
+		t.Errorf("step 6: plugin_input = %v, want {command: dnf install -y foo, from_host: false}", cmdRunPI)
+	}
+
+	// (h) a check: command step is the FIELD-SPLIT case — command + the EXCLUSIVE
+	//     in_container move into plugin_input, but the MATCHERS stdout/exit_status STAY at
+	//     step level (#Op, shared via matchAll). Comment on the command line is preserved.
+	cmdCheck := plan[7].(map[string]any)
+	if cmdCheck["plugin"] != "command" {
+		t.Errorf("step 7: plugin: command not added, got %v: %v", cmdCheck["plugin"], cmdCheck)
+	}
+	cmdCheckPI := cmdCheck["plugin_input"].(map[string]any)
+	if cmdCheckPI["command"] != "redis-cli ping" || cmdCheckPI["in_container"] != false {
+		t.Errorf("step 7: plugin_input = %v, want {command: redis-cli ping, in_container: false}", cmdCheckPI)
+	}
+	if _, has := cmdCheckPI["stdout"]; has {
+		t.Errorf("step 7: stdout MUST stay at step level (matcher), not move into plugin_input: %v", cmdCheckPI)
+	}
+	if cmdCheck["stdout"] != "PONG" {
+		t.Errorf("step 7: stdout matcher must stay at step level, got %v", cmdCheck["stdout"])
+	}
+	if cmdCheck["exit_status"] != 0 {
+		t.Errorf("step 7: exit_status matcher must stay at step level, got %v", cmdCheck["exit_status"])
+	}
+
+	// (i) a libvirt: guest/exec step with a command MODIFIER is NOT converted — `command`
+	//     is the libvirt argv (a charly-verb is present), so it stays in place.
+	libvirtStep := plan[8].(map[string]any)
+	if _, has := libvirtStep["plugin"]; has {
+		t.Errorf("step 8: a libvirt step with a command modifier must NOT convert: %v", libvirtStep)
+	}
+	if libvirtStep["libvirt"] != "guest/exec" || libvirtStep["command"] != "uname -r" {
+		t.Errorf("step 8: libvirt verb + command modifier must be untouched: %v", libvirtStep)
+	}
+	if !strings.Contains(string(out), "field-split: matchers stay") {
+		t.Errorf("comment on the command check step was lost:\n%s", out)
 	}
 
 	// (h) idempotent — a second pass changes nothing (the nested plugin_input keys are not
@@ -191,7 +250,7 @@ func TestMigrateStateProvisionVerbsToPlugin(t *testing.T) {
 func TestMigrateStateProvisionVerbsToPlugin_NoVerbUntouched(t *testing.T) {
 	dir := t.TempDir()
 	rootYML := "" +
-		"version: 2026.174.0300\n" +
+		"version: 2026.174.0500\n" +
 		"via-bastion:\n" +
 		"    local:\n" +
 		"        from: dev-workstation\n" +
@@ -203,8 +262,8 @@ func TestMigrateStateProvisionVerbsToPlugin_NoVerbUntouched(t *testing.T) {
 		"        - check: \"the marker file exists\"\n" +
 		"          file: \"/etc/marker\"\n" +
 		"          exists: true\n" +
-		"        - run: \"do a thing\"\n" +
-		"          command: \"echo hi\"\n"
+		"        - run: \"make a dir\"\n" + // mkdir is NOT an extracted verb → no rewrite
+		"          mkdir: \"/opt/app\"\n"
 	rootPath := filepath.Join(dir, "charly.yml")
 	if err := os.WriteFile(rootPath, []byte(rootYML), 0o644); err != nil {
 		t.Fatal(err)

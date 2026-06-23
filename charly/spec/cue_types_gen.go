@@ -16,8 +16,6 @@ type Op struct {
 
 	Service string `yaml:"service,omitempty" json:"service,omitempty"`
 
-	Command string `yaml:"command,omitempty" json:"command,omitempty"`
-
 	Mkdir string `yaml:"mkdir,omitempty" json:"mkdir,omitempty"`
 
 	Copy string `yaml:"copy,omitempty" json:"copy,omitempty"`
@@ -105,7 +103,15 @@ type Op struct {
 
 	Timeout Duration `yaml:"timeout,omitempty" json:"timeout,omitempty"`
 
-	InContainer *bool `yaml:"in_container,omitempty" json:"in_container,omitempty"`
+	// command — a SHARED exec-string modifier (NOT a verb): the live-container verbs
+	// `wl: exec` / `wl: sway-msg` / `libvirt: guest-exec` read it as their argv, and
+	// the `command` plugin verb's INSTALL-EMIT rehydrates it onto an OpStep for emitCmd
+	// (build) / renderOpCommand (deploy). It LEFT #OpVerb in the command→plugin
+	// extraction (the command CHECK verb is now `plugin: command` + #CommandInput), so
+	// Op.Kind() no longer treats it as a verb; it stays here as a modifier the other
+	// verbs + the act-emit seam read off the step Op. `in_container`/`background`/
+	// `from_host` were command-EXCLUSIVE and moved into #CommandInput.
+	Command string `yaml:"command,omitempty" json:"command,omitempty"`
 
 	Context []Context `yaml:"context,omitempty" json:"context,omitempty"`
 
@@ -161,8 +167,6 @@ type Op struct {
 	Count int `yaml:"count,omitempty" json:"count,omitempty"`
 
 	IndexVar string `yaml:"index_var,omitempty" json:"index_var,omitempty"`
-
-	Background bool `yaml:"background,omitempty" json:"background,omitempty"`
 
 	// --- aggregation (summarize) ---
 	OverIDs []string `yaml:"over_id,omitempty" json:"over_id,omitempty"`
@@ -230,14 +234,15 @@ type Op struct {
 
 	Running *bool `yaml:"running,omitempty" json:"running,omitempty"`
 
-	// --- command ---
+	// --- command-verb matchers (SHARED via matchAll: the `command` plugin verb +
+	// the 11 live-container verbs assert exit_status/stdout/stderr off the step Op,
+	// so they STAY in #Op; only the command-EXCLUSIVE command/in_container/background/
+	// from_host moved into #CommandInput) ---
 	ExitStatus *int `yaml:"exit_status,omitempty" json:"exit_status,omitempty"`
 
 	Stdout MatcherList `yaml:"stdout,omitempty" json:"stdout,omitempty"`
 
 	Stderr MatcherList `yaml:"stderr,omitempty" json:"stderr,omitempty"`
-
-	FromHost bool `yaml:"from_host,omitempty" json:"from_host,omitempty"`
 
 	// --- shared request modifiers (the http plugin verb + the live cdp/dbus/libvirt
 	// verbs read these off the step Op; they are NOT carried in the http plugin's

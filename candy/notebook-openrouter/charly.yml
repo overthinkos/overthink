@@ -27,12 +27,14 @@ notebook-openrouter:
             - runtime
     notebook-openrouter-step-1:
         check: the OpenRouter_Basics producer notebook is present
-        command: ls ${VOLUME_CONTAINER_PATH:workspace}/openrouter/
         exit_status: 0
         stdout:
             - matches: "OpenRouter_Basics"
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: ls ${VOLUME_CONTAINER_PATH:workspace}/openrouter/
     notebook-openrouter-step-2:
         check: the OpenRouter_Basics producer notebook is staged in the image data tree
         file: /data/workspace/openrouter/00_OpenRouter_Basics.ipynb
@@ -48,10 +50,12 @@ notebook-openrouter:
             - contains: "OPENROUTER_API_KEY"
     notebook-openrouter-step-5:
         check: all three documented tutorial notebooks (basics, models, inference) are staged as runnable examples
-        command: find /data/workspace/openrouter -maxdepth 1 -name "*.ipynb" | wc -l
         exit_status: 0
         stdout:
             - matches: "[1-9]"
+        plugin: command
+        plugin_input:
+            command: find /data/workspace/openrouter -maxdepth 1 -name "*.ipynb" | wc -l
     notebook-openrouter-staged-dir:
         check: file=/data/workspace/openrouter
         id: notebook-openrouter-staged-dir

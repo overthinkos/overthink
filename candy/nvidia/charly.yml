@@ -46,12 +46,14 @@ nvidia:
               ln -sf /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json /etc/vulkan/icd.d/nvidia_icd.json || true
             [ -f /usr/share/vulkan/implicit_layer.d/nvidia_layers.json ] && \
               ln -sf /usr/share/vulkan/implicit_layer.d/nvidia_layers.json /etc/vulkan/icd.d/nvidia_layers.json || true
-        command: |
-            [ -f /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json ] && \
-              ln -sf /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json /etc/vulkan/icd.d/nvidia_icd.json || true
-            [ -f /usr/share/vulkan/implicit_layer.d/nvidia_layers.json ] && \
-              ln -sf /usr/share/vulkan/implicit_layer.d/nvidia_layers.json /etc/vulkan/icd.d/nvidia_layers.json || true
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                [ -f /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json ] && \
+                  ln -sf /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json /etc/vulkan/icd.d/nvidia_icd.json || true
+                [ -f /usr/share/vulkan/implicit_layer.d/nvidia_layers.json ] && \
+                  ln -sf /usr/share/vulkan/implicit_layer.d/nvidia_layers.json /etc/vulkan/icd.d/nvidia_layers.json || true
     nvidia-step-2:
         check: the nvidia-container-toolkit package is installed for CDI device generation
         package: nvidia-container-toolkit
@@ -62,10 +64,12 @@ nvidia:
         exists: true
     nvidia-step-4:
         check: nvidia-ctk runs and reports a version number
-        command: nvidia-ctk --version
         exit_status: 0
         stdout:
             - matches: "[0-9]+\\.[0-9]+"
+        plugin: command
+        plugin_input:
+            command: nvidia-ctk --version
     nvidia-step-5:
         check: the Vulkan ICD directory exists to hold the nvidia ICD symlinks
         file: /etc/vulkan/icd.d
@@ -73,7 +77,9 @@ nvidia:
         filetype: directory
     nvidia-step-6:
         check: LD_LIBRARY_PATH is exported so the GPU driver libs under /usr/lib64 resolve at runtime
-        command: printenv LD_LIBRARY_PATH
         exit_status: 0
         stdout:
             - contains: /usr/lib64
+        plugin: command
+        plugin_input:
+            command: printenv LD_LIBRARY_PATH

@@ -60,15 +60,17 @@ appium-server:
             export ANDROID_HOME=/opt/android-sdk
             export PATH="$JAVA_HOME/bin:$PATH"
             /usr/bin/appium driver install uiautomator2
-        command: |
-            set -euo pipefail
-            # Driver installs per-user (writes ~/.appium/node_modules). JAVA_HOME
-            # + ANDROID_HOME come from upstream layer ENV baked into the image.
-            export JAVA_HOME=/usr/lib/jvm/charly-jdk21
-            export ANDROID_HOME=/opt/android-sdk
-            export PATH="$JAVA_HOME/bin:$PATH"
-            /usr/bin/appium driver install uiautomator2
         run_as: "${USER}"
+        plugin: command
+        plugin_input:
+            command: |
+                set -euo pipefail
+                # Driver installs per-user (writes ~/.appium/node_modules). JAVA_HOME
+                # + ANDROID_HOME come from upstream layer ENV baked into the image.
+                export JAVA_HOME=/usr/lib/jvm/charly-jdk21
+                export ANDROID_HOME=/opt/android-sdk
+                export PATH="$JAVA_HOME/bin:$PATH"
+                /usr/bin/appium driver install uiautomator2
     appium-server-step-1:
         run: mkdir=/opt/chromedriver/${WEBVIEW_CHROMEDRIVER_MAJOR}
         mkdir: /opt/chromedriver/${WEBVIEW_CHROMEDRIVER_MAJOR}
@@ -86,22 +88,26 @@ appium-server:
             D="/opt/chromedriver/${WEBVIEW_CHROMEDRIVER_MAJOR}"
             install -m 0755 "${D}/chromedriver-linux64/chromedriver" "${D}/chromedriver"
             rm -rf "${D}/chromedriver-linux64"
-        command: |
-            set -euo pipefail
-            D="/opt/chromedriver/${WEBVIEW_CHROMEDRIVER_MAJOR}"
-            install -m 0755 "${D}/chromedriver-linux64/chromedriver" "${D}/chromedriver"
-            rm -rf "${D}/chromedriver-linux64"
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                set -euo pipefail
+                D="/opt/chromedriver/${WEBVIEW_CHROMEDRIVER_MAJOR}"
+                install -m 0755 "${D}/chromedriver-linux64/chromedriver" "${D}/chromedriver"
+                rm -rf "${D}/chromedriver-linux64"
     appium-server-step-4:
         check: the Appium WebDriver server binary is installed at /usr/bin/appium
         file: /usr/bin/appium
         exists: true
     appium-server-step-5:
         check: the installed Appium server reports a numeric version
-        command: /usr/bin/appium --version
         exit_status: 0
         stdout:
             - matches: "^[0-9]+\\."
+        plugin: command
+        plugin_input:
+            command: /usr/bin/appium --version
     appium-server-step-6:
         check: the uiautomator2 Android driver is installed per-user under ~/.appium
         file: ${HOME}/.appium/node_modules/appium-uiautomator2-driver
@@ -113,12 +119,14 @@ appium-server:
         exists: true
     appium-server-step-8:
         check: the baked chromedriver reports major version 133 matching the API-36 System WebView
-        command: /opt/chromedriver/133/chromedriver --version
         exit_status: 0
         stdout:
             - matches: "ChromeDriver 133\\."
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: /opt/chromedriver/133/chromedriver --version
     appium-server-step-9:
         check: the running Appium server answers a WebDriver status request with HTTP 200
         timeout: 10s

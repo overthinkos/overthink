@@ -23,14 +23,18 @@ mcporter:
         exists: true
     mcporter-step-2:
         check: running mcporter --version exits cleanly and prints a semantic version
-        command: ${HOME}/.npm-global/bin/mcporter --version
         exit_status: 0
         stdout:
             - matches: "[0-9]+\\.[0-9]+"
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.npm-global/bin/mcporter --version
     mcporter-step-3:
         check: running mcporter --help lists the list and call MCP commands
-        command: ${HOME}/.npm-global/bin/mcporter --help
         exit_status: 0
         stderr:
             - contains: "list"
             - contains: "call"
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.npm-global/bin/mcporter --help

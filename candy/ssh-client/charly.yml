@@ -38,10 +38,12 @@ ssh-client:
         exists: true
     ssh-client-step-3:
         check: ssh -V identifies the client as OpenSSH on stderr and exits cleanly
-        command: /usr/bin/ssh -V
         exit_status: 0
         stderr:
             - contains: "OpenSSH"
+        plugin: command
+        plugin_input:
+            command: /usr/bin/ssh -V
     ssh-client-step-4:
         agent-check: with a host SSH agent forwarded at runtime, ssh-add -l inside the deployment lists the host's keys via the forwarded SSH_AUTH_SOCK
     ssh-client-package:

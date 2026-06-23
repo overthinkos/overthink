@@ -30,7 +30,7 @@ func TestTaskKind_Valid(t *testing.T) {
 		task Op
 		want string
 	}{
-		{Op{Command: "echo hi"}, "command"},
+		{cmdOp("echo hi"), "plugin"}, // command is a plugin verb now (plugin: command)
 		{Op{Mkdir: "/etc/foo"}, "mkdir"},
 		{Op{Copy: "foo", To: "/bar"}, "copy"},
 		{Op{Write: "/x", Content: "body"}, "write"},
@@ -388,7 +388,7 @@ func TestTaskCacheMounts_OwnershipByUser(t *testing.T) {
 		t.Errorf("non-root cache mount should be uid-owned: %v", user)
 	}
 	// no cache: → no mounts
-	if got := taskCacheMounts(Op{Command: "x"}, img); got != nil {
+	if got := taskCacheMounts(cmdOp("x"), img); got != nil {
 		t.Errorf("no cache: should yield nil, got %v", got)
 	}
 }
@@ -404,7 +404,7 @@ func TestEmitDownload_UnknownExtract(t *testing.T) {
 func TestEmitCmd_RootCacheMounts(t *testing.T) {
 	var b strings.Builder
 	emitCmd(&b,
-		Op{Command: "echo hello", RunAs: "root"},
+		Op{Plugin: "command", PluginInput: map[string]any{"command": "echo hello"}, RunAs: "root"},
 		"my-layer", testResolvedBox(), true,
 	)
 	out := b.String()
@@ -425,7 +425,7 @@ func TestEmitCmd_RootCacheMounts(t *testing.T) {
 func TestEmitCmd_UserNpmCache(t *testing.T) {
 	var b strings.Builder
 	emitCmd(&b,
-		Op{Command: "xdg-settings default-browser foo", RunAs: "${USER}"},
+		Op{Plugin: "command", PluginInput: map[string]any{"command": "xdg-settings default-browser foo"}, RunAs: "${USER}"},
 		"my-layer", testResolvedBox(), false,
 	)
 	out := b.String()
@@ -476,7 +476,7 @@ func TestEmitTasks_CommandEmitsRun(t *testing.T) {
 	dir := t.TempDir()
 	g := &Generator{BuildDir: dir}
 	ops := []Op{
-		{Command: "echo rpmfusion-enable", RunAs: "root"},
+		{Plugin: "command", PluginInput: map[string]any{"command": "echo rpmfusion-enable"}, RunAs: "root"},
 	}
 	layer := &Candy{Name: "lyr"}
 	var b strings.Builder
@@ -682,7 +682,7 @@ func TestValidateCandyTasks_ReservedVarKey(t *testing.T) {
 	layers := map[string]*Candy{
 		"mylyr": {
 			Name: "mylyr",
-			plan: []Step{{Run: "build", Op: Op{Command: "true"}}},
+			plan: []Step{{Run: "build", Op: cmdOp("true")}},
 			vars: map[string]string{"USER": "ignored"}, // collides with auto-export
 		},
 	}
@@ -725,7 +725,7 @@ func TestValidateCandyTasks_HappyPath(t *testing.T) {
 				{Run: "build", Op: Op{Download: "https://x.com/v${VERSION}/app.tar.gz", Extract: "tar.gz", To: "/usr/local/bin", RunAs: "root"}},
 				{Run: "build", Op: Op{Link: "/usr/local/bin/app-current", Target: "/usr/local/bin/app", RunAs: "root"}},
 				{Run: "build", Op: Op{Setcap: "/usr/bin/foo", Caps: "cap_setuid=ep"}},
-				{Run: "build", Op: Op{Command: "echo hello ${VERSION}", RunAs: "${USER}"}},
+				{Run: "build", Op: Op{Plugin: "command", PluginInput: map[string]any{"command": "echo hello ${VERSION}"}, RunAs: "${USER}"}},
 			},
 		},
 	}
@@ -739,7 +739,7 @@ func TestValidateCandyTasks_HappyPath(t *testing.T) {
 // --- Parity: ensure HasInstallFiles picks up HasTasks ---
 
 func TestCandy_HasInstallFiles_IncludesTasks(t *testing.T) {
-	l := &Candy{plan: []Step{{Run: "build", Op: Op{Command: "true"}}}}
+	l := &Candy{plan: []Step{{Run: "build", Op: cmdOp("true")}}}
 	if !l.HasInstallFiles() {
 		t.Error("HasInstallFiles() should be true when HasTasks is true")
 	}

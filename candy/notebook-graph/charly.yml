@@ -40,12 +40,14 @@ notebook-graph:
             - runtime
     notebook-graph-step-1:
         check: the gpu-libraries-demo notebook is present
-        command: ls ${VOLUME_CONTAINER_PATH:workspace}/notebooks/
         exit_status: 0
         stdout:
             - matches: "gpu-libraries-demo"
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: ls ${VOLUME_CONTAINER_PATH:workspace}/notebooks/
     notebook-graph-demo-present:
         check: file=${VOLUME_CONTAINER_PATH:workspace}/notebooks/gpu-libraries-demo.py
         id: notebook-graph-demo-present

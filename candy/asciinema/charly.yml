@@ -22,13 +22,17 @@ asciinema:
         installed: true
     asciinema-step-2:
         check: running asciinema --version prints the asciinema version banner and exits cleanly
-        command: /usr/bin/asciinema --version
         exit_status: 0
         stdout:
             - contains: asciinema
+        plugin: command
+        plugin_input:
+            command: /usr/bin/asciinema --version
     asciinema-step-3:
         check: asciinema --help advertises the rec subcommand that captures terminal sessions
-        command: /usr/bin/asciinema --help
         exit_status: 0
         stdout:
             - contains: rec
+        plugin: command
+        plugin_input:
+            command: /usr/bin/asciinema --help

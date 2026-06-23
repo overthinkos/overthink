@@ -780,8 +780,8 @@ func (r *Runner) runKill(_ context.Context, c *Op) CheckResult {
 	}
 }
 
-// Background mode: when c.Background is true, the host-side command is
-// spawned via cmd.Start() (no Wait); the PID is registered with the
+// Background mode: when cc.Background is true (from the command plugin_input), the
+// host-side command is spawned via cmd.Start() (no Wait); the PID is registered with the
 // plan-run context for SIGTERM-reap at plan teardown. Background
 // mode is host-side only — in-container backgrounding is the user's
 // responsibility (use `setsid nohup ... &` inside the bash given to
@@ -801,25 +801,38 @@ func wrapContainerCommand(script string) string {
 	return "{ " + script + "\n} </dev/null"
 }
 
-func (r *Runner) runCommand(ctx context.Context, c *Op) CheckResult {
+// commandCheck carries the command verb's plugin_input-decoded EXCLUSIVE fields,
+// passed from commandVerb.RunVerb (plugin_verb_command.go) since command/in_container/
+// background/from_host left #Op when the verb became a builtin plugin unit. The SHARED
+// matchers exit_status/stdout/stderr (also asserted by the 11 live-container verbs via
+// matchAll) and the general timeout stay base #Op fields, so the runner reads them off
+// the step Op (c) directly — mirrors httpCheck.
+type commandCheck struct {
+	Command     string
+	InContainer *bool
+	Background  bool
+	FromHost    bool
+}
+
+func (r *Runner) runCommand(ctx context.Context, c *Op, cc commandCheck) CheckResult {
 	inContainer := true
-	if c.InContainer != nil {
-		inContainer = *c.InContainer
+	if cc.InContainer != nil {
+		inContainer = *cc.InContainer
 	}
-	if c.FromHost {
+	if cc.FromHost {
 		inContainer = false
 	}
 
 	// Background path — host-side only, fire-and-forget. Plan teardown
 	// reaps via SIGTERM. Returns immediately with PASS.
-	if c.Background {
+	if cc.Background {
 		if inContainer {
 			return failf(c, "background: true is host-side only (set in_container: false or from_host: true)")
 		}
 		if r.Mode == RunModeBox {
 			return skipf(c, "background command not meaningful under charly check box")
 		}
-		cmd := exec.Command("sh", "-c", c.Command) // not CommandContext — survives ctx cancel
+		cmd := exec.Command("sh", "-c", cc.Command) // not CommandContext — survives ctx cancel
 		if err := cmd.Start(); err != nil {
 			return failf(c, "background start: %v", err)
 		}
@@ -839,12 +852,12 @@ func (r *Runner) runCommand(ctx context.Context, c *Op) CheckResult {
 	var exit int
 	var err error
 	if inContainer {
-		stdout, stderr, exit, err = r.Exec.RunCapture(ctx, wrapContainerCommand(c.Command))
+		stdout, stderr, exit, err = r.Exec.RunCapture(ctx, wrapContainerCommand(cc.Command))
 	} else {
 		if r.Mode == RunModeBox {
 			return skipf(c, "host-side command not meaningful under charly check box")
 		}
-		cmd := exec.CommandContext(ctx, "sh", "-c", c.Command)
+		cmd := exec.CommandContext(ctx, "sh", "-c", cc.Command)
 		stdout, stderr, exit, err = runCaptureCmd(cmd)
 	}
 	if err != nil {
@@ -1071,7 +1084,7 @@ func FormatResultsText(w io.Writer, results []CheckResult) int {
 			skips++
 		}
 		verb := r.Verb
-		subject := firstNonEmpty(r.Op.File, pluginInputStr(r.Op, "http"), r.Op.Command, pluginInputStr(r.Op, "addr"))
+		subject := firstNonEmpty(r.Op.File, pluginInputStr(r.Op, "http"), r.Op.Command, pluginInputStr(r.Op, "command"), pluginInputStr(r.Op, "addr"))
 		fmt.Fprintf(w, "%s %s %s — %s\n", glyph, verb, subject, r.Message)
 		if r.Op.Origin != "" && r.Status == TestFail {
 			fmt.Fprintf(w, "  from %s\n", r.Op.Origin)
@@ -1103,7 +1116,7 @@ func FormatResultsJSON(w io.Writer, results []CheckResult) int {
 	out := make([]entry, 0, len(results))
 	fails := 0
 	for _, r := range results {
-		subject := firstNonEmpty(r.Op.File, pluginInputStr(r.Op, "http"), r.Op.Command, pluginInputStr(r.Op, "addr"))
+		subject := firstNonEmpty(r.Op.File, pluginInputStr(r.Op, "http"), r.Op.Command, pluginInputStr(r.Op, "command"), pluginInputStr(r.Op, "addr"))
 		if r.Status == TestFail {
 			fails++
 		}
@@ -1126,7 +1139,7 @@ func FormatResultsTAP(w io.Writer, results []CheckResult) int {
 	fails := 0
 	fmt.Fprintf(w, "TAP version 13\n1..%d\n", len(results))
 	for i, r := range results {
-		subject := firstNonEmpty(r.Op.File, pluginInputStr(r.Op, "http"), r.Op.Command, pluginInputStr(r.Op, "addr"))
+		subject := firstNonEmpty(r.Op.File, pluginInputStr(r.Op, "http"), r.Op.Command, pluginInputStr(r.Op, "command"), pluginInputStr(r.Op, "addr"))
 		label := fmt.Sprintf("%s %s - %s", r.Verb, subject, r.Message)
 		switch r.Status {
 		case TestPass:

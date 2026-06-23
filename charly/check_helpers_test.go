@@ -10,6 +10,22 @@ import (
 // the unified loader (charly.yml + includes).
 const testdataDir = "testdata"
 
+// cmdOp builds the extracted `command` plugin-verb Op for tests. `command` left #OpVerb
+// in the command→plugin extraction, so a command check/run is now `plugin: command` +
+// plugin_input.command (the exec string), with the matchers exit_status/stdout/stderr
+// staying on the step Op. The returned Op is plain — callers set any extra fields
+// (RunAs/Context/ID/Stdout/Cache/Env) on it directly.
+func cmdOp(command string) Op {
+	return Op{Plugin: "command", PluginInput: map[string]any{"command": command}}
+}
+
+// cmdOpP is the *Op form of cmdOp, for call sites that need an addressable Op
+// (e.g. &Op{Command: ...} became cmdOpP(...) in the command→plugin extraction).
+func cmdOpP(command string) *Op {
+	o := cmdOp(command)
+	return &o
+}
+
 // testDistroConfig returns the default DistroConfig from testdata fixtures for tests.
 func testDistroConfig() *DistroConfig {
 	distroCfg, _, _, err := LoadBuildConfigForBox(testdataDir)
@@ -48,7 +64,7 @@ func testProjectDir(t interface {
 	tmpdir := t.TempDir()
 	// Reuse testdata's build.yml (and testdata itself as the helper's dir when
 	// the caller didn't need tmpdir specifically) — it's a complete fixture.
-	root := []byte("version: 2026.174.0300\nimport: [build.yml]\n")
+	root := []byte("version: 2026.174.0500\nimport: [build.yml]\n")
 	if err := os.WriteFile(filepath.Join(tmpdir, "charly.yml"), root, 0644); err != nil {
 		t.Fatalf("writing charly.yml: %v", err)
 	}

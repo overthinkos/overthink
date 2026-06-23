@@ -72,14 +72,18 @@ charly:
             deb: pkg/debian
     charly-step-0:
         check: the charly binary resolves on the deployment's PATH
-        command: command -v charly
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: command -v charly
     charly-step-1:
         check: charly version prints a CalVer build stamp on stdout
-        command: charly version
         exit_status: 0
         stdout:
             - matches: "[0-9]{4}\\.[0-9]+"
+        plugin: command
+        plugin_input:
+            command: charly version
     charly-step-2:
         check: the gocryptfs encrypted-storage binary (gocryptfs candy) is installed
         file: /usr/bin/gocryptfs
@@ -98,12 +102,13 @@ charly:
         exists: true
     charly-step-6:
         check: charly doctor runs and emits its Summary line
-        command: charly doctor 2>&1 | grep -q "Summary:"
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: charly doctor 2>&1 | grep -q "Summary:"
     charly-binary:
         check: command=command -v charly
         id: charly-binary
-        command: command -v charly
         exit_status: 0
         stdout:
             # Path-agnostic: the package installs to /usr/bin/charly, but on a
@@ -113,3 +118,6 @@ charly:
             # passes regardless of which PATH alias resolved it (RE2: no $ anchor,
             # which wouldn't match the trailing newline).
             - matches: "/usr/(local/)?s?bin/charly"
+        plugin: command
+        plugin_input:
+            command: command -v charly

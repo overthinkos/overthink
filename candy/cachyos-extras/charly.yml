@@ -66,8 +66,10 @@ cachyos-extras:
         exists: true
     cachyos-extras-step-3:
         check: the cloudflared-bin AUR tunnel client resolves on PATH
-        command: command -v cloudflared
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: command -v cloudflared
     cachyos-extras-step-4:
         check: the syncthing file-synchronisation daemon binary is present
         file: /usr/bin/syncthing

@@ -168,13 +168,17 @@ debug-tools:
     ping-binary:
         check: command=command -v ping
         id: ping-binary
-        command: command -v ping
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: command -v ping
     nc-binary:
         check: command=command -v nc
         id: nc-binary
-        command: command -v nc
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: command -v nc
     nano-binary:
         check: file=/usr/bin/nano
         id: nano-binary

@@ -63,15 +63,17 @@ sshd:
             fi
             printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$account" > /etc/sudoers.d/charly-user
             chmod 0440 /etc/sudoers.d/charly-user
-        command: |
-            account=$(getent passwd 1000 | cut -d: -f1)
-            if [ -z "$account" ]; then
-              echo "sshd layer: no uid-1000 account found — refusing to write sudoers" >&2
-              exit 1
-            fi
-            printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$account" > /etc/sudoers.d/charly-user
-            chmod 0440 /etc/sudoers.d/charly-user
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                account=$(getent passwd 1000 | cut -d: -f1)
+                if [ -z "$account" ]; then
+                  echo "sshd layer: no uid-1000 account found — refusing to write sudoers" >&2
+                  exit 1
+                fi
+                printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$account" > /etc/sudoers.d/charly-user
+                chmod 0440 /etc/sudoers.d/charly-user
     sshd-step-2:
         check: the OpenSSH sshd daemon binary is installed at /usr/sbin/sshd
         file: /usr/sbin/sshd
@@ -90,11 +92,13 @@ sshd:
         mode: "0755"
     sshd-step-5:
         check: the uid-1000 account can run sudo with no password (NOPASSWD rule in effect)
-        command: |
-            if [ "$(id -u)" = "0" ]; then runuser -u user -- sudo -n -l; else sudo -n -l; fi
         exit_status: 0
         stdout:
             - contains: "NOPASSWD"
+        plugin: command
+        plugin_input:
+            command: |
+                if [ "$(id -u)" = "0" ]; then runuser -u user -- sudo -n -l; else sudo -n -l; fi
     sshd-step-6:
         agent-check: a client presenting a key from SSH_AUTHORIZED_KEYS can open an interactive session on the published SSH port
     sshd-binary:

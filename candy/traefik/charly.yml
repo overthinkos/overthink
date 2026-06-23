@@ -50,20 +50,24 @@ traefik:
         run_as: root
     traefik-step-3:
         run: resolve ${HOME} in the ACME storage path — traefik does NOT expand env vars in static config, so the literal must be substituted at build time (getent works under both create and adopt user policies)
-        command: |
-            HOME_DIR=$(getent passwd 1000 | cut -d: -f6)
-            sed -i "s#\${HOME}#${HOME_DIR}#g" /etc/traefik/traefik.yml
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                HOME_DIR=$(getent passwd 1000 | cut -d: -f6)
+                sed -i "s#\${HOME}#${HOME_DIR}#g" /etc/traefik/traefik.yml
     traefik-step-4:
         check: the traefik release binary is installed at /usr/local/bin/traefik
         file: /usr/local/bin/traefik
         exists: true
     traefik-step-5:
         check: running the binary reports the pinned 3.4.0 release
-        command: /usr/local/bin/traefik version
         exit_status: 0
         stdout:
             - contains: "3.4.0"
+        plugin: command
+        plugin_input:
+            command: /usr/local/bin/traefik version
     traefik-step-6:
         check: the static configuration is staged at /etc/traefik/traefik.yml with mode 0644 and the letsencrypt resolver
         file: /etc/traefik/traefik.yml

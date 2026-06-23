@@ -112,11 +112,13 @@ dev-tools:
             command=if [ -f /usr/bin/batcat ] && [ ! -e /usr/bin/bat ]; then
               ln -sf /usr/bin/batcat /usr/bin/bat
             fi
-        command: |
-            if [ -f /usr/bin/batcat ] && [ ! -e /usr/bin/bat ]; then
-              ln -sf /usr/bin/batcat /usr/bin/bat
-            fi
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                if [ -f /usr/bin/batcat ] && [ ! -e /usr/bin/bat ]; then
+                  ln -sf /usr/bin/batcat /usr/bin/bat
+                fi
     dev-tools-step-1:
         check: the ripgrep fast-search binary is on PATH
         file: /usr/bin/rg
@@ -135,14 +137,18 @@ dev-tools:
         exists: true
     dev-tools-step-5:
         check: the bat pager runs and reports its version
-        command: bat --version
         exit_status: 0
         stdout:
             - contains: bat
+        plugin: command
+        plugin_input:
+            command: bat --version
     dev-tools-step-6:
         check: the yamllint linter runs and reports its version
-        command: yamllint --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: yamllint --version
     dev-tools-step-7:
         agent-check: an engineer can lint a malformed YAML file and have yamllint flag the syntax error
     fastfetch-binary:

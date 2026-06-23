@@ -45,8 +45,10 @@ rocm:
         installed: true
     rocm-step-4:
         check: ROCM_PATH is exported into the container environment as /usr
-        command: printenv ROCM_PATH
         stdout: /usr
+        plugin: command
+        plugin_input:
+            command: printenv ROCM_PATH
     rocm-step-5:
         agent-check: on a host with an AMD GPU and /dev/kfd passed through, clinfo lists at least one ROCm OpenCL platform and rocm-smi reports the device temperature and utilization
     rocm-opencl-package:

@@ -144,8 +144,10 @@ build-toolchain:
         exists: true
     build-toolchain-step-1:
         check: gcc reports its version and exits successfully
-        command: /usr/bin/gcc --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/bin/gcc --version
     build-toolchain-step-2:
         check: GNU make is available to drive Makefile builds
         file: /usr/bin/make
@@ -156,8 +158,10 @@ build-toolchain:
         exists: true
     build-toolchain-step-4:
         check: cmake reports its version and exits successfully
-        command: /usr/bin/cmake --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/bin/cmake --version
     build-toolchain-step-5:
         check: the cargo Rust package manager is installed
         file: /usr/bin/cargo
@@ -168,8 +172,10 @@ build-toolchain:
         exists: true
     build-toolchain-step-7:
         check: cargo reports its version and exits successfully
-        command: /usr/bin/cargo --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/bin/cargo --version
     build-toolchain-step-8:
         check: the GNU debugger is available for native debugging
         file: /usr/bin/gdb
@@ -185,5 +191,7 @@ build-toolchain:
     make-version:
         check: command=/usr/bin/make --version
         id: make-version
-        command: /usr/bin/make --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/bin/make --version

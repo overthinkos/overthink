@@ -286,9 +286,11 @@ var VerbCatalog = map[string]VerbSpec{
 	"setcap":   {ctxBuildDeploy, DoAct, false, ""},
 	"build":    {ctxBuildDeploy, DoAct, false, ""},
 
-	// shell — act-or-assert; portable across build/deploy/runtime. No
-	// auto-reverse (opaque); act-mode needs explicit uninstall:.
-	"command": {ctxBuildDeployRuntime, DoAssert, false, ""},
+	// `command` is NOT here — it is an extracted plugin verb (plugin: command +
+	// #CommandInput). It left #OpVerb/spec.OpVerbs/VerbCatalog; the check dispatches via
+	// the generic `plugin:` verb and the act renders via the dedicated install-task
+	// emitCmd branch (`plugin == "command"` in emitTasks/renderOpCommand/
+	// opActsInBuildDeploy), preserving the full command build/deploy install path.
 
 	// system-state probe/provision — assert by default; the act-capable subset
 	// lowers into existing reversible InstallPlan step kinds.
@@ -333,27 +335,36 @@ var VerbCatalog = map[string]VerbSpec{
 // Distinct from the LowersTo verbs, which lower into a typed install step.
 var installVerbs = map[string]bool{
 	"mkdir": true, "copy": true, "write": true, "link": true,
-	"download": true, "setcap": true, "build": true, "command": true,
+	"download": true, "setcap": true, "build": true,
+	// `command` is NOT here — it is a plugin verb now; its build/deploy install path is
+	// the dedicated `plugin == "command"` emitCmd branch, accepted by opActsInBuildDeploy
+	// directly (not via this map, which is keyed by the verb the Op resolves to, never
+	// "command" again).
 }
 
 // ActsInBuildDeploy reports whether a do:act op with this verb has a real
-// build/deploy install path — a generic OpStep (the install verbs + command)
-// or a typed lowering (VerbCatalog.LowersTo). Every other verb's act form runs
-// only at runtime (the check Runner's executor), so a build/deploy do:act op of
-// such a verb would be silently dropped by the compiler — the validator
-// rejects it instead (file creation in build/deploy is the write/copy verbs).
+// build/deploy install path — a generic OpStep (the install verbs) or a typed
+// lowering (VerbCatalog.LowersTo). Every other verb's act form runs only at runtime
+// (the check Runner's executor), so a build/deploy do:act op of such a verb would be
+// silently dropped by the compiler — the validator rejects it instead (file creation
+// in build/deploy is the write/copy verbs).
 func ActsInBuildDeploy(verb string) bool {
 	return installVerbs[verb] || VerbCatalog[verb].LowersTo != ""
 }
 
 // opActsInBuildDeploy is the Op-level act-capability test, threading the generic
-// `plugin:` verb: a plugin verb (plugin: <word>) acts in build/deploy when its
-// registered provider is a ProvisionActor — the act-emit enabler renders its
-// RenderProvisionScript at install emit (resolveProvisionScript). Every other verb
-// defers to the verb-keyed ActsInBuildDeploy. verb is the caller's already-computed
-// c.Kind() (avoids recomputation).
+// `plugin:` verb: `plugin: command` is the ONE install-task plugin verb — act-capable
+// via the dedicated emitCmd branch in emitTasks/renderOpCommand (preserving the full
+// command build/deploy install path), NOT a ProvisionActor — so it is accepted directly.
+// Every other plugin verb acts in build/deploy only when its registered provider is a
+// ProvisionActor (the act-emit enabler renders RenderProvisionScript at install emit).
+// Every non-plugin verb defers to the verb-keyed ActsInBuildDeploy. verb is the caller's
+// already-computed c.Kind() (avoids recomputation).
 func opActsInBuildDeploy(c *Op, verb string) bool {
 	if verb == "plugin" {
+		if c.Plugin == "command" {
+			return true
+		}
 		prov, ok := providerRegistry.ResolveVerb(c.Plugin)
 		if !ok {
 			return false

@@ -28,23 +28,27 @@ golang:
         exists: true
     golang-step-1:
         check: running `go version` succeeds and prints a Go toolchain version
-        command: /usr/bin/go version
         exit_status: 0
         stdout:
             - matches: "go version go[0-9]"
+        plugin: command
+        plugin_input:
+            command: /usr/bin/go version
     golang-step-2:
         check: the toolchain compiles and runs a standalone Go program and prints its output
-        command: |
-            set -e
-            d=$(mktemp -d)
-            printf 'package main\nimport "fmt"\nfunc main() { fmt.Println("charly-go-build-ok") }\n' > "$d/main.go"
-            cd "$d"
-            export HOME="$d" GOCACHE="$d/.gocache" GOPATH="$d/.gopath" GOFLAGS=-mod=mod
-            /usr/bin/go mod init charlygotest >/dev/null 2>&1 || true
-            /usr/bin/go run main.go
         exit_status: 0
         stdout:
             - contains: charly-go-build-ok
+        plugin: command
+        plugin_input:
+            command: |
+                set -e
+                d=$(mktemp -d)
+                printf 'package main\nimport "fmt"\nfunc main() { fmt.Println("charly-go-build-ok") }\n' > "$d/main.go"
+                cd "$d"
+                export HOME="$d" GOCACHE="$d/.gocache" GOPATH="$d/.gopath" GOFLAGS=-mod=mod
+                /usr/bin/go mod init charlygotest >/dev/null 2>&1 || true
+                /usr/bin/go run main.go
     go-package:
         check: package=go
         id: go-package

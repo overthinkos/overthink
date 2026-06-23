@@ -19,7 +19,9 @@ claude-code:
         exists: true
     claude-code-step-1:
         check: running claude --version exits cleanly and prints the Claude Code banner
-        command: ${HOME}/.npm-global/bin/claude --version
         exit_status: 0
         stdout:
             - contains: "Claude Code"
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.npm-global/bin/claude --version

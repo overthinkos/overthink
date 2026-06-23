@@ -45,8 +45,10 @@ debootstrap-builder:
         exists: true
     debootstrap-builder-step-3:
         check: qemu-img runs and reports its version
-        command: /usr/bin/qemu-img --version
         stdout: qemu-img version
+        plugin: command
+        plugin_input:
+            command: /usr/bin/qemu-img --version
     debootstrap-builder-step-4:
         check: parted is available to partition the disk image
         file: /usr/sbin/parted

@@ -108,15 +108,17 @@ osm-tools:
             make install PREFIX=/usr/local
             cd /
             rm -rf /tmp/tippecanoe
-        command: |
-            set -euo pipefail
-            git clone --depth 1 https://github.com/felt/tippecanoe /tmp/tippecanoe
-            cd /tmp/tippecanoe
-            make -j"$(nproc)"
-            make install PREFIX=/usr/local
-            cd /
-            rm -rf /tmp/tippecanoe
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                set -euo pipefail
+                git clone --depth 1 https://github.com/felt/tippecanoe /tmp/tippecanoe
+                cd /tmp/tippecanoe
+                make -j"$(nproc)"
+                make install PREFIX=/usr/local
+                cd /
+                rm -rf /tmp/tippecanoe
     osm-tools-step-1:
         run: download=https://github.com/maplibre/martin/releases/download/martin-v1.9.0/martin-${BUILD_ARCH}-unknown-linux-musl.tar.gz
         download: "https://github.com/maplibre/martin/releases/download/martin-v1.9.0/martin-${BUILD_ARCH}-unknown-linux-musl.tar.gz"
@@ -136,30 +138,34 @@ osm-tools:
             tar -xzf pmtiles.tar.gz pmtiles
             install -m 0755 pmtiles /usr/local/bin/pmtiles
             cd / && rm -rf "$TMPDIR"
-        command: |
-            set -euo pipefail
-            LATEST=$(curl -fsSL "https://api.github.com/repos/protomaps/go-pmtiles/releases/latest" | jq -r '.tag_name')
-            VERSION="${LATEST#v}"
-            TMPDIR=$(mktemp -d)
-            cd "$TMPDIR"
-            curl -fsSL "https://github.com/protomaps/go-pmtiles/releases/download/${LATEST}/go-pmtiles_${VERSION}_Linux_${BUILD_ARCH}.tar.gz" \
-              -o pmtiles.tar.gz
-            tar -xzf pmtiles.tar.gz pmtiles
-            install -m 0755 pmtiles /usr/local/bin/pmtiles
-            cd / && rm -rf "$TMPDIR"
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                set -euo pipefail
+                LATEST=$(curl -fsSL "https://api.github.com/repos/protomaps/go-pmtiles/releases/latest" | jq -r '.tag_name')
+                VERSION="${LATEST#v}"
+                TMPDIR=$(mktemp -d)
+                cd "$TMPDIR"
+                curl -fsSL "https://github.com/protomaps/go-pmtiles/releases/download/${LATEST}/go-pmtiles_${VERSION}_Linux_${BUILD_ARCH}.tar.gz" \
+                  -o pmtiles.tar.gz
+                tar -xzf pmtiles.tar.gz pmtiles
+                install -m 0755 pmtiles /usr/local/bin/pmtiles
+                cd / && rm -rf "$TMPDIR"
     osm-tools-step-3:
         run: |
             command=set -euo pipefail
             cargo install gpq-tiles --root /usr/local --jobs "$(nproc)"
             rm -rf /root/.cargo/registry /root/.cargo/git \
                    /root/.cargo/.crates.toml /root/.cargo/.crates2.json
-        command: |
-            set -euo pipefail
-            cargo install gpq-tiles --root /usr/local --jobs "$(nproc)"
-            rm -rf /root/.cargo/registry /root/.cargo/git \
-                   /root/.cargo/.crates.toml /root/.cargo/.crates2.json
         run_as: root
+        plugin: command
+        plugin_input:
+            command: |
+                set -euo pipefail
+                cargo install gpq-tiles --root /usr/local --jobs "$(nproc)"
+                rm -rf /root/.cargo/registry /root/.cargo/git \
+                       /root/.cargo/.crates.toml /root/.cargo/.crates2.json
     osm-tools-step-4:
         run: write=/usr/local/bin/martin-wrapper.sh
         write: /usr/local/bin/martin-wrapper.sh
@@ -173,16 +179,22 @@ osm-tools:
             exec /usr/local/bin/martin --listen-addresses 0.0.0.0:3000 "$DIR"
     osm-tools-step-5:
         check: tippecanoe (built from felt/tippecanoe source) responds to --version
-        command: tippecanoe --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: tippecanoe --version
     osm-tools-step-6:
         check: the gdal ogr2ogr conversion CLI responds to --version
-        command: ogr2ogr --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: ogr2ogr --version
     osm-tools-step-7:
         check: the pmtiles inspection CLI responds to its version subcommand
-        command: pmtiles version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: pmtiles version
     osm-tools-step-8:
         check: the gpq-tiles GeoParquet→PMTiles converter is installed at /usr/local/bin/gpq-tiles
         file: /usr/local/bin/gpq-tiles
@@ -225,23 +237,31 @@ osm-tools:
     jq-installed:
         check: command=jq --version
         id: jq-installed
-        command: jq --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: jq --version
     martin-installed:
         check: command=martin --version
         id: martin-installed
-        command: martin --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: martin --version
     gpq-tiles-installed:
         check: command=/usr/local/bin/gpq-tiles --version
         id: gpq-tiles-installed
-        command: /usr/local/bin/gpq-tiles --version
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: /usr/local/bin/gpq-tiles --version
     martin-tiles-dir-runtime:
         check: command=test -d /workspace/tiles/pmtiles
         id: martin-tiles-dir-runtime
-        command: test -d /workspace/tiles/pmtiles
         exit_status: 0
-        in_container: true
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: test -d /workspace/tiles/pmtiles
+            in_container: true

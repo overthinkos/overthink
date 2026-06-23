@@ -25,12 +25,16 @@ sqlite:
         installed: true
     sqlite-step-2:
         check: sqlite3 reports a 3.x version string
-        command: sqlite3 --version
         exit_status: 0
         stdout:
             - matches: "[0-9]+\\.[0-9]+\\.[0-9]+"
+        plugin: command
+        plugin_input:
+            command: sqlite3 --version
     sqlite-step-3:
         check: sqlite3 runs SQL against an in-memory database and returns the stored row
-        command: 'sqlite3 :memory: "CREATE TABLE t(x INTEGER); INSERT INTO t VALUES(42); SELECT x FROM t;"'
         stdout:
             - equals: "42"
+        plugin: command
+        plugin_input:
+            command: 'sqlite3 :memory: "CREATE TABLE t(x INTEGER); INSERT INTO t VALUES(42); SELECT x FROM t;"'

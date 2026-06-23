@@ -31,19 +31,23 @@ sway-desktop-vnc:
         exists: true
     sway-desktop-vnc-step-3:
         check: the Wayland renderer is pinned to the pixman software backend so the desktop runs without a GPU
-        command: printenv WLR_RENDERER
         exit_status: 0
         stdout:
             - pixman
+        plugin: command
+        plugin_input:
+            command: printenv WLR_RENDERER
     sway-desktop-vnc-step-4:
         check: the sway compositor and wayvnc server both report RUNNING under supervisord
-        command: supervisorctl status sway wayvnc | awk '{print $2}' | sort -u
-        in_container: true
         exit_status: 0
         stdout:
             - RUNNING
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: supervisorctl status sway wayvnc | awk '{print $2}' | sort -u
+            in_container: true
     sway-desktop-vnc-step-5:
         check: the VNC server accepts a TCP connection on the published display port
         timeout: 5s
@@ -58,8 +62,10 @@ sway-desktop-vnc:
     sway-desktop-vnc-binaries:
         check: command=test -x /usr/bin/sway && test -x /usr/bin/wayvnc && test -x /usr/bin/google-chrome-stable
         id: sway-desktop-vnc-binaries
-        command: test -x /usr/bin/sway && test -x /usr/bin/wayvnc && test -x /usr/bin/google-chrome-stable
         exit_status: 0
+        plugin: command
+        plugin_input:
+            command: test -x /usr/bin/sway && test -x /usr/bin/wayvnc && test -x /usr/bin/google-chrome-stable
     sway-desktop-vnc-cdp-up:
         check: cdp=status
         id: sway-desktop-vnc-cdp-up

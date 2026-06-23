@@ -1941,11 +1941,13 @@ func validateSingleTask(candyName string, idx int, verb string, t *Op, known map
 	// mode: octal format (^0[0-7]{3,4}$) is enforced by #Op.mode.
 
 	// cache: additional buildkit cache mounts — only meaningful on the
-	// RUN-emitting verbs (command/download); each path must be absolute (or
-	// ~/ / ${HOME}, which resolve to absolute mount points).
+	// RUN-emitting verbs (download + the `plugin: command` install-task verb, which
+	// renders a RUN via emitCmd); each path must be absolute (or ~/ / ${HOME}, which
+	// resolve to absolute mount points). `command` is a plugin verb now, so its cache:
+	// rides a `plugin: command` step (verb == "plugin").
 	if len(t.Cache) > 0 {
-		if verb != "command" && verb != "download" {
-			errs.Add("candy %q: tasks[%d]: cache: is only valid on command: or download: tasks (got %s)", candyName, idx, verb)
+		if verb != "download" && !(verb == "plugin" && t.Plugin == "command") {
+			errs.Add("candy %q: tasks[%d]: cache: is only valid on download: or plugin: command tasks (got %s)", candyName, idx, verb)
 		}
 		for _, p := range t.Cache {
 			if !isAbsOrHomePath(p) {
@@ -1954,10 +1956,10 @@ func validateSingleTask(candyName string, idx int, verb string, t *Op, known map
 		}
 	}
 
-	// Per-verb required modifiers
+	// Per-verb required modifiers. `command` is NOT here — it is a plugin verb now
+	// (`plugin: command`); its only modifier check (command non-empty) is enforced by
+	// the #CommandInput CUE schema (`command: string & !=""`) at plugin_input validation.
 	switch verb {
-	case "command":
-		validateCommandTask(candyName, idx, t, errs)
 	case "mkdir":
 		validateMkdirTask(candyName, idx, t, errs)
 	case "copy":
@@ -1994,13 +1996,6 @@ func validateSingleTask(candyName string, idx int, verb string, t *Op, known map
 		if unresolved := taskUnresolvedRefs(val, known); len(unresolved) > 0 {
 			errs.Add("candy %q: tasks[%d]: %s references unknown ${VAR}: %s (declare in vars: or use an auto-export)", candyName, idx, field, strings.Join(unresolved, ", "))
 		}
-	}
-}
-
-// validateCommandTask checks the required modifiers for a command: task.
-func validateCommandTask(candyName string, idx int, t *Op, errs *ValidationError) {
-	if strings.TrimSpace(t.Command) == "" {
-		errs.Add("candy %q: tasks[%d]: command: must be non-empty", candyName, idx)
 	}
 }
 

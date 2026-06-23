@@ -19,10 +19,12 @@ clawhub:
         exists: true
     clawhub-step-1:
         check: running clawhub --cli-version prints a semantic version and exits zero
-        command: ${HOME}/.npm-global/bin/clawhub --cli-version
         exit_status: 0
         stdout:
             - matches: "[0-9]+\\.[0-9]+\\.[0-9]+"
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.npm-global/bin/clawhub --cli-version
     clawhub-step-2:
         agent-check: clawhub search <term> queries the ClawHub registry and returns matching OpenClaw skills
     clawdhub-alias-binary:
@@ -33,8 +35,10 @@ clawhub:
     clawhub-help-subcommands:
         check: command=${HOME}/.npm-global/bin/clawhub --help
         id: clawhub-help-subcommands
-        command: ${HOME}/.npm-global/bin/clawhub --help
         exit_status: 0
         stdout:
             - contains: search
             - contains: install
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.npm-global/bin/clawhub --help

@@ -22,16 +22,20 @@ goplaces:
         run: |
             command=go install github.com/steipete/goplaces/cmd/goplaces@latest
             go clean -cache
-        command: |
-            go install github.com/steipete/goplaces/cmd/goplaces@latest
-            go clean -cache
         run_as: "${USER}"
+        plugin: command
+        plugin_input:
+            command: |
+                go install github.com/steipete/goplaces/cmd/goplaces@latest
+                go clean -cache
     goplaces-step-1:
         check: the goplaces binary is go-installed into the user's GOPATH bin
         file: ${HOME}/go/bin/goplaces
         exists: true
     goplaces-step-2:
         check: the installed goplaces binary carries the executable bit
-        command: test -x ${HOME}/go/bin/goplaces
         exit_status: 0
-        in_container: true
+        plugin: command
+        plugin_input:
+            command: test -x ${HOME}/go/bin/goplaces
+            in_container: true

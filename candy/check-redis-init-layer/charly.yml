@@ -52,10 +52,12 @@ check-redis-init-layer:
             - contains: "set bench:hello world"
     check-redis-init-layer-step-2:
         check: after the service runs, redis serves the pre-populated key bench:hello = world
-        command: redis-cli -h 127.0.0.1 -p 6379 get bench:hello
         stdout: world
-        in_container: true
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: redis-cli -h 127.0.0.1 -p 6379 get bench:hello
+            in_container: true
     check-redis-init-layer-step-3:
         agent-check: the bench-redis-init service stays running after seeding the key (exec sleep infinity, restart=always) so supervisord does not restart-loop it

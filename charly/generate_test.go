@@ -156,11 +156,11 @@ func TestGenerateTraefikRoutes(t *testing.T) {
 		Candies: map[string]*Candy{
 			"traefik": {
 				Name: "traefik",
-				plan: []Step{{Run: "build", Op: Op{Command: "true"}}},
+				plan: []Step{{Run: "build", Op: cmdOp("true")}},
 			},
 			"svc": {
 				Name:  "svc",
-				plan:  []Step{{Run: "build", Op: Op{Command: "true"}}},
+				plan:  []Step{{Run: "build", Op: cmdOp("true")}},
 				route: &RouteConfig{Host: "svc.localhost", Port: "9090"},
 			},
 		},
@@ -214,7 +214,7 @@ func TestGenerateRouteWithoutTraefik_NoTraefikRoutes(t *testing.T) {
 		Candies: map[string]*Candy{
 			"svc": {
 				Name:  "svc",
-				plan:  []Step{{Run: "build", Op: Op{Command: "true"}}},
+				plan:  []Step{{Run: "build", Op: cmdOp("true")}},
 				route: &RouteConfig{Host: "svc.localhost", Port: "9090"},
 			},
 		},
@@ -267,12 +267,12 @@ func TestGenerateInitFragments(t *testing.T) {
 		Candies: map[string]*Candy{
 			"python": {
 				Name: "python",
-				plan: []Step{{Run: "build", Op: Op{Command: "true"}}},
+				plan: []Step{{Run: "build", Op: cmdOp("true")}},
 			},
 			"svc": {
 				Name:        "svc",
 				InitSystems: map[string]bool{"supervisord": true},
-				plan:        []Step{{Run: "build", Op: Op{Command: "true"}}},
+				plan:        []Step{{Run: "build", Op: cmdOp("true")}},
 				service: []ServiceEntry{
 					{Name: "svc", Exec: "svc serve"},
 				},
@@ -280,7 +280,7 @@ func TestGenerateInitFragments(t *testing.T) {
 			"other": {
 				Name:        "other",
 				InitSystems: map[string]bool{"supervisord": true},
-				plan:        []Step{{Run: "build", Op: Op{Command: "true"}}},
+				plan:        []Step{{Run: "build", Op: cmdOp("true")}},
 				service: []ServiceEntry{
 					{Name: "other", Exec: "other run"},
 				},
@@ -340,11 +340,11 @@ func TestGenerateRelayInitFragments(t *testing.T) {
 		Candies: map[string]*Candy{
 			"socat": {
 				Name: "socat",
-				plan: []Step{{Run: "build", Op: Op{Command: "true"}}},
+				plan: []Step{{Run: "build", Op: cmdOp("true")}},
 			},
 			"chrome": {
 				Name:           "chrome",
-				plan:           []Step{{Run: "build", Op: Op{Command: "true"}}},
+				plan:           []Step{{Run: "build", Op: cmdOp("true")}},
 				PortRelayPorts: []int{9222},
 				InitSystems:    map[string]bool{"supervisord": true},
 				service: []ServiceEntry{

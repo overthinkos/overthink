@@ -233,24 +233,28 @@ airflow:
             status: 200
     airflow-step-13:
         check: posting the injected admin credentials to /auth/token returns a bearer access_token
-        command: |
-            curl -fsS -X POST "http://localhost:8080/auth/token" \
-              -H "Content-Type: application/json" \
-              -d "{\"username\":\"admin\",\"password\":\"$AIRFLOW_ADMIN_PASSWORD\"}" \
-            | grep -q '"access_token"'
-        in_container: true
         exit_status: 0
         timeout: 15s
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: |
+                curl -fsS -X POST "http://localhost:8080/auth/token" \
+                  -H "Content-Type: application/json" \
+                  -d "{\"username\":\"admin\",\"password\":\"$AIRFLOW_ADMIN_PASSWORD\"}" \
+                | grep -q '"access_token"'
+            in_container: true
     airflow-init-db-created:
         check: command=test -f ${HOME}/airflow/airflow.db
         id: airflow-init-db-created
-        command: test -f ${HOME}/airflow/airflow.db
         exit_status: 0
-        in_container: true
         context:
             - runtime
+        plugin: command
+        plugin_input:
+            command: test -f ${HOME}/airflow/airflow.db
+            in_container: true
     airflow-scheduler-running:
         check: service=airflow-scheduler
         id: airflow-scheduler-running

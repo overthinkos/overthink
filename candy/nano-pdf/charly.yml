@@ -18,13 +18,17 @@ nano-pdf:
         exists: true
     nano-pdf-step-1:
         check: the nano-pdf distribution is installed at version 0.2.1
-        command: ${HOME}/.pixi/envs/default/bin/python -c "import importlib.metadata as m; print(m.version('nano-pdf'))"
         exit_status: 0
         stdout:
             - contains: "0.2.1"
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.pixi/envs/default/bin/python -c "import importlib.metadata as m; print(m.version('nano-pdf'))"
     nano-pdf-step-2:
         check: the Typer CLI runs and prints its usage banner without error
-        command: ${HOME}/.pixi/envs/default/bin/nano-pdf --help
         exit_status: 0
         stdout:
             - contains: "Usage"
+        plugin: command
+        plugin_input:
+            command: ${HOME}/.pixi/envs/default/bin/nano-pdf --help

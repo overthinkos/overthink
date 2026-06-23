@@ -42,13 +42,13 @@ var builtinProviderInstances = []Provider{
 	// state-provision-verb→plugin extractions, like process/port/dns; `file` is the LAST
 	// state-provision/goss-tier verb extracted; `command` is the install-task-act member and
 	// `package`/`service` are the TWO typed-step members of that set).
-	// cdp/vnc are NOT here — each is the first live-container verb extracted into its
-	// OWN dedicated file (plugin_verb_cdp.go / plugin_verb_vnc.go), self-registering via
-	// registerDedicatedBuiltin (the schema-less dedicated-provider path, since their
+	// cdp/vnc/wl/dbus/mcp/record/spice/libvirt are NOT here — each is a live-container
+	// verb extracted into its OWN dedicated file (plugin_verb_<verb>.go), self-registering
+	// via registerDedicatedBuiltin (the schema-less dedicated-provider path, since their
 	// modifiers stay on the closed base #Op — no plugin_input, no served schema), absent
-	// from both this slice and the providers: manifest.
-	wlVerb{}, dbusVerb{},
-	mcpVerb{}, recordVerb{}, spiceVerb{}, libvirtVerb{}, kubeVerb{}, adbVerb{}, appiumVerb{},
+	// from both this slice and the providers: manifest. The dep-shedders adb/appium/kube
+	// stay here (manifest-listed) until their later, dep-shedding extraction.
+	kubeVerb{}, adbVerb{}, appiumVerb{},
 	summarizeVerb{}, killVerb{}, pluginVerb{},
 	// kinds (ClassKind) — NONE remain here: Phase 2 is COMPLETE, every kind is now a
 	// dedicated provider file. The tier-1 kinds (agent/module/sidecar/package-group/distro/

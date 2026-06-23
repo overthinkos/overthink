@@ -22,7 +22,8 @@ import (
 //
 // The dispatcher pattern mirrors charly/dbus.go (parent struct + N leaf structs
 // with Run() methods + positional args + `-i` flag). Live-container wiring
-// (runMcp + method allowlist) lives in testrun_ov_verbs.go.
+// (the mcpVerb provider, runMcp dispatcher + mcpMethods allowlist) lives in
+// plugin_verb_mcp.go.
 
 // McpCmd groups the seven `charly check mcp …` leaves.
 type McpCmd struct {

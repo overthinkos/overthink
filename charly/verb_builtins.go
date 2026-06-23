@@ -5,17 +5,18 @@ import "context"
 // The built-in check verbs as CheckVerbProviders. Each wraps its existing
 // r.runX handler unchanged — the migration is behavior-preserving; only the
 // runOne dispatch switch is replaced by providerRegistry.ResolveVerb. The
-// live-container verbs remaining here (wl/dbus/mcp/record/spice/libvirt/kube/
-// adb/appium) still funnel through runCharlyVerb + the method-allowlist maps
-// (checkrun_charly_verbs.go) inside their handler.
+// live-container verbs remaining here (kube/adb/appium) still funnel through
+// runCharlyVerb + the method-allowlist maps (checkrun_charly_verbs.go) inside
+// their handler.
 //
-// cdp and vnc are NOT here — each is the first live-container verb extracted into
-// its OWN dedicated file (plugin_verb_cdp.go / plugin_verb_vnc.go) carrying its
-// provider + LiveVerbProvider method contract + its <verb>Methods map + its runX
-// dispatcher, self-registering via registerDedicatedBuiltin (the schema-less
-// dedicated-provider path — no plugin_input, no served schema, since their
-// modifiers stay on the closed base #Op), absent from both builtinProviderInstances
-// and the `providers:` manifest. They dispatch identically through providerRegistry.
+// cdp/vnc/wl/dbus/mcp/record/spice/libvirt are NOT here — each is a live-container verb
+// extracted into its OWN dedicated file (plugin_verb_<verb>.go) carrying its provider +
+// LiveVerbProvider method contract + its <verb>Methods map + its runX dispatcher,
+// self-registering via registerDedicatedBuiltin (the schema-less dedicated-provider
+// path — no plugin_input, no served schema, since their modifiers stay on the closed
+// base #Op), absent from both builtinProviderInstances and the `providers:` manifest.
+// They dispatch identically through providerRegistry. (The dep-shedders adb/appium/kube
+// stay here until their later, dep-shedding extraction.)
 //
 // The do-mode (act) half of the state-provision verbs is a ProvisionActor method
 // per provider (checkrun_act.go) — runProvisionAct resolves + type-asserts it (C1b).
@@ -33,48 +34,6 @@ import "context"
 // runtime/box-build live-act path); `package` is the simpler one (no PriorEnabled state).
 // `command` is a CheckVerbProvider ONLY — its act is the dedicated install-task emitCmd
 // branch (`plugin == "command"` in emitTasks/renderOpCommand), NOT a ProvisionActor.
-
-type wlVerb struct{ builtinVerbBase }
-
-func (wlVerb) Reserved() string { return "wl" }
-func (wlVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runWl(ctx, op)
-}
-
-type dbusVerb struct{ builtinVerbBase }
-
-func (dbusVerb) Reserved() string { return "dbus" }
-func (dbusVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runDbus(ctx, op)
-}
-
-type mcpVerb struct{ builtinVerbBase }
-
-func (mcpVerb) Reserved() string { return "mcp" }
-func (mcpVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runMcp(ctx, op)
-}
-
-type recordVerb struct{ builtinVerbBase }
-
-func (recordVerb) Reserved() string { return "record" }
-func (recordVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runRecord(ctx, op)
-}
-
-type spiceVerb struct{ builtinVerbBase }
-
-func (spiceVerb) Reserved() string { return "spice" }
-func (spiceVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runSpice(ctx, op)
-}
-
-type libvirtVerb struct{ builtinVerbBase }
-
-func (libvirtVerb) Reserved() string { return "libvirt" }
-func (libvirtVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runLibvirt(ctx, op)
-}
 
 type kubeVerb struct{ builtinVerbBase }
 

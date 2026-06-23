@@ -55,11 +55,16 @@ var artifactValidatableMethods = map[string]bool{
 	"record/stop":        true,
 }
 
-// checkrun_charly_verbs.go implements the cdp/wl/dbus/vnc test verbs. Each verb
-// is a thin wrapper around the corresponding `charly check <verb> <method>` CLI
-// path — the test framework spawns a subprocess for each check, captures
-// stdout/stderr/exit, and feeds the output through the existing matcher
-// pipeline (Stdout/Stderr/ExitStatus + artifact size via ArtifactMinBytes).
+// checkrun_charly_verbs.go is the SHARED live-container-verb dispatch library: the
+// methodSpec type, the posArgs builder library, the artifactValidatableMethods allowlist,
+// the runCharlyVerb dispatcher, and the artifact validators — all reused by every live
+// verb (R3). Each live verb is a thin wrapper around the corresponding `charly check
+// <verb> <method>` CLI path — the test framework spawns a subprocess for each check,
+// captures stdout/stderr/exit, and feeds the output through the existing matcher pipeline
+// (Stdout/Stderr/ExitStatus + artifact size via ArtifactMinBytes). The per-verb providers
+// + their <verb>Methods allowlists + run<Verb> dispatchers live in dedicated
+// plugin_verb_<verb>.go files (cdp/vnc/wl/dbus/mcp/record/spice/libvirt); the dep-shedders
+// kube/adb/appium keep their method maps + dispatchers HERE until their later extraction.
 //
 // Architectural notes:
 //   - Host-side only: the test runner invokes the host `charly` binary, which
@@ -68,9 +73,9 @@ var artifactValidatableMethods = map[string]bool{
 //   - RunModeBox short-circuits with a skip: these verbs need a live
 //     container with port mappings, which a disposable `podman run --rm`
 //     container doesn't expose the same way.
-//   - Method allowlists are hand-enumerated here so authoring errors surface
-//     at `charly box validate` time, not at test-run time. Drift between the
-//     CLI and the allowlist is a documentation issue — see /charly-internals:go for
+//   - Method allowlists are hand-enumerated (each in its verb's file) so authoring
+//     errors surface at `charly box validate` time, not at test-run time. Drift between
+//     the CLI and the allowlist is a documentation issue — see /charly-internals:go for
 //     the maintenance rule.
 
 // methodSpec describes one method within a verb group.
@@ -96,181 +101,16 @@ type methodSpec struct {
 	skipBox bool
 }
 
-// cdpMethods (the cdp verb's method allowlist) + its provider, LiveVerbProvider method
-// contract, and runCdp dispatcher live in plugin_verb_cdp.go (Phase 1 live-container-verb
-// relocation). The shared posArgs builders cdp uses (posTab/posURL/posCdpRaw/posTab*) stay
-// in the builder library below — reused across verbs.
-
-// ---------------------------------------------------------------------------
-// wl methods
-// ---------------------------------------------------------------------------
-
-var wlMethods = map[string]methodSpec{
-	// queries
-	"status":     {path: []string{"wl", "status"}},
-	"toplevel":   {path: []string{"wl", "toplevel"}},
-	"windows":    {path: []string{"wl", "windows"}},
-	"geometry":   {path: []string{"wl", "geometry"}, required: []string{"Target"}, posArgs: posTarget},
-	"xprop":      {path: []string{"wl", "xprop"}, posArgs: posTargetOptional},
-	"atspi":      {path: []string{"wl", "atspi"}, required: []string{"Action"}, posArgs: posAtspi},
-	"screenshot": {path: []string{"wl", "screenshot"}, required: []string{"Artifact"}, posArgs: posArtifact, artifact: true},
-	"clipboard":  {path: []string{"wl", "clipboard"}, required: []string{"Action"}, posArgs: posClipboard},
-
-	// side-effect actions
-	"click":        {path: []string{"wl", "click"}, required: []string{"X", "Y"}, posArgs: posXY},
-	"double-click": {path: []string{"wl", "double-click"}, required: []string{"X", "Y"}, posArgs: posXY},
-	"mouse":        {path: []string{"wl", "mouse"}, required: []string{"X", "Y"}, posArgs: posXY},
-	"scroll":       {path: []string{"wl", "scroll"}, required: []string{"X", "Y", "Direction"}, posArgs: posScroll},
-	"drag":         {path: []string{"wl", "drag"}, required: []string{"X", "Y", "X2", "Y2"}, posArgs: posXYXY}, // start (X,Y) → end (X2,Y2)
-	"type":         {path: []string{"wl", "type"}, required: []string{"Text"}, posArgs: posText},
-	"key":          {path: []string{"wl", "key"}, required: []string{"KeyName"}, posArgs: posKeyName},
-	"key-combo":    {path: []string{"wl", "key-combo"}, required: []string{"Combo"}, posArgs: posCombo},
-	"focus":        {path: []string{"wl", "focus"}, required: []string{"Target"}, posArgs: posTarget},
-	"close":        {path: []string{"wl", "close"}, required: []string{"Target"}, posArgs: posTarget},
-	"fullscreen":   {path: []string{"wl", "fullscreen"}, required: []string{"Target"}, posArgs: posTarget},
-	"minimize":     {path: []string{"wl", "minimize"}, required: []string{"Target"}, posArgs: posTarget},
-	"exec":         {path: []string{"wl", "exec"}, required: []string{"Command"}, posArgs: posCommand},
-	"resolution":   {path: []string{"wl", "resolution"}, required: []string{"Target"}, posArgs: posTarget}, // target here = "WxH"
-
-	// overlay nested
-	"overlay-list":   {path: []string{"wl", "overlay", "list"}},
-	"overlay-status": {path: []string{"wl", "overlay", "status"}},
-	"overlay-show":   {path: []string{"wl", "overlay", "show"}, required: []string{"Text"}, posArgs: posOverlayShow},
-	"overlay-hide":   {path: []string{"wl", "overlay", "hide"}, required: []string{"Target"}, posArgs: posTarget},
-
-	// sway nested
-	"sway-tree":       {path: []string{"wl", "sway", "tree"}},
-	"sway-workspaces": {path: []string{"wl", "sway", "workspaces"}},
-	"sway-outputs":    {path: []string{"wl", "sway", "outputs"}},
-	"sway-msg":        {path: []string{"wl", "sway", "msg"}, required: []string{"Command"}, posArgs: posCommand},
-	"sway-focus":      {path: []string{"wl", "sway", "focus"}, required: []string{"Target"}, posArgs: posTarget},
-	"sway-move":       {path: []string{"wl", "sway", "move"}, required: []string{"Target"}, posArgs: posTarget},
-	"sway-resize":     {path: []string{"wl", "sway", "resize"}, required: []string{"Target"}, posArgs: posTarget},
-	"sway-layout":     {path: []string{"wl", "sway", "layout"}, required: []string{"Target"}, posArgs: posTarget},
-	"sway-workspace":  {path: []string{"wl", "sway", "workspace"}, required: []string{"Target"}, posArgs: posTarget},
-	"sway-kill":       {path: []string{"wl", "sway", "kill"}},
-	"sway-floating":   {path: []string{"wl", "sway", "floating"}},
-	"sway-reload":     {path: []string{"wl", "sway", "reload"}},
-}
-
-// ---------------------------------------------------------------------------
-// dbus methods
-// ---------------------------------------------------------------------------
-
-var dbusMethods = map[string]methodSpec{
-	"list":       {path: []string{"dbus", "list"}},
-	"call":       {path: []string{"dbus", "call"}, required: []string{"Dest", "Path", "Method"}, posArgs: posDbusCall},
-	"introspect": {path: []string{"dbus", "introspect"}, required: []string{"Dest", "Path"}, posArgs: posDbusIntrospect},
-	"notify":     {path: []string{"dbus", "notify"}, required: []string{"Text"}, posArgs: posDbusNotify},
-}
-
-// vncMethods (the vnc verb's method allowlist) + its provider, LiveVerbProvider method
-// contract, and runVnc dispatcher live in plugin_verb_vnc.go (Phase 1 live-container-verb
-// relocation). The shared posArgs builders vnc uses (posArtifact/posXY/posText/posKeyName/
-// posCommand) stay in the builder library below — reused across verbs.
-
-// ---------------------------------------------------------------------------
-// mcp methods
-// ---------------------------------------------------------------------------
-//
-// The mcp verb dispatches to `charly check mcp <method> <image> …`, which uses
-// github.com/modelcontextprotocol/go-sdk to connect to the declared MCP
-// server. Methods mirror the SDK's ClientSession surface. See
-// mcp.go / mcp_client.go for the host-side implementation.
-
-var mcpMethods = map[string]methodSpec{
-	"ping":           {path: []string{"mcp", "ping"}, posArgs: posMcpCommon},
-	"servers":        {path: []string{"mcp", "servers"}, posArgs: posMcpCommon},
-	"list-tools":     {path: []string{"mcp", "list-tools"}, posArgs: posMcpCommon},
-	"list-resources": {path: []string{"mcp", "list-resources"}, posArgs: posMcpCommon},
-	"list-prompts":   {path: []string{"mcp", "list-prompts"}, posArgs: posMcpCommon},
-	"call":           {path: []string{"mcp", "call"}, required: []string{"Tool"}, posArgs: posMcpCall},
-	"read":           {path: []string{"mcp", "read"}, required: []string{"URI"}, posArgs: posMcpRead},
-}
-
-// ---------------------------------------------------------------------------
-// record methods — `charly check record <method>` drives in-container recording
-// sessions (asciinema terminal / pixelflux-record / wf-recorder desktop).
-// Container-only: resolveContainer does not know about VMs, so a `record:`
-// check on a `vm:<name>` deploy will fail at subprocess dispatch. Documented
-// in /charly:record; validator does not pre-filter by deploy kind.
-// ---------------------------------------------------------------------------
-
-var recordMethods = map[string]methodSpec{
-	"list":  {path: []string{"record", "list"}},
-	"start": {path: []string{"record", "start"}, posArgs: posRecordStart},
-	// stop's artifact: true asserts the recording was copied out AND (when
-	// ArtifactMinBytes is set) that the file is at least N bytes — a strong
-	// "the recorder actually produced output" invariant.
-	"stop": {path: []string{"record", "stop"}, required: []string{"Artifact"}, posArgs: posRecordStop, artifact: true},
-	// `record: cmd` sends a text line into the recording's tmux session.
-	// Text (not Command) is used because Command is itself a verb
-	// discriminator — setting both would trip the Kind() uniqueness check.
-	"cmd": {path: []string{"record", "cmd"}, required: []string{"Text"}, posArgs: posRecordCmd},
-}
-
-// ---------------------------------------------------------------------------
-// spice methods — `charly check spice <method>` speaks the SPICE wire protocol
-// (github.com/Shells-com/spice) to a running VM's SPICE port. Host-side;
-// only applicable to `vm:<name>` deploys that expose SPICE graphics.
-// ---------------------------------------------------------------------------
-
-var spiceMethods = map[string]methodSpec{
-	"status":     {path: []string{"spice", "status"}},
-	"screenshot": {path: []string{"spice", "screenshot"}, posArgs: posArtifact, artifact: true},
-	"cursor":     {path: []string{"spice", "cursor"}, posArgs: posArtifact, artifact: true},
-	"click":      {path: []string{"spice", "click"}, posArgs: posXY},
-	"mouse":      {path: []string{"spice", "mouse"}, posArgs: posXY},
-	"type":       {path: []string{"spice", "type"}, required: []string{"Text"}, posArgs: posText},
-	"key":        {path: []string{"spice", "key"}, required: []string{"KeyName"}, posArgs: posKeyName},
-}
-
-// ---------------------------------------------------------------------------
-// libvirt methods — `charly check libvirt <method>` uses go-libvirt RPC against
-// a running VM. Host-side; only applicable to `vm:<name>` deploys. Nested
-// subgroups (guest/*, snapshot/*) are flattened via slash-separated method
-// names so authors write `libvirt: guest/ping` or `libvirt: snapshot/list`.
-// ---------------------------------------------------------------------------
-
-var libvirtMethods = map[string]methodSpec{
-	// Top-level verbs
-	"list":       {path: []string{"libvirt", "list"}},
-	"info":       {path: []string{"libvirt", "info"}},
-	"screenshot": {path: []string{"libvirt", "screenshot"}, posArgs: posArtifact, artifact: true},
-	"send-key":   {path: []string{"libvirt", "send-key"}, required: []string{"KeyName"}, posArgs: posKeyNameSplit},
-	"passwd":     {path: []string{"libvirt", "passwd"}, required: []string{"Text"}, posArgs: posText},
-	// qmp takes a QMP method name + optional JSON args. Text holds the
-	// method name (Command would collide with the command: verb).
-	"qmp":        {path: []string{"libvirt", "qmp"}, required: []string{"Text"}, posArgs: posLibvirtQmp},
-	"domain-xml": {path: []string{"libvirt", "domain-xml"}},
-	"console":    {path: []string{"libvirt", "console"}},
-	"events":     {path: []string{"libvirt", "events"}},
-
-	// qemu-guest-agent subgroup
-	"guest/ping":       {path: []string{"libvirt", "guest", "ping"}},
-	"guest/info":       {path: []string{"libvirt", "guest", "info"}},
-	"guest/os-info":    {path: []string{"libvirt", "guest", "os-info"}},
-	"guest/time":       {path: []string{"libvirt", "guest", "time"}},
-	"guest/hostname":   {path: []string{"libvirt", "guest", "hostname"}},
-	"guest/users":      {path: []string{"libvirt", "guest", "users"}},
-	"guest/interfaces": {path: []string{"libvirt", "guest", "interfaces"}},
-	"guest/disks":      {path: []string{"libvirt", "guest", "disks"}},
-	"guest/fsinfo":     {path: []string{"libvirt", "guest", "fsinfo"}},
-	"guest/vcpus":      {path: []string{"libvirt", "guest", "vcpus"}},
-	// guest/exec runs a command via qemu-guest-agent inside the VM. Reuses the
-	// `command:` field as a sub-modifier (verbsSet treats it as a modifier when
-	// libvirt: is set). The string is split on whitespace into argv (no shell
-	// metacharacter handling — guest-exec wants a real argv list).
-	"guest/exec":   {path: []string{"libvirt", "guest", "exec"}, required: []string{"Command"}, posArgs: posCommandFields},
-	"guest/fstrim": {path: []string{"libvirt", "guest", "fstrim"}},
-
-	// Snapshot subgroup — Target holds the snapshot name.
-	"snapshot/list":   {path: []string{"libvirt", "snapshot", "list"}},
-	"snapshot/create": {path: []string{"libvirt", "snapshot", "create"}, required: []string{"Target"}, posArgs: posTarget},
-	"snapshot/info":   {path: []string{"libvirt", "snapshot", "info"}, required: []string{"Target"}, posArgs: posTarget},
-	"snapshot/revert": {path: []string{"libvirt", "snapshot", "revert"}, required: []string{"Target"}, posArgs: posTarget},
-	"snapshot/delete": {path: []string{"libvirt", "snapshot", "delete"}, required: []string{"Target"}, posArgs: posTarget},
-}
+// The live-container verbs cdp/vnc/wl/dbus/mcp/record/spice/libvirt each live in their
+// OWN dedicated plugin_verb_<verb>.go file (Phase 1 live-container-verb relocation),
+// carrying that verb's provider + LiveVerbProvider method contract + its <verb>Methods
+// allowlist + its run<Verb> dispatcher. The shared posArgs builder library those verbs
+// reference (posTab/posURL/posXY/posText/posKeyName/posTarget/posCommand/posScroll/
+// posAtspi/posClipboard/posOverlayShow/posDbusCall/posMcpCommon/posRecordStart/
+// posKeyNameSplit/posLibvirtQmp/posCommandFields/…), the methodSpec type, and the
+// artifactValidatableMethods allowlist STAY here — reused across every live verb (R3).
+// The dep-shedders kube/adb/appium keep their method maps below until their later,
+// dep-shedding extraction.
 
 // ---------------------------------------------------------------------------
 // kube methods — `charly check kube <method>` probes a Kubernetes cluster via the
@@ -964,32 +804,10 @@ func posWaitForDevice(c *Op) []string {
 // Verb dispatchers
 // ---------------------------------------------------------------------------
 
-// runCdp lives in plugin_verb_cdp.go; runVnc lives in plugin_verb_vnc.go (Phase 1
-// live-container-verb relocation) — alongside each verb's provider + method allowlist.
-
-func (r *Runner) runWl(ctx context.Context, c *Op) CheckResult {
-	return r.runCharlyVerb(ctx, c, "wl", c.Wl, wlMethods)
-}
-
-func (r *Runner) runDbus(ctx context.Context, c *Op) CheckResult {
-	return r.runCharlyVerb(ctx, c, "dbus", c.Dbus, dbusMethods)
-}
-
-func (r *Runner) runMcp(ctx context.Context, c *Op) CheckResult {
-	return r.runCharlyVerb(ctx, c, "mcp", c.Mcp, mcpMethods)
-}
-
-func (r *Runner) runRecord(ctx context.Context, c *Op) CheckResult {
-	return r.runCharlyVerb(ctx, c, "record", c.Record, recordMethods)
-}
-
-func (r *Runner) runSpice(ctx context.Context, c *Op) CheckResult {
-	return r.runCharlyVerb(ctx, c, "spice", c.Spice, spiceMethods)
-}
-
-func (r *Runner) runLibvirt(ctx context.Context, c *Op) CheckResult {
-	return r.runCharlyVerb(ctx, c, "libvirt", c.Libvirt, libvirtMethods)
-}
+// run<Verb> for cdp/vnc/wl/dbus/mcp/record/spice/libvirt lives in each verb's dedicated
+// plugin_verb_<verb>.go file (Phase 1 live-container-verb relocation) — alongside its
+// provider + method allowlist. The dep-shedders kube/adb/appium keep their dispatchers
+// here until their later, dep-shedding extraction.
 
 func (r *Runner) runKube(ctx context.Context, c *Op) CheckResult {
 	return r.runCharlyVerb(ctx, c, "kube", c.Kube, kubeMethods)

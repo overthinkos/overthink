@@ -95,21 +95,33 @@ func parseEmbeddedOvmfPaths() map[string]ovmfFamilyPaths {
 	return table
 }
 
+// ovmfDistroAliases maps a host distro ID to its OVMF firmware family (fedora|arch|debian),
+// read from the ovmf_distro_aliases directive in the embedded charly.yml (Phase 4: data
+// moved out of Go). An unlisted distro has no entry — ovmfCandidatesForDistro then unions
+// all families and ovmfNotFoundError emits the generic install hint. Both readers derive
+// the family from this ONE map (R3 — no duplicated alias grouping).
+var ovmfDistroAliases = parseEmbeddedOvmfDistroAliases()
+
+func parseEmbeddedOvmfDistroAliases() map[string]string {
+	var doc struct {
+		OvmfDistroAliases map[string]string `yaml:"ovmf_distro_aliases"`
+	}
+	unmarshalEmbeddedDefaults(&doc)
+	if len(doc.OvmfDistroAliases) == 0 {
+		panic("ovmf: embedded charly.yml has no ovmf_distro_aliases: directive")
+	}
+	return doc.OvmfDistroAliases
+}
+
 // ovmfCandidatesForDistro returns the ordered candidate path pairs for a given distro +
 // secure-boot combination. More than one candidate per distro covers historical path
 // variation (e.g. Fedora pre-40 used /usr/share/edk2-ovmf/ instead of /usr/share/OVMF/).
-// The path data lives in the embedded charly.yml (ovmfPathTable); this resolves the distro
-// alias to its family, selects secure/nonsecure, and unions the three for an unknown distro.
+// Both the path data (ovmfPathTable) and the distro→family aliases (ovmfDistroAliases) live
+// in the embedded charly.yml; this selects secure/nonsecure and unions the three families
+// for an unknown distro.
 func ovmfCandidatesForDistro(distroID string, secure bool) []OvmfPaths {
-	var family string
-	switch distroID {
-	case "fedora", "centos", "rhel", "rocky", "alma":
-		family = "fedora"
-	case "arch", "manjaro", "endeavouros":
-		family = "arch"
-	case "debian", "ubuntu":
-		family = "debian"
-	default:
+	family, ok := ovmfDistroAliases[distroID]
+	if !ok {
 		// Unknown distro — try the union of common paths.
 		fedora := ovmfCandidatesForDistro("fedora", secure)
 		arch := ovmfCandidatesForDistro("arch", secure)
@@ -131,12 +143,12 @@ func ovmfCandidatesForDistro(distroID string, secure bool) []OvmfPaths {
 // install instructions.
 func ovmfNotFoundError(distroID string, secure bool) error {
 	var installHint string
-	switch distroID {
-	case "fedora", "centos", "rhel", "rocky", "alma":
+	switch ovmfDistroAliases[distroID] {
+	case "fedora":
 		installHint = "sudo dnf install edk2-ovmf"
-	case "arch", "manjaro", "endeavouros":
+	case "arch":
 		installHint = "sudo pacman -S edk2-ovmf"
-	case "debian", "ubuntu":
+	case "debian":
 		installHint = "sudo apt-get install ovmf"
 	default:
 		installHint = "install the 'edk2-ovmf' (Fedora/Arch) or 'ovmf' (Debian/Ubuntu) package"

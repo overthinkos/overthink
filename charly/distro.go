@@ -39,17 +39,24 @@ func parseOsRelease(content string) Distro {
 			d.Name = strings.Trim(after, "\"")
 		}
 	}
-	switch d.ID {
-	case "arch":
-		d.Manager = "pacman -S"
-	case "fedora", "rhel", "centos", "rocky", "almalinux":
-		d.Manager = "sudo dnf install"
-	case "debian", "ubuntu", "pop", "linuxmint":
-		d.Manager = "sudo apt-get install"
-	case "opensuse-tumbleweed", "opensuse-leap":
-		d.Manager = "sudo zypper install"
-	}
+	d.Manager = distroPackageManagers[d.ID]
 	return d
+}
+
+// distroPackageManagers maps a host distro ID to its install command prefix, read from the
+// distro_package_managers directive in the embedded charly.yml (Phase 4: data moved out of
+// Go). An unlisted distro yields the zero value "" (no manager, no install hint).
+var distroPackageManagers = parseEmbeddedDistroPackageManagers()
+
+func parseEmbeddedDistroPackageManagers() map[string]string {
+	var doc struct {
+		DistroPackageManagers map[string]string `yaml:"distro_package_managers"`
+	}
+	unmarshalEmbeddedDefaults(&doc)
+	if len(doc.DistroPackageManagers) == 0 {
+		panic("distro: embedded charly.yml has no distro_package_managers: directive")
+	}
+	return doc.DistroPackageManagers
 }
 
 // installHints maps binary names to per-distro package names, read from the install_hints
@@ -101,16 +108,27 @@ func (d Distro) installHint(binary string) string {
 	return fmt.Sprintf("%s %s", d.Manager, binary)
 }
 
-// distroFamily maps distro IDs to their base family for install hint lookup.
-func distroFamily(id string) string {
-	switch id {
-	case "ubuntu", "pop", "linuxmint":
-		return "debian"
-	case "rhel", "centos", "rocky", "almalinux":
-		return "fedora"
-	case "opensuse-tumbleweed", "opensuse-leap":
-		return "fedora" // similar package names
-	default:
-		return id
+// distroFamilyMap maps a host distro ID to its base family for install-hint package-name
+// lookup, read from the distro_family_map directive in the embedded charly.yml (Phase 4:
+// data moved out of Go). An unlisted distro maps to itself (see distroFamily).
+var distroFamilyMap = parseEmbeddedDistroFamilyMap()
+
+func parseEmbeddedDistroFamilyMap() map[string]string {
+	var doc struct {
+		DistroFamilyMap map[string]string `yaml:"distro_family_map"`
 	}
+	unmarshalEmbeddedDefaults(&doc)
+	if len(doc.DistroFamilyMap) == 0 {
+		panic("distro: embedded charly.yml has no distro_family_map: directive")
+	}
+	return doc.DistroFamilyMap
+}
+
+// distroFamily maps distro IDs to their base family for install hint lookup. An unlisted
+// distro maps to itself.
+func distroFamily(id string) string {
+	if fam, ok := distroFamilyMap[id]; ok {
+		return fam
+	}
+	return id
 }

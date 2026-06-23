@@ -124,18 +124,21 @@ func parseKFDGFXVersion(path string) string {
 	return ""
 }
 
-// devicePatterns lists device paths to auto-detect on the host.
-// NVIDIA GPUs are handled separately via CDI/--gpus.
-// AMD GPUs need /dev/kfd for ROCm compute access.
-var devicePatterns = []string{
-	"/dev/dri/renderD*",
-	"/dev/kfd",
-	"/dev/kvm",
-	"/dev/vhost-net",
-	"/dev/vhost-vsock",
-	"/dev/fuse",
-	"/dev/net/tun",
-	"/dev/hwrng",
+// devicePatterns lists device paths to auto-detect on the host, read from the
+// device_patterns directive in the embedded charly.yml (Phase 4: data moved out of Go).
+// Read by DetectHostDevices (here) and `charly doctor` (doctor.go). NVIDIA GPUs are
+// handled separately via CDI/--gpus; AMD GPUs need /dev/kfd for ROCm compute access.
+var devicePatterns = parseEmbeddedDevicePatterns()
+
+func parseEmbeddedDevicePatterns() []string {
+	var doc struct {
+		DevicePatterns []string `yaml:"device_patterns"`
+	}
+	unmarshalEmbeddedDefaults(&doc)
+	if len(doc.DevicePatterns) == 0 {
+		panic("devices: embedded charly.yml has no device_patterns: directive")
+	}
+	return doc.DevicePatterns
 }
 
 // DetectHostDevices probes the host for available devices.
@@ -187,12 +190,28 @@ func pickRenderNode(devices []string) string {
 		if first == "" {
 			first = d
 		}
-		switch renderNodeVendor(d) {
-		case "0x10de", "0x1002", "0x8086": // NVIDIA / AMD / Intel — a real, encode-capable GPU
-			return d
+		if _, ok := gpuRenderVendors[renderNodeVendor(d)]; ok {
+			return d // a real, encode-capable GPU (NVIDIA/AMD/Intel) over virtio-gpu
 		}
 	}
 	return first
+}
+
+// gpuRenderVendors is the set of PCI vendor IDs whose render node counts as a real,
+// encode-capable GPU (vs the paravirtual virtio-gpu), read from the gpu_vendors directive
+// in the embedded charly.yml (Phase 4: data moved out of Go). The map value is the vendor
+// name (documentary); only key membership drives pickRenderNode.
+var gpuRenderVendors = parseEmbeddedGPUVendors()
+
+func parseEmbeddedGPUVendors() map[string]string {
+	var doc struct {
+		GpuVendors map[string]string `yaml:"gpu_vendors"`
+	}
+	unmarshalEmbeddedDefaults(&doc)
+	if len(doc.GpuVendors) == 0 {
+		panic("devices: embedded charly.yml has no gpu_vendors: directive")
+	}
+	return doc.GpuVendors
 }
 
 // LogDetectedDevices prints detected devices to stderr.
@@ -447,23 +466,26 @@ func isDisplayClass(class string) bool {
 	return strings.HasPrefix(class, "0x03")
 }
 
-func pciClassLabel(class string) string {
-	switch class {
-	case "0x0300":
-		return "VGA controller"
-	case "0x0302":
-		return "3D controller"
-	case "0x0380":
-		return "Display controller"
-	case "0x0403":
-		return "Audio device"
-	case "0x0604":
-		return "PCI bridge"
-	case "0x0c03":
-		return "USB controller"
-	case "0x0c0330":
-		return "USB controller"
-	default:
-		return class
+// pciClassLabels maps a PCI class code (high 16 bits) to a human label for VFIO
+// passthrough device reporting, read from the pci_class_labels directive in the embedded
+// charly.yml (Phase 4: data moved out of Go). An unknown class falls back to the raw class
+// string (see pciClassLabel).
+var pciClassLabels = parseEmbeddedPCIClassLabels()
+
+func parseEmbeddedPCIClassLabels() map[string]string {
+	var doc struct {
+		PciClassLabels map[string]string `yaml:"pci_class_labels"`
 	}
+	unmarshalEmbeddedDefaults(&doc)
+	if len(doc.PciClassLabels) == 0 {
+		panic("devices: embedded charly.yml has no pci_class_labels: directive")
+	}
+	return doc.PciClassLabels
+}
+
+func pciClassLabel(class string) string {
+	if label, ok := pciClassLabels[class]; ok {
+		return label
+	}
+	return class
 }

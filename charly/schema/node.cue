@@ -147,5 +147,28 @@ _reservedNode: "^(candy|pod|vm|k8s|local|android|group)$"
 	// device_descriptions — host device path → human description for `charly doctor`'s
 	// hardware section, formerly the Go var deviceDescriptions (doctor.go); data, not code.
 	device_descriptions?: {[string]: string}
-	{[!~"^(version|repo|import|discover|defaults|provides|providers|context_ignore_baseline|install_hints|ovmf_paths|device_descriptions)$"]: #Node}
+	// device_patterns — host device glob patterns probed for auto-detection
+	// (DetectHostDevices) + `charly doctor`'s hardware section, formerly the Go var
+	// devicePatterns (devices.go); data, not code.
+	device_patterns?: [...string]
+	// gpu_vendors — PCI vendor ID → name for the render nodes that count as a real,
+	// encode-capable GPU (vs the paravirtual virtio-gpu), formerly the inline switch in
+	// pickRenderNode (devices.go); key membership picks the DRINODE render node.
+	gpu_vendors?: {[string]: string}
+	// pci_class_labels — PCI class code (high 16 bits) → human label for VFIO passthrough
+	// device reporting, formerly the inline switch in pciClassLabel (devices.go); an
+	// unknown class falls back to the raw class (logic, not data).
+	pci_class_labels?: {[string]: string}
+	// distro_package_managers — host distro ID → install command prefix for `charly
+	// doctor` install hints, formerly the inline switch in parseOsRelease (distro.go).
+	distro_package_managers?: {[string]: string}
+	// distro_family_map — host distro ID → base family for install-hint package-name
+	// lookup, formerly the inline switch in distroFamily (distro.go); an unlisted distro
+	// maps to itself (logic, not data).
+	distro_family_map?: {[string]: string}
+	// ovmf_distro_aliases — host distro ID → OVMF firmware family (fedora|arch|debian),
+	// formerly the inline switches in ovmfCandidatesForDistro + ovmfNotFoundError
+	// (ovmf_paths.go); an unlisted distro tries the union of all families (logic).
+	ovmf_distro_aliases?: {[string]: string}
+	{[!~"^(version|repo|import|discover|defaults|provides|providers|context_ignore_baseline|install_hints|ovmf_paths|device_descriptions|device_patterns|gpu_vendors|pci_class_labels|distro_package_managers|distro_family_map|ovmf_distro_aliases)$"]: #Node}
 })

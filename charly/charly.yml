@@ -105,6 +105,88 @@ device_descriptions:
     /dev/net/tun: TUN/TAP network device
     /dev/hwrng: hardware random number generator
 
+# device_patterns — host device glob patterns probed for auto-detection
+# (DetectHostDevices in devices.go) AND `charly doctor`'s hardware section (doctor.go),
+# formerly the Go var devicePatterns. NVIDIA GPUs are handled separately via CDI/--gpus;
+# AMD GPUs need /dev/kfd for ROCm compute access.
+device_patterns:
+    - "/dev/dri/renderD*"
+    - /dev/kfd
+    - /dev/kvm
+    - /dev/vhost-net
+    - /dev/vhost-vsock
+    - /dev/fuse
+    - /dev/net/tun
+    - /dev/hwrng
+
+# gpu_vendors — PCI vendor ID -> name for the render nodes that count as a real,
+# encode-capable GPU (vs the paravirtual virtio-gpu 0x1af4), formerly the inline switch in
+# pickRenderNode (devices.go). Key membership picks the DRINODE/DRI_NODE render node on a
+# multi-GPU/passthrough host; the name value is documentary.
+gpu_vendors:
+    "0x10de": NVIDIA
+    "0x1002": AMD
+    "0x8086": Intel
+
+# pci_class_labels — PCI class code (high 16 bits) -> human label for VFIO passthrough
+# device reporting, formerly the inline switch in pciClassLabel (devices.go). An unknown
+# class falls back to the raw class string (logic in pciClassLabel, not data).
+pci_class_labels:
+    "0x0300": VGA controller
+    "0x0302": 3D controller
+    "0x0380": Display controller
+    "0x0403": Audio device
+    "0x0604": PCI bridge
+    "0x0c03": USB controller
+    "0x0c0330": USB controller
+
+# distro_package_managers — host distro ID -> install command prefix for `charly doctor`
+# install hints, formerly the inline switch in parseOsRelease (distro.go). An unlisted
+# distro yields an empty manager (no install hint).
+distro_package_managers:
+    arch: pacman -S
+    fedora: sudo dnf install
+    rhel: sudo dnf install
+    centos: sudo dnf install
+    rocky: sudo dnf install
+    almalinux: sudo dnf install
+    debian: sudo apt-get install
+    ubuntu: sudo apt-get install
+    pop: sudo apt-get install
+    linuxmint: sudo apt-get install
+    opensuse-tumbleweed: sudo zypper install
+    opensuse-leap: sudo zypper install
+
+# distro_family_map — host distro ID -> base family for install-hint package-name lookup,
+# formerly the inline switch in distroFamily (distro.go). An unlisted distro maps to itself
+# (logic in distroFamily, not data).
+distro_family_map:
+    ubuntu: debian
+    pop: debian
+    linuxmint: debian
+    rhel: fedora
+    centos: fedora
+    rocky: fedora
+    almalinux: fedora
+    opensuse-tumbleweed: fedora
+    opensuse-leap: fedora
+
+# ovmf_distro_aliases — host distro ID -> OVMF firmware family (fedora|arch|debian),
+# formerly the inline switches in ovmfCandidatesForDistro + ovmfNotFoundError
+# (ovmf_paths.go). An unlisted distro has no entry; ovmfCandidatesForDistro then tries the
+# union of all families and ovmfNotFoundError emits the generic install hint (logic).
+ovmf_distro_aliases:
+    fedora: fedora
+    centos: fedora
+    rhel: fedora
+    rocky: fedora
+    alma: fedora
+    arch: arch
+    manjaro: arch
+    endeavouros: arch
+    debian: debian
+    ubuntu: debian
+
 nvidia-gpu:
     resource:
         gpu:

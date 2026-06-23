@@ -247,15 +247,6 @@ type Op struct {
 
 	RequestBody string `yaml:"request_body,omitempty" json:"request_body,omitempty"`
 
-	// --- residual state-provision modifier ---
-	// groups — the `unix_group` verb's supplementary-members modifier. It has NO remaining
-	// #Op reader: `unix_group` extracted to its builtin plugin unit (its #UnixGroupInput
-	// reproduces only `unix_group`+`gid`, not members), and the `user`/`kernel-param`/`mount`
-	// verbs likewise left #Op for their units — taking `uid`/`gid`/`home`/`shell`, `value`,
-	// and `mount_source`/`filesystem`/`opt` into their own #*Input defs. groups is a dormant
-	// modifier (no current consumer), tracked for a follow-up.
-	Groups []string `yaml:"groups,omitempty" json:"groups,omitempty"`
-
 	// --- cdp / wl / dbus / vnc / spice modifiers ---
 	Tab string `yaml:"tab,omitempty" json:"tab,omitempty"`
 

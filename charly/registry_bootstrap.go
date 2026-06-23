@@ -42,7 +42,12 @@ var builtinProviderInstances = []Provider{
 	// state-provision-verb→plugin extractions, like process/port/dns; `file` is the LAST
 	// state-provision/goss-tier verb extracted; `command` is the install-task-act member and
 	// `package`/`service` are the TWO typed-step members of that set).
-	cdpVerb{}, wlVerb{}, dbusVerb{}, vncVerb{},
+	// cdp/vnc are NOT here — each is the first live-container verb extracted into its
+	// OWN dedicated file (plugin_verb_cdp.go / plugin_verb_vnc.go), self-registering via
+	// registerDedicatedBuiltin (the schema-less dedicated-provider path, since their
+	// modifiers stay on the closed base #Op — no plugin_input, no served schema), absent
+	// from both this slice and the providers: manifest.
+	wlVerb{}, dbusVerb{},
 	mcpVerb{}, recordVerb{}, spiceVerb{}, libvirtVerb{}, kubeVerb{}, adbVerb{}, appiumVerb{},
 	summarizeVerb{}, killVerb{}, pluginVerb{},
 	// kinds (ClassKind) — NONE remain here: Phase 2 is COMPLETE, every kind is now a

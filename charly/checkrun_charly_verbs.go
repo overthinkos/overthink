@@ -96,38 +96,10 @@ type methodSpec struct {
 	skipBox bool
 }
 
-// ---------------------------------------------------------------------------
-// cdp methods
-// ---------------------------------------------------------------------------
-
-var cdpMethods = map[string]methodSpec{
-	// queries — produce assertable output
-	"status":     {path: []string{"cdp", "status"}},
-	"list":       {path: []string{"cdp", "list"}},
-	"url":        {path: []string{"cdp", "url"}, required: []string{"Tab"}, posArgs: posTab},
-	"text":       {path: []string{"cdp", "text"}, required: []string{"Tab"}, posArgs: posTab},
-	"html":       {path: []string{"cdp", "html"}, required: []string{"Tab"}, posArgs: posTab},
-	"eval":       {path: []string{"cdp", "eval"}, required: []string{"Tab", "Expression"}, posArgs: posTabExpression},
-	"axtree":     {path: []string{"cdp", "axtree"}, required: []string{"Tab"}, posArgs: posTabQuery},
-	"coords":     {path: []string{"cdp", "coords"}, required: []string{"Tab", "Selector"}, posArgs: posTabSelector},
-	"raw":        {path: []string{"cdp", "raw"}, required: []string{"Tab", "Method"}, posArgs: posCdpRaw},
-	"wait":       {path: []string{"cdp", "wait"}, required: []string{"Tab", "Selector"}, posArgs: posTabSelector},
-	"screenshot": {path: []string{"cdp", "screenshot"}, required: []string{"Tab", "Artifact"}, posArgs: posTabArtifact, artifact: true},
-
-	// side-effect actions — pass on exit 0
-	"open":  {path: []string{"cdp", "open"}, required: []string{"URL"}, posArgs: posURL},
-	"close": {path: []string{"cdp", "close"}, required: []string{"Tab"}, posArgs: posTab},
-	"click": {path: []string{"cdp", "click"}, required: []string{"Tab", "Selector"}, posArgs: posTabSelector},
-	"type":  {path: []string{"cdp", "type"}, required: []string{"Tab", "Selector", "Text"}, posArgs: posTabSelectorText},
-
-	// SPA nested subcommands
-	"spa-status":    {path: []string{"cdp", "spa", "status"}, required: []string{"Tab"}, posArgs: posTab},
-	"spa-click":     {path: []string{"cdp", "spa", "click"}, required: []string{"Tab", "X", "Y"}, posArgs: posTabXY},
-	"spa-type":      {path: []string{"cdp", "spa", "type"}, required: []string{"Tab", "Text"}, posArgs: posTabText},
-	"spa-key":       {path: []string{"cdp", "spa", "key"}, required: []string{"Tab", "KeyName"}, posArgs: posTabKeyName},
-	"spa-key-combo": {path: []string{"cdp", "spa", "key-combo"}, required: []string{"Tab", "Combo"}, posArgs: posTabCombo},
-	"spa-mouse":     {path: []string{"cdp", "spa", "mouse"}, required: []string{"Tab", "X", "Y"}, posArgs: posTabXY},
-}
+// cdpMethods (the cdp verb's method allowlist) + its provider, LiveVerbProvider method
+// contract, and runCdp dispatcher live in plugin_verb_cdp.go (Phase 1 live-container-verb
+// relocation). The shared posArgs builders cdp uses (posTab/posURL/posCdpRaw/posTab*) stay
+// in the builder library below — reused across verbs.
 
 // ---------------------------------------------------------------------------
 // wl methods
@@ -192,20 +164,10 @@ var dbusMethods = map[string]methodSpec{
 	"notify":     {path: []string{"dbus", "notify"}, required: []string{"Text"}, posArgs: posDbusNotify},
 }
 
-// ---------------------------------------------------------------------------
-// vnc methods
-// ---------------------------------------------------------------------------
-
-var vncMethods = map[string]methodSpec{
-	"status":     {path: []string{"vnc", "status"}},
-	"screenshot": {path: []string{"vnc", "screenshot"}, required: []string{"Artifact"}, posArgs: posArtifact, artifact: true},
-	"click":      {path: []string{"vnc", "click"}, required: []string{"X", "Y"}, posArgs: posXY},
-	"mouse":      {path: []string{"vnc", "mouse"}, required: []string{"X", "Y"}, posArgs: posXY},
-	"type":       {path: []string{"vnc", "type"}, required: []string{"Text"}, posArgs: posText},
-	"key":        {path: []string{"vnc", "key"}, required: []string{"KeyName"}, posArgs: posKeyName},
-	"rfb":        {path: []string{"vnc", "rfb"}, required: []string{"Method"}, posArgs: posCommand}, // Method field reused as rfb method
-	"passwd":     {path: []string{"vnc", "passwd"}},
-}
+// vncMethods (the vnc verb's method allowlist) + its provider, LiveVerbProvider method
+// contract, and runVnc dispatcher live in plugin_verb_vnc.go (Phase 1 live-container-verb
+// relocation). The shared posArgs builders vnc uses (posArtifact/posXY/posText/posKeyName/
+// posCommand) stay in the builder library below — reused across verbs.
 
 // ---------------------------------------------------------------------------
 // mcp methods
@@ -1002,9 +964,8 @@ func posWaitForDevice(c *Op) []string {
 // Verb dispatchers
 // ---------------------------------------------------------------------------
 
-func (r *Runner) runCdp(ctx context.Context, c *Op) CheckResult {
-	return r.runCharlyVerb(ctx, c, "cdp", c.Cdp, cdpMethods)
-}
+// runCdp lives in plugin_verb_cdp.go; runVnc lives in plugin_verb_vnc.go (Phase 1
+// live-container-verb relocation) — alongside each verb's provider + method allowlist.
 
 func (r *Runner) runWl(ctx context.Context, c *Op) CheckResult {
 	return r.runCharlyVerb(ctx, c, "wl", c.Wl, wlMethods)
@@ -1012,10 +973,6 @@ func (r *Runner) runWl(ctx context.Context, c *Op) CheckResult {
 
 func (r *Runner) runDbus(ctx context.Context, c *Op) CheckResult {
 	return r.runCharlyVerb(ctx, c, "dbus", c.Dbus, dbusMethods)
-}
-
-func (r *Runner) runVnc(ctx context.Context, c *Op) CheckResult {
-	return r.runCharlyVerb(ctx, c, "vnc", c.Vnc, vncMethods)
 }
 
 func (r *Runner) runMcp(ctx context.Context, c *Op) CheckResult {

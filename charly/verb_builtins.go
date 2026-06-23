@@ -5,8 +5,17 @@ import "context"
 // The built-in check verbs as CheckVerbProviders. Each wraps its existing
 // r.runX handler unchanged — the migration is behavior-preserving; only the
 // runOne dispatch switch is replaced by providerRegistry.ResolveVerb. The
-// live-container verbs (cdp/wl/…) still funnel through runCharlyVerb + the
-// method-allowlist maps (checkrun_charly_verbs.go) inside their handler.
+// live-container verbs remaining here (wl/dbus/mcp/record/spice/libvirt/kube/
+// adb/appium) still funnel through runCharlyVerb + the method-allowlist maps
+// (checkrun_charly_verbs.go) inside their handler.
+//
+// cdp and vnc are NOT here — each is the first live-container verb extracted into
+// its OWN dedicated file (plugin_verb_cdp.go / plugin_verb_vnc.go) carrying its
+// provider + LiveVerbProvider method contract + its <verb>Methods map + its runX
+// dispatcher, self-registering via registerDedicatedBuiltin (the schema-less
+// dedicated-provider path — no plugin_input, no served schema, since their
+// modifiers stay on the closed base #Op), absent from both builtinProviderInstances
+// and the `providers:` manifest. They dispatch identically through providerRegistry.
 //
 // The do-mode (act) half of the state-provision verbs is a ProvisionActor method
 // per provider (checkrun_act.go) — runProvisionAct resolves + type-asserts it (C1b).
@@ -25,13 +34,6 @@ import "context"
 // `command` is a CheckVerbProvider ONLY — its act is the dedicated install-task emitCmd
 // branch (`plugin == "command"` in emitTasks/renderOpCommand), NOT a ProvisionActor.
 
-type cdpVerb struct{ builtinVerbBase }
-
-func (cdpVerb) Reserved() string { return "cdp" }
-func (cdpVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runCdp(ctx, op)
-}
-
 type wlVerb struct{ builtinVerbBase }
 
 func (wlVerb) Reserved() string { return "wl" }
@@ -44,13 +46,6 @@ type dbusVerb struct{ builtinVerbBase }
 func (dbusVerb) Reserved() string { return "dbus" }
 func (dbusVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runDbus(ctx, op)
-}
-
-type vncVerb struct{ builtinVerbBase }
-
-func (vncVerb) Reserved() string { return "vnc" }
-func (vncVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runVnc(ctx, op)
 }
 
 type mcpVerb struct{ builtinVerbBase }

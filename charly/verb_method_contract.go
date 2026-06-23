@@ -5,21 +5,19 @@ package main
 // *Op. The host's generic validateCharlyVerb and the method-allowlist bijection gate
 // read these through the registry (LiveVerbProvider), replacing the former central
 // validateCharlyVerb switch + the liveVerbDispatch registry. The <verb>Methods maps
-// live in checkrun_charly_verbs.go (the verb's dispatch data, used by runCharlyVerb);
-// Phase 1 relocates each into its dedicated verb plugin. This is the right home for
-// the cross-field required-modifier/artifact rules — on the verb that owns them.
-
-func (cdpVerb) Methods() map[string]methodSpec { return cdpMethods }
-func (cdpVerb) MethodField(c *Op) string       { return c.Cdp }
+// for the verbs still defined here live in checkrun_charly_verbs.go (the verb's
+// dispatch data, used by runCharlyVerb); Phase 1 relocates each into its dedicated
+// verb plugin. This is the right home for the cross-field required-modifier/artifact
+// rules — on the verb that owns them.
+//
+// cdp + vnc have already been relocated: each owns its Methods()/MethodField() contract
+// alongside its provider + <verb>Methods map in plugin_verb_cdp.go / plugin_verb_vnc.go.
 
 func (wlVerb) Methods() map[string]methodSpec { return wlMethods }
 func (wlVerb) MethodField(c *Op) string       { return c.Wl }
 
 func (dbusVerb) Methods() map[string]methodSpec { return dbusMethods }
 func (dbusVerb) MethodField(c *Op) string       { return c.Dbus }
-
-func (vncVerb) Methods() map[string]methodSpec { return vncMethods }
-func (vncVerb) MethodField(c *Op) string       { return c.Vnc }
 
 func (mcpVerb) Methods() map[string]methodSpec { return mcpMethods }
 func (mcpVerb) MethodField(c *Op) string       { return c.Mcp }

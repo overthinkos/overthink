@@ -16,7 +16,7 @@ version: 2026.174.1100
 # list is empty by design too.
 providers:
     kind: []
-    verb: [adb, appium, cdp, dbus, kill, kube, libvirt, mcp, plugin, record, spice, summarize, vnc, wl]
+    verb: [adb, appium, dbus, kill, kube, libvirt, mcp, plugin, record, spice, summarize, wl]
     deploy: []
     step: []
     builder: []

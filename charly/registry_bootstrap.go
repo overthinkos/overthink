@@ -26,12 +26,13 @@ import (
 // registered (deploy/step have a gate; builders have none). See plugin_deploy_local.go,
 // plugin_step_reboot.go, plugin_builder_cargo.go.
 var builtinProviderInstances = []Provider{
-	// verbs (ClassVerb) — http/interface/addr are NOT here: each is a dedicated plugin
-	// UNIT (plugin_http.go / plugin_interface.go / plugin_addr.go) that self-registers
-	// via RegisterBuiltinPluginUnit, absent from both this slice and the providers:
-	// manifest (the observe-only goss-verb→plugin extraction, like process/port/dns).
+	// verbs (ClassVerb) — http/interface/addr/unix_group are NOT here: each is a dedicated
+	// plugin UNIT (plugin_http.go / plugin_interface.go / plugin_addr.go /
+	// plugin_unix_group.go) that self-registers via RegisterBuiltinPluginUnit, absent from
+	// both this slice and the providers: manifest (the goss-verb→plugin + the first
+	// state-provision-verb→plugin extractions, like process/port/dns).
 	fileVerb{}, commandVerb{}, packageVerb{}, serviceVerb{},
-	userVerb{}, unixGroupVerb{}, kernelParamVerb{},
+	userVerb{}, kernelParamVerb{},
 	mountVerb{}, cdpVerb{}, wlVerb{}, dbusVerb{}, vncVerb{},
 	mcpVerb{}, recordVerb{}, spiceVerb{}, libvirtVerb{}, kubeVerb{}, adbVerb{}, appiumVerb{},
 	summarizeVerb{}, killVerb{}, pluginVerb{},

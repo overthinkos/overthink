@@ -725,6 +725,7 @@ func compileActOp(op *Op, layer *Candy, img *ResolvedBox) InstallStep {
 		ResolvedUser: userDir,
 		CandyVars:    candyVars,
 		To:           resolvedTo,
+		Distros:      img.Tags,
 	}
 }
 

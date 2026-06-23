@@ -467,6 +467,13 @@ type OpStep struct {
 	// ${K3D_VERSION} fetched an empty path-component at deploy time and
 	// curl 404'd.
 	CandyVars map[string]string
+
+	// Distros is the image's distro tag chain (img.Tags), carried so the act-emit
+	// enabler can pass it to a state-provision plugin verb's RenderProvisionScript
+	// (e.g. the cross-distro package resolution). Empty for non-plugin ops; the
+	// unix_group act ignores it, but a future package/service state-provision plugin
+	// reads it.
+	Distros []string
 }
 
 func (s *OpStep) Kind() StepKind { return StepKindOp }

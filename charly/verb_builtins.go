@@ -46,12 +46,11 @@ func (userVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runUser(ctx, op)
 }
 
-type unixGroupVerb struct{ builtinVerbBase }
-
-func (unixGroupVerb) Reserved() string { return "unix_group" }
-func (unixGroupVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runUnixGroup(ctx, op)
-}
+// unix_group is NOT here — it is the FIRST extracted STATE-PROVISION verb, a dedicated
+// plugin UNIT (plugin_unix_group.go) that self-registers via RegisterBuiltinPluginUnit
+// (absent from both builtinProviderInstances and the providers: manifest). Its provider
+// is BOTH a CheckVerbProvider (getent-group probe) AND a ProvisionActor (groupadd at
+// install emit + runtime act).
 
 type kernelParamVerb struct{ builtinVerbBase }
 

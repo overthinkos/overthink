@@ -71,7 +71,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.173.2300")
+var latestSchemaVersion = mustCalVer("2026.174.0100")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -499,13 +499,33 @@ func migrationSteps() []MigrationStep {
 			w, err := MigrateGossVerbsToPlugin(c.Dir, c.DryRun)
 			return len(w) > 0, err
 		}},
+		// 2026-06 FIRST state-provision-verb extraction: the DUAL-NATURED `unix_group` verb
+		// (getent-group probe + groupadd) left the closed `#Op`/`spec.OpVerbs` and became a
+		// BUILTIN plugin unit (plugin/builtins/unix_group) whose provider is BOTH a
+		// CheckVerbProvider AND a ProvisionActor — the check half dispatches via the generic
+		// `plugin:` verb, the act half renders at install emit via the act-emit enabler. A
+		// plan step authoring `unix_group: <name>` (+ optional `gid:`) now authors the generic
+		// plugin step `plugin: unix_group` + a typed `plugin_input:`. Unlike the OBSERVE-only
+		// goss migrator (which strips a `run:` step's vestigial keys), a state-provision verb's
+		// `run:` step is REAL (the act timeline), so this step CONVERTS a `check:` OR a `run:`
+		// step and STRIPS only on a verb-less step kind (agent-*/include). The shared companion
+		// `gid` STAYS in #Op for the `user` verb but MOVES into plugin_input on the unix_group
+		// step. Gated on isStepNode so a Calamares group's / a published port's fields are never
+		// rewritten, and a migrated config's nested plugin_input is a no-op (idempotent). Raises
+		// HEAD (a closed `#Op` rejects the `unix_group:` key). TouchesHost false → remote-cache
+		// auto-migration applies it to fetched candy manifests. See
+		// migrate_state_provision_verbs_to_plugin.go + CHANGELOG/.
+		{mustCalVer("2026.174.0050"), "state-provision-verbs-to-plugin", false, func(c *MigrateContext) (bool, error) {
+			w, err := MigrateStateProvisionVerbsToPlugin(c.Dir, c.DryRun)
+			return len(w) > 0, err
+		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up
 		// and every versioned file lands on this CalVer. This is the integer→CalVer
 		// transition step (version: 4 → version: <HEAD>) and the universal stamper.
 		// TouchesHost is false so it ALSO runs in project-only mode (remote-cache
 		// auto-migration); its host-file stamping is gated on ctx.HostDeployPath,
 		// which the project-only runner leaves empty.
-		{mustCalVer("2026.173.2300"), "calver-schema", false, func(c *MigrateContext) (bool, error) {
+		{mustCalVer("2026.174.0100"), "calver-schema", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateCalverSchema(c.Dir, c.HostDeployPath, latestSchemaVersion, c.DryRun)
 			return len(w) > 0, err
 		}},

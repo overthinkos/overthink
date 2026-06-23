@@ -215,9 +215,11 @@ func (r *Runner) runUser(ctx context.Context, c *Op) CheckResult {
 	return passf(c, fmt.Sprintf("uid=%d gid=%d", uid, gid))
 }
 
-// runUnixGroup: getent group. Parses gid and members.
-func (r *Runner) runUnixGroup(ctx context.Context, c *Op) CheckResult {
-	probe := fmt.Sprintf(`getent group %s`, shellSingleQuote(c.UnixGroup))
+// runUnixGroup: getent group. Parses gid and members. The group name + expected gid come
+// from the unix_group plugin's decoded plugin_input (the verb left #Op for its dedicated
+// builtin plugin unit) — c is retained for failf/passf reporting context.
+func (r *Runner) runUnixGroup(ctx context.Context, c *Op, group string, wantGID *int) CheckResult {
+	probe := fmt.Sprintf(`getent group %s`, shellSingleQuote(group))
 	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
 		return failf(c, "probe: %v", err)
@@ -231,8 +233,8 @@ func (r *Runner) runUnixGroup(ctx context.Context, c *Op) CheckResult {
 		return failf(c, "unexpected group line: %q", out)
 	}
 	gid, _ := strconv.Atoi(parts[2])
-	if c.GID != nil && gid != *c.GID {
-		return failf(c, "gid=%d, want %d", gid, *c.GID)
+	if wantGID != nil && gid != *wantGID {
+		return failf(c, "gid=%d, want %d", gid, *wantGID)
 	}
 	return passf(c, fmt.Sprintf("gid=%d", gid))
 }

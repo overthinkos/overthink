@@ -28,20 +28,46 @@ import (
 // grader in runUnit (description_run.go). Runtime act ops are NOT auto-reversed
 // (no ledger entry) — the author reverses them with a teardown run: step.
 
-// runProvisionAct executes a state-provision verb's create/configure command
-// and reports pass on a zero exit. Returns ok=false when the verb has no
-// provision renderer (an action verb whose handler already acts, or a pure
-// observe verb) so the caller falls through to the normal dispatch.
-func (r *Runner) runProvisionAct(ctx context.Context, c *Op, verb string) (CheckResult, bool) {
-	prov, ok := providerRegistry.ResolveVerb(verb)
+// resolveProvisionScript resolves an op's state-provision verb to its ProvisionActor
+// and renders the act shell — the SINGLE Op→act-shell seam shared by the runtime act
+// path (runProvisionAct) AND every install-emit path: emitTasks' `case "plugin"` (the
+// box build via writeCandySteps→emitTasks, and the pod overlay via OCITarget.emitOp,
+// which delegates to emitTasks) AND renderOpCommand (the local/vm deploy targets) — the
+// act-emit enabler, so a state-provision verb provisions identically whether run live,
+// baked into an image, or applied at deploy (R3).
+//
+// It threads the plugin indirection: when the op's verb is the generic `plugin:`
+// discriminator, the ProvisionActor is the plugin word's provider (op.Plugin), NOT the
+// pluginVerb dispatcher. ok=false when the resolved provider is not a ProvisionActor (an
+// action verb whose handler already acts, a pure observe verb, or a non-act plugin) — the
+// runtime caller then falls through to the normal dispatch; an emit caller turns it into a
+// hard error (a run: step naming a non-act verb has no build/deploy install path).
+func resolveProvisionScript(op *Op, distros []string) (string, bool) {
+	word, err := op.Kind()
+	if err != nil {
+		return "", false
+	}
+	if word == "plugin" {
+		word = op.Plugin
+	}
+	prov, ok := providerRegistry.ResolveVerb(word)
 	if !ok {
-		return CheckResult{}, false
+		return "", false
 	}
 	actor, ok := prov.(ProvisionActor)
 	if !ok {
-		return CheckResult{}, false
+		return "", false
 	}
-	script, ok := actor.RenderProvisionScript(c, r.Distros)
+	return actor.RenderProvisionScript(op, distros)
+}
+
+// runProvisionAct executes a state-provision verb's create/configure command
+// and reports pass on a zero exit. Returns ok=false when the verb has no
+// provision renderer (an action verb whose handler already acts, or a pure
+// observe verb) so the caller falls through to the normal dispatch. Resolution
+// (incl. the `plugin:` indirection) is the shared resolveProvisionScript.
+func (r *Runner) runProvisionAct(ctx context.Context, c *Op, verb string) (CheckResult, bool) {
+	script, ok := resolveProvisionScript(c, r.Distros)
 	if !ok {
 		return CheckResult{}, false
 	}
@@ -112,14 +138,9 @@ func (userVerb) RenderProvisionScript(c *Op, _ []string) (string, bool) {
 	return fmt.Sprintf("id %[1]s >/dev/null 2>&1 || useradd%[2]s %[1]s", name, flags), true
 }
 
-func (unixGroupVerb) RenderProvisionScript(c *Op, _ []string) (string, bool) {
-	flags := ""
-	if c.GID != nil {
-		flags += fmt.Sprintf(" -g %d", *c.GID)
-	}
-	name := shellSingleQuote(c.UnixGroup)
-	return fmt.Sprintf("getent group %[1]s >/dev/null 2>&1 || groupadd%[2]s %[1]s", name, flags), true
-}
+// unix_group's RenderProvisionScript (the do:act half) lives with its dedicated plugin
+// unit (plugin_unix_group.go) — it decodes plugin_input rather than the removed
+// Op.UnixGroup/Op.GID fields.
 
 func (kernelParamVerb) RenderProvisionScript(c *Op, _ []string) (string, bool) {
 	if v, ok := firstMatcherScalar(c.Value); ok {

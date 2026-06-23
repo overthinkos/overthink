@@ -294,7 +294,10 @@ func (t *OCITarget) emitOp(s *OpStep) error {
 	}
 
 	// Render just this one op (the OpStep the compiler produced from a plan
-	// run: step) via the shared emitter.
+	// run: step) via the shared emitter. A plugin: <verb> run-Op (the act-emit
+	// enabler) is handled by emitTasks' `case "plugin"` — the SAME seam the box
+	// build (writeCandySteps→emitTasks) flows through, so there is NO pre-conversion
+	// here (one seam, not two — R3/R5).
 	_, err := t.Generator.emitTasks(&t.buf, layer, t.Box, []Op{*s.Op}, t.BuildDir, t.ContextRelPrefix)
 	return err
 }

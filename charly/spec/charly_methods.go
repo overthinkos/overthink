@@ -82,9 +82,6 @@ func (c *Op) VerbsSet() []string {
 	if c.User != "" {
 		set = append(set, "user")
 	}
-	if c.UnixGroup != "" {
-		set = append(set, "unix_group")
-	}
 	if c.KernelParam != "" {
 		set = append(set, "kernel-param")
 	}
@@ -141,7 +138,7 @@ func (c *Op) VerbsSet() []string {
 func (c *Op) StringFields() []*string {
 	return []*string{
 		&c.File, &c.Package, &c.Service, &c.Command,
-		&c.User, &c.UnixGroup,
+		&c.User,
 		&c.KernelParam, &c.Mount,
 		&c.ID, &c.Description, &c.Timeout,
 		&c.Mode, &c.Owner, &c.GroupOf, &c.Filetype, &c.Sha256,

@@ -675,6 +675,24 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 			// unchanged, so build tasks are a no-op in this emitter.
 			b.WriteString("# build: " + t.Build + " (handled by builder stage)\n")
 
+		case "plugin":
+			// THE box-build act-emit enabler. A run: step whose verb is a state-provision
+			// plugin (plugin: <verb> + plugin_input, the provider implementing
+			// ProvisionActor) has no per-verb emitter — render its act shell via the
+			// provider's ProvisionActor (resolveProvisionScript: the ONE Op→act-shell seam
+			// shared by the runtime act path runProvisionAct AND the local/vm deploy emit
+			// renderOpCommand, R3) and emit it as a command RUN via the SAME emitCmd the
+			// `command` verb uses. writeCandySteps→emitTasks is the REAL box-build path
+			// (OCITarget.emitOp for pod overlays delegates here too), so handling it HERE —
+			// not in emitOp — is the single seam every Containerfile emit flows through.
+			// ok=false ⇒ the plugin verb is not act-capable: a run: step with no install
+			// path, a loud error, never silently dropped (R4).
+			script, ok := resolveProvisionScript(&t, img.Tags)
+			if !ok {
+				return runningUser, fmt.Errorf("run: plugin verb %q is not act-capable (no ProvisionActor)", t.Plugin)
+			}
+			emitCmd(b, Op{Command: script, RunAs: t.RunAs}, layer.Name, img, runningUser == "0" || runningUser == "root")
+
 		default:
 			fmt.Fprintf(b, "# unknown verb %q — skipping\n", verb)
 		}

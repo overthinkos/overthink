@@ -296,12 +296,14 @@ var VerbCatalog = map[string]VerbSpec{
 	"package":      {ctxBuildDeployRuntime, DoAssert, true, StepKindSystemPackages},
 	"service":      {ctxBuildDeployRuntime, DoAssert, true, StepKindServicePackaged}, // act → enable the named packaged unit
 	"user":         {ctxBuildDeployRuntime, DoAssert, true, ""},                      // act → useradd (+ ReverseOpUserRemove)
-	"unix_group":   {ctxBuildDeployRuntime, DoAssert, true, ""},                      // act → groupadd (+ ReverseOpGroupRemove)
 	"kernel-param": {ctxBuildDeployRuntime, DoAssert, true, ""},                      // act → sysctl (+ ReverseOpSysctlRestore)
 	"mount":        {ctxDeployRuntime, DoAssert, true, ""},                           // act → mount (+ ReverseOpUmount)
-	// http / interface / addr are observe-only goss verbs extracted to builtin plugin
-	// units (charly/plugin/builtins/{http,interface,addr}); they dispatch via the
-	// generic `plugin:` verb, so they have no VerbCatalog entry (mirrors process/port/dns).
+	// unix_group is the FIRST extracted STATE-PROVISION verb — BOTH a check (getent-group)
+	// AND an act (groupadd). It left #Op/spec.OpVerbs for its builtin plugin unit
+	// (charly/plugin/builtins/unix_group) and dispatches via the generic `plugin:` verb, so
+	// it has no VerbCatalog entry; its act renders at install emit via the act-emit enabler
+	// (resolveProvisionScript). http / interface / addr are observe-only goss verbs likewise
+	// extracted to builtin plugin units (charly/plugin/builtins/{http,interface,addr}).
 
 	// live-container — runtime only; act drives UI/config, reversed via plan
 	// teardown (never the ledger). kube also legal at deploy (apply manifest).
@@ -345,6 +347,24 @@ var installVerbs = map[string]bool{
 // rejects it instead (file creation in build/deploy is the write/copy verbs).
 func ActsInBuildDeploy(verb string) bool {
 	return installVerbs[verb] || VerbCatalog[verb].LowersTo != ""
+}
+
+// opActsInBuildDeploy is the Op-level act-capability test, threading the generic
+// `plugin:` verb: a plugin verb (plugin: <word>) acts in build/deploy when its
+// registered provider is a ProvisionActor — the act-emit enabler renders its
+// RenderProvisionScript at install emit (resolveProvisionScript). Every other verb
+// defers to the verb-keyed ActsInBuildDeploy. verb is the caller's already-computed
+// c.Kind() (avoids recomputation).
+func opActsInBuildDeploy(c *Op, verb string) bool {
+	if verb == "plugin" {
+		prov, ok := providerRegistry.ResolveVerb(c.Plugin)
+		if !ok {
+			return false
+		}
+		_, isActor := prov.(ProvisionActor)
+		return isActor
+	}
+	return ActsInBuildDeploy(verb)
 }
 
 // EffectiveDo returns the op's resolved do-mode: the keyword-stamped intentDo

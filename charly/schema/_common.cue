@@ -17,7 +17,7 @@
 // the `--- verb discriminators ---` group in #Op.
 #OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" |
 	"command" | "file" | "package" | "service" |
-	"user" | "unix_group" | "kernel-param" | "mount" |
+	"user" | "kernel-param" | "mount" |
 	"cdp" | "wl" | "dbus" | "vnc" | "mcp" | "record" | "spice" |
 	"libvirt" | "kube" | "adb" | "appium" | "summarize" | "kill" | "plugin") @go(-)
 
@@ -54,7 +54,6 @@
 	service?:        string
 	command?:        string
 	user?:           string
-	unix_group?:     string @go(UnixGroup)
 	"kernel-param"?: string @go(KernelParam)
 	mount?:          string
 	mkdir?:          string
@@ -209,7 +208,11 @@
 	method?:       string
 	request_body?: string @go(RequestBody)
 
-	// --- user / group ---
+	// --- user ---
+	// gid STAYS in #Op (read by the `user` verb's getent-passwd assertion). The
+	// `unix_group` verb left #Op for its own builtin plugin unit
+	// (plugin/builtins/unix_group) and reproduces gid standalone in #UnixGroupInput
+	// (a self-contained copy, NOT a move — gid still has a non-extracted #Op consumer).
 	uid?:   int & >=0 @go(UID,type=*int)
 	gid?:   int & >=0 @go(GID,type=*int)
 	home?:  string

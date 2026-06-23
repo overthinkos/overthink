@@ -20,8 +20,6 @@ type Op struct {
 
 	User string `yaml:"user,omitempty" json:"user,omitempty"`
 
-	UnixGroup string `yaml:"unix_group,omitempty" json:"unix_group,omitempty"`
-
 	KernelParam string `yaml:"kernel-param,omitempty" json:"kernel-param,omitempty"`
 
 	Mount string `yaml:"mount,omitempty" json:"mount,omitempty"`
@@ -255,7 +253,11 @@ type Op struct {
 
 	RequestBody string `yaml:"request_body,omitempty" json:"request_body,omitempty"`
 
-	// --- user / group ---
+	// --- user ---
+	// gid STAYS in #Op (read by the `user` verb's getent-passwd assertion). The
+	// `unix_group` verb left #Op for its own builtin plugin unit
+	// (plugin/builtins/unix_group) and reproduces gid standalone in #UnixGroupInput
+	// (a self-contained copy, NOT a move — gid still has a non-extracted #Op consumer).
 	UID *int `yaml:"uid,omitempty" json:"uid,omitempty"`
 
 	GID *int `yaml:"gid,omitempty" json:"gid,omitempty"`

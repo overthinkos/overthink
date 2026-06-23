@@ -149,14 +149,17 @@ func TestRunner_User_UIDMismatch(t *testing.T) {
 	}
 }
 
-// group verb — getent group parsing.
+// unix_group verb — getent group parsing. Now the FIRST extracted state-provision verb,
+// a dedicated builtin plugin unit dispatched IN-PROCESS via the CheckVerbProvider RunVerb
+// path (TestMain loads its schema); authored as plugin: unix_group + plugin_input.
 func TestRunner_Group(t *testing.T) {
 	r, fake := newFakeRunner(t, RunModeLive)
 	fake.responses = []fakeResponse{
 		{matchPrefix: "getent group 'docker'", stdout: "docker:x:999:alice,bob\n", exit: 0},
 	}
-	gid := 999
-	res := r.Run(context.Background(), []Op{{UnixGroup: "docker", GID: &gid}})
+	res := r.Run(context.Background(), []Op{
+		{Plugin: "unix_group", PluginInput: map[string]any{"unix_group": "docker", "gid": 999}},
+	})
 	if res[0].Status != TestPass {
 		t.Errorf("got %+v", res[0])
 	}

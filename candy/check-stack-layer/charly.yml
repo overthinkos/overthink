@@ -1,6 +1,6 @@
 check-stack-layer:
     candy:
-        version: 2026.161.2302
+        version: 2026.174.0100
         description: |
             Combined kind:layer + kind:pod + DeployTarget smoke on top of check-base-layer
             The second (and final) layer of the check-pod stack. In one layer it
@@ -52,6 +52,22 @@ check-stack-layer:
         mode: "0644"
         content: |
             check-stack v1
+    check-stack-layer-unix-group-act:
+        # Exercises the ACT-EMIT ENABLER end-to-end at IMAGE BUILD: a run: step whose verb
+        # is the extracted state-provision `unix_group` plugin renders groupadd into the
+        # check-pod Containerfile (plugin: unix_group + plugin_input → RenderProvisionScript).
+        # The check half rides on the check-pod box (check-unix-group-present). Runs on the
+        # LAYER (not the box) because a box's own run: steps are not part of the build
+        # timeline — only its composed candies' run: steps compile.
+        run: create the checkgrp group at image build via the unix_group plugin verb (act-emit enabler)
+        id: check-stack-layer-unix-group-act
+        context:
+            - build
+        run_as: root
+        plugin: unix_group
+        plugin_input:
+            unix_group: checkgrp
+            gid: 4242
     check-stack-layer-step-1:
         check: the check-stack marker file is present at /etc/check-stack-marker
         file: /etc/check-stack-marker

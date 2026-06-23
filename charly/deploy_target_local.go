@@ -694,6 +694,18 @@ func renderOpCommand(s *OpStep) (string, error) {
 			mode, shDoubleQuote(task.Write), task.Content), nil
 	case task.Download != "":
 		return renderDownloadScript(task, s.CandyVars), nil
+	case task.Plugin != "":
+		// The act-emit enabler: a run: step whose verb is a state-provision plugin
+		// (plugin: <verb> + plugin_input) renders its act shell via the provider's
+		// ProvisionActor (resolveProvisionScript) — the SAME seam the box/OCI build
+		// (emitTasks' `case "plugin"`) and the runtime act path (runProvisionAct) use
+		// (R3). ok=false means the plugin verb is not act-capable — a run: step naming a
+		// non-act plugin has no install path, a hard authoring error.
+		script, ok := resolveProvisionScript(task, s.Distros)
+		if !ok {
+			return "", fmt.Errorf("run: plugin verb %q is not act-capable (no ProvisionActor)", task.Plugin)
+		}
+		return script, nil
 	}
 	return "", fmt.Errorf("task has no supported verb: %+v", task)
 }

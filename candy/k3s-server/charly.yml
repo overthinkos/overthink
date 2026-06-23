@@ -12,6 +12,16 @@ k3s-server:
     k3s-server-require:
         require:
             - k3s
+            # plugin-kube is the OUT-OF-TREE plugin that serves the `kube:` cluster-probe
+            # check verb AND the clientcmd-backed k3s kubeconfig-merge K3sPostProvision
+            # performs (the heavy k8s.io/client-go + k8s.io/apimachinery stack lives there,
+            # not in charly's core). Requiring it puts it in every k3s-server deploy's
+            # scanned candy set, so loadProjectPlugins (in the bed runner AND in
+            # `charly bundle add`) builds + connects it before the deploy's kubeconfig
+            # merge and the bed's `kube:` checks dispatch. (box/<distro> adopts the
+            # matching @github pin via reconcile later — the deliberate cross-repo lag;
+            # the R10 bed loads the LOCAL candy via the superproject override.)
+            - plugin-kube
     k3s-server-security:
         # Layer-intrinsic container security. Applied ONLY to pod targets via
         # quadlet PodmanArgs; VM and host targets silently ignore this block

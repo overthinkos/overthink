@@ -362,13 +362,15 @@ check-k3s-vm:
         cluster: "vm-k3s-vm"
         stdout: {contains: "local-path"}
         context: [runtime]
-    kv-k8s-raw-version:
-        check: k8s=raw
-        id: kv-k8s-raw-version
+    kv-k8s-raw:
+        check: k8s=raw — the raw escape hatch lists an arbitrary resource (namespaces)
+        id: kv-k8s-raw
         kube: raw
         cluster: "vm-k3s-vm"
-        text: "version -o json"
+        kube_resource: namespaces
         context: [runtime]
+        stdout:
+            - contains: kube-system
     kv-k8s-service-kubernetes:
         check: k8s=service
         id: kv-k8s-service-kubernetes

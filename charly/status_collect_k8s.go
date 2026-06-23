@@ -4,8 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // K8sCollector is the kubernetes SubstrateCollector. It surfaces every
@@ -16,11 +14,13 @@ import (
 //
 // Provenance is Source="tree": k8s deploys do not run a container on this
 // host — they emit a manifest tree that `charly bundle sync` / `kubectl apply -k`
-// applies to a remote cluster. The flat (non-nested) view therefore reports
-// generation state, never live pod health. Under opts.Nested it additionally
-// queries the live cluster (via the same vendored client-go subset the
-// `charly check kube` verbs use) for the workload's readiness and refines Status
-// to running / not-ready / unreachable.
+// applies to a remote cluster. The collector reports generation state
+// (tree-present | not-generated), never live pod health: live cluster readiness
+// would require the client-go subset, which left charly's core go.mod for
+// the out-of-tree candy/plugin-kube (no host loads the plugin at `charly status`
+// time), so the former --nested live-readiness probe was dropped. A k8s
+// deployment's live health is asserted by a `kube:` check (candy/plugin-kube),
+// not the status collector.
 type K8sCollector struct {
 	c *Collector
 }
@@ -45,10 +45,11 @@ func (k *K8sCollector) Available(opts CollectOpts) bool {
 	return len(k8sDeployEntries(opts.Unified)) > 0
 }
 
-// Collect emits one row per declared target:k8s deploy. The flat view stats
+// Collect emits one row per declared target:k8s deploy. It stats
 // .opencharly/k8s/<name>/ (tree-present | not-generated) and reads
-// cluster/context from the referenced kind:k8s template. Under opts.Nested it
-// upgrades the status with a live cluster readiness probe.
+// cluster/context from the referenced kind:k8s template. There is no live cluster
+// readiness probe — that left for candy/plugin-kube with the client-go subset (see
+// the type docstring); a `kube:` check asserts live health instead.
 func (k *K8sCollector) Collect(ctx context.Context, opts CollectOpts) ([]DeploymentStatus, error) {
 	entries := k8sDeployEntries(opts.Unified)
 	if len(entries) == 0 {
@@ -89,15 +90,6 @@ func (k *K8sCollector) Collect(ctx context.Context, opts CollectOpts) ([]Deploym
 			row.Network = spec.KubeconfigContext
 		} else if node.From != "" {
 			row.Network = node.From
-		}
-
-		// Live readiness — only under --nested, only when a tree exists and a
-		// cluster context is known. Failure degrades to the tree-state status
-		// (never aborts the row).
-		if opts.Nested && treePresent && spec != nil {
-			if live, ok := k8sLiveStatus(ctx, name, node, spec); ok {
-				row.Status = live
-			}
 		}
 
 		rows = append(rows, row)
@@ -151,46 +143,9 @@ func k8sSpecFor(uf *UnifiedFile, node BundleNode) *K8sSpec {
 	return uf.K8s[node.From]
 }
 
-// k8sLiveStatus probes the live cluster for the deploy's workload readiness,
-// reusing the same client-go subset and predicates the `charly check kube` verbs
-// use. Returns ("running"|"not-ready", true) on a successful query, or
-// ("unreachable", true) when the cluster can't be reached; ("", false) only
-// when no workload GVR can be derived. Never panics, never blocks beyond the
-// dynamic client's own dialing.
-func k8sLiveStatus(ctx context.Context, name string, node BundleNode, spec *K8sSpec) (string, bool) {
-	gvr, ok := kindToGVR(k8sWorkloadKind(node))
-	if !ok {
-		return "", false
-	}
-	flags := &k8sClusterFlags{Context: spec.KubeconfigContext}
-	client, err := flags.dynamicClient()
-	if err != nil {
-		return "unreachable", true
-	}
-	ns := k8sWorkloadNamespace(node, spec)
-	u, err := client.Resource(gvr).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
-	if err != nil {
-		return "unreachable", true
-	}
-	if workloadReady(u) {
-		return "running", true
-	}
-	return "not-ready", true
-}
-
-// k8sWorkloadKind derives the workload kind for a deploy node using the same
-// heuristic GenerateK8sKustomize applies (service+storage → StatefulSet, etc.),
-// so the live probe targets the SAME resource that was generated.
-func k8sWorkloadKind(node BundleNode) string {
-	return selectWorkloadKind(K8sGenerateOpts{Deploy: node})
-}
-
-// k8sWorkloadNamespace resolves the workload namespace exactly as
-// deployNamespace does (deploy override → template default → "default").
-func k8sWorkloadNamespace(node BundleNode, spec *K8sSpec) string {
-	ns := deployNamespace(K8sGenerateOpts{Deploy: node, Cluster: spec})
-	if ns == "" {
-		ns = "default"
-	}
-	return ns
-}
+// The former --nested live-readiness probe (the client-go dynamic-client workload
+// query + its workload-kind/namespace helpers) was removed in the kube →
+// external-plugin dep-shed: it depended on the client-go dynamic client +
+// apimachinery, which left charly's core go.mod for candy/plugin-kube. `charly
+// status` reports the k8s deploy's tree-state only; a `kube: wait-ready` /
+// `kube: nodes` check (candy/plugin-kube) asserts live workload health.

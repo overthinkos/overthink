@@ -247,26 +247,8 @@ func TestShortNameMatchesRef(t *testing.T) {
 	}
 }
 
-// TestPosKubeRaw_JsonFlagThreaded covers the 2026-04-27 cutover's
-// `json: true` step modifier passthrough into the underlying
-// `charly check kube raw --json` invocation. List-mode default emits
-// `<namespace>/<name>` per line; --json emits the full JSON List
-// document for plan steps that author `stdout: { contains: kind }`.
-func TestPosKubeRaw_JsonFlagThreaded(t *testing.T) {
-	withJSON := posKubeRaw(&Op{KubeResource: "nodes", JSON: true})
-	foundJSON := false
-	for _, a := range withJSON {
-		if a == "--json" {
-			foundJSON = true
-		}
-	}
-	if !foundJSON {
-		t.Errorf("expected `--json` flag in argv when Check.JSON=true; got %v", withJSON)
-	}
-	withoutJSON := posKubeRaw(&Op{KubeResource: "nodes", JSON: false})
-	for _, a := range withoutJSON {
-		if a == "--json" {
-			t.Errorf("expected NO `--json` flag when Check.JSON=false; got %v", withoutJSON)
-		}
-	}
-}
+// TestPosKubeRaw_JsonFlagThreaded was removed in the kube → external-plugin
+// dep-shed: posKubeRaw (the `charly check kube raw` argv builder) left charly's core
+// with the rest of the kube verb. The `json: true` step modifier is now read
+// directly off the Op by candy/plugin-kube's runRaw (op.JSON → the full JSON List
+// document vs the `<namespace>/<name>` line form).

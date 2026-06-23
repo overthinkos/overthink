@@ -79,7 +79,11 @@ type CheckCmd struct {
 	Spice   SpiceCmd   `cmd:"" help:"VM SPICE display (handshake, inputs, native screenshot)"`
 	Vnc     VncCmd     `cmd:"" help:"Control VNC desktop in running containers"`
 	Wl      WlCmd      `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
-	Kube    KubeCmd    `cmd:"" name:"kube" help:"Kubernetes cluster probes (nodes, wait-nodes, pods, ingress, storageclass, addons, apply, delete, raw)"`
+	// `kube` is NOT a CLI subcommand here — the Kubernetes cluster-probe implementation (+ the
+	// client-go + apimachinery dependency) was dep-shed into the out-of-tree
+	// candy/plugin-kube module. `kube` is now a DECLARATIVE check VERB that dispatches to that
+	// external plugin via the provider registry (invokeVerbProvider, after the host pre-resolves
+	// any --cluster profile to a kubeconfig context); there is no host `charly check kube`.
 	// `adb` is NOT a CLI subcommand here — the Android Debug Bridge implementation (+ the
 	// goadb ADB-wire dependency) was dep-shed into the out-of-tree
 	// candy/plugin-adb module. `adb` is now a DECLARATIVE check VERB that dispatches to that
@@ -462,8 +466,18 @@ func (c *CheckLiveCmd) runVm() error {
 
 	runner := NewRunner(executor, resolver, RunModeLive)
 	runner.VerifyOnly = true
-	runner.Box = c.Box
-	runner.Instance = c.Instance
+	// Load the project's composed OUT-OF-TREE plugins so an externalized check
+	// verb (e.g. `kube:`, served by candy/plugin-kube) RESOLVES in the VM check
+	// path too — the SAME shared wiring the pod path uses (attachCheckRunnerContext,
+	// the ONE place every RunModeLive baked-plan runner loads plugins, R3). Without
+	// it a VM bed's `kube:` steps SKIP as `unknown verb "kube"` (the kube dep-shed
+	// regression: kube WAS a builtin, always registered, so runVm never needed it).
+	if cfg, cerr := LoadConfig(dir); cerr == nil {
+		attachCheckRunnerContext(runner, c.Box, c.Instance, nil, dir, cfg)
+	} else {
+		runner.Box = c.Box
+		runner.Instance = c.Instance
+	}
 	// Cross-deployment support for a VM SUBJECT (the `on:` driver dispatch +
 	// ${HOST}/${HOST} resolution) — the SAME wiring the pod
 	// (CheckLiveCmd.Run) and local (runLocalCheck) paths already do (R3). Without

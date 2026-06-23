@@ -110,16 +110,19 @@ type methodSpec struct {
 // posAtspi/posClipboard/posOverlayShow/posDbusCall/posMcpCommon/posRecordStart/
 // posKeyNameSplit/posLibvirtQmp/posCommandFields/…), the methodSpec type, and the
 // artifactValidatableMethods allowlist STAY here — reused across every live verb (R3).
-// Only the dep-shedder kube keeps its method map below until its later, dep-shedding
-// extraction (adb + appium are already extracted as external-charly-verbs).
+// NO dep-shedder remains here: kube/adb/appium have all been extracted as
+// external-charly-verbs (candy/plugin-kube, candy/plugin-adb, candy/plugin-appium).
 
-// ---------------------------------------------------------------------------
-// kube methods — `charly check kube <method>` probes a Kubernetes cluster via the
-// vendored client-go SDK. Cluster selection is via --cluster <profile> /
-// --context / --kubeconfig (see checkrun_charly_verbs_test.go). Host-side; applicable to
-// any deploy whose post-provision registered a ClusterProfile (typically
-// a k3s-server candy).
-// ---------------------------------------------------------------------------
+// The kube method allowlist + its positional-arg builders + the shared cluster-arg
+// renderer were removed in the kube → external-plugin dep-shed (the THIRD dep-shedder:
+// the client-go + apimachinery stack left charly's core go.mod). kube is now an
+// EXTERNAL-CHARLY-VERB served out-of-process by candy/plugin-kube: it keeps its
+// `kube:` discriminator + modifiers + #KubeMethod on core #Op (authoring unchanged) but
+// dispatches via invokeVerbProvider, NOT runCharlyVerb, so it has no in-proc method map
+// here. The host pre-resolves any --cluster profile to a concrete kubeconfig context
+// (provider_checkenv.go's preresolveKubeCluster) before marshaling the Op; the same
+// plugin's clientcmd-backed k3s kubeconfig-merge routes through it via k8s_plugin.go's
+// invokeKubePlugin.
 
 // The adb method allowlist + its positional-arg builders were removed in the adb →
 // external-plugin dep-shed (the SECOND dep-shedder: the goadb ADB-wire dependency left
@@ -134,154 +137,15 @@ type methodSpec struct {
 // core go.mod). appium is now an EXTERNAL-CHARLY-VERB served out-of-process by
 // candy/plugin-appium: it keeps its `appium:` discriminator + modifiers + #AppiumMethod on
 // core #Op (authoring unchanged) but dispatches via invokeVerbProvider, NOT runCharlyVerb,
-// so it has no in-proc method map here. Only kube remains (the last dep-shedder, extracted later).
+// so it has no in-proc method map here.
 
-// kube methods all run against a cluster, not an image/container, so
-// skipBox=true across the board.
-var kubeMethods = map[string]methodSpec{
-	"nodes":          {path: []string{"kube", "nodes"}, posArgs: posKubeCluster, skipBox: true},
-	"wait-nodes":     {path: []string{"kube", "wait-nodes"}, posArgs: posKubeWaitNodes, skipBox: true},
-	"pods":           {path: []string{"kube", "pods"}, posArgs: posKubePods, skipBox: true},
-	"wait-ready":     {path: []string{"kube", "wait-ready"}, required: []string{"Kind", "Name"}, posArgs: posKubeWaitReady, skipBox: true},
-	"ingress":        {path: []string{"kube", "ingress"}, posArgs: posKubeNamespaceOpt, skipBox: true},
-	"ingressclass":   {path: []string{"kube", "ingressclass"}, posArgs: posKubeCluster, skipBox: true},
-	"storageclass":   {path: []string{"kube", "storageclass"}, posArgs: posKubeCluster, skipBox: true},
-	"service":        {path: []string{"kube", "service"}, posArgs: posKubeNamespaceOpt, skipBox: true},
-	"lb-external-ip": {path: []string{"kube", "lb-external-ip"}, required: []string{"Namespace", "Name"}, posArgs: posKubeLbExternal, skipBox: true},
-	"addons":         {path: []string{"kube", "addons"}, posArgs: posKubeAddons, skipBox: true},
-	"apply":          {path: []string{"kube", "apply"}, required: []string{"Manifest"}, posArgs: posKubeApply, skipBox: true},
-	"delete":         {path: []string{"kube", "delete"}, required: []string{"Manifest"}, posArgs: posKubeApply, skipBox: true},
-	"raw":            {path: []string{"kube", "raw"}, required: []string{"Resource"}, posArgs: posKubeRaw, skipBox: true},
-}
-
-// ---------------------------------------------------------------------------
-// kube positional-arg builders — every method emits --cluster/--context/
-// --kubeconfig + its method-specific flags. Because kube probes are run
-// against a cluster (not a container/image), the --image positional from
-// runCharlyVerb is still passed, but `charly check kube ...` ignores it by accepting
-// arbitrary trailing args under Kong's default catch-all policy.
-// ---------------------------------------------------------------------------
-
-// posKubeCluster emits only the shared cluster-selection flags. Used by
-// methods that take no other parameters (nodes, ingressclass, storageclass).
-func posKubeCluster(c *Op) []string {
-	return kubeClusterArgs(c)
-}
-
-func posKubeWaitNodes(c *Op) []string {
-	args := kubeClusterArgs(c)
-	if c.KubeCount > 0 {
-		args = append(args, "--count", strconv.Itoa(c.KubeCount))
-	}
-	if c.Name != "" {
-		args = append(args, "--name", c.Name)
-	}
-	if c.Timeout != "" {
-		args = append(args, "--timeout", c.Timeout)
-	}
-	return args
-}
-
-func posKubePods(c *Op) []string {
-	args := kubeClusterArgs(c)
-	if c.Namespace != "" {
-		args = append(args, "--namespace", c.Namespace)
-	}
-	if c.Label != "" {
-		args = append(args, "--label", c.Label)
-	}
-	return args
-}
-
-func posKubeWaitReady(c *Op) []string {
-	args := kubeClusterArgs(c)
-	args = append(args, "--kind", c.KubeKind, "--name", c.Name)
-	if c.Namespace != "" {
-		args = append(args, "--namespace", c.Namespace)
-	}
-	if c.Timeout != "" {
-		args = append(args, "--timeout", c.Timeout)
-	}
-	return args
-}
-
-func posKubeNamespaceOpt(c *Op) []string {
-	args := kubeClusterArgs(c)
-	if c.Namespace != "" {
-		args = append(args, "--namespace", c.Namespace)
-	}
-	return args
-}
-
-func posKubeLbExternal(c *Op) []string {
-	args := kubeClusterArgs(c)
-	args = append(args, "--namespace", c.Namespace, "--name", c.Name)
-	if c.Timeout != "" {
-		args = append(args, "--timeout", c.Timeout)
-	}
-	return args
-}
-
-func posKubeAddons(c *Op) []string {
-	args := kubeClusterArgs(c)
-	if c.Namespace != "" {
-		args = append(args, "--namespace", c.Namespace)
-	}
-	if c.Timeout != "" {
-		args = append(args, "--timeout", c.Timeout)
-	}
-	return args
-}
-
-func posKubeApply(c *Op) []string {
-	args := kubeClusterArgs(c)
-	args = append(args, "--file", c.Manifest)
-	if c.Namespace != "" {
-		args = append(args, "--namespace", c.Namespace)
-	}
-	return args
-}
-
-func posKubeRaw(c *Op) []string {
-	args := kubeClusterArgs(c)
-	args = append(args, "--resource", c.KubeResource)
-	if c.KubeGroup != "" {
-		args = append(args, "--group", c.KubeGroup)
-	}
-	if c.KubeVersion != "" {
-		args = append(args, "--version", c.KubeVersion)
-	}
-	if c.Name != "" {
-		args = append(args, "--name", c.Name)
-	}
-	if c.Namespace != "" {
-		args = append(args, "--namespace", c.Namespace)
-	}
-	if c.JSON {
-		// A check's `json: true` → `--json` flag on the underlying
-		// `charly check kube raw` invocation. List-mode then emits the
-		// full Kubernetes List JSON document instead of one
-		// `<namespace>/<name>` per line.
-		args = append(args, "--json")
-	}
-	return args
-}
-
-// kubeClusterArgs renders the shared --cluster / --context / --kubeconfig
-// selection flags from the Check.
-func kubeClusterArgs(c *Op) []string {
-	var args []string
-	if c.Cluster != "" {
-		args = append(args, "--cluster", c.Cluster)
-	}
-	if c.KubeContext != "" {
-		args = append(args, "--context", c.KubeContext)
-	}
-	if c.Kubeconfig != "" {
-		args = append(args, "--kubeconfig", c.Kubeconfig)
-	}
-	return args
-}
+// The kube positional-arg builders (posKubeCluster/posKubeWaitNodes/posKubePods/
+// posKubeWaitReady/posKubeNamespaceOpt/posKubeLbExternal/posKubeAddons/posKubeApply/
+// posKubeRaw) and the shared kubeClusterArgs renderer were removed in the kube →
+// external-plugin dep-shed: kube no longer dispatches via runCharlyVerb (there is no
+// `charly check kube` subprocess), so its argv builders have no caller. The Kubernetes
+// probe dispatch now lives in candy/plugin-kube; the host pre-resolves the cluster
+// context in provider_checkenv.go's preresolveKubeCluster and marshals the full #Op.
 
 // ---------------------------------------------------------------------------
 // positional-arg builders — reused across verbs.
@@ -542,16 +406,12 @@ func (r *Runner) resolveCheckApk(apk, origin string) (string, error) {
 
 // run<Verb> for cdp/vnc/wl/dbus/mcp/record/spice/libvirt lives in each verb's dedicated
 // plugin_verb_<verb>.go file (Phase 1 live-container-verb relocation) — alongside its
-// provider + method allowlist. Only the dep-shedder kube keeps its dispatcher here until
-// its later, dep-shedding extraction.
+// provider + method allowlist. NO dep-shedder dispatcher remains here.
 
-func (r *Runner) runKube(ctx context.Context, c *Op) CheckResult {
-	return r.runCharlyVerb(ctx, c, "kube", c.Kube, kubeMethods)
-}
-
-// The adb + appium runCharlyVerb dispatchers were removed in their external-plugin dep-sheds
-// — neither dispatches through a `charly check <verb>` subprocess anymore; each grpcProvider
-// (candy/plugin-adb, candy/plugin-appium) is invoked via invokeVerbProvider with the full #Op.
+// The kube + adb + appium runCharlyVerb dispatchers were removed in their external-plugin
+// dep-sheds — none dispatches through a `charly check <verb>` subprocess anymore; each
+// grpcProvider (candy/plugin-kube, candy/plugin-adb, candy/plugin-appium) is invoked via
+// invokeVerbProvider with the full #Op.
 
 // runCharlyVerb is the shared dispatch path: skip checks, method lookup,
 // argv building, subprocess exec, matcher pipeline, optional artifact size
@@ -966,42 +826,13 @@ func isZeroField(c *Op, name string) bool {
 		return c.Spice == ""
 	case "Libvirt":
 		return c.Libvirt == ""
-	case "Kube":
-		return c.Kube == ""
-	case "Name":
-		return c.Name == ""
-	case "Namespace":
-		return c.Namespace == ""
-	case "Label":
-		return c.Label == ""
-	case "Cluster":
-		return c.Cluster == ""
-	case "Manifest":
-		return c.Manifest == ""
-	case "Kind":
-		// Kind is a METHOD on Check; required-field lookups of "Kind" target
-		// the kube-specific KubeKind field to avoid the method-vs-field name
-		// clash that Go disallows.
-		return c.KubeKind == ""
-	case "KubeKind":
-		return c.KubeKind == ""
-	case "KubeContext":
-		return c.KubeContext == ""
-	case "Kubeconfig":
-		return c.Kubeconfig == ""
-	case "KubeCount":
-		return c.KubeCount == 0
-	case "KubeResource":
-		return c.KubeResource == ""
-	case "KubeGroup":
-		return c.KubeGroup == ""
-	case "KubeVersion":
-		return c.KubeVersion == ""
-		// The adb required-field cases (Args/Apk/Property/AppId, plus the "Adb"
-		// discriminator) were DELETED in the adb → external-plugin dep-shed: adb's
-		// required-modifier checks now run inside candy/plugin-adb (methods.go's
-		// checkRequiredModifiers), so no remaining in-proc verb's required: list names
-		// them. The appium required-field cases left the SAME way (candy/plugin-appium).
+		// The kube required-field cases (Kube/Name/Namespace/Label/Cluster/Manifest/Kind/
+		// KubeKind/KubeContext/Kubeconfig/KubeCount/KubeResource/KubeGroup/KubeVersion) were
+		// DELETED in the kube → external-plugin dep-shed: kube's required-modifier checks now
+		// run inside candy/plugin-kube (methods.go's checkRequiredModifiers), so no remaining
+		// in-proc verb's required: list names them. The adb required-field cases
+		// (Args/Apk/Property/AppId, plus the "Adb" discriminator) left the SAME way
+		// (candy/plugin-adb), as did the appium required-field cases (candy/plugin-appium).
 	}
 	// Unknown field name is a programming error: treat as "not zero" so
 	// authoring errors surface elsewhere instead of spurious skips.

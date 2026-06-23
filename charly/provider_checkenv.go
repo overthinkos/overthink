@@ -171,6 +171,11 @@ func (r *Runner) invokeVerbProvider(ctx context.Context, prov Provider, word str
 			c = &cc
 		}
 	}
+	// Pre-resolve a `kube:` op's `cluster: <profile>` to a concrete kubeconfig context
+	// host-side — an out-of-process kube verb cannot reach core's project loader
+	// (findK8sSpec) to map a ClusterProfile name to a context. Copy-on-write, like the
+	// apk path above; a no-op for every non-kube verb.
+	c = preresolveKubeCluster(c)
 	params, err := marshalJSON(c)
 	if err != nil {
 		res.Status = TestFail

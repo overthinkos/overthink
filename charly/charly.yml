@@ -16,7 +16,7 @@ version: 2026.174.1100
 # list is empty by design too.
 providers:
     kind: []
-    verb: [kill, kube, plugin, summarize]
+    verb: [kill, plugin, summarize]
     deploy: []
     step: []
     builder: []

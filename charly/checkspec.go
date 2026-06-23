@@ -310,7 +310,7 @@ var VerbCatalog = map[string]VerbSpec{
 	// (charly/plugin/builtins/{http,interface,addr}).
 
 	// live-container — runtime only; act drives UI/config, reversed via plan
-	// teardown (never the ledger). kube also legal at deploy (apply manifest).
+	// teardown (never the ledger).
 	"cdp":     {ctxRuntimeOnly, DoAssert, false},
 	"wl":      {ctxRuntimeOnly, DoAssert, false},
 	"dbus":    {ctxRuntimeOnly, DoAssert, false},
@@ -319,7 +319,13 @@ var VerbCatalog = map[string]VerbSpec{
 	"record":  {ctxRuntimeOnly, DoAssert, false},
 	"spice":   {ctxRuntimeOnly, DoAssert, false},
 	"libvirt": {ctxRuntimeOnly, DoAssert, false},
-	"kube":    {ctxDeployRuntime, DoAssert, false},
+	// `kube` is NOT here — it is an EXTERNAL-CHARLY-VERB served out-of-process by
+	// candy/plugin-kube. It left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc
+	// CheckVerbProvider) but keeps its `kube:` discriminator + modifiers + the #KubeMethod
+	// enum on core #Op (authoring unchanged); the registered external provider resolves at
+	// dispatch (the host pre-resolves any --cluster profile to a kubeconfig context first).
+	// Its deploy/runtime-context legality now lives on the authored `context:` + the
+	// plugin's own box-mode skip, not this table.
 	// `adb` is NOT here — it is an EXTERNAL-CHARLY-VERB served out-of-process by
 	// candy/plugin-adb. It left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc
 	// CheckVerbProvider) but keeps its `adb:` discriminator + modifiers + the #AdbMethod

@@ -48,9 +48,11 @@ func TestArtifactValidatableMethods_MatchesArtifactProducingMethodSpecs(t *testi
 		"libvirt": libvirtMethods,
 		"spice":   spiceMethods,
 		"record":  recordMethods,
-		"kube":    kubeMethods,
 		"dbus":    dbusMethods,
 		"mcp":     mcpMethods,
+		// kube/adb/appium are NOT here — each is an EXTERNAL-CHARLY-VERB
+		// (candy/plugin-kube / candy/plugin-adb / candy/plugin-appium) with no in-proc
+		// method table; its artifact-method validation runs inside the plugin.
 	} {
 		for method, spec := range table {
 			if spec.artifact {

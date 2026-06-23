@@ -258,7 +258,6 @@ var OpVerbs = []string{
 	"record",
 	"spice",
 	"libvirt",
-	"kube",
 	"summarize",
 	"kill",
 	"plugin",
@@ -403,5 +402,4 @@ var LiveVerbMethods = map[string][]string{
 	"record":  {"list", "start", "stop", "cmd"},
 	"spice":   {"status", "screenshot", "cursor", "click", "mouse", "type", "key"},
 	"libvirt": {"list", "info", "screenshot", "send-key", "passwd", "qmp", "domain-xml", "console", "events", "guest/ping", "guest/info", "guest/os-info", "guest/time", "guest/hostname", "guest/users", "guest/interfaces", "guest/disks", "guest/fsinfo", "guest/vcpus", "guest/exec", "guest/fstrim", "snapshot/list", "snapshot/create", "snapshot/info", "snapshot/revert", "snapshot/delete"},
-	"kube":    {"nodes", "wait-nodes", "pods", "wait-ready", "ingress", "ingressclass", "storageclass", "service", "lb-external-ip", "addons", "apply", "delete", "raw"},
 }

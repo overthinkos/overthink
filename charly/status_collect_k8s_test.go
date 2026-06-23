@@ -141,27 +141,7 @@ func TestK8sCollector_AvailableFalse(t *testing.T) {
 	}
 }
 
-// TestK8sWorkloadKind asserts the live-probe kind heuristic matches the
-// generator's selectWorkloadKind (service→Deployment, service+storage→
-// StatefulSet, daemon→DaemonSet) so the Nested probe targets the SAME GVR
-// the tree was generated for.
-func TestK8sWorkloadKind(t *testing.T) {
-	cases := []struct {
-		node BundleNode
-		want string
-	}{
-		{BundleNode{}, "Deployment"},
-		{BundleNode{Kind: "service"}, "Deployment"},
-		{BundleNode{Kind: "service", Storage: []DeployStorage{{Name: "data"}}}, "StatefulSet"},
-		{BundleNode{Kind: "daemon"}, "DaemonSet"},
-	}
-	for _, c := range cases {
-		got := k8sWorkloadKind(c.node)
-		if got != c.want {
-			t.Errorf("k8sWorkloadKind(%+v) = %q, want %q", c.node, got, c.want)
-		}
-		if _, ok := kindToGVR(got); !ok && got != "Job" && got != "CronJob" {
-			t.Errorf("kindToGVR(%q) returned ok=false; live probe would skip", got)
-		}
-	}
-}
+// TestK8sWorkloadKind was removed with the --nested live-readiness probe (the
+// workload-kind heuristic + GVR mapping left charly's core for candy/plugin-kube in
+// the kube → external-plugin dep-shed). The remaining collector tests assert
+// tree-state only.

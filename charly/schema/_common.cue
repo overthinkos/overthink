@@ -17,7 +17,7 @@
 // the `--- verb discriminators ---` group in #Op.
 #OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" |
 	"cdp" | "wl" | "dbus" | "vnc" | "mcp" | "record" | "spice" |
-	"libvirt" | "kube" | "summarize" | "kill" | "plugin") @go(-)
+	"libvirt" | "summarize" | "kill" | "plugin") @go(-)
 
 // ---------------------------------------------------------------------------
 // Plan steps: the unified run/check/agent-run/agent-check/include vocabulary.
@@ -62,6 +62,17 @@
 	record?:         #RecordMethod
 	spice?:          #SpiceMethod
 	libvirt?:        #LibvirtMethod
+	// `kube` is an EXTERNAL-CHARLY-VERB: its implementation (+ the heavy
+	// client-go + apimachinery dependency) lives in the out-of-tree
+	// candy/plugin-kube module, served OUT-OF-PROCESS. Like cdp/vnc (and unlike
+	// file/package/service/command, which left #Op entirely, re-authored as
+	// `plugin: <verb>`), kube KEEPS its `kube:` discriminator + every modifier on
+	// this closed #Op — authoring is unchanged (`kube: nodes`, not `plugin: kube`).
+	// It therefore left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc CheckVerbProvider
+	// to gate) BUT keeps this field + #KubeMethod here, so `kube: nodes` still
+	// validates against the method enum and VerbsSet still classifies the op (then
+	// dispatch resolves the registered external provider, after the host pre-resolves
+	// any --cluster profile to a concrete kubeconfig context).
 	kube?:           #KubeMethod
 	// `adb` is an EXTERNAL-CHARLY-VERB: its implementation (+ the heavy goadb
 	// ADB-wire dependency) lives in the out-of-tree candy/plugin-adb module,

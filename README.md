@@ -604,8 +604,10 @@ getprop`, `appium: click`, …):
 - `charly check libvirt` — libvirt API (VM info, screenshot, send-key,
   QMP, snapshots, event stream).
 - `charly check record` — terminal asciinema or desktop ffmpeg.
-- `charly check kube` — Kubernetes probes (nodes, pods, ingress,
-  wait-ready, storageclass, addons, raw kubectl).
+- `kube:` — Kubernetes cluster-probe declarative check verb (nodes, pods,
+  ingress, wait-ready, storageclass, addons, apply/delete, raw resource
+  GETs) — out-of-process plugin (`candy/plugin-kube`), no host CLI
+  subcommand.
 - `adb:` — Android Debug Bridge declarative check verb (devices, shell,
   install, getprop, screencap, logcat, wait-for-device) — out-of-process
   plugin, no host CLI subcommand.

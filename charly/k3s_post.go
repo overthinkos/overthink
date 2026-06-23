@@ -4,27 +4,24 @@ package main
 // included k3s-server. Runs after RetrieveCandyArtifacts has pulled the
 // kubeconfig to ~/.cache/charly/clusters/<deploy>/kubeconfig.yaml.
 //
-// Two things happen here that the generic artifact-retricheck pipeline
-// cannot:
-//   1. Merge the retrieved kubeconfig into ~/.kube/config under a context
-//      named after the deploy, so `kubectl --context <deploy> …` and
-//      `charly check kube nodes --cluster <deploy>` both work immediately.
-//   2. Write a ClusterProfile at ~/.config/charly/clusters/<deploy>.yaml with
-//      ingress.class=traefik and storage.class_default=local-path so any
-//      subsequent `charly bundle add <app> --target kubernetes` that selects
-//      this cluster picks up the right defaults for the k3s addon stack.
+// One thing happens here that the generic artifact-retricheck pipeline cannot:
+// merge the retrieved kubeconfig into ~/.kube/config under a context named after
+// the deploy, so `kubectl --context <deploy> …` and a `kube:` check addressing the
+// deploy (cluster: ${DEPLOY_NAME}) both work immediately. The clientcmd merge — and
+// therefore the client-go dependency — lives in the out-of-tree
+// candy/plugin-kube provider (invokeKubePlugin), not in charly's core.
 //
-// Called from deploy_add_cmd.go and deploy_add_cmd_vm.go after the artifact
-// retricheck step when the deploy's candy list contains "k3s-server".
+// Called from deploy_add_cmd.go and deploy_add_cmd_vm.go (both via
+// deploy_add_shared.go) after the artifact retricheck step when the deploy's candy
+// list contains "k3s-server". `charly bundle add` loads the deploy's composed
+// external plugins first (loadProjectPlugins), so candy/plugin-kube — required by
+// the k3s-server candy — is connected before this merge dispatches.
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"k8s.io/client-go/tools/clientcmd"
-	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 // sanitizeDeployName turns a deploy name like "vm:arch" or "stack.web.db"
@@ -56,79 +53,21 @@ func K3sPostProvision(deployName string) error {
 	if err := mergeKubeconfig(retrieved, contextName); err != nil {
 		return fmt.Errorf("merging kubeconfig into ~/.kube/config: %w", err)
 	}
-	if err := WriteClusterProfile(safe, contextName); err != nil {
-		return fmt.Errorf("writing ClusterProfile: %w", err)
-	}
 	fmt.Fprintf(os.Stderr, "k3s cluster %q registered — kubectl --context=%s get nodes\n", deployName, contextName)
-	fmt.Fprintf(os.Stderr, "ClusterProfile written to ~/.config/charly/clusters/%s.yaml (ingress=traefik, storage=local-path)\n", safe)
 	return nil
 }
 
-// mergeKubeconfig reads the retrieved kubeconfig and merges it into the
-// operator's ~/.kube/config under the chosen context name. Existing
-// entries with the same context/cluster/user name are OVERWRITTEN —
-// deploy-add is the single source of truth for clusters it manages, so
-// a rebuild cleanly picks up a fresh admin cert without stale entries.
+// mergeKubeconfig merges the retrieved kubeconfig into the operator's
+// ~/.kube/config under the chosen context name. The clientcmd merge itself — and
+// therefore the client-go clientcmd dependency — lives in the
+// out-of-tree candy/plugin-kube provider; this host-side wrapper just dispatches a
+// synthetic `kube: merge-kubeconfig` #Op to it (invokeKubePlugin). Existing entries
+// with the same context/cluster/user name are OVERWRITTEN by the plugin —
+// deploy-add is the single source of truth for clusters it manages, so a rebuild
+// cleanly picks up a fresh admin cert without stale entries.
 func mergeKubeconfig(retrievedPath, contextName string) error {
-	home, err := os.UserHomeDir()
-	if err != nil {
+	if _, err := invokeKubePlugin(&Op{Kube: "merge-kubeconfig", Kubeconfig: retrievedPath, KubeContext: contextName}); err != nil {
 		return err
-	}
-	kubeConfigPath := filepath.Join(home, ".kube", "config")
-
-	// Load the retrieved kubeconfig.
-	srcCfg, err := clientcmd.LoadFromFile(retrievedPath)
-	if err != nil {
-		return fmt.Errorf("loading retrieved kubeconfig %s: %w", retrievedPath, err)
-	}
-	if len(srcCfg.Contexts) == 0 {
-		return fmt.Errorf("retrieved kubeconfig has no contexts")
-	}
-
-	// k3s emits kubeconfig with one context named "default" that points
-	// at the "default" cluster + "default" user. Rename each of these to
-	// the deploy-named context so multiple clusters can coexist in one
-	// ~/.kube/config.
-	// Find the single cluster/user/context in the source — k3s always
-	// emits exactly one of each.
-	var srcCtxName, srcClusterName, srcUserName string
-	for n := range srcCfg.Contexts {
-		srcCtxName = n
-		break
-	}
-	srcCtx := srcCfg.Contexts[srcCtxName]
-	srcClusterName = srcCtx.Cluster
-	srcUserName = srcCtx.AuthInfo
-
-	// Load (or initialize) the destination kubeconfig.
-	var dstCfg *clientcmdapi.Config
-	if _, err := os.Stat(kubeConfigPath); err == nil {
-		dstCfg, err = clientcmd.LoadFromFile(kubeConfigPath)
-		if err != nil {
-			return fmt.Errorf("loading existing kubeconfig %s: %w", kubeConfigPath, err)
-		}
-	} else {
-		dstCfg = clientcmdapi.NewConfig()
-	}
-
-	// Upsert with deploy-named keys.
-	dstCfg.Clusters[contextName] = srcCfg.Clusters[srcClusterName]
-	dstCfg.AuthInfos[contextName] = srcCfg.AuthInfos[srcUserName]
-	newCtx := clientcmdapi.NewContext()
-	newCtx.Cluster = contextName
-	newCtx.AuthInfo = contextName
-	if srcCtx.Namespace != "" {
-		newCtx.Namespace = srcCtx.Namespace
-	}
-	dstCfg.Contexts[contextName] = newCtx
-	// Leave CurrentContext alone — we don't want adding a cluster to
-	// silently switch the operator's default context.
-
-	if err := os.MkdirAll(filepath.Dir(kubeConfigPath), 0o755); err != nil {
-		return err
-	}
-	if err := clientcmd.WriteToFile(*dstCfg, kubeConfigPath); err != nil {
-		return fmt.Errorf("writing %s: %w", kubeConfigPath, err)
 	}
 	return nil
 }

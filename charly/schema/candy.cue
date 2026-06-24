@@ -35,6 +35,16 @@
 	// authoring surface). See provider.go / plugin_loader.go.
 	plugin?: #Plugin @go(Plugin,optional=nillable)
 
+	// external_builder — the reserved word of an EXTERNAL builder plugin
+	// (`builder:<word>`, an out-of-tree grpcProvider) this candy SELECTS to produce
+	// a multi-stage build artifact. At image build the generator resolves the word,
+	// Invokes the provider's OpResolve, and splices the returned BuilderResolveReply
+	// (the FROM…AS stage pre-main-FROM + the COPY --from artifacts post-main-FROM).
+	// The build-time BUILDER leg — the counterpart of a `run:` step's `plugin:` verb
+	// (the STEP leg). A builtin builder (pixi/cargo/npm/aur) is selected by detection
+	// files, NOT this field. See generate.go emitExternalBuilderStages.
+	external_builder?: string & !="" @go(ExternalBuilder)
+
 	// --- runtime env / local vars / PATH ---
 	// env forbids PATH (validate.go: use path_append instead). Values are
 	// Go-coerced scalars (#StrVal) — an unquoted `PORT: 8080` is a string. The Go

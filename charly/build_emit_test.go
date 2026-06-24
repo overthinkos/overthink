@@ -44,6 +44,46 @@ func TestEmitPluginFragment_BuildTimeOpEmit(t *testing.T) {
 	}
 }
 
+// stubResolveBuilder is an in-proc Provider that resolves a build-time BUILDER stage
+// via OpResolve — the same Provider.Invoke interface a real OUT-OF-PROCESS grpcProvider
+// satisfies, so this exercises the placement-agnostic build-resolve dispatch (the
+// BUILDER leg) without a subprocess (the gRPC path is covered by the plugin transport
+// round-trip tests).
+type stubResolveBuilder struct{}
+
+func (stubResolveBuilder) Reserved() string     { return "stubbuilder" }
+func (stubResolveBuilder) Class() ProviderClass { return ClassBuilder }
+func (stubResolveBuilder) Invoke(_ context.Context, op *Operation) (*Result, error) {
+	if op.Op != OpResolve {
+		return &Result{JSON: []byte(`{}`)}, nil
+	}
+	// A real plugin would tailor the stage from op.Params (the requesting candy) +
+	// op.Env (spec.BuildEnv); the stub returns a deterministic multi-stage block + a
+	// COPY --from proving it ran at build.
+	return &Result{JSON: []byte(`{"stage":"FROM scratch AS stubbuilder-stage\nRUN : > /built\n","copy_artifacts":["COPY --from=stubbuilder-stage /built /opt/stubbuilder-artifact"]}`)}, nil
+}
+
+// TestResolveExternalBuilder_BuildTimeOpResolve is the build-time-plugin-execution
+// BUILDER-leg gate: an external builder provider renders its build-context multi-stage
+// block via Invoke(OpResolve), which emitExternalBuilderStages splices pre-main-FROM
+// (the Stage) and emitExternalBuilderArtifacts splices post-main-FROM (the
+// CopyArtifacts). This proves the resolve helper extracts both — placement-agnostic,
+// since the stub is reached through the SAME Provider.Invoke an external grpcProvider
+// implements.
+func TestResolveExternalBuilder_BuildTimeOpResolve(t *testing.T) {
+	img := &ResolvedBox{Name: "fedora", Tags: []string{"fedora:43", "fedora"}}
+	reply, err := resolveExternalBuilder(stubResolveBuilder{}, "stubbuilder", "stubbuilder-consumer", img)
+	if err != nil {
+		t.Fatalf("resolveExternalBuilder: %v", err)
+	}
+	if !strings.Contains(reply.Stage, "FROM scratch AS stubbuilder-stage") {
+		t.Fatalf("Stage = %q, want the plugin's multi-stage FROM…AS block", reply.Stage)
+	}
+	if len(reply.CopyArtifacts) != 1 || !strings.Contains(reply.CopyArtifacts[0], "COPY --from=stubbuilder-stage /built /opt/stubbuilder-artifact") {
+		t.Fatalf("CopyArtifacts = %v, want the plugin's single COPY --from directive", reply.CopyArtifacts)
+	}
+}
+
 // stubBuildEmitterVerb is the BUILTIN placement of a build-emit verb: an in-proc
 // provider that BOTH marks the capability (BuildEmits) AND renders the fragment
 // (Invoke OpEmit). opActsInBuildDeploy must accept it in a build context.

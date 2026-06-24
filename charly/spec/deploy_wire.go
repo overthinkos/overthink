@@ -190,3 +190,19 @@ type BuildEnv struct {
 type EmitReply struct {
 	Fragment string `json:"fragment"`
 }
+
+// BuilderResolveReply is what an external builder plugin returns from an OpResolve
+// Invoke at image-generation time — the build-time BUILDER leg, the multi-stage
+// counterpart of a verb/step's EmitReply. Stage is the `FROM <ref> AS <name>` block
+// (its RUN/COPY body included) spliced PRE-main-FROM by emitExternalBuilderStages
+// (alongside the embedded builder: vocabulary's StageTemplate output); CopyArtifacts
+// are the `COPY --from=<stage> …` directives spliced POST-main-FROM by
+// emitExternalBuilderArtifacts to pull the built artifacts into the final image. A
+// candy SELECTS the external builder via its `external_builder:` field; the same
+// reply travels both splice points (cached per candy on the Generator). Both the
+// Stage and the CopyArtifacts are egress-validated with the rest of the Containerfile
+// before it hits disk.
+type BuilderResolveReply struct {
+	Stage         string   `json:"stage"`
+	CopyArtifacts []string `json:"copy_artifacts,omitempty"`
+}

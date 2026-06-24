@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/overthinkos/overthink/charly/spec"
 )
 
 // Generator holds state for generating build artifacts
@@ -42,6 +44,13 @@ type Generator struct {
 	// passes `--dev-local-pkg`), so a bed always tests the in-development charly;
 	// a production box build leaves it false. See renderLocalPkgImageInstall.
 	DevLocalPkg bool
+
+	// externalBuilderReplies caches each candy's external-builder OpResolve reply
+	// for ONE image: emitExternalBuilderStages populates it (writing the pre-main-FROM
+	// stage) and emitExternalBuilderArtifacts reads it (writing the post-main-FROM
+	// COPY --from artifacts) — so the provider is Invoked exactly once per candy. Keyed
+	// by candy name; RESET per image at the start of emitExternalBuilderStages.
+	externalBuilderReplies map[string]spec.BuilderResolveReply
 }
 
 // globalOrderForBox returns the candy order for an image by filtering the
@@ -434,6 +443,14 @@ func (g *Generator) generateContainerfile(boxName string) error {
 		return err
 	}
 
+	// Emit per-candy EXTERNAL builder stages — the build-time BUILDER leg: a candy
+	// selecting an `external_builder:` (an out-of-tree builder plugin) gets the
+	// provider's OpResolve stage spliced here, pre-main-FROM (the artifacts COPY
+	// follows post-main-FROM via emitExternalBuilderArtifacts).
+	if err := g.emitExternalBuilderStages(&b, img, candyOrder); err != nil {
+		return err
+	}
+
 	// Emit extraction stages for candies with extract field
 	g.emitExtractStages(&b, candyOrder)
 
@@ -508,6 +525,10 @@ func (g *Generator) generateContainerfile(boxName string) error {
 
 	// Copy builder artifacts — fully config-driven from the embedded builder: vocabulary copy_artifacts/copy_binary
 	g.emitBuilderArtifacts(&b, img, candyOrder)
+
+	// Copy EXTERNAL builder artifacts — the cached OpResolve reply's COPY --from
+	// directives (the post-main-FROM half of the build-time BUILDER leg).
+	g.emitExternalBuilderArtifacts(&b, candyOrder)
 
 	// Copy extracted files from multi-stage builds
 	g.emitExtractedFiles(&b, img, candyOrder)
@@ -624,6 +645,102 @@ func (g *Generator) emitBuilderStages(b *strings.Builder, boxName string, img *R
 		}
 	}
 	return nil
+}
+
+// emitExternalBuilderStages emits the pre-main-FROM multi-stage block for every
+// candy that selects an `external_builder:` — the build-time BUILDER leg, the
+// multi-stage counterpart of a `run:` step's `plugin:` verb (emitPluginFragment).
+// For each such candy it resolves the builder word through providerRegistry; an
+// EXTERNAL provider (a *grpcProvider connected by the build-time plugin connect seam
+// in NewGenerator) is Invoked with OpResolve and the returned BuilderResolveReply's
+// Stage is written verbatim (egress-validated with the rest of the Containerfile).
+// The reply is CACHED on the Generator so emitExternalBuilderArtifacts can splice the
+// matching COPY --from directives post-main-FROM without re-Invoking. An unresolvable
+// external_builder, a builtin/typed BuilderProvider (no OpResolve), or an Invoke error
+// fails LOUDLY (R4) — never a silently-dropped builder stage. The cache is RESET here
+// so it scopes to ONE image.
+func (g *Generator) emitExternalBuilderStages(b *strings.Builder, img *ResolvedBox, candyOrder []string) error {
+	g.externalBuilderReplies = map[string]spec.BuilderResolveReply{}
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
+		word := layer.ExternalBuilder
+		if word == "" {
+			continue
+		}
+		prov, ok := providerRegistry.ResolveBuilder(word)
+		if !ok {
+			return fmt.Errorf("candy %q: external_builder %q is not a registered builder (an external plugin not connected at build time?)", candyName, word)
+		}
+		// A builtin BuilderProvider (pixi/cargo/npm/aur) is selected by detection
+		// files via the embedded builder: vocabulary, NOT external_builder — it has no
+		// OpResolve. Only an EXTERNAL out-of-process builder (a *grpcProvider) drives
+		// this path; reject a builtin so the author uses the right mechanism.
+		if _, isExternal := prov.(*grpcProvider); !isExternal {
+			return fmt.Errorf("candy %q: external_builder %q resolves to a built-in builder, not an external plugin — built-in builders are selected by detection files, not external_builder", candyName, word)
+		}
+		reply, err := resolveExternalBuilder(prov, word, candyName, img)
+		if err != nil {
+			return fmt.Errorf("candy %q: external_builder %q resolve: %w", candyName, word, err)
+		}
+		g.externalBuilderReplies[candyName] = reply
+		b.WriteString(reply.Stage)
+		if !strings.HasSuffix(reply.Stage, "\n") {
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
+	return nil
+}
+
+// emitExternalBuilderArtifacts writes the post-main-FROM COPY --from directives for
+// each candy whose external builder resolved in emitExternalBuilderStages (read from
+// the per-image cache — never re-Invoked). The artifacts pull the built files out of
+// the plugin's multi-stage build into the final image.
+func (g *Generator) emitExternalBuilderArtifacts(b *strings.Builder, candyOrder []string) {
+	for _, candyName := range candyOrder {
+		reply, ok := g.externalBuilderReplies[candyName]
+		if !ok || len(reply.CopyArtifacts) == 0 {
+			continue
+		}
+		fmt.Fprintf(b, "# Copy external_builder artifacts (%s)\n", g.Candies[candyName].ExternalBuilder)
+		for _, line := range reply.CopyArtifacts {
+			b.WriteString(line)
+			if !strings.HasSuffix(line, "\n") {
+				b.WriteString("\n")
+			}
+		}
+		b.WriteString("\n")
+	}
+}
+
+// resolveExternalBuilder Invokes an external builder provider's OpResolve and returns
+// the decoded BuilderResolveReply — the BUILDER-leg analogue of emitPluginFragment.
+// The plugin receives the requesting candy name as op.Params and a spec.BuildEnv
+// descriptor as op.Env (so it can tailor its stage per distro/image), and returns a
+// stage + COPY artifacts. An empty Stage means the provider produced no build-context
+// builder (a mis-selected word) — fail LOUDLY here, the real enforcement at build.
+func resolveExternalBuilder(prov Provider, word, candyName string, img *ResolvedBox) (spec.BuilderResolveReply, error) {
+	var zero spec.BuilderResolveReply
+	params, err := marshalJSON(map[string]string{"candy": candyName})
+	if err != nil {
+		return zero, fmt.Errorf("marshal builder params: %w", err)
+	}
+	env, err := marshalJSON(spec.BuildEnv{Distros: img.Tags, Image: img.Name})
+	if err != nil {
+		return zero, fmt.Errorf("marshal build env: %w", err)
+	}
+	res, err := prov.Invoke(context.Background(), &Operation{Reserved: word, Op: OpResolve, Params: params, Env: env})
+	if err != nil {
+		return zero, err
+	}
+	var reply spec.BuilderResolveReply
+	if err := json.Unmarshal(res.JSON, &reply); err != nil {
+		return zero, fmt.Errorf("decode OpResolve reply: %w", err)
+	}
+	if strings.TrimSpace(reply.Stage) == "" {
+		return zero, fmt.Errorf("external builder %q returned an empty OpResolve stage — it has no build-context builder", word)
+	}
+	return reply, nil
 }
 
 // emitExtractStages emits a `FROM <source> AS <candy>-extract-<i>` stage for

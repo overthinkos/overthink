@@ -2260,5 +2260,6 @@ func populateCandyFromYAML(layer *Candy, ly *CandyYAML) {
 	layer.apk = ly.Apk
 	layer.localpkg = ly.LocalPkg
 	layer.reboot = ly.Reboot
+	layer.ExternalBuilder = ly.ExternalBuilder
 	layer.shell = ly.Shell
 }

@@ -328,39 +328,40 @@ type Candy struct {
 	SubPathPrefix string // e.g. "candy/" — parent directory within the repo for sibling resolution
 
 	// Pre-populated from the candy manifest
-	formatSections map[string]*PackageSection // generic format sections (only `aur` now — the secondary AUR build format)
-	tagSections    map[string]*TagPkgConfig   // per-distro/version package sections (debian, ubuntu, debian:13, …) — the sole package surface
-	topPackages    []string                   // top-level package: — the always-included BASE, folded at RESOLVE time (never at parse — that cross-contaminated debian/ubuntu)
-	ports          []string
-	portSpecs      []PortSpec // full PortSpec data with protocol info
-	envConfig      *EnvConfig
-	route          *RouteConfig
-	serviceFiles   []string       // paths to *.service files in candy dir (systemd user-level, file_copy model)
-	service        []ServiceEntry // unified service: list (the only service schema)
-	volumes        []VolumeYAML
-	aliases        []AliasYAML
-	extract        []ExtractYAML
-	data           []DataYAML
-	security       *SecurityConfig
-	libvirt        []string
-	hooks          *HooksConfig
-	secrets        []SecretYAML
-	envProvides    map[string]string // env vars provided to other containers (service discovery)
-	envRequires    []EnvDependency   // env vars this candy must have
-	envAccepts     []EnvDependency   // env vars this candy can optionally use
-	secretAccepts  []EnvDependency   // credential-store-backed env vars this candy can optionally use
-	secretRequires []EnvDependency   // credential-store-backed env vars this candy must have
-	mcpProvides    []MCPServerYAML   // MCP servers provided to other containers
-	mcpRequires    []EnvDependency   // MCP servers this candy must have
-	mcpAccepts     []EnvDependency   // MCP servers this candy can optionally use
-	engine         string            // required run engine from the candy manifest ("docker", "podman", or "")
-	vars           map[string]string // candy-local variables (from the candy manifest vars:)
-	apk            []ApkPackageSpec  // Android apps to install on a kind:android device (from the candy manifest apk:)
-	localpkg       map[string]string // per-format native-package source dirs (pac/rpm/deb → dir) from the candy manifest localpkg:
-	reboot         bool              // reboot the deploy target after this candy (from the candy manifest reboot:)
-	plan           []Step            // unified ordered plan (from the candy manifest plan:): run:/check:/agent-*/include:
-	artifacts      []CandyArtifact   // files to retrieve after setup (from the candy manifest artifacts:)
-	shell          *ShellConfig      // shell-init declarations (from the candy manifest shell:)
+	formatSections  map[string]*PackageSection // generic format sections (only `aur` now — the secondary AUR build format)
+	tagSections     map[string]*TagPkgConfig   // per-distro/version package sections (debian, ubuntu, debian:13, …) — the sole package surface
+	topPackages     []string                   // top-level package: — the always-included BASE, folded at RESOLVE time (never at parse — that cross-contaminated debian/ubuntu)
+	ports           []string
+	portSpecs       []PortSpec // full PortSpec data with protocol info
+	envConfig       *EnvConfig
+	route           *RouteConfig
+	serviceFiles    []string       // paths to *.service files in candy dir (systemd user-level, file_copy model)
+	service         []ServiceEntry // unified service: list (the only service schema)
+	volumes         []VolumeYAML
+	aliases         []AliasYAML
+	extract         []ExtractYAML
+	data            []DataYAML
+	security        *SecurityConfig
+	libvirt         []string
+	hooks           *HooksConfig
+	secrets         []SecretYAML
+	envProvides     map[string]string // env vars provided to other containers (service discovery)
+	envRequires     []EnvDependency   // env vars this candy must have
+	envAccepts      []EnvDependency   // env vars this candy can optionally use
+	secretAccepts   []EnvDependency   // credential-store-backed env vars this candy can optionally use
+	secretRequires  []EnvDependency   // credential-store-backed env vars this candy must have
+	mcpProvides     []MCPServerYAML   // MCP servers provided to other containers
+	mcpRequires     []EnvDependency   // MCP servers this candy must have
+	mcpAccepts      []EnvDependency   // MCP servers this candy can optionally use
+	engine          string            // required run engine from the candy manifest ("docker", "podman", or "")
+	vars            map[string]string // candy-local variables (from the candy manifest vars:)
+	apk             []ApkPackageSpec  // Android apps to install on a kind:android device (from the candy manifest apk:)
+	localpkg        map[string]string // per-format native-package source dirs (pac/rpm/deb → dir) from the candy manifest localpkg:
+	reboot          bool              // reboot the deploy target after this candy (from the candy manifest reboot:)
+	ExternalBuilder string            // reserved word of an EXTERNAL builder plugin this candy selects (from the candy manifest external_builder:); resolved at build via OpResolve — see generate.go emitExternalBuilderStages
+	plan            []Step            // unified ordered plan (from the candy manifest plan:): run:/check:/agent-*/include:
+	artifacts       []CandyArtifact   // files to retrieve after setup (from the candy manifest artifacts:)
+	shell           *ShellConfig      // shell-init declarations (from the candy manifest shell:)
 
 	// Candy-contributed image-level facts (capabilities: block in the candy manifest)
 	// and cross-candy requirement declarations (requires_capabilities:).

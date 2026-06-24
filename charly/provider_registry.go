@@ -61,6 +61,19 @@ func (r *Registry) register(p Provider, origin string) error {
 	return nil
 }
 
+// registeredOrigin reports the origin a (class, word) provider is registered from,
+// if any. It lets loadProjectPlugins make a same-origin re-load IDEMPOTENT (skip the
+// whole build+connect+schema-append+register) while still surfacing a different-origin
+// collision — WITHOUT touching register, which stays the fail-fast bijection backstop.
+// Returns ("", false) for an unregistered word.
+func (r *Registry) registeredOrigin(class ProviderClass, word string) (string, bool) {
+	k := provKey(class, word)
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	o, ok := r.origins[k]
+	return o, ok
+}
+
 // RegisterBuiltinProvider is called from init() for an in-process built-in. It
 // panics on conflict (a startup invariant, like the bijection gate) — a built-in
 // duplicate is a programming error caught at process start.

@@ -224,6 +224,13 @@ func boxEntityWireYAML(name string, box BoxConfig) ([]byte, error) {
 func Validate(cfg *Config, layers map[string]*Candy, dir string, opts ResolveOpts) error {
 	errs := &ValidationError{}
 
+	// Recognize every external (out-of-tree) plugin VERB the scanned candies declare —
+	// including @github-composed plugin candies fetched during the scan — so a build-context
+	// `run:` plugin verb step validates as build-emit-capable even when its provider is not
+	// connected (standalone `charly box validate`). Post-scan + here (not the parse-time
+	// prescan) because only the scanned candy map sees a @github plugin's `verb:<word>`.
+	registerExternalVerbsFromCandies(layers)
+
 	// Load default build config for global validation. Unconditional — the
 	// caller is required to pass a project dir containing charly.yml.
 	// Tests that need in-memory-only validation must use testProjectDir(t).

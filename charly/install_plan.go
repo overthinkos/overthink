@@ -8,9 +8,12 @@ package main
 // into the generator. The IR defined here lifts the walk into structured
 // data so the same plan can be consumed by:
 //
-//   - OCITarget        → build-mode Containerfile emission (charly box build)
+//   - OCITarget        → deploy-mode pod-overlay (add_candy) Containerfile emission (charly bundle add <name>)
 //   - ContainerDeploy  → deploy-mode overlay + quadlet (charly bundle add <name>)
 //   - LocalDeployTarget → deploy-mode host execution (charly bundle add host)
+//
+// `charly box build`/`generate` do NOT consume this IR — they emit Containerfile
+// text directly via generate.go writeCandySteps→emitTasks. The IR is deploy-only.
 //
 // Keeping these three code paths behind one shared IR is the load-bearing
 // move: every feature (service rendering, add_candy overlay, uninstall

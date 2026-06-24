@@ -270,9 +270,50 @@ func loadProjectPlugins(ctx context.Context, candies map[string]*Candy) error {
 		if src := candy.Plugin.Source; src == "" || src == "builtin" {
 			continue
 		}
+		// Idempotent re-load: loadProjectPlugins runs on EVERY connect path (build,
+		// deploy, check), and a single process that builds AND deploys connects twice
+		// (e.g. `charly bundle add` → loadDeployPlugins, then the pod-overlay
+		// NewGenerator's build-time connect seam). Skip a plugin already connected FROM
+		// THE SAME SOURCE in this process — short-circuiting the whole build+connect+
+		// schema-append+register before any of it runs a second time. A SAME word
+		// already registered from a DIFFERENT origin is a genuine bijection collision
+		// and errors here (preserving register's intent) before the wasteful re-build.
+		connected, err := pluginAlreadyConnected(name, candy.Plugin)
+		if err != nil {
+			return err
+		}
+		if connected {
+			continue
+		}
 		if err := loadPluginUnit(ctx, name, candy.Plugin, candy.SourceDir); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// pluginAlreadyConnected reports whether an out-of-tree plugin candy's declared
+// providers are ALREADY registered in this process from candy.Plugin.Source — making a
+// re-load a no-op. It checks EVERY declared capability: any one already registered from
+// the SAME source means the unit is connected (loadPluginUnit registers a unit's
+// providers together), so it returns true (skip); any one registered from a DIFFERENT
+// origin is a real word→two-providers collision and returns an error. Returns
+// (false, nil) when none of the plugin's providers are registered yet.
+func pluginAlreadyConnected(name string, p *CandyPluginDecl) (bool, error) {
+	connected := false
+	for _, capability := range p.Providers {
+		class, word, ok := splitCapability(string(capability))
+		if !ok {
+			continue
+		}
+		origin, found := providerRegistry.registeredOrigin(class, word)
+		if !found {
+			continue
+		}
+		if origin != p.Source {
+			return false, fmt.Errorf("plugin %q provider %s:%s collides with one already registered from %q", name, class, word, origin)
+		}
+		connected = true
+	}
+	return connected, nil
 }

@@ -39,10 +39,16 @@ func prepareCandySecrets(plans []*InstallPlan, dir string) ([]*Candy, map[string
 	return candyList, secretEnv, nil
 }
 
-// loadDeployPlugins connects every OUT-OF-TREE plugin candy a deployment composes
-// (its add_candy: candies + any caller-supplied extra refs) BEFORE a deploy verb
-// resolves the target, so a deploy whose SUBSTRATE / step / verb is served by an
-// external provider resolves out-of-process. The SAME scan + loadProjectPlugins
+// loadDeployPlugins connects the project's OUT-OF-TREE plugin candies BEFORE a
+// deploy verb resolves the target, so a deploy whose SUBSTRATE / step / verb is
+// served by an external provider resolves out-of-process. It scans the WHOLE
+// project (ScanAllCandyWithConfigOpts) and loads EVERY plugin candy found —
+// deliberately conservative, because ANY verb/step/substrate word in the
+// deployment's plan must resolve and the plan is not analyzed here to scope the
+// set (scoping the load to plan-referenced words is a future perf option). The
+// deployment's add_candy: candies + any caller-supplied extra refs are ADDED to
+// that scan via ExtraCandyRefs (so a REMOTE composed plugin not already in the
+// local scan is fetched + connected too). The SAME scan + loadProjectPlugins
 // the check runner uses (attachCheckRunnerContext) and the bundle-add path uses —
 // extracted here so bundle add / bundle del / charly update all connect a
 // deployment's plugins identically (R3). For an external deploy SUBSTRATE this is

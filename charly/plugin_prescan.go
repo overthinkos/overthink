@@ -41,6 +41,16 @@ import (
 var (
 	declaredDeployMu        sync.RWMutex
 	declaredDeploySubstrate = map[string]bool{}
+	// declaredExternalVerb holds the external (out-of-tree) VERB words a project's candy
+	// plugin declarations name — learned POST-SCAN by registerExternalVerbsFromCandies
+	// (called at Validate), NOT by the parse-time prescan: a @github-composed plugin candy
+	// is fetched DURING the scan, after the prescan, so only the scanned candy map sees its
+	// `verb:<word>` declaration. Lets a build-context `run:` plugin verb step validate as
+	// build-emit-capable WITHOUT building+connecting the plugin (standalone `charly box
+	// validate`). Additive, best-effort, no-false-negatives: an over-broad recognition is
+	// harmless — a verb that turns out non-build-emit-capable fails loudly at build via
+	// emitPluginFragment's empty-fragment guard. Shares declaredDeployMu (the one lock).
+	declaredExternalVerb = map[string]bool{}
 )
 
 // recognizedDeploySubstrate reports whether word names a deploy substrate the
@@ -79,6 +89,52 @@ func registerDeclaredDeploySubstrate(word string) {
 	declaredDeployMu.Unlock()
 }
 
+// isDeclaredExternalVerb reports whether word was registered as an external verb a
+// plugin candy declares (registerExternalVerbsFromCandies, post-scan) — used by
+// opActsInBuildDeploy ONLY when the verb does NOT resolve in the registry (standalone
+// `charly box validate`, where external plugins are not connected). A CONNECTED verb
+// (builtin always, or an external connected via the build-time connect seam) is
+// classified by its provider type, not this map.
+func isDeclaredExternalVerb(word string) bool {
+	declaredDeployMu.RLock()
+	defer declaredDeployMu.RUnlock()
+	return declaredExternalVerb[word]
+}
+
+// registerDeclaredExternalVerb records one declared external verb word.
+func registerDeclaredExternalVerb(word string) {
+	if word == "" {
+		return
+	}
+	declaredDeployMu.Lock()
+	declaredExternalVerb[word] = true
+	declaredDeployMu.Unlock()
+}
+
+// registerExternalVerbsFromCandies registers the external (out-of-tree) VERB words every
+// scanned plugin candy declares, so a build-context `run:` plugin verb step validates as
+// build-emit-capable in standalone `charly box validate` (where the provider is not
+// connected). It runs over the SCANNED candy map — which includes @github-composed plugin
+// candies fetched DURING the scan — so it recognizes a verb whether the plugin candy is
+// locally vendored OR pulled via @github (the gap the parse-time prescan, which sees only
+// locally-discovered dirs, cannot close). Builtins are skipped: they register their verbs
+// at init(), so ResolveVerb already classifies them (this map is the not-connected path).
+func registerExternalVerbsFromCandies(candies map[string]*Candy) {
+	for _, candy := range candies {
+		if candy == nil || candy.Plugin == nil {
+			continue
+		}
+		if src := candy.Plugin.Source; src == "" || src == "builtin" {
+			continue
+		}
+		for _, capability := range candy.Plugin.Providers {
+			if class, word, ok := splitCapability(string(capability)); ok && class == ClassVerb {
+				registerDeclaredExternalVerb(word)
+			}
+		}
+	}
+}
+
 // prescanDeclaredPluginWords reads the project root's `discover:` directive from
 // rootData (leniently — ignoring everything else), walks each discovered manifest
 // dir, and registers every external DEPLOY word a candy's `plugin: providers:`
@@ -109,35 +165,35 @@ func prescanDeclaredPluginWords(rootData []byte, baseDir string) {
 			continue
 		}
 		for _, dir := range dirs {
-			for _, word := range deployWordsInManifest(filepath.Join(dir, manifest)) {
-				registerDeclaredDeploySubstrate(word)
-			}
+			prescanPluginManifest(filepath.Join(dir, manifest))
 		}
 	}
 }
 
-// deployWordsInManifest returns the external DEPLOY words a candy manifest's
-// `plugin: providers:` declares. The byte-gate skips every non-plugin manifest
-// before paying for a YAML parse (the vast majority of candies). Best-effort:
-// a read/parse error yields no words.
-func deployWordsInManifest(path string) []string {
+// prescanPluginManifest reads one candy manifest's `plugin: providers:` declarations
+// and registers each external DEPLOY substrate word — the PARSE-time loader recognition
+// that lets a root-charly.yml bed using an external deploy substrate as its entity
+// discriminator LOAD before the provider connects. External VERB words are NOT registered
+// here: they are needed only at Validate (opActsInBuildDeploy), and a @github-composed
+// plugin candy is fetched only DURING the scan (after this parse-time prescan), so verbs
+// register post-scan from the candy map (registerExternalVerbsFromCandies). The byte-gate
+// skips every non-plugin manifest before paying for a YAML parse. Best-effort.
+func prescanPluginManifest(path string) {
 	data, err := os.ReadFile(path)
 	if err != nil || !bytes.Contains(data, []byte("plugin:")) {
-		return nil
+		return
 	}
 	var root any
 	if err := yaml.Unmarshal(data, &root); err != nil {
-		return nil
+		return
 	}
 	var providers []string
 	collectPluginProviders(root, &providers)
-	var words []string
 	for _, p := range providers {
 		if class, word, ok := splitCapability(p); ok && class == ClassDeployTarget {
-			words = append(words, word)
+			registerDeclaredDeploySubstrate(word)
 		}
 	}
-	return words
 }
 
 // collectPluginProviders recursively gathers every `plugin: { providers: [...] }`

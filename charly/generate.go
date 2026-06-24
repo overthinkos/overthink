@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -143,6 +144,20 @@ func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) 
 	layers, err := ScanAllCandyWithConfigOpts(dir, cfg, opts)
 	if err != nil {
 		return nil, err
+	}
+
+	// Build-time plugin connect (operator-authorized build-time plugin execution).
+	// Connect the project's OUT-OF-TREE plugin candies so an external step/builder/verb
+	// provider is registered + dialable DURING image generation — the SAME loader the
+	// deploy/check paths use (loadDeployPlugins / attachCheckRunnerContext), transport-
+	// invisible above the registry. A BUILTIN plugin is already registered via init() and
+	// needs no connect; only an EXTERNAL one is host-built + connected here. This is what
+	// lets a `run:` plugin verb (and a plugin builder) EXECUTE at build time to emit its
+	// Containerfile fragment, placement-agnostically: in-proc for a builtin, over go-plugin
+	// gRPC for an external. Best-effort: a connect failure on a plugin the build actually
+	// USES fails loudly at emit (emitTasks' OpEmit dispatch), never silently mis-builds.
+	if perr := loadProjectPlugins(context.Background(), layers); perr != nil {
+		fmt.Fprintf(os.Stderr, "warning: build-time plugin load: %v\n", perr)
 	}
 
 	// Populate init systems on candies from the embedded build vocabulary

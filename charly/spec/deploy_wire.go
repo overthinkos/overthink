@@ -164,3 +164,29 @@ type DeployReplyRecord struct {
 	Candy   string `json:"candy"`
 	Version string `json:"version,omitempty"`
 }
+
+// ---------------------------------------------------------------------------
+// Out-of-proc build-time wire — what a plugin verb/builder exchanges with the
+// host across the go-plugin boundary on an OpEmit Invoke at IMAGE BUILD time.
+// ---------------------------------------------------------------------------
+
+// BuildEnv is the build-context descriptor the host puts in op.Env for an OpEmit
+// Invoke at image-generation time: the image's distro tags + name, so a plugin can
+// tailor its emitted Containerfile fragment per distro/arch. The build-time
+// analogue of DeployVenue (deploy) / the verb check-env. Placement-agnostic: a
+// builtin reads it in-proc, an external over gRPC.
+type BuildEnv struct {
+	Distros []string `json:"distros,omitempty"`
+	Image   string   `json:"image,omitempty"`
+}
+
+// EmitReply is what a plugin verb/builder returns from an OpEmit Invoke at build
+// time: a verbatim Containerfile FRAGMENT (RUN/COPY/… directives) the generator
+// splices into the emitted .build/<image>/Containerfile (egress-validated with the
+// rest of the Containerfile before it hits disk). This is the build-context
+// counterpart of a builtin verb's ProvisionActor.RenderProvisionScript (a shell
+// RUN) generalized to any directive an external plugin owns. The host appends a
+// trailing newline if absent.
+type EmitReply struct {
+	Fragment string `json:"fragment"`
+}

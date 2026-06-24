@@ -1,13 +1,15 @@
 package main
 
 // build_target_oci.go — OCITarget implements DeployTarget for Containerfile
-// emission (the "build mode" target used by `charly box build`).
+// emission: the POD-OVERLAY target that synthesizes an add_candy overlay
+// Containerfile at DEPLOY (charly bundle add of a pod carrying add_candy:).
+// `charly box build`/`generate` do NOT use OCITarget — they emit directly via
+// generate.go writeCandySteps→emitTasks; the IR/OCITarget path is deploy-only.
 //
-// At this stage of the refactor, OCITarget is a thin walker over the
-// InstallPlan that delegates to the existing format/template rendering
-// machinery in format_template.go + tasks.go. Later passes will migrate
-// the direct-text emission inside writeCandySteps into this walker so
-// the legacy generator shrinks to a shell.
+// OCITarget is a thin walker over the InstallPlan that delegates to the
+// format/template rendering machinery in format_template.go + tasks.go
+// (OCITarget.emitOp for a plugin/run op delegates to the SAME emitTasks seam
+// box build uses, so the overlay stays functionally equivalent for one candy).
 //
 // The key property we want from OCITarget: feeding it a plan produced
 // by BuildDeployPlan must emit a Containerfile fragment that's

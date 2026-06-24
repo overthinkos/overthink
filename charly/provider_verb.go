@@ -71,6 +71,23 @@ type TypedStepProvider interface {
 	ConstructStep(op *Op, layer *Candy, img *ResolvedBox) InstallStep
 }
 
+// BuildEmitter is the build-context act half of a verb provider that renders its
+// install timeline as a verbatim Containerfile FRAGMENT via Invoke(OpEmit) — neither
+// a RenderProvisionScript shell string (ProvisionActor) nor a typed InstallStep
+// (TypedStepProvider). emitTasks resolves a `plugin:` verb's provider and, when it is
+// NOT a ProvisionActor, renders the fragment via emitPluginFragment → Invoke(OpEmit)
+// (placement-agnostic: in-proc for a builtin implementing this interface, over go-plugin
+// gRPC for an external grpcProvider). A builtin verb implementing BuildEmitter therefore
+// also "acts in build/deploy" (opActsInBuildDeploy) even though it is not a ProvisionActor.
+// The EXTERNAL placement of the same plugin is a grpcProvider — the host cannot type-assert
+// across the process boundary, so opActsInBuildDeploy recognizes that placement separately.
+type BuildEmitter interface {
+	Provider
+	// BuildEmits marks the capability — it always returns true; the fragment itself is
+	// produced by Invoke(OpEmit), not here. (A marker method, like LowersTo names a kind.)
+	BuildEmits() bool
+}
+
 // builtinVerbBase supplies the in-proc-only Provider half (Class + a stub Invoke)
 // for every built-in verb provider. A compiled-in verb runs via RunVerb; it does
 // not serve itself out-of-process, so Invoke is an explicit error rather than a

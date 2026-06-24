@@ -1,0 +1,27 @@
+plugin-example-step:
+    candy:
+        version: 2026.175.0001
+        description: |-
+            Reference OUT-OF-TREE charly plugin proving BUILD-TIME plugin execution — a
+            standalone Go module (go.mod + main.go) serving the `examplestep` verb over
+            go-plugin gRPC via the charly plugin SDK (charly/plugin/sdk). At image build,
+            charly's build-path connect seam host-builds + connects this plugin
+            out-of-process and Invokes its OpEmit; the returned Containerfile FRAGMENT
+            (a RUN baking /opt/examplestep-baked) is spliced verbatim into the generated
+            Containerfile — so the marker file proves the plugin EXECUTED at build. The
+            build-context counterpart of the deploy-time candy/plugin-example-deploy;
+            consumed by candy/examplestep-consumer's build-context `plugin: examplestep`
+            run-step.
+    plugin-example-step-decl:
+        plugin:
+            providers:
+                - verb:examplestep
+            source: github.com/overthinkos/overthink/candy/plugin-example-step
+    examplestep-module-present:
+        check: the out-of-tree build-emit plugin ships a buildable Go module (go.mod + the provider main) the host can build + serve out-of-process at image build
+        id: examplestep-module-present
+        context:
+            - build
+        plugin: command
+        plugin_input:
+            command: "true"

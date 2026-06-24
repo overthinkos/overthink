@@ -398,15 +398,33 @@ func opActsInBuildDeploy(c *Op, verb string) bool {
 		}
 		prov, ok := providerRegistry.ResolveVerb(c.Plugin)
 		if !ok {
-			return false
+			// Not connected — the standalone `charly box validate` path, where external
+			// plugins are not built+connected. Trust a verb the parse-time prescan saw a
+			// plugin candy declare (registerDeclaredExternalVerb): it is build-emit-capable
+			// until the BUILD (which DOES connect it via the connect seam) proves otherwise
+			// at emitPluginFragment's empty-fragment guard. A BUILTIN verb always resolves
+			// above, so this branch is reached only for a genuinely external, not-yet-
+			// connected verb — never for a runtime-only builtin (which is correctly rejected).
+			return isDeclaredExternalVerb(c.Plugin)
 		}
-		// A ProvisionActor renders an install shell; a TypedStepProvider (service)
-		// lowers into a typed install step. Either is a real build/deploy act path.
+		// A ProvisionActor renders an install shell; a TypedStepProvider (service) lowers
+		// into a typed install step; a BuildEmitter (an in-proc build-emit verb) renders a
+		// Containerfile fragment via Invoke(OpEmit). Each is a real build/deploy act path —
+		// the same capability whether the plugin is builtin or external (placement-agnostic).
 		if _, isActor := prov.(ProvisionActor); isActor {
 			return true
 		}
-		_, isTyped := prov.(TypedStepProvider)
-		return isTyped
+		if _, isTyped := prov.(TypedStepProvider); isTyped {
+			return true
+		}
+		if _, isEmitter := prov.(BuildEmitter); isEmitter {
+			return true
+		}
+		// A CONNECTED external (out-of-process) verb is build-emit-capable via Invoke(OpEmit);
+		// the host cannot type-assert capability across the process boundary, so it is trusted
+		// here and gated at build by emitPluginFragment's empty-fragment guard.
+		_, isExternal := prov.(*grpcProvider)
+		return isExternal
 	}
 	return ActsInBuildDeploy(verb)
 }

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path"
@@ -13,6 +15,7 @@ import (
 	"strings"
 
 	commandparams "github.com/overthinkos/overthink/charly/plugin/builtins/command/params"
+	"github.com/overthinkos/overthink/charly/spec"
 )
 
 // Auto-exported variable names reserved for the generator.
@@ -690,21 +693,42 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 					layer.Name, img, runningUser == "0" || runningUser == "root")
 				break
 			}
-			// Every OTHER state-provision plugin (plugin: <verb> + plugin_input, the provider
-			// implementing ProvisionActor) has no per-verb emitter — render its act shell via
-			// the provider's ProvisionActor (resolveProvisionScript: the ONE Op→act-shell seam
-			// shared by the runtime act path runProvisionAct AND the local/vm deploy emit
-			// renderOpCommand, R3) and emit it as a command RUN via the SAME emitCmd.
-			// writeCandySteps→emitTasks is the REAL box-build path (OCITarget.emitOp for pod
-			// overlays delegates here too), so handling it HERE — not in emitOp — is the single
-			// seam every Containerfile emit flows through. ok=false ⇒ the plugin verb is not
-			// act-capable: a run: step with no install path, a loud error, never silently
-			// dropped (R4).
-			script, ok := resolveProvisionScript(&t, img.Tags)
+			// Every OTHER plugin: <verb> install step renders its BUILD-context output
+			// PLACEMENT-AGNOSTICALLY above the registry (a plugin works identically whether it
+			// is compiled into charly OR dynamically loaded as an external candy):
+			//   - a BUILTIN ProvisionActor renders an act SHELL emitted as a RUN — the in-proc
+			//     fast path (resolveProvisionScript: the ONE Op→act-shell seam shared with the
+			//     runtime act path runProvisionAct AND the local/vm deploy emit renderOpCommand,
+			//     R3), zero JSON;
+			//   - ANY OTHER resolved provider — an EXTERNAL grpcProvider (host-built + connected
+			//     by the build-time plugin connect seam in NewGenerator), or a builtin emitting a
+			//     richer Containerfile fragment — renders its fragment via Invoke(OpEmit), in-proc
+			//     for a builtin or over go-plugin gRPC for an external, written verbatim
+			//     (egress-validated with the rest of the Containerfile). This is the build half of
+			//     the operator-authorized build-time plugin execution.
+			// writeCandySteps→emitTasks is the REAL box-build path (the IR/OCITarget path is
+			// deploy-only), so this is the single seam every Containerfile plugin-step emit flows
+			// through. An unresolved verb ⇒ a loud error, never a silently-dropped run: step (R4).
+			prov, ok := providerRegistry.ResolveVerb(t.Plugin)
 			if !ok {
-				return runningUser, fmt.Errorf("run: plugin verb %q is not act-capable (no ProvisionActor)", t.Plugin)
+				return runningUser, fmt.Errorf("run: plugin verb %q is not registered (an external plugin not connected at build time?)", t.Plugin)
 			}
-			emitCmd(b, Op{Command: script, RunAs: t.RunAs}, layer.Name, img, runningUser == "0" || runningUser == "root")
+			if actor, isActor := prov.(ProvisionActor); isActor {
+				script, sok := actor.RenderProvisionScript(&t, img.Tags)
+				if !sok {
+					return runningUser, fmt.Errorf("run: plugin verb %q is not act-capable (ProvisionActor declined)", t.Plugin)
+				}
+				emitCmd(b, Op{Command: script, RunAs: t.RunAs}, layer.Name, img, runningUser == "0" || runningUser == "root")
+			} else {
+				frag, ferr := emitPluginFragment(prov, &t, img)
+				if ferr != nil {
+					return runningUser, fmt.Errorf("run: plugin verb %q build-emit: %w", t.Plugin, ferr)
+				}
+				b.WriteString(frag)
+				if !strings.HasSuffix(frag, "\n") {
+					b.WriteString("\n")
+				}
+			}
 
 		default:
 			fmt.Fprintf(b, "# unknown verb %q — skipping\n", verb)
@@ -712,6 +736,41 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 		i++
 	}
 	return runningUser, nil
+}
+
+// emitPluginFragment renders a plugin verb's BUILD-context Containerfile fragment
+// via the provider's OpEmit Invoke — placement-agnostic above the registry (in-proc
+// for a builtin, over go-plugin gRPC for an external connected by the build-time
+// plugin connect seam in NewGenerator). The plugin receives its plugin_input as
+// op.Params and a spec.BuildEnv descriptor as op.Env, and returns a spec.EmitReply
+// whose Fragment is spliced verbatim into the generated Containerfile. The build-time
+// half of the operator-authorized build-time plugin execution.
+func emitPluginFragment(prov Provider, op *Op, img *ResolvedBox) (string, error) {
+	params, err := marshalJSON(op.PluginInput)
+	if err != nil {
+		return "", fmt.Errorf("marshal plugin_input: %w", err)
+	}
+	env, err := marshalJSON(spec.BuildEnv{Distros: img.Tags})
+	if err != nil {
+		return "", fmt.Errorf("marshal build env: %w", err)
+	}
+	res, err := prov.Invoke(context.Background(), &Operation{Reserved: op.Plugin, Op: OpEmit, Params: params, Env: env})
+	if err != nil {
+		return "", err
+	}
+	var reply spec.EmitReply
+	if err := json.Unmarshal(res.JSON, &reply); err != nil {
+		return "", fmt.Errorf("decode OpEmit reply: %w", err)
+	}
+	// A build-emit-capable plugin verb returns a non-empty Containerfile fragment.
+	// An empty fragment means the verb has no build-context act (a runtime-only verb
+	// mistakenly used in a build-context run: step) — fail LOUDLY here rather than
+	// bake nothing silently (R4). The validator (opActsInBuildDeploy) trusts an
+	// external verb is build-emit-capable; THIS is the real enforcement at build.
+	if strings.TrimSpace(reply.Fragment) == "" {
+		return "", fmt.Errorf("plugin verb %q returned an empty OpEmit fragment — it has no build-context act (a runtime-only verb in a build run: step? use context: [runtime])", op.Plugin)
+	}
+	return reply.Fragment, nil
 }
 
 // candyHasImplicitBuild returns true if the candy has a detection file

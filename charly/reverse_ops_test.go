@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/overthinkos/overthink/charly/spec"
 )
 
 // mockReverseExecutor always dry-runs for testing.
@@ -104,6 +106,53 @@ func TestReverseOpsDryRunEmitsSudoMarkers(t *testing.T) {
 	if !strings.Contains(got, "dnf remove -y ripgrep") {
 		t.Errorf("expected dnf remove, got: %s", got)
 	}
+}
+
+func TestReverseOpsPluginScript(t *testing.T) {
+	// User scope (no sudo): the recorded plugin-script runs verbatim via the
+	// local user shell and removes the marker an external deploy plugin created.
+	t.Run("user-scope runs the recorded script", func(t *testing.T) {
+		tmp := t.TempDir()
+		marker := filepath.Join(tmp, "marker")
+		if err := os.WriteFile(marker, []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		ops := []ReverseOp{{
+			Kind:  ReverseOpPluginScript,
+			Scope: ScopeUser,
+			Extra: map[string]string{spec.ReverseOpPluginScriptKey: "rm -f " + marker},
+		}}
+		runReverseOps(ops, &mockReverseExecutor{})
+		if _, err := os.Stat(marker); !os.IsNotExist(err) {
+			t.Errorf("plugin-script reverse op did not remove the marker (err=%v)", err)
+		}
+	})
+
+	// System scope routes through the sudo path — dry-run proves the routing
+	// (emits the sudo marker + the verbatim script) without needing real sudo.
+	t.Run("system-scope routes through sudo (dry-run)", func(t *testing.T) {
+		ops := []ReverseOp{{
+			Kind:  ReverseOpPluginScript,
+			Scope: ScopeSystem,
+			Extra: map[string]string{spec.ReverseOpPluginScriptKey: "rm -rf /tmp/charly-plugin-script-test"},
+		}}
+		got := captureStderr(t, func() { runReverseOps(ops, &mockReverseExecutor{dryRun: true}) })
+		if !strings.Contains(got, "[dry-run] sudo bash -lc") {
+			t.Errorf("expected the system-scope sudo dry-run marker, got: %q", got)
+		}
+		if !strings.Contains(got, "rm -rf /tmp/charly-plugin-script-test") {
+			t.Errorf("expected the verbatim script in dry-run output, got: %q", got)
+		}
+	})
+
+	// An empty script body is a no-op (nothing config-sanctioned to run), never
+	// an error or stray output.
+	t.Run("empty script is a no-op", func(t *testing.T) {
+		ops := []ReverseOp{{Kind: ReverseOpPluginScript, Scope: ScopeUser, Extra: map[string]string{}}}
+		if got := captureStderr(t, func() { runReverseOps(ops, &mockReverseExecutor{}) }); got != "" {
+			t.Errorf("empty plugin-script should be a silent no-op, got stderr: %q", got)
+		}
+	})
 }
 
 func TestReverseOpsOrderIsReversed(t *testing.T) {

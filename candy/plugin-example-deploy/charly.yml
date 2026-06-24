@@ -1,6 +1,28 @@
-version: 2026.174.0900
-discover:
-    - path: box
-      recursive: true
-    - path: candy
-      recursive: true
+plugin-example-deploy:
+    candy:
+        version: 2026.175.0001
+        description: |-
+            Reference OUT-OF-TREE charly DEPLOY plugin — a standalone Go module
+            (go.mod + main.go) serving the `exampledeploy` deploy TARGET over
+            go-plugin gRPC via the charly plugin SDK (charly/plugin/sdk). It proves
+            the E3b ExecutorService reverse channel end-to-end for the deploy class:
+            charly's loader host-builds this candy's provider binary and serves it
+            OUT-OF-PROCESS via LocalTransport, then the externalDeployTarget Add
+            Invokes it (OpExecute) with the deployment's InstallPlan views + a venue
+            descriptor; the plugin dials BACK through the SDK Executor to apply a
+            marker on the host venue and returns a plugin-script reverse op the host
+            records in the install ledger and replays at `charly bundle del`. The
+            deploy-class companion of the verb-class candy/plugin-example-external.
+    plugin-example-deploy-decl:
+        plugin:
+            providers:
+                - deploy:exampledeploy
+            source: github.com/overthinkos/overthink/candy/plugin-example-deploy
+    exampledeploy-module-present:
+        check: the out-of-tree deploy plugin ships a buildable Go module (go.mod + the provider main) the host can build + serve out-of-process
+        id: exampledeploy-module-present
+        context:
+            - build
+        plugin: command
+        plugin_input:
+            command: "true"

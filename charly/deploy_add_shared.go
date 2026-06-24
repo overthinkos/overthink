@@ -39,6 +39,32 @@ func prepareCandySecrets(plans []*InstallPlan, dir string) ([]*Candy, map[string
 	return candyList, secretEnv, nil
 }
 
+// loadDeployPlugins connects every OUT-OF-TREE plugin candy a deployment composes
+// (its add_candy: candies + any caller-supplied extra refs) BEFORE a deploy verb
+// resolves the target, so a deploy whose SUBSTRATE / step / verb is served by an
+// external provider resolves out-of-process. The SAME scan + loadProjectPlugins
+// the check runner uses (attachCheckRunnerContext) and the bundle-add path uses —
+// extracted here so bundle add / bundle del / charly update all connect a
+// deployment's plugins identically (R3). For an external deploy SUBSTRATE this is
+// what turns the pre-scanned placeholder word into a connected grpcProvider that
+// ResolveTarget can route to. Best-effort: a build/connect failure is a warning,
+// then the dispatch fails loudly at ResolveTarget / runPluginVerb rather than
+// silently mis-deploying.
+func loadDeployPlugins(dir, deployName string, extraAddCandy []string) {
+	cfg, cerr := LoadConfig(dir)
+	if cerr != nil {
+		return
+	}
+	extra := append(append([]string(nil), extraAddCandy...), deployAddCandyRefs(dir, deployName)...)
+	candyMap, scanErr := ScanAllCandyWithConfigOpts(dir, cfg, ResolveOpts{ExtraCandyRefs: extra})
+	if scanErr != nil || candyMap == nil {
+		return
+	}
+	if perr := loadProjectPlugins(context.Background(), candyMap); perr != nil {
+		fmt.Fprintf(os.Stderr, "warning: plugin load: %v\n", perr)
+	}
+}
+
 // buildArtifactEnv composes the env used for candy-artifact path
 // substitution: the resolved secret env first, then the deploy node's
 // own env: lines overlaid (last-wins). nil node contributes nothing.

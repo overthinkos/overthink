@@ -24,6 +24,8 @@ package main
 import (
 	"os"
 	"strings"
+
+	"github.com/overthinkos/overthink/charly/spec"
 )
 
 // HomeToken is the deferred-home placeholder the compiler bakes into
@@ -42,42 +44,18 @@ const HomeToken = "{{.Home}}"
 // Scope — where the effect lands on the target filesystem.
 // ---------------------------------------------------------------------------
 
-// Scope classifies what kind of filesystem mutation a step makes. Steps are
-// grouped by scope (and venue) when the host target batches into sudo vs
-// user heredocs — mixing scopes in one batch would need per-command sudo.
-type Scope int
+// Scope is the spec-homed enum (charly/spec/deploy_wire.go) — aliased here so
+// the whole IR keeps spelling it `Scope`/`ScopeSystem`/… unchanged. It lives in
+// spec because an out-of-process deploy/step/builder plugin (through the SDK)
+// constructs it for a ReverseOp it returns across the process boundary; package
+// main and the SDK therefore share ONE type (R3).
+type Scope = spec.Scope
 
 const (
-	// ScopeSystem mutates global host state: /etc, /usr, /var, systemd system
-	// units, package DB. Requires sudo on host; emitted as USER root in the
-	// Containerfile.
-	ScopeSystem Scope = iota
-
-	// ScopeUser mutates the invoking user's home or user-owned paths:
-	// $HOME/.pixi, $HOME/.cargo, $HOME/.npm-global, $HOME/.local, systemd
-	// user units, etc. No sudo needed on host; emitted as USER ${UID} in the
-	// Containerfile.
-	ScopeUser
-
-	// ScopeUserProfile writes to the user's shell init surface:
-	// ~/.bashrc / ~/.zshenv / fish conf.d + ~/.config/opencharly/env.d/.
-	// Separate from ScopeUser because the host target has special handling
-	// (managed blocks, shell detection) and the OCI target renders these as
-	// ENV directives + path additions rather than file writes.
-	ScopeUserProfile
+	ScopeSystem      = spec.ScopeSystem
+	ScopeUser        = spec.ScopeUser
+	ScopeUserProfile = spec.ScopeUserProfile
 )
-
-func (s Scope) String() string {
-	switch s {
-	case ScopeSystem:
-		return "system"
-	case ScopeUser:
-		return "user"
-	case ScopeUserProfile:
-		return "user-profile"
-	}
-	return "unknown"
-}
 
 // ---------------------------------------------------------------------------
 // Venue — where the step physically runs.
@@ -199,47 +177,34 @@ const (
 // ReverseOp — what the ledger records to un-do a step at teardown time.
 // ---------------------------------------------------------------------------
 
-// ReverseOpKind discriminates the kinds of teardown actions Reverse()
-// produces. Ledger entries serialize these verbatim so a later
-// `charly bundle del` can walk them without re-compiling the plan.
-type ReverseOpKind string
+// ReverseOpKind + ReverseOp are spec-homed (charly/spec/deploy_wire.go) and
+// aliased here. They live in spec because an out-of-process deploy/step/builder
+// plugin (through the SDK) RETURNS ReverseOps across the process boundary for
+// the host to record + replay; package main and the SDK share ONE type (R3).
+// ReverseOpPluginScript is the generic recordable kind such a plugin returns.
+type ReverseOpKind = spec.ReverseOpKind
 
 const (
-	ReverseOpPackageRemove  ReverseOpKind = "package-remove"
-	ReverseOpCargoUninstall ReverseOpKind = "cargo-uninstall"
-	ReverseOpNpmUninstallG  ReverseOpKind = "npm-uninstall-g"
-	ReverseOpPixiEnvRemove  ReverseOpKind = "pixi-env-remove"
-	ReverseOpRmFileSystem   ReverseOpKind = "rm-file-system"
-	ReverseOpRmFileUser     ReverseOpKind = "rm-file-user"
-	ReverseOpRmDirRecursive ReverseOpKind = "rm-dir-recursive"
-	ReverseOpServiceDisable ReverseOpKind = "service-disable"
-	ReverseOpServiceRemove  ReverseOpKind = "service-remove"
-	ReverseOpRemoveDropin   ReverseOpKind = "remove-dropin"
-	ReverseOpRestoreEnabled ReverseOpKind = "restore-enabled"
-	ReverseOpRemoveManaged  ReverseOpKind = "remove-managed-block"
-	ReverseOpRemoveEnvdFile ReverseOpKind = "remove-envd-file"
-	ReverseOpRemoveRepoFile ReverseOpKind = "remove-repo-file"
-	ReverseOpCoprDisable    ReverseOpKind = "copr-disable"
+	ReverseOpPackageRemove  = spec.ReverseOpPackageRemove
+	ReverseOpCargoUninstall = spec.ReverseOpCargoUninstall
+	ReverseOpNpmUninstallG  = spec.ReverseOpNpmUninstallG
+	ReverseOpPixiEnvRemove  = spec.ReverseOpPixiEnvRemove
+	ReverseOpRmFileSystem   = spec.ReverseOpRmFileSystem
+	ReverseOpRmFileUser     = spec.ReverseOpRmFileUser
+	ReverseOpRmDirRecursive = spec.ReverseOpRmDirRecursive
+	ReverseOpServiceDisable = spec.ReverseOpServiceDisable
+	ReverseOpServiceRemove  = spec.ReverseOpServiceRemove
+	ReverseOpRemoveDropin   = spec.ReverseOpRemoveDropin
+	ReverseOpRestoreEnabled = spec.ReverseOpRestoreEnabled
+	ReverseOpRemoveManaged  = spec.ReverseOpRemoveManaged
+	ReverseOpRemoveEnvdFile = spec.ReverseOpRemoveEnvdFile
+	ReverseOpRemoveRepoFile = spec.ReverseOpRemoveRepoFile
+	ReverseOpCoprDisable    = spec.ReverseOpCoprDisable
+	ReverseOpPluginScript   = spec.ReverseOpPluginScript
 )
 
-// ReverseOp is a single teardown action. Serialized into the ledger so
-// uninstall can reverse a deploy without re-reading the candy manifest.
-type ReverseOp struct {
-	Kind    ReverseOpKind     `json:"kind"`
-	Format  string            `json:"format,omitempty"`  // package format for package-remove (rpm/deb/pac)
-	Targets []string          `json:"targets,omitempty"` // package names, file paths, env names, …
-	Scope   Scope             `json:"scope,omitempty"`   // system vs user for disambiguation
-	Extra   map[string]string `json:"extra,omitempty"`   // op-specific details (e.g. unit name, layer name)
-
-	// UninstallCmd is the rendered host-venue package-removal command for a
-	// ReverseOpPackageRemove op, filled at record time from the format's
-	// uninstall_template (the embedded build vocabulary, charly/charly.yml) by fillReverseUninstallCmds — the deploy
-	// target has the DistroConfig at install time, the teardown (which reads
-	// the persisted ledger) does not, so the command is rendered up front and
-	// persisted. reverse_ops.go runs it verbatim, so there is NO hardcoded
-	// per-format removal switch in the teardown path.
-	UninstallCmd string `json:"uninstall_cmd,omitempty"`
-}
+// ReverseOp is the spec-homed teardown action (see ReverseOpKind above).
+type ReverseOp = spec.ReverseOp
 
 // ---------------------------------------------------------------------------
 // InstallStep — the primary IR element. Each step has one concrete type.
@@ -1014,6 +979,29 @@ type InstallPlan struct {
 	AddCandies      []string          // layers added on top via charly.yml add_layers: (for provenance)
 	BuilderImage    string            // selected builder image for VenueContainerBuilder steps
 	Meta            map[string]string // free-form metadata (builder image, glibc version, …)
+}
+
+// wireView projects the rich in-core InstallPlan onto the JSON-roundtrippable
+// spec.InstallPlanView the host marshals into an external deploy provider's
+// op.Params. The Steps interface slice is deliberately dropped — it cannot
+// round-trip across the process boundary (a serializable per-step IR for
+// external plugins that EXECUTE steps is a future cutover); the provenance
+// fields prove the plan travelled.
+func (p *InstallPlan) wireView() spec.InstallPlanView {
+	if p == nil {
+		return spec.InstallPlanView{}
+	}
+	return spec.InstallPlanView{
+		DeployID:        p.DeployID,
+		Box:             p.Box,
+		Version:         p.Version,
+		Distro:          p.Distro,
+		Candy:           p.Candy,
+		CandiesIncluded: p.CandiesIncluded,
+		AddCandies:      p.AddCandies,
+		BuilderImage:    p.BuilderImage,
+		Meta:            p.Meta,
+	}
 }
 
 // ResolveHome substitutes the deferred HomeToken with a concrete home in

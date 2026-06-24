@@ -82,9 +82,11 @@ func buildBundleNode(gn *genericNode) (*BundleNode, error) {
 
 // isResourceDisc reports whether a discriminator names a deploy-substrate kind
 // (the markers of a bundle member / bundle-shaped node) — the CUE-derived
-// resourceKindSet (#ResourceKind).
+// resourceKindSet (#ResourceKind), OR a recognized external DEPLOY substrate word
+// (a registered/pre-scanned out-of-process deploy provider, e.g. `exampledeploy`),
+// so a deploy whose edge is an external target is built as a bundle node.
 func isResourceDisc(d string) bool {
-	return resourceKindSet[d]
+	return resourceKindSet[d] || recognizedDeploySubstrate(d)
 }
 
 // bundleTargetForDisc maps a node discriminator to the BundleNode Target.

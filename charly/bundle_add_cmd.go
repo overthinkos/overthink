@@ -118,24 +118,13 @@ func (c *BundleAddCmd) Run() error {
 	// Connect + register every OUT-OF-TREE plugin candy the deploy composes BEFORE any
 	// target.Add/Emit dispatches — so a target whose deploy path drives an external verb
 	// (e.g. the android target → the adb plugin's install / wait-for-device device ops via
-	// invokeAdbPlugin) resolves its grpcProvider out-of-process. The SAME candy scan +
-	// loadProjectPlugins the check runner uses (attachCheckRunnerContext) — every deploy
-	// loads its composed external plugins (R3). A build/connect failure is a warning; the
-	// dispatch then fails loudly via invokeAdbPlugin's "plugin not loaded" / runPluginVerb's
-	// unresolved-verb path rather than silently mis-deploying.
-	// ExtraCandyRefs adds THIS deploy's add_candy: candies (the node's `add_candy:` +
-	// any CLI --add-candy) to the collection: the image-closure scan never reaches
-	// them, so a deploy that add_candy's an out-of-tree plugin candy (e.g. plugin-spice)
-	// would otherwise leave its grpcProvider unloaded. The SAME deployAddCandyRefs the
-	// check runner uses (R3).
-	if cfg, cerr := LoadConfig(dir); cerr == nil {
-		extra := append(append([]string(nil), c.AddCandy...), deployAddCandyRefs(dir, c.Name)...)
-		if candyMap, scanErr := ScanAllCandyWithConfigOpts(dir, cfg, ResolveOpts{ExtraCandyRefs: extra}); scanErr == nil && candyMap != nil {
-			if perr := loadProjectPlugins(context.Background(), candyMap); perr != nil {
-				fmt.Fprintf(os.Stderr, "warning: plugin load: %v\n", perr)
-			}
-		}
-	}
+	// invokeAdbPlugin), OR whose SUBSTRATE is an external deploy provider (the E3-deploy
+	// externalDeployTarget), resolves its grpcProvider out-of-process. The shared
+	// loadDeployPlugins (deploy_add_shared.go) — also called by bundle del + charly
+	// update — adds THIS deploy's add_candy: candies (+ any CLI --add-candy) to the scan
+	// (the image-closure scan never reaches them), so a deploy that add_candy's an
+	// out-of-tree plugin candy would otherwise leave its grpcProvider unloaded (R3).
+	loadDeployPlugins(dir, c.Name, c.AddCandy)
 
 	// Resolve the named root + any dotted-path subtree the user
 	// targeted. Supports three call shapes:
@@ -427,7 +416,11 @@ func (c *BundleAddCmd) compileNodePlans(target, refStr, tag, path string, addCan
 	var base string
 	var candySet []string
 
-	if target == "local" || target == "vm" || target == "android" {
+	if target == "local" || target == "vm" || target == "android" || isExternalDeploySubstrate(target) {
+		// Target-only deploys (local/vm/android + an EXTERNAL deploy substrate)
+		// compile no primary image plan — the workload is entirely add_candy:
+		// (for an external substrate, the candies whose plan views the host marshals
+		// to the out-of-process provider). base is the deploy path identity.
 		base = path
 	} else {
 		ref, err := ResolveDeployRef(refStr, dir)
@@ -575,6 +568,14 @@ func (c *BundleDelCmd) Run() error {
 	defer lock.Release() //nolint:errcheck
 
 	node, kind := c.resolveDelNode()
+
+	// Connect the deployment's OUT-OF-TREE plugins before ResolveTarget, so an
+	// external deploy SUBSTRATE (the E3-deploy externalDeployTarget) resolves its
+	// grpcProvider for teardown — the SAME loadDeployPlugins bundle add / charly
+	// update use (R3). Best-effort; the dispatch fails loudly if still unresolved.
+	if cwd, _ := os.Getwd(); cwd != "" {
+		loadDeployPlugins(cwd, c.Name, nil)
+	}
 
 	// Build the gate-flag-bearing adapter. Del's signature is uniform
 	// (DelOpts only); kind-specific teardown gates live on the adapter.

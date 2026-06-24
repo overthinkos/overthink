@@ -107,6 +107,12 @@ func TestCueKinds_Corpus(t *testing.T) {
 		if err != nil {
 			continue // layout may omit a file
 		}
+		// Register external deploy substrate words declared by this file's
+		// discovered candies, so a deploy/bed using such a word (e.g.
+		// check-exampledeploy -> exampledeploy) is recognized + skipped below — it
+		// is validated via the loader/bed path, not the core #NodeDoc grammar this
+		// test covers (the same exemption plugin KIND nodes get).
+		prescanDeclaredPluginWords(data, filepath.Dir(f))
 		doc, err := cueDocFromYAML(f, data)
 		if err != nil {
 			t.Errorf("%s: ingest: %v", f, err)
@@ -176,6 +182,9 @@ func nodeHasPluginKindDisc(node cue.Value) bool {
 		}
 		if _, ok := providerRegistry.ResolveKind(k); ok {
 			return true // a registered plugin kind
+		}
+		if isExternalDeploySubstrate(k) {
+			return true // an external (out-of-process) deploy substrate — validated via the loader/bed path, not core #NodeDoc here
 		}
 	}
 	return false

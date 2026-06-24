@@ -24,6 +24,15 @@ import "fmt"
 func normalizeNodeInto(gn *genericNode, uf *UnifiedFile) error {
 	prov, ok := providerRegistry.ResolveKind(gn.disc)
 	if !ok {
+		// An external DEPLOY substrate word (e.g. `exampledeploy`) at a deploy's edge
+		// is not a KIND — it routes to the bundle builder, the same path the
+		// deploy-shape kinds (pod/vm/k8s/local/android/group) take. Recognized via a
+		// connected OR pre-scanned deploy provider (plugin_prescan.go), so the bed
+		// parses before the out-of-process provider connects (loadProjectPlugins);
+		// the actual Add still dispatches through the connected grpcProvider.
+		if recognizedDeploySubstrate(gn.disc) {
+			return buildBundleNodeInto(gn, uf)
+		}
 		return fmt.Errorf("node %q: unsupported discriminator %q", gn.name, gn.disc)
 	}
 	// Built-in kind: the typed DecodeNode fast path (no JSON). External plugin kind:

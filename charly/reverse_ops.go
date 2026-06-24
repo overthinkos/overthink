@@ -16,6 +16,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/overthinkos/overthink/charly/spec"
 )
 
 // ReverseExecutor is the interface ReverseOp handlers expect. Allows
@@ -97,8 +99,29 @@ func runReverseOp(op ReverseOp, re ReverseExecutor) error {
 		return reverseRemoveRepoFile(op, re)
 	case ReverseOpCoprDisable:
 		return reverseCoprDisable(op, re)
+	case ReverseOpPluginScript:
+		return reversePluginScript(op, re)
 	}
 	return fmt.Errorf("runReverseOp: unknown kind %q", op.Kind)
+}
+
+// reversePluginScript runs the verbatim shell script an external (out-of-process)
+// deploy/step/builder plugin recorded as its teardown. The script body lives in
+// Extra[ReverseOpPluginScriptKey]; Scope picks the privilege — ScopeSystem runs
+// it as root (sudo on host / `ssh sudo` on a VM runner), anything else as the
+// deploy user. It routes through the SAME runScriptReverse / runUserShellReverse
+// the config-rendered package-uninstall command uses (R3), so dry-run + the
+// ReverseRunner dispatch (local vs SSH) are honored identically. An empty script
+// is a no-op (nothing config-sanctioned to run).
+func reversePluginScript(op ReverseOp, re ReverseExecutor) error {
+	script := strings.TrimSpace(op.Extra[spec.ReverseOpPluginScriptKey])
+	if script == "" {
+		return nil
+	}
+	if op.Scope == ScopeUser {
+		return runUserShellReverse(script, re)
+	}
+	return runScriptReverse(script, re)
 }
 
 // ---------------------------------------------------------------------------

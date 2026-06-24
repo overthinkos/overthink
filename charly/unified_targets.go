@@ -340,6 +340,10 @@ var (
 	_ LifecycleTarget = (*LocalUnifiedTarget)(nil)
 	_ LifecycleTarget = (*VmUnifiedTarget)(nil)
 	_ LifecycleTarget = (*PodUnifiedTarget)(nil)
+	// externalDeployTarget is a LifecycleTarget so `charly update <name>` (the
+	// disposable bed's fresh-rebuild R10 gate) can Rebuild it (re-apply via the
+	// reverse channel). Start/Stop/Logs/Shell error like the host target.
+	_ LifecycleTarget = (*externalDeployTarget)(nil)
 	// K8sUnifiedTarget + AndroidUnifiedTarget intentionally NOT in the
 	// LifecycleTarget set (cluster / device lifecycle is external).
 )

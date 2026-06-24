@@ -74,6 +74,15 @@ func classifyDisc(k string, asChild bool) string {
 	if _, ok := providerRegistry.ResolveKind(k); ok {
 		return "entity"
 	}
+	// An external DEPLOY substrate word (e.g. `exampledeploy`): a registered or
+	// pre-scanned deploy provider whose word is a deploy SUBSTRATE at a deploy's
+	// edge. Recognized here so a deploy/bed using it as its discriminator parses as
+	// an entity (it routes to the bundle builder in normalizeNodeInto) even before
+	// the out-of-process provider connects (loadProjectPlugins). Checked before
+	// dataKeySet for the same top-level-entity-wins reason as the kind check above.
+	if recognizedDeploySubstrate(k) {
+		return "entity"
+	}
 	if dataKeySet[k] {
 		return "data"
 	}

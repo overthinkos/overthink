@@ -959,6 +959,17 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 		return fmt.Errorf("reading %s: %w", abs, err)
 	}
 
+	// EXTERNAL-deploy-substrate parse pre-scan (plugin_prescan.go): at a project
+	// boundary (depth 0 = the root file OR a namespace root), register the external
+	// DEPLOY words this file's discovered candies' `plugin:` declarations name —
+	// BEFORE mergeUnifiedDocs normalizes the entity nodes below — so a deploy using
+	// such a word as its substrate (`check-foo: { exampledeploy: {…} }`) parses even
+	// though the provider connects only later at loadProjectPlugins. Additive +
+	// best-effort: a no-external-substrate project is unaffected.
+	if depth == 0 {
+		prescanDeclaredPluginWords(data, filepath.Dir(abs))
+	}
+
 	// Parse + merge every document in the file via the SHARED routing core
 	// (mergeUnifiedDocs → classifyDoc → #NodeDoc gate → normalizeNodeInto →
 	// mergeUnified). The SAME mergeUnifiedDocs parses the data compiled from the
@@ -1650,7 +1661,17 @@ func validateCheckBeds(uf *UnifiedFile) error {
 				return fmt.Errorf("kind:check bed %q references android device %q which is not defined", name, node.From)
 			}
 		default:
-			return fmt.Errorf("kind:check bed %q has unsupported target %q (must be pod, vm, local, or android)", name, node.Target)
+			// An external (out-of-process) deploy substrate (e.g. `exampledeploy`):
+			// the provider applies the deployment via the E3b reverse channel; it
+			// composes its candies via add_candy: and carries no from:/image:
+			// cross-ref to validate here. Recognized via a connected OR pre-scanned
+			// EXTERNAL deploy provider (plugin_prescan.go) — NOT a core in-process
+			// substrate (k8s stays unsupported as a bed target), so the bed validates
+			// before the provider connects (loadProjectPlugins).
+			if isExternalDeploySubstrate(node.Target) {
+				break
+			}
+			return fmt.Errorf("kind:check bed %q has unsupported target %q (must be pod, vm, local, android, or a registered external deploy substrate)", name, node.Target)
 		}
 	}
 	return nil

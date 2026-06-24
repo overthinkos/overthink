@@ -104,14 +104,17 @@ func summaryStatus(ok bool) string {
 // `charly vm destroy`. The next `charly check run` best-effort clears the lingering
 // target before rebuilding, so leaving it up never blocks a re-run.
 func printDebugRetentionNotice(w io.Writer, name string, node BundleNode) {
-	switch node.Target {
-	case "vm":
+	switch {
+	case node.Target == "vm":
 		fmt.Fprintf(w, "\n[charly check run] bed %q FAILED — VM %q left running for debugging.\n"+
 			"  inspect: charly check live %s | charly vm ssh %s\n"+
 			"  destroy: charly vm destroy %s\n", name, node.From, name, node.From, node.From)
-	case "local":
+	case node.Target == "local":
 		fmt.Fprintf(w, "\n[charly check run] bed %q FAILED — local apply left in place for debugging.\n"+
 			"  destroy: charly remove %s\n", name, name)
+	case isExternalDeploySubstrate(node.Target):
+		fmt.Fprintf(w, "\n[charly check run] bed %q FAILED — external deploy apply left in place for debugging.\n"+
+			"  destroy: charly bundle del %s\n", name, name)
 	default: // pod
 		fmt.Fprintf(w, "\n[charly check run] bed %q FAILED — pod left running for debugging.\n"+
 			"  inspect: charly check live %s | podman exec charly-%s sh\n"+
@@ -144,16 +147,17 @@ func persistBedDeployOverrides(name string, node BundleNode) {
 	if node.IsGroup() {
 		return
 	}
-	// A LOCAL bed never runs `charly config` (kind:local applies candies in place
-	// during `charly bundle add` — see runCheckBed's `if !isLocal` config guard), so
-	// the whole reason persistBedDeployOverrides exists — seeding port/volume/env
-	// overrides BEFORE config — does not apply. Worse, a local bed's only persistable
+	// A LOCAL or EXTERNAL in-place bed never runs `charly config` (it applies candies
+	// in place during `charly bundle add` — see runCheckBed's `if !isInPlace` config
+	// guard), so the whole reason persistBedDeployOverrides exists — seeding
+	// port/volume/env overrides BEFORE config — does not apply. Worse, a local bed's
+	// only persistable
 	// cross-ref is its `local:` template, which lives in the bed's OWN project; writing
 	// it into the GLOBAL per-host overlay makes that overlay un-loadable from every
 	// OTHER project (validateCheckBeds: "references local template … which is not
 	// defined"), poisoning concurrent/cross-project bed runs. Local deploys persist via
 	// the install ledger, not this bundle-map path, so skipping is also lossless.
-	if node.Target == "local" {
+	if node.Target == "local" || isExternalDeploySubstrate(node.Target) {
 		return
 	}
 	saveDeployState(name, "", SaveDeployStateInput{
@@ -182,6 +186,14 @@ func persistBedDeployOverrides(name string, node BundleNode) {
 func runCheckBed(exe, name string, node BundleNode, opts bedRunOpts) (*bedRunResult, error) {
 	isVM := node.Target == "vm"
 	isLocal := node.Target == "local"
+	// An EXTERNAL deploy substrate (e.g. `exampledeploy`, served by an
+	// out-of-process deploy plugin): it applies in place on the host venue via the
+	// E3b reverse channel — like a kind:local deploy it has no image to build, runs
+	// no `charly config`/`charly start`, and tears down via `charly bundle del`
+	// (which replays the recorded reverse op). isInPlace unifies local + external
+	// at every "apply candies in place, no container lifecycle" decision below.
+	isExternalDeploy := isExternalDeploySubstrate(node.Target)
+	isInPlace := isLocal || isExternalDeploy
 	// A GROUP bed (the §3 cross-deployment shape): no root box/vm/local cross-ref,
 	// but sibling Members (subject + driver) that ARE the deployment. It has no
 	// root container, so its R10 sequence builds/deploys/rebuilds the MEMBERS
@@ -401,9 +413,14 @@ func runCheckBed(exe, name string, node BundleNode, opts bedRunOpts) (*bedRunRes
 		if opts.Keep {
 			return
 		}
-		if isVM {
+		switch {
+		case isVM:
 			_ = step("cleanup", []string{"vm", "destroy", vmTemplate})
-		} else {
+		case isExternalDeploy:
+			// External deploy: `bundle del` replays the recorded reverse op (e.g.
+			// removes the apply markers); `charly remove` is pod-quadlet-specific.
+			_ = step("cleanup", []string{"bundle", "del", name})
+		default:
 			// --purge removes the bed's named volumes too. Safe because a
 			// disposable bed's volumes are re-scoped to its own deploy key
 			// (charly-<bed>-<vol>), never a production deploy's charly-<image>-<vol>.
@@ -547,20 +564,34 @@ func runCheckBed(exe, name string, node BundleNode, opts bedRunOpts) (*bedRunRes
 		tearDownMembers(&node)
 		deployed = true // members will be brought up — keep state on a later failure
 	default:
-		// Pod beds → image ref; kind:local beds → local template ref.
-		ref := image
-		if isLocal {
-			ref = localRef
+		// Pod beds → image ref; kind:local beds → local template ref; an EXTERNAL
+		// deploy substrate composes its candies via add_candy: and carries no
+		// image/template ref (the bundle-add ref falls back to the deploy key).
+		addArgs := []string{"bundle", "add", name}
+		switch {
+		case isExternalDeploy:
+			// no ref — add_candy: is the workload
+		case isLocal:
+			addArgs = append(addArgs, localRef)
+		default:
+			addArgs = append(addArgs, image)
 		}
+		addArgs = append(addArgs, "--node-only")
 		// Best-effort tear-down of any lingering bed from a previous
 		// interrupted/failed run (symmetry with the VM path's pre-destroy
 		// above). A failed run now LEAVES the bed up for debugging, so this
 		// clears it before the fresh deploy — kept-alive state never blocks
-		// a re-run. Silent on the common no-op case.
-		// --purge clears any prior bed volumes so each deploy starts fresh
-		// (a stale postgres volume would carry a stale password). Safe: a bed's
-		// volumes are isolated under its own deploy key, never production's.
-		_ = exec.Command(exe, "remove", name, "--purge").Run()
+		// a re-run. Silent on the common no-op case. An external deploy tears
+		// down via `bundle del` (replays the recorded reverse op); `charly remove`
+		// is pod-quadlet-specific and a no-op for it.
+		if isExternalDeploy {
+			_ = exec.Command(exe, "bundle", "del", name).Run()
+		} else {
+			// --purge clears any prior bed volumes so each deploy starts fresh
+			// (a stale postgres volume would carry a stale password). Safe: a bed's
+			// volumes are isolated under its own deploy key, never production's.
+			_ = exec.Command(exe, "remove", name, "--purge").Run()
+		}
 		// Clear any sibling peers left over from a previous interrupted run
 		// (symmetry with the bed remove above) so kept-alive peer state never
 		// blocks a fresh deploy.
@@ -572,6 +603,7 @@ func runCheckBed(exe, name string, node BundleNode, opts bedRunOpts) (*bedRunRes
 		// from the IMAGE LABELS (and gate port writes behind an operator -p), so
 		// a bed's declared port: remap would silently fall back to the image
 		// default and collide with any same-image deploy already bound to it.
+		// (persistBedDeployOverrides itself skips local + external in-place targets.)
 		persistBedDeployOverrides(name, node)
 		// --node-only: deploy ONLY the bed's root node here. A pod bed's
 		// container doesn't exist until `charly start` below, so any nested
@@ -579,15 +611,15 @@ func runCheckBed(exe, name string, node BundleNode, opts bedRunOpts) (*bedRunRes
 		// packages onto the running emulator) can't deploy yet — they're
 		// deployed after start (see the nested-child loop below). Harmless
 		// for childless beds (the no-op is identical to a full walk).
-		if err := step("deploy-add", []string{"bundle", "add", name, ref, "--node-only"}); err != nil {
+		if err := step("deploy-add", addArgs); err != nil {
 			return fail("bundle add %s: %w", name, err)
 		}
 		deployed = true // target registered — keep it on any later failure
 		// Pod beds: deploy add registers the entry but does not generate the
 		// quadlet or start the service — `charly config` writes the unit,
-		// `charly start` activates it. kind:local applies candies in place during
-		// deploy add, so neither step is needed.
-		if !isLocal {
+		// `charly start` activates it. kind:local + external apply candies in place
+		// during deploy add, so neither step is needed.
+		if !isInPlace {
 			if err := step("config", []string{"config", name}); err != nil {
 				return fail("config %s: %w", name, err)
 			}
@@ -709,7 +741,7 @@ func runCheckBed(exe, name string, node BundleNode, opts bedRunOpts) (*bedRunRes
 		// the post-update state is unexercised. (A flat bed's `charly update`
 		// succeeding is itself the rebuild proof; its baked deploy-scope check
 		// needs no re-deploy.)
-		if runRuntimeCheck && !isLocal && len(node.Children) > 0 {
+		if runRuntimeCheck && !isInPlace && len(node.Children) > 0 {
 			if isVM {
 				// `charly update` recreated the libvirt domain; the qcow2 disk (and
 				// thus the applied guest candies, the nested pod's quadlet, and

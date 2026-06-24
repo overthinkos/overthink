@@ -364,9 +364,14 @@ func checkVmTarget(uf *UnifiedFile, name string) (vmName string, ok bool) {
 }
 
 // checkLocalTarget reports whether `name` (or its dotted root segment) is a
-// target:local deployment and returns its node so the caller can build the
-// host/ssh executor via rootExecutorForDeployNode. Shared by
-// CheckLiveCmd.isLocalTarget and resolveCheckVenue (R3).
+// HOST-VENUE deployment — a `target: local` filesystem apply OR an EXTERNAL
+// out-of-process deploy (whose externalDeployTarget runs its deploy-scope probes
+// host-side via ShellExecutor, exactly like local) — and returns its node so the
+// caller can build the host/ssh executor via rootExecutorForDeployNode. Shared by
+// CheckLiveCmd.isLocalTarget and resolveCheckVenue (R3): one classifier routes an
+// external deploy to the host path for BOTH the declarative `charly check live`
+// and the interactive `charly check <verb>`, instead of the pod/container path
+// (which would fail at resolveContainer with "container ... is not running").
 func checkLocalTarget(uf *UnifiedFile, name string) (BundleNode, bool) {
 	if uf == nil || uf.Bundle == nil {
 		return BundleNode{}, false
@@ -375,7 +380,7 @@ func checkLocalTarget(uf *UnifiedFile, name string) (BundleNode, bool) {
 	if idx := strings.Index(name, "."); idx > 0 {
 		root = name[:idx]
 	}
-	if entry, present := uf.Bundle[root]; present && entry.Target == "local" {
+	if entry, present := uf.Bundle[root]; present && (entry.Target == "local" || isExternalDeploySubstrate(entry.Target)) {
 		return entry, true
 	}
 	return BundleNode{}, false

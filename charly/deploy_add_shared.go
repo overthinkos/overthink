@@ -42,31 +42,36 @@ func prepareCandySecrets(plans []*InstallPlan, dir string) ([]*Candy, map[string
 // loadDeployPlugins connects the project's OUT-OF-TREE plugin candies BEFORE a
 // deploy verb resolves the target, so a deploy whose SUBSTRATE / step / verb is
 // served by an external provider resolves out-of-process. It scans the WHOLE
-// project (ScanAllCandyWithConfigOpts) and loads EVERY plugin candy found —
-// deliberately conservative, because ANY verb/step/substrate word in the
-// deployment's plan must resolve and the plan is not analyzed here to scope the
-// set (scoping the load to plan-referenced words is a future perf option). The
-// deployment's add_candy: candies + any caller-supplied extra refs are ADDED to
-// that scan via ExtraCandyRefs (so a REMOTE composed plugin not already in the
-// local scan is fetched + connected too). The SAME scan + loadProjectPlugins
-// the check runner uses (attachCheckRunnerContext) and the bundle-add path uses —
-// extracted here so bundle add / bundle del / charly update all connect a
-// deployment's plugins identically (R3). For an external deploy SUBSTRATE this is
-// what turns the pre-scanned placeholder word into a connected grpcProvider that
-// ResolveTarget can route to. Best-effort: a build/connect failure is a warning,
-// then the dispatch fails loudly at ResolveTarget / runPluginVerb rather than
-// silently mis-deploying.
+// project (ScanAllCandyWithConfigOpts) but loads ONLY the plugin candies the
+// deployment REFERENCES (perf-scoped): collectReferencedPluginWords unions the
+// candy/box plans + candy external_builder selections, and deployNodePluginContext
+// adds the deploy's OWN references — its substrate kind + the inline Op.Plugin words
+// in its FLATTENED bed plan (members hoisted into the root node.Plan). A plugin candy
+// none of whose providers is referenced is skipped (no wasted host build/connect); a
+// REFERENCED one always loads (the reference set is collected COMPLETE — over-load
+// safe, never under). The deployment's add_candy: candies + any caller-supplied extra
+// refs are ADDED to the scan via ExtraCandyRefs (so a REMOTE composed plugin not in
+// the local scan is fetched too, and its words are then collected from its plan). The
+// SAME scan + loadProjectPlugins the check runner uses (attachCheckRunnerContext) and
+// the bundle-add path uses — so bundle add / bundle del / charly update all connect a
+// deployment's plugins identically (R3). For an external deploy SUBSTRATE this is what
+// turns the pre-scanned placeholder word into a connected grpcProvider that
+// ResolveTarget can route to. Best-effort: a build/connect failure is a warning, then
+// the dispatch fails loudly at ResolveTarget / runPluginVerb rather than silently
+// mis-deploying.
 func loadDeployPlugins(dir, deployName string, extraAddCandy []string) {
 	cfg, cerr := LoadConfig(dir)
 	if cerr != nil {
 		return
 	}
-	extra := append(append([]string(nil), extraAddCandy...), deployAddCandyRefs(dir, deployName)...)
+	addCandy, refWords := deployNodePluginContext(dir, deployName)
+	extra := append(append([]string(nil), extraAddCandy...), addCandy...)
 	candyMap, scanErr := ScanAllCandyWithConfigOpts(dir, cfg, ResolveOpts{ExtraCandyRefs: extra})
 	if scanErr != nil || candyMap == nil {
 		return
 	}
-	if perr := loadProjectPlugins(context.Background(), candyMap); perr != nil {
+	refs := collectReferencedPluginWords(candyMap, cfg.Box, refWords)
+	if perr := loadProjectPlugins(context.Background(), candyMap, refs); perr != nil {
 		fmt.Fprintf(os.Stderr, "warning: plugin load: %v\n", perr)
 	}
 }

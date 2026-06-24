@@ -702,41 +702,68 @@ func attachCheckRunnerContext(runner *Runner, box, instance string, distros []st
 	// PLUGIN candy (e.g. plugin-spice for the `spice:` check verb authored INLINE in
 	// the bed plan, with no candy in the image closure requiring it) would otherwise
 	// leave the plugin unloaded and the `spice:` step failing as an unknown verb.
-	candyMap, scanErr := ScanAllCandyWithConfigOpts(dir, cfg, ResolveOpts{ExtraCandyRefs: deployAddCandyRefs(dir, box)})
+	addCandy, refWords := deployNodePluginContext(dir, box)
+	candyMap, scanErr := ScanAllCandyWithConfigOpts(dir, cfg, ResolveOpts{ExtraCandyRefs: addCandy})
 	if scanErr != nil {
 		runner.CandyScanErr = fmt.Errorf("scanning candy source dirs: %w", scanErr)
 		return
 	}
 	runner.CandyDirs = candyDirsFromScan(candyMap)
-	// Connect + register every OUT-OF-TREE plugin candy so a `check: plugin: <verb>`
-	// step resolves it out-of-process (built-in plugins are already compiled in). A
-	// build/connect failure is surfaced as a warning; the bed's plugin check then
-	// fails loudly via runPluginVerb's unresolved-verb path. The shared check-runner
-	// setup is the ONE place every check path (box/live) loads plugins (R3).
-	if err := loadProjectPlugins(context.Background(), candyMap); err != nil {
+	// Connect + register the OUT-OF-TREE plugin candies a `check: plugin: <verb>` step
+	// REFERENCES, out-of-process (built-in plugins are already compiled in). Perf-scoped
+	// via collectReferencedPluginWords: the candy/box plans + candy external_builder +
+	// the bed's OWN refWords (its substrate kind + the inline plugin verbs in its
+	// flattened plan — the `spice:` step above) name every plugin the bed dispatches, so
+	// an UNREFERENCED plugin candy in the scan (the rest of a box/<distro> plugin set) is
+	// not host-built while a referenced one always loads (over-load safe, never under). A
+	// build/connect failure is surfaced as a warning; the bed's plugin check then fails
+	// loudly via runPluginVerb's unresolved-verb path. The shared check-runner setup is
+	// the ONE place every check path (box/live) loads plugins (R3).
+	refs := collectReferencedPluginWords(candyMap, cfg.Box, refWords)
+	if err := loadProjectPlugins(context.Background(), candyMap, refs); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: plugin load: %v\n", err)
 	}
 }
 
-// deployAddCandyRefs returns the `add_candy:` refs declared on the deploy node named
-// `name` in the project at `dir` (best-effort: nil on any load failure or unknown
-// name). The project candy scan (ScanAllCandyWithConfig) only collects IMAGE-closure
-// candies (CollectRemoteRefs walks base/builder/require edges); a deploy's add_candy
-// candies are NOT in that set, so the check runner (attachCheckRunnerContext) and the
-// deploy path (BundleAddCmd) feed them to ScanAllCandyWithConfigOpts' ExtraCandyRefs
-// to build + connect their out-of-process plugins (R3 — one helper, both paths).
-// resolveTreeRoot is the SAME project-bundle loader the deploy walker uses, so the
-// add_candy child nodes are already folded into BundleNode.AddCandy.
-func deployAddCandyRefs(dir, name string) []string {
+// deployNodePluginContext resolves the deploy/bed node named `name` in the project at
+// `dir` ONCE (the SAME project-bundle loader the deploy walker uses) and returns the
+// two plugin-loading inputs the check runner (attachCheckRunnerContext) and the deploy
+// path (loadDeployPlugins) both need (R3 — one helper, both paths):
+//
+//   - addCandy: the deploy's `add_candy:` refs. The project candy scan
+//     (ScanAllCandyWithConfig) collects only IMAGE-closure candies (CollectRemoteRefs
+//     walks base/builder/require edges); add_candy candies are NOT in that set, so both
+//     callers feed these to ScanAllCandyWithConfigOpts' ExtraCandyRefs to fetch them.
+//   - refWords: the plugin WORDS the node references DIRECTLY — its substrate kind (an
+//     external deploy-substrate plugin word, e.g. `exampledeploy`) + every inline
+//     Op.Plugin in its FLATTENED plan. flattenBundleVenues hoists member/nested steps
+//     into the root node.Plan, so this ONE walk covers the whole bed including members
+//     (e.g. a `spice:` check verb authored inline). These scope loadProjectPlugins to
+//     the plugins the deploy actually dispatches — caught here because they appear in
+//     NEITHER a candy plan NOR a box plan (over-load safe, never under-load).
+//
+// Best-effort: (nil, nil) on any load failure or unknown name (the caller still
+// collects candy + box references; a genuinely missing reference fails loudly at
+// dispatch, never silently mis-deploys).
+func deployNodePluginContext(dir, name string) (addCandy []string, refWords []string) {
 	tree, err := resolveTreeRoot(dir)
 	if err != nil || tree == nil {
-		return nil
+		return nil, nil
 	}
 	node, ok := tree[name]
 	if !ok {
-		return nil
+		return nil, nil
 	}
-	return node.AddCandy
+	addCandy = node.AddCandy
+	if node.Target != "" {
+		refWords = append(refWords, node.Target)
+	}
+	for i := range node.Plan {
+		if w := node.Plan[i].Op.Plugin; w != "" {
+			refWords = append(refWords, w)
+		}
+	}
+	return addCandy, refWords
 }
 
 // isLocalTarget returns true when c.Box names a `target: local` deployment

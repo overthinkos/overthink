@@ -165,7 +165,11 @@ func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) 
 	// Containerfile fragment, placement-agnostically: in-proc for a builtin, over go-plugin
 	// gRPC for an external. Best-effort: a connect failure on a plugin the build actually
 	// USES fails loudly at emit (emitTasks' OpEmit dispatch), never silently mis-builds.
-	if perr := loadProjectPlugins(context.Background(), layers); perr != nil {
+	// PERF-SCOPED: connect ONLY the plugins the candy plans (run-step verbs) + candy
+	// external_builder selections + box plans reference — an unreferenced box/<distro>
+	// plugin candy is not host-built. No deploy substrate / add_candy at build (no deploy).
+	buildRefs := collectReferencedPluginWords(layers, cfg.Box, nil)
+	if perr := loadProjectPlugins(context.Background(), layers, buildRefs); perr != nil {
 		fmt.Fprintf(os.Stderr, "warning: build-time plugin load: %v\n", perr)
 	}
 

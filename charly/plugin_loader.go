@@ -249,15 +249,79 @@ func loadPluginUnit(ctx context.Context, name string, p *CandyPluginDecl, srcDir
 	return nil
 }
 
+// collectReferencedPluginWords returns the COMPLETE set of plugin words the work at
+// hand can reference, so loadProjectPlugins host-builds + connects ONLY the plugins
+// it actually needs (perf-scoping). It unions every reference SITE:
+//   - every candy's `external_builder:` selection (the BUILDER leg);
+//   - every Op.Plugin across every candy PLAN step (the verb/step legs — all steps,
+//     not just run:, so a build-emit run verb AND a deploy/runtime check verb count);
+//   - every Op.Plugin across every box PLAN step (a box may author a plugin check
+//     verb directly, baked into ai.opencharly.description and run at check live);
+//   - the caller-supplied `extra` words (a deploy's substrate kind + the inline
+//     Op.Plugin words in its FLATTENED bed plan — see deployNodePluginContext).
+//
+// Word-keyed + class-AGNOSTIC by design: a plugin candy loads iff ANY of its provided
+// words is in this set (pluginProvidesReferencedWord), regardless of class. Over-load
+// (a matched-but-unused word) is harmless — the idempotency guard + a connect for an
+// undispatched word — while under-load (a MISSED reference) breaks the verb/builder/
+// substrate at dispatch, so collection errs toward INCLUDE: every enumerated site is
+// unioned, and when in doubt a word is added rather than filtered.
+func collectReferencedPluginWords(candies map[string]*Candy, boxes map[string]BoxConfig, extra []string) map[string]struct{} {
+	refs := make(map[string]struct{})
+	add := func(w string) {
+		if w != "" {
+			refs[w] = struct{}{}
+		}
+	}
+	for _, w := range extra {
+		add(w)
+	}
+	for _, candy := range candies {
+		if candy == nil {
+			continue
+		}
+		add(candy.ExternalBuilder)
+		for i := range candy.plan {
+			add(candy.plan[i].Op.Plugin)
+		}
+	}
+	for _, box := range boxes {
+		for i := range box.Plan {
+			add(box.Plan[i].Op.Plugin)
+		}
+	}
+	return refs
+}
+
+// pluginProvidesReferencedWord reports whether ANY of a plugin candy's declared
+// providers' words is in the referenced set — the perf-scoping predicate. Class is
+// IGNORED (a word match in any class loads the unit): collection is the complete,
+// over-load-safe side, so matching on the word alone can never UNDER-load on a class
+// mismatch. A malformed capability string is skipped (validate flags it elsewhere).
+func pluginProvidesReferencedWord(p *CandyPluginDecl, refs map[string]struct{}) bool {
+	for _, capability := range p.Providers {
+		if _, word, ok := splitCapability(string(capability)); ok {
+			if _, hit := refs[word]; hit {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // loadProjectPlugins gates every builtin plugin unit's schema (process-start pass)
-// and connects every out-of-tree plugin candy in the RESOLVED candy set before
-// checks/deploys reference its providers. It takes the scanned set
-// (ScanAllCandyWithConfig) — which, unlike LoadUnified's project-local Candy map,
-// includes @github-fetched candies and carries each candy's own .SourceDir +
-// .Plugin (so a box that vendors all its candies via @github, like box/<distro>,
-// still loads its plugins). Errors are returned (not swallowed) so a bed asserting
-// a plugin verb fails loudly if its plugin won't load.
-func loadProjectPlugins(ctx context.Context, candies map[string]*Candy) error {
+// and connects the out-of-tree plugin candies the work at hand REFERENCES (the words
+// in refs) before checks/deploys/builds dispatch to their providers. It takes the
+// scanned set (ScanAllCandyWithConfig) — which, unlike LoadUnified's project-local
+// Candy map, includes @github-fetched candies and carries each candy's own .SourceDir
+// + .Plugin (so a box that vendors all its candies via @github, like box/<distro>,
+// still loads its plugins). refs (from collectReferencedPluginWords) SCOPES the load:
+// a plugin candy NONE of whose providers is referenced is SKIPPED — a host `go build`
+// + connect avoided for a word nothing dispatches (a box/<distro> set vendors many
+// plugin candies — adb/appium/kube/spice/example-* — most unused by any one build or
+// deploy). Errors are returned (not swallowed) so a bed asserting a plugin verb fails
+// loudly if its REFERENCED plugin won't load.
+func loadProjectPlugins(ctx context.Context, candies map[string]*Candy, refs map[string]struct{}) error {
 	if err := loadBuiltinPluginUnits(); err != nil {
 		return fmt.Errorf("builtin plugin schema gate: %w", err)
 	}
@@ -268,6 +332,14 @@ func loadProjectPlugins(ctx context.Context, candies map[string]*Candy) error {
 		// Builtins are gated above (their schemas) and registered at init() (their
 		// providers); only out-of-tree sources need build + connect + register.
 		if src := candy.Plugin.Source; src == "" || src == "builtin" {
+			continue
+		}
+		// PERF-SCOPING: skip an out-of-tree plugin candy NONE of whose providers is
+		// referenced by the work at hand — no wasted host build/connect for a word
+		// nothing will dispatch. refs is collected COMPLETE (collectReferencedPluginWords
+		// + deployNodePluginContext), so a skip here can never drop a referenced plugin
+		// (over-load safe; under-load is a bug — see the HARD CONSTRAINT in those docs).
+		if !pluginProvidesReferencedWord(candy.Plugin, refs) {
 			continue
 		}
 		// Idempotent re-load: loadProjectPlugins runs on EVERY connect path (build,

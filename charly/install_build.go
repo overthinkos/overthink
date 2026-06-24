@@ -698,6 +698,24 @@ func compileActOp(op *Op, layer *Candy, img *ResolvedBox) InstallStep {
 			if stepprov, ok := prov.(TypedStepProvider); ok {
 				return stepprov.ConstructStep(op, layer, img)
 			}
+			// An EXTERNAL (out-of-process) plugin verb has no in-proc ProvisionActor
+			// shell — it EXECUTES its deploy-context effect at deploy over the E3b
+			// reverse channel (Invoke(OpExecute) WITH the live executor), and bakes its
+			// build-context fragment via Invoke(OpEmit). Route it to ExternalPluginStep.
+			// The discriminator is the executorInvoker capability, which only the
+			// grpcProvider (broker-carrying out-of-proc peer) satisfies — so `command`
+			// and every built-in ProvisionActor verb fall through to the OpStep path
+			// below (renderOpCommand), unchanged. The build-context counterpart
+			// (emitTasks `case "plugin"`) stays the box-build seam; this is the
+			// DEPLOY-context (Local/VM) + pod-overlay (OCI) leg.
+			if _, ok := prov.(executorInvoker); ok {
+				return &ExternalPluginStep{
+					Op:           op,
+					CandyName:    layer.Name,
+					ResolvedUser: userDir,
+					Distros:      img.Tags,
+				}
+			}
 		}
 	}
 	// Install verbs (mkdir/copy/write/link/download/setcap/build) + command →

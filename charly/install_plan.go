@@ -155,6 +155,7 @@ const (
 	StepKindApkInstall      StepKind = "ApkInstall"
 	StepKindLocalPkgInstall StepKind = "LocalPkgInstall"
 	StepKindReboot          StepKind = "Reboot"
+	StepKindExternalPlugin  StepKind = "ExternalPlugin"
 )
 
 // ---------------------------------------------------------------------------
@@ -941,6 +942,63 @@ func (s *RebootStep) RequiresGate() Gate { return GateNone }
 
 // Reverse is empty — a reboot is not a persistent artifact to undo.
 func (s *RebootStep) Reverse() []ReverseOp { return nil }
+
+// ---------------------------------------------------------------------------
+// ExternalPluginStep — a `run: plugin: <verb>` step served by an OUT-OF-PROCESS
+// plugin, executed at DEPLOY via the E3b ExecutorService reverse channel.
+// ---------------------------------------------------------------------------
+
+// ExternalPluginStep is the install-timeline IR node for a `run: plugin: <verb>`
+// step whose verb is served by an EXTERNAL (out-of-process) plugin — a grpcProvider,
+// not a built-in TypedStepProvider (package/service) or ProvisionActor (the
+// state-provision shell verbs) or the `command` install verb. compileActOp routes
+// it here; the per-venue StepProvider (plugin_step_external.go) picks the Invoke op
+// per venue, placement-agnostic above the registry:
+//
+//   - EmitLocal / EmitVM (a DEPLOY venue — the install runs ON the target, not into
+//     an image): Invoke(OpExecute) WITH the live DeployExecutor on the go-plugin
+//     broker (the E3b reverse channel), so the plugin runs its deploy-context effect
+//     (RunSystem/RunUser) on the real venue it cannot hold across the process
+//     boundary, and RETURNS its teardown ReverseOps which the target records into the
+//     ledger (record-and-replay — only recorded ops are reversed at `charly bundle
+//     del`). This is the deploy-context counterpart of the build-context OpEmit leg
+//     (tasks.go emitPluginFragment), reusing the SAME spec.DeployReply / ReverseOp
+//     wire as the external deploy TARGET (deploy_target_external.go) — R3.
+//   - EmitOCI (a BUILD venue — the pod-overlay Containerfile): Invoke(OpEmit) via the
+//     SHARED emitPluginFragment, splicing the plugin's Containerfile FRAGMENT verbatim
+//     — it cannot deploy-execute at build (no live venue). Identical behaviour to the
+//     box-build path (writeCandySteps → emitTasks `case "plugin"`), just relocated.
+//
+// Reverse() is static-nil: the reversal ops are DYNAMIC — they come from the plugin's
+// OpExecute reply at emit time, appended to the CandyRecord by EmitLocal/EmitVM (the
+// externalDeployTarget pattern).
+type ExternalPluginStep struct {
+	Op           *Op      // the run: step op — Plugin (verb word) + PluginInput + RunAs
+	CandyName    string   // owning candy (provenance + the ledger CandyRecord key)
+	ResolvedUser string   // uid:gid or "root" after resolveUserSpec — drives Scope
+	Distros      []string // the image's distro tag chain (img.Tags) for the build-emit BuildEnv
+}
+
+func (s *ExternalPluginStep) Kind() StepKind { return StepKindExternalPlugin }
+
+// Scope classifies by the step's user context — the SAME rule OpStep uses
+// (opStepScope): root/empty → system, a named/numeric non-root user → user. The
+// plugin then chooses RunSystem vs RunUser on the reverse channel per its own effect;
+// this scope drives only the ledger reverse-op privilege bookkeeping.
+func (s *ExternalPluginStep) Scope() Scope { return opStepScope(s.ResolvedUser) }
+
+func (s *ExternalPluginStep) Venue() Venue { return VenueHostNative }
+
+// RequiresGate is GateNone — an external plugin verb-step is operator-authorized
+// build/deploy-time plugin execution (the candy author opted into it), mirroring the
+// external deploy TARGET which is ungated; the plugin picks its own privilege via
+// RunSystem/RunUser on the reverse channel.
+func (s *ExternalPluginStep) RequiresGate() Gate { return GateNone }
+
+// Reverse is static-nil: the teardown ops are recorded DYNAMICALLY from the plugin's
+// OpExecute DeployReply at emit time (EmitLocal/EmitVM append reply.ReverseOps to the
+// CandyRecord), exactly like the external deploy target — never recomputed.
+func (s *ExternalPluginStep) Reverse() []ReverseOp { return nil }
 
 // PackageIDs returns the installable package ids (committed-APK entries with
 // no `package:` id are excluded — they can't be uninstalled by id).

@@ -46,7 +46,7 @@ var allStepKinds = []StepKind{
 	StepKindSystemPackages, StepKindBuilder, StepKindOp, StepKindFile,
 	StepKindServicePackaged, StepKindServiceCustom, StepKindShellHook,
 	StepKindShellSnippet, StepKindRepoChange, StepKindApkInstall,
-	StepKindLocalPkgInstall, StepKindReboot,
+	StepKindLocalPkgInstall, StepKindReboot, StepKindExternalPlugin,
 }
 
 // checkStepProviderBijection asserts every InstallStep kind has a registered

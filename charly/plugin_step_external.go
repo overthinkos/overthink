@@ -1,0 +1,163 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/overthinkos/overthink/charly/spec"
+)
+
+// plugin_step_external.go — the StepProvider for StepKindExternalPlugin: the
+// install-timeline IR node for a `run: plugin: <verb>` step served by an
+// OUT-OF-PROCESS plugin. It is the DEPLOY-context (Local/VM) + pod-overlay (OCI) leg
+// of the operator-authorized plugin execution, the counterpart of the build-context
+// OpEmit leg in tasks.go (emitPluginFragment). Self-registers via
+// registerDedicatedBuiltin, like every other dedicated step provider.
+
+// executorInvoker is the capability to Invoke a deploy/step/builder op WITH the E3b
+// reverse channel: the provider stands up the host's ExecutorService on the go-plugin
+// broker and the out-of-process plugin dials back to run shell/SSH ops on the live
+// venue. Only *grpcProvider (the broker-carrying out-of-proc peer) implements it — a
+// built-in verb runs in-proc and has no out-of-proc execute — so it is the precise
+// discriminator that routes an EXTERNAL plugin verb to ExternalPluginStep while every
+// builtin (command + the ProvisionActor verbs) stays on the OpStep path. Mirrors the
+// build-context BuildEmitter marker interface (provider_verb.go).
+type executorInvoker interface {
+	InvokeWithExecutor(ctx context.Context, op *Operation, exec DeployExecutor) (*Result, error)
+}
+
+// externalPluginStepProvider is the StepKindExternalPlugin StepProvider. Each Emit*
+// picks the right Invoke op for its venue, placement-agnostic above the registry.
+type externalPluginStepProvider struct{ builtinStepBase }
+
+func (externalPluginStepProvider) Reserved() string { return string(StepKindExternalPlugin) }
+
+// EmitOCI is the BUILD venue (image build / pod-overlay Containerfile): an external
+// plugin verb bakes its build-context output via Invoke(OpEmit) through the SHARED
+// emitPluginFragment seam (R3) — the SAME path the box-build emitTasks `case "plugin"`
+// takes for an external verb. It CANNOT deploy-execute at build (no live venue); a
+// deploy-only plugin (empty OpEmit fragment) fails loudly at emitPluginFragment's
+// empty-fragment guard, never bakes nothing silently.
+func (externalPluginStepProvider) EmitOCI(t *OCITarget, step InstallStep, _ *InstallPlan) error {
+	s := step.(*ExternalPluginStep)
+	prov, ok := providerRegistry.ResolveVerb(s.Op.Plugin)
+	if !ok {
+		return fmt.Errorf("OCITarget: external plugin verb %q is not connected at build time", s.Op.Plugin)
+	}
+	frag, err := emitPluginFragment(prov, s.Op, t.Box)
+	if err != nil {
+		return fmt.Errorf("external plugin verb %q build-emit: %w", s.Op.Plugin, err)
+	}
+	t.buf.WriteString(frag)
+	if !strings.HasSuffix(frag, "\n") {
+		t.buf.WriteString("\n")
+	}
+	return nil
+}
+
+// EmitLocal is the host DEPLOY venue: Invoke(OpExecute) WITH the host executor on the
+// reverse channel, then record the plugin's returned teardown ops into the CandyRecord
+// (recordCandy persists them to the ledger; del replays them). DryRun does NOT Invoke
+// — Invoke IS the apply (the plugin runs effects on the venue), and the reverse server
+// runs them with the EmitOpts the plugin sends (nil → zero opts), so a dry-run must
+// short-circuit BEFORE the wire call (the externalDeployTarget pattern).
+func (externalPluginStepProvider) EmitLocal(t *LocalDeployTarget, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
+	s := step.(*ExternalPluginStep)
+	if opts.DryRun {
+		fmt.Printf("[dry-run] external plugin step %s (verb=%s): would execute via the E3b reverse channel\n",
+			s.CandyName, s.Op.Plugin)
+		return nil
+	}
+	reply, err := executeExternalPluginStep(opts.ContextOrDefault(), s, plan, t.exec())
+	if err != nil {
+		return err
+	}
+	rec.ReverseOps = append(rec.ReverseOps, reply.ReverseOps...)
+	t.noteStep(rec, StepKindExternalPlugin, s.Scope(), s.Venue(),
+		fmt.Sprintf("plugin: %s (candy=%s)", s.Op.Plugin, s.CandyName), start)
+	return nil
+}
+
+// EmitVM is the guest DEPLOY venue: the SAME Invoke(OpExecute) over the reverse channel
+// as EmitLocal, but the executor is the SSHExecutor, so the plugin's RunSystem/RunUser
+// run inside the guest. Records the returned ReverseOps into the guest-side ledger.
+func (externalPluginStepProvider) EmitVM(t *VmDeployTarget, ctx context.Context, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord) error {
+	s := step.(*ExternalPluginStep)
+	if opts.DryRun {
+		fmt.Fprintf(os.Stderr, "[dry-run] vm:%s external plugin step %s (verb=%s)\n",
+			t.VMName, s.CandyName, s.Op.Plugin)
+		return nil
+	}
+	reply, err := executeExternalPluginStep(ctx, s, plan, t.Exec)
+	if err != nil {
+		return err
+	}
+	rec.ReverseOps = append(rec.ReverseOps, reply.ReverseOps...)
+	return nil
+}
+
+// executeExternalPluginStep Invokes the external plugin verb's OpExecute over the E3b
+// reverse channel and returns the decoded DeployReply (its ReverseOps recorded by the
+// caller). plugin_input rides op.Params UNWRAPPED (the SAME shape emitPluginFragment /
+// the externalDeployTarget marshal — R3), a spec.DeployVenue rides op.Env, and the
+// live executor is stood up on the broker by InvokeWithExecutor so the plugin runs its
+// effect on the real venue. Shared by EmitLocal + EmitVM so the two venues cannot drift.
+func executeExternalPluginStep(ctx context.Context, s *ExternalPluginStep, plan *InstallPlan, exec DeployExecutor) (spec.DeployReply, error) {
+	var zero spec.DeployReply
+	prov, ok := providerRegistry.ResolveVerb(s.Op.Plugin)
+	if !ok {
+		return zero, fmt.Errorf("external plugin step %q: verb is not connected at deploy time", s.Op.Plugin)
+	}
+	inv, ok := prov.(executorInvoker)
+	if !ok {
+		// A non-external provider reached here — compileActOp only routes external
+		// grpcProviders to ExternalPluginStep, so this is an internal invariant breach,
+		// never an authoring error (those are caught at compileActOp / validate).
+		return zero, fmt.Errorf("external plugin step %q: verb has no deploy-context execute (not an out-of-process plugin)", s.Op.Plugin)
+	}
+	params, err := marshalJSON(s.Op.PluginInput)
+	if err != nil {
+		return zero, fmt.Errorf("external plugin step %q: marshal plugin_input: %w", s.Op.Plugin, err)
+	}
+	env, err := marshalJSON(spec.DeployVenue{DeployName: externalStepVenueName(plan)})
+	if err != nil {
+		return zero, fmt.Errorf("external plugin step %q: marshal venue: %w", s.Op.Plugin, err)
+	}
+	res, err := inv.InvokeWithExecutor(ctx,
+		&Operation{Reserved: s.Op.Plugin, Op: OpExecute, Params: params, Env: env}, exec)
+	if err != nil {
+		return zero, err
+	}
+	var reply spec.DeployReply
+	if res != nil && len(res.JSON) > 0 {
+		if err := json.Unmarshal(res.JSON, &reply); err != nil {
+			return zero, fmt.Errorf("external plugin step %q: decode reply: %w", s.Op.Plugin, err)
+		}
+	}
+	return reply, nil
+}
+
+// externalStepVenueName derives the venue descriptor's DeployName from the plan's
+// identity (box name, else single-candy name, else the deploy-id hash) — the analogue
+// of the externalDeployTarget passing its deploy name, so a plugin can derive a
+// deterministic per-deploy scratch location.
+func externalStepVenueName(plan *InstallPlan) string {
+	switch {
+	case plan == nil:
+		return ""
+	case plan.Box != "":
+		return plan.Box
+	case plan.Candy != "":
+		return plan.Candy
+	default:
+		return plan.DeployID
+	}
+}
+
+// Self-register at package-var init (before any init(), so the per-class step bijection
+// gate in registry_bootstrap.go observes it without a cross-init race).
+var _ = registerDedicatedBuiltin(externalPluginStepProvider{})

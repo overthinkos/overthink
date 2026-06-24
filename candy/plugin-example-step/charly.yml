@@ -1,17 +1,21 @@
 plugin-example-step:
     candy:
-        version: 2026.175.0001
+        version: 2026.175.1200
         description: |-
-            Reference OUT-OF-TREE charly plugin proving BUILD-TIME plugin execution — a
-            standalone Go module (go.mod + main.go) serving the `examplestep` verb over
-            go-plugin gRPC via the charly plugin SDK (charly/plugin/sdk). At image build,
-            charly's build-path connect seam host-builds + connects this plugin
-            out-of-process and Invokes its OpEmit; the returned Containerfile FRAGMENT
-            (a RUN baking /opt/examplestep-baked) is spliced verbatim into the generated
-            Containerfile — so the marker file proves the plugin EXECUTED at build. The
-            build-context counterpart of the deploy-time candy/plugin-example-deploy;
-            consumed by candy/examplestep-consumer's build-context `plugin: examplestep`
-            run-step.
+            Reference OUT-OF-TREE charly plugin proving BOTH legs of plugin execution for
+            a VERB-as-step — a standalone Go module (go.mod + main.go) serving the
+            `examplestep` verb over go-plugin gRPC via the charly plugin SDK
+            (charly/plugin/sdk). BUILD leg (OpEmit): at image build charly's build-path
+            connect seam host-builds + connects this plugin out-of-process and Invokes its
+            OpEmit; the returned Containerfile FRAGMENT (a RUN baking /opt/examplestep-baked)
+            is spliced verbatim into the generated Containerfile (consumed by
+            candy/examplestep-consumer). DEPLOY leg (OpExecute): a `run: plugin: examplestep`
+            step composed in a LOCAL/VM deploy is lowered to charly's ExternalPluginStep,
+            which Invokes this plugin's OpExecute WITH the host's live executor on the
+            go-plugin broker (the E3b reverse channel); the plugin writes a marker on the
+            target VENUE and returns a plugin-script reverse op the host records + replays at
+            teardown (consumed by candy/examplestep-deploy-consumer). The verb-as-step
+            analogue of the deploy-TARGET candy/plugin-example-deploy.
     plugin-example-step-decl:
         plugin:
             providers:

@@ -411,7 +411,14 @@ check-local:
         disposable: true
         lifecycle: dev
         description: >-
-            Sole proof of the kind:local layer-application path via ShellExecutor + HostDeployTarget, and the fastest bed. Applies check-local-layer to the operator host (host: local), dropping /etc/check-local-marker, then runs host-side command/file probes plus charly status --json asserting kind:local + source:ledger (status-shows-local).
+            Sole proof of the kind:local layer-application path via ShellExecutor + HostDeployTarget, and the fastest bed. Applies check-local-layer to the operator host (host: local), dropping /etc/check-local-marker, then runs host-side command/file probes plus charly status --json asserting kind:local + source:ledger (status-shows-local). ALSO the witness for the STEP DEPLOY-EXECUTE leg of external plugin execution: add_candy composes examplestep-deploy-consumer (a DEPLOY-context `run: plugin: examplestep` step) + plugin-example-step (the out-of-tree examplestep verb), so at local deploy charly lowers the run-step to an ExternalPluginStep and Invokes the plugin's OpExecute over the E3b ExecutorService reverse channel — the plugin writes /tmp/charly-examplestep/examplestep-deploy/{applied,probe} on the host venue and returns a plugin-script reverse op the host records; the fresh-rebuild (charly update) re-applies idempotently and teardown (charly bundle del) replays the recorded reverse op so the markers are gone (zero operator side-effect). The deploy-context counterpart of check-pod's build-context examplestep-build-baked.
+    check-local-add_candy:
+        add_candy:
+            # The out-of-tree examplestep verb (host-built + connected out-of-process via
+            # loadDeployPlugins) and its DEPLOY-context consumer step — drives the STEP
+            # DEPLOY-EXECUTE leg over the E3b reverse channel (ExternalPluginStep).
+            - plugin-example-step
+            - examplestep-deploy-consumer
     status-shows-local:
         check: command=charly status --json
         id: status-shows-local
@@ -425,6 +432,17 @@ check-local:
         plugin: command
         plugin_input:
             command: charly status --json
+            in_container: false
+    examplestep-deploy-marker:
+        check: the external examplestep verb-as-step EXECUTED at local deploy — its OpExecute wrote the probe marker on the host venue over the E3b reverse channel (proves ExternalPluginStep → InvokeWithExecutor(OpExecute))
+        id: examplestep-deploy-marker
+        stdout:
+            - contains: EXAMPLESTEP-DEPLOY-PROBE-PRESENT
+        context:
+            - runtime
+        plugin: command
+        plugin_input:
+            command: "test -f /tmp/charly-examplestep/examplestep-deploy/probe && echo EXAMPLESTEP-DEPLOY-PROBE-PRESENT"
             in_container: false
 # External (out-of-process) deploy-target lifecycle witness over the E3b reverse
 # channel. The substrate is the `exampledeploy` word served by the out-of-tree

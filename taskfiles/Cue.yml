@@ -67,9 +67,10 @@ tasks:
         #    header, R3). A plugin schema is self-contained, so it compiles + gens
         #    standalone; the host's base ++ plugin splice provides the collision
         #    check. Covers every in-tree builtin unit AND the in-repo external
-        #    example (whose params its own module compiles against).
+        #    examples that compile generated params against their own module
+        #    (plugin-example-external — a verb; plugin-example-command — a command).
         ROOT="$PWD"
-        for SCHEMA_DIR in charly/plugin/builtins/*/schema candy/plugin-example-external/schema; do
+        for SCHEMA_DIR in charly/plugin/builtins/*/schema candy/plugin-example-external/schema candy/plugin-example-command/schema; do
           test -d "$SCHEMA_DIR" || continue
           PARAMS_DIR="$(dirname "$SCHEMA_DIR")/params"
           mkdir -p "$PARAMS_DIR"

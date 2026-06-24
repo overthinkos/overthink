@@ -45,7 +45,7 @@ func TestExternalCommandSeam_DynamicCommandDispatch(t *testing.T) {
 	}
 	t.Logf("kctx.Command() = %q", kctx.Command())
 
-	d := externalCommandDispatch{prov: fake, holder: holder, field: field}
+	d := externalCommandDispatch{prov: fake, word: "examplecmd", holder: holder, field: field}
 	if err := dispatchExternalCommand(d); err != nil {
 		t.Fatalf("dispatchExternalCommand: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestExternalCommandSeam_NestedCheckCommand(t *testing.T) {
 	if key := commandPathKey(kctx.Command()); key != "check examplekube" {
 		t.Fatalf("commandPathKey(%q) = %q, want %q", kctx.Command(), key, "check examplekube")
 	}
-	d := externalCommandDispatch{prov: fake, holder: holder, field: field}
+	d := externalCommandDispatch{prov: fake, word: "examplekube", holder: holder, field: field}
 	if err := dispatchExternalCommand(d); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}

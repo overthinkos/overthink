@@ -51,6 +51,16 @@ var (
 	// harmless — a verb that turns out non-build-emit-capable fails loudly at build via
 	// emitPluginFragment's empty-fragment guard. Shares declaredDeployMu (the one lock).
 	declaredExternalVerb = map[string]bool{}
+	// declaredExternalCommand holds the external (out-of-tree) COMMAND words a project's candy
+	// plugin declarations name — learned by the SAME byte-gated prescan, but consumed EARLY
+	// (in main, before kong.Parse) so an external command plugin's CLI word reaches the Kong
+	// grammar before the provider is connected. The connect is LAZY: only when the user
+	// actually invokes `charly <word>` does dispatchExternalCommand build+connect the plugin
+	// (collectExternalCommandPlugins builds a grammar holder from the prescanned word; the
+	// dispatch entry carries the word and lazy-connects). Additive/best-effort: a project
+	// with no command plugins registers nothing, so the grammar is byte-for-byte unchanged.
+	// Shares declaredDeployMu (the one lock).
+	declaredExternalCommand = map[string]bool{}
 )
 
 // recognizedDeploySubstrate reports whether word names a deploy substrate the
@@ -109,6 +119,29 @@ func registerDeclaredExternalVerb(word string) {
 	declaredDeployMu.Lock()
 	declaredExternalVerb[word] = true
 	declaredDeployMu.Unlock()
+}
+
+// registerDeclaredExternalCommand records one declared external command word.
+func registerDeclaredExternalCommand(word string) {
+	if word == "" {
+		return
+	}
+	declaredDeployMu.Lock()
+	declaredExternalCommand[word] = true
+	declaredDeployMu.Unlock()
+}
+
+// declaredExternalCommandWords returns a snapshot of the prescanned external command
+// words — the grammar holders collectExternalCommandPlugins builds before any provider
+// is connected, so `charly <word>` parses; the connect is deferred to dispatch.
+func declaredExternalCommandWords() []string {
+	declaredDeployMu.RLock()
+	defer declaredDeployMu.RUnlock()
+	words := make([]string, 0, len(declaredExternalCommand))
+	for w := range declaredExternalCommand {
+		words = append(words, w)
+	}
+	return words
 }
 
 // registerExternalVerbsFromCandies registers the external (out-of-tree) VERB words every
@@ -171,13 +204,15 @@ func prescanDeclaredPluginWords(rootData []byte, baseDir string) {
 }
 
 // prescanPluginManifest reads one candy manifest's `plugin: providers:` declarations
-// and registers each external DEPLOY substrate word — the PARSE-time loader recognition
+// and registers each external DEPLOY substrate word (the PARSE-time loader recognition
 // that lets a root-charly.yml bed using an external deploy substrate as its entity
-// discriminator LOAD before the provider connects. External VERB words are NOT registered
-// here: they are needed only at Validate (opActsInBuildDeploy), and a @github-composed
-// plugin candy is fetched only DURING the scan (after this parse-time prescan), so verbs
-// register post-scan from the candy map (registerExternalVerbsFromCandies). The byte-gate
-// skips every non-plugin manifest before paying for a YAML parse. Best-effort.
+// discriminator LOAD before the provider connects) AND each external COMMAND word (the
+// CLI-grammar recognition that lets `charly <word>` parse before the provider connects —
+// consumed EARLY by prescanProjectCommandWords in main, ahead of kong.Parse). External
+// VERB words are NOT registered here: they are needed only at Validate (opActsInBuildDeploy),
+// and a @github-composed plugin candy is fetched only DURING the scan (after this parse-time
+// prescan), so verbs register post-scan from the candy map (registerExternalVerbsFromCandies).
+// The byte-gate skips every non-plugin manifest before paying for a YAML parse. Best-effort.
 func prescanPluginManifest(path string) {
 	data, err := os.ReadFile(path)
 	if err != nil || !bytes.Contains(data, []byte("plugin:")) {
@@ -190,8 +225,15 @@ func prescanPluginManifest(path string) {
 	var providers []string
 	collectPluginProviders(root, &providers)
 	for _, p := range providers {
-		if class, word, ok := splitCapability(p); ok && class == ClassDeployTarget {
+		class, word, ok := splitCapability(p)
+		if !ok {
+			continue
+		}
+		switch class {
+		case ClassDeployTarget:
 			registerDeclaredDeploySubstrate(word)
+		case ClassCommand:
+			registerDeclaredExternalCommand(word)
 		}
 	}
 }

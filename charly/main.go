@@ -761,6 +761,13 @@ func main() {
 	}
 
 	var cli CLI
+	// Pre-parse: learn the project's external COMMAND words (byte-gated, best-effort) so the
+	// next line can put a Kong grammar holder in place for each BEFORE kong.Parse — an external
+	// command plugin's word must be in the grammar to parse `charly <word>`, but connecting its
+	// provider needs the project dir (itself a Kong flag). The provider stays UNconnected here;
+	// the build+connect is lazy (dispatchExternalCommand). A project with no command plugins
+	// registers nothing, so the grammar below is byte-for-byte the builtin set.
+	prescanProjectCommandWords()
 	// 6th seam: subcommands contributed by command providers — builtin (static KongCommand)
 	// PLUS out-of-process command plugins (dynamic reflect.StructOf commands dispatched
 	// manually after parse, since those structs carry no Run() for Kong to call). Top-level

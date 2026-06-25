@@ -1,0 +1,24 @@
+plugin-http:
+    candy:
+        version: 2026.176.2200
+        description: |-
+            The `http` check verb relocated into a candy: an HTTP request matched
+            against status / body / headers — issued from the charly process
+            (outside-in) under charly check live, or from inside the disposable
+            container via `curl` under charly check box. A HOST-COUPLED verb — its
+            RunVerb runs against the live check engine (charly/plugin/kit.CheckContext:
+            HTTPClient under live, Exec under box), so it is COMPILED-IN-ONLY. A pure
+            check verb; the matcher evaluation reuses the shared sdk.MatchAll.
+    plugin-http-decl:
+        plugin:
+            source: github.com/overthinkos/overthink/candy/plugin-http
+            providers:
+                - verb:http
+    http-verb-dispatches:
+        check: the http verb dispatches through the provider registry and matches an HTTP response status
+        id: http-verb-dispatches
+        plugin: http
+        plugin_input:
+            http: http://localhost/
+            status: 200
+        context: [runtime]

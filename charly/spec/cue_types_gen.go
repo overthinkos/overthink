@@ -271,7 +271,7 @@ type Op struct {
 	// --- shared request modifiers (the http plugin verb + the live cdp/dbus/libvirt
 	// verbs read these off the step Op; they are NOT carried in the http plugin's
 	// plugin_input — the http-exclusive request fields status/body/header/…/ca_file
-	// moved into #HttpInput, see charly/plugin/builtins/http) ---
+	// moved into #HttpInput, see candy/plugin-http) ---
 	Method string `yaml:"method,omitempty" json:"method,omitempty"`
 
 	RequestBody string `yaml:"request_body,omitempty" json:"request_body,omitempty"`

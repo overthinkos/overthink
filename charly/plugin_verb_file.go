@@ -87,7 +87,7 @@ func (fileVerb) RenderProvisionScript(op *Op, _ []string) (string, bool) {
 }
 
 // fileCheck carries r.runFile's decoded plugin_input — the package-main analogue of
-// httpCheck, keeping the file params import out of checkrun.go.
+// the http candy's httpCheck, keeping the file params import out of checkrun.go.
 type fileCheck struct {
 	Path     string
 	Exists   *bool

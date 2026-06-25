@@ -33,6 +33,14 @@ const (
 	ModeBox
 )
 
+// String renders the mode as "box" / "live" (mirrors charly's runModeName).
+func (m RunMode) String() string {
+	if m == ModeBox {
+		return "box"
+	}
+	return "live"
+}
+
 // Executor is the subset of charly's DeployExecutor a check verb needs: run one
 // command/script on the venue and capture stdout/stderr/exit separately. charly's
 // DeployExecutor satisfies this structurally (RunCapture + Kind have identical

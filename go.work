@@ -12,3 +12,4 @@ use ./candy/plugin-process
 use ./candy/plugin-interface
 use ./candy/plugin-addr
 use ./candy/plugin-dns
+use ./candy/plugin-examplerunverb

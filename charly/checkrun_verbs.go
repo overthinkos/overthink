@@ -126,28 +126,6 @@ func (r *Runner) runService(ctx context.Context, c *Op, service string, running,
 	return passf(c, "ok")
 }
 
-// runProcess: pgrep -x by default (exact-name match). The process name + optional
-// running expectation arrive from the `process` plugin's typed plugin_input
-// (params.ProcessInput, decoded by processVerb.RunVerb in plugin_process.go) — the
-// verb left the closed #Op, so they no longer ride the (removed) Op.Process field.
-// c is retained only for result metadata (id/description via failf/passf).
-func (r *Runner) runProcess(ctx context.Context, c *Op, process string, running *bool) CheckResult {
-	wantRunning := true
-	if running != nil {
-		wantRunning = *running
-	}
-	probe := fmt.Sprintf(`pgrep -x %s >/dev/null 2>&1`, shellSingleQuote(process))
-	_, _, exit, err := r.Exec.RunCapture(ctx, probe)
-	if err != nil {
-		return failf(c, "probe: %v", err)
-	}
-	isRunning := exit == 0
-	if isRunning != wantRunning {
-		return failf(c, "running=%v, want %v", isRunning, wantRunning)
-	}
-	return passf(c, fmt.Sprintf("running=%v", isRunning))
-}
-
 // runDNS uses the charly process's resolver (host-side) under RunModeLive, and
 // `getent hosts` inside the container under RunModeBox. The hostname + modifiers
 // (resolvable/addrs) arrive from the `dns` plugin's typed plugin_input (params.DnsInput,

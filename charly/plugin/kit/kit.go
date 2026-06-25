@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/overthinkos/overthink/charly/spec"
@@ -92,6 +93,13 @@ func Skip(msg string) Result { return Result{Status: StatusSkip, Message: msg} }
 func Passf(format string, a ...any) Result { return Pass(fmt.Sprintf(format, a...)) }
 func Failf(format string, a ...any) Result { return Fail(fmt.Sprintf(format, a...)) }
 func Skipf(format string, a ...any) Result { return Skip(fmt.Sprintf(format, a...)) }
+
+// ShellQuote wraps s in single quotes for safe interpolation into a shell command
+// (the importable analogue of charly's shellSingleQuote). Embedded single quotes are
+// escaped as '\''.
+func ShellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
 
 // DecodeInput decodes an Op's plugin_input (map[string]any) into a candy's
 // CUE-generated typed params struct via a JSON round-trip — the importable analogue

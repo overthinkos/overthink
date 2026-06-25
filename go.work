@@ -8,3 +8,4 @@ use ./charly
 use ./candy/plugin-example
 use ./candy/plugin-example-external
 use ./candy/plugin-port
+use ./candy/plugin-process

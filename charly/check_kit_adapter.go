@@ -73,6 +73,57 @@ func (a kitVerbActAdapter) RenderProvisionScript(op *Op, distros []string) (stri
 	return a.pa.RenderProvisionScript(op, distros)
 }
 
+// kitVerbActStepAdapter is the variant for a host-coupled verb candy whose kit verb ALSO
+// implements kit.StepProvider — a TYPED-STEP state-provision verb (service/package) whose
+// build/deploy act lowers into a typed InstallStep, not a shell. It adds the package-main
+// TypedStepProvider role (LowersTo + ConstructStep), materializing the candy's
+// kit.StepDescriptor into the real ServicePackagedStep / SystemPackagesStep — so
+// compileActOp lowers it exactly as the in-charly-module verb did, and the load-bearing
+// Reverse() stays in package main. Embeds kitVerbActAdapter (service/package are also
+// ProvisionActors — the runtime act-shell half).
+type kitVerbActStepAdapter struct {
+	kitVerbActAdapter
+	sp kit.StepProvider
+}
+
+func (a kitVerbActStepAdapter) LowersTo() StepKind {
+	return kitStepKindToCharly(a.sp.StepKind())
+}
+
+func (a kitVerbActStepAdapter) ConstructStep(op *Op, layer *Candy, img *ResolvedBox) InstallStep {
+	return materializeStep(a.sp.ConstructStepDescriptor(op), op, layer, img)
+}
+
+// kitStepKindToCharly maps the kit's StepKindName to charly's internal StepKind enum.
+func kitStepKindToCharly(k kit.StepKindName) StepKind {
+	switch k {
+	case kit.StepKindServicePackaged:
+		return StepKindServicePackaged
+	case kit.StepKindSystemPackages:
+		return StepKindSystemPackages
+	}
+	panic("kitStepKindToCharly: unknown kit step kind " + string(k))
+}
+
+// materializeStep rebuilds the real package-main InstallStep from a candy's
+// kit.StepDescriptor, computing the package-main-only inputs (the run-as-resolved scope,
+// the candy name) that the candy cannot. The load-bearing Reverse() lives on the built
+// step (package main), unchanged from the in-charly-module verb's ConstructStep.
+func materializeStep(desc kit.StepDescriptor, op *Op, layer *Candy, img *ResolvedBox) InstallStep {
+	userDir, _ := resolveUserSpec(op.RunAs, img)
+	switch {
+	case desc.ServicePackaged != nil:
+		return &ServicePackagedStep{
+			Unit:        desc.ServicePackaged.Unit,
+			TargetScope: opStepScope(userDir),
+			Enable:      desc.ServicePackaged.Enable,
+			CandyName:   layer.Name,
+		}
+	default:
+		panic("materializeStep: empty StepDescriptor for verb in candy " + layer.Name)
+	}
+}
+
 func kitStatusToCheck(s kit.Status) CheckStatus {
 	switch s {
 	case kit.StatusFail:
@@ -105,8 +156,14 @@ func registerCompiledCheckVerb(kv kit.CheckVerbProvider, schemaFS fs.FS, schemaD
 	// A multi-role state-provision verb's kit verb also implements kit.ProvisionActor —
 	// register the act-aware variant so the act dispatch (resolveProvisionScript) resolves
 	// its RenderProvisionScript. A pure check verb stays the plain adapter (no act role).
+	// A TYPED-STEP verb (service/package) additionally implements kit.StepProvider — wrap
+	// the act variant once more so compileActOp resolves it as a TypedStepProvider.
 	if pa, ok := kv.(kit.ProvisionActor); ok {
-		prov = kitVerbActAdapter{kitVerbAdapter: base, pa: pa}
+		act := kitVerbActAdapter{kitVerbAdapter: base, pa: pa}
+		prov = act
+		if sp, ok := kv.(kit.StepProvider); ok {
+			prov = kitVerbActStepAdapter{kitVerbActAdapter: act, sp: sp}
+		}
 	}
 	RegisterBuiltinPluginUnit(PluginUnit{
 		Providers: []Provider{prov},

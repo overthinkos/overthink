@@ -138,6 +138,56 @@ type CheckVerbProvider interface {
 	RunVerb(ctx context.Context, cc CheckContext, op *spec.Op) Result
 }
 
+// StepKindName names the TYPED install-plan step a step-providing verb lowers into. The
+// host maps it to its internal StepKind enum; kept a string so the kit need not import
+// charly's package main.
+type StepKindName string
+
+const (
+	// StepKindServicePackaged — the `service` verb (enable a packaged unit; load-bearing reversals).
+	StepKindServicePackaged StepKindName = "service-packaged"
+	// StepKindSystemPackages — the `package` verb (install system packages).
+	StepKindSystemPackages StepKindName = "system-packages"
+)
+
+// ServicePackagedDesc is the candy-decodable construction input for a service-packaged
+// step: the host materializer adds the op-resolved scope + candy name and keeps the
+// load-bearing Reverse() (disable / restore-enabled / remove-dropin) in package main.
+type ServicePackagedDesc struct {
+	Unit   string
+	Enable bool
+}
+
+// SystemPackagesDesc is the candy-decodable construction input for a system-packages step
+// (the `package` verb): the plugin_input-derived package set + per-distro map; the host
+// materializer resolves the image format + builds the SystemPackagesStep.
+type SystemPackagesDesc struct {
+	Packages   []string
+	PackageMap map[string]string
+}
+
+// StepDescriptor is the candy-decodable construction input for a TYPED install-plan step
+// (the build/deploy install timeline). Exactly one variant is non-nil; the host
+// materializer rebuilds the real package-main InstallStep from it (computing the
+// package-main-only inputs — scope from op.RunAs+img, candy name — and keeping the
+// load-bearing Reverse() in package main, so the candy never imports an IR type).
+type StepDescriptor struct {
+	ServicePackaged *ServicePackagedDesc
+	SystemPackages  *SystemPackagesDesc
+}
+
+// StepProvider is the OPTIONAL third role of a host-coupled verb candy: a verb whose
+// build/deploy ACT lowers into a TYPED install-plan step (service → service-packaged,
+// package → system-packages) rather than a shell (ProvisionActor) or a generic OpStep.
+// StepKind names the target step (static); ConstructStepDescriptor returns the
+// candy-decodable construction inputs for one op. The host wraps a candy implementing
+// this in an adapter that satisfies package-main's TypedStepProvider, materializing the
+// descriptor into the real IR step.
+type StepProvider interface {
+	StepKind() StepKindName
+	ConstructStepDescriptor(op *spec.Op) StepDescriptor
+}
+
 // ProvisionActor is the OPTIONAL second role of a host-coupled verb candy: the do:act
 // renderer for a state-provision verb (kernel_param/mount/user/unix_group/file/command/
 // service/package), rendering the shell that ENACTS the op under the live init / package

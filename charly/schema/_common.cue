@@ -240,7 +240,7 @@
 	// `exclude_distro` modifier above is NOT package-exclusive and stays on #Op.
 	//
 	// `service`/`running`/`enabled` are NOT here — `service` is an extracted plugin
-	// verb (plugin: service + #ServiceInput, charly/plugin/builtins/service). It left
+	// verb (plugin: service + #ServiceInput, candy/plugin-service). It left
 	// #OpVerb/spec.OpVerbs, and `running`/`enabled` (read ONLY by the service verb off
 	// the step Op) MOVED into #ServiceInput with it. `running` was reproduced standalone
 	// in #ProcessInput when `process` extracted (process reads its own plugin_input, not

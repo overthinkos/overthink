@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+
+	"github.com/overthinkos/overthink/charly/plugin/sdk"
 )
 
 // Provider is the ONE extension abstraction. Every reserved word — every kind,
@@ -105,14 +107,16 @@ type PluginUnit struct {
 	Schema    PluginSchema
 }
 
-// Operation selectors (op.Op). Each class uses the subset it needs.
+// Operation selectors (op.Op). Each class uses the subset it needs. Aliased to the SDK
+// constants (sdk/ops.go) — the SINGLE SOURCE shared with compiled-in / out-of-tree plugin
+// candies, so a kind candy's Invoke can compare req.GetOp() against the same value (R3).
 const (
-	OpRun      = "run"      // verb: run a check / live-container probe → CheckResult
-	OpLoad     = "load"     // kind: decode a node into its typed entity
-	OpValidate = "validate" // kind: closed/concrete CUE validation → Diagnostics
-	OpEmit     = "emit"     // deploy/step: emit an InstallPlan / Containerfile fragment
-	OpExecute  = "execute"  // deploy/step: execute against a venue (streamed)
-	OpResolve  = "resolve"  // builder: resolve a builder image + steps
+	OpRun      = sdk.OpRun
+	OpLoad     = sdk.OpLoad
+	OpValidate = sdk.OpValidate
+	OpEmit     = sdk.OpEmit
+	OpExecute  = sdk.OpExecute
+	OpResolve  = sdk.OpResolve
 )
 
 // marshalParams / unmarshalResult are the small helpers the in-proc adapters and

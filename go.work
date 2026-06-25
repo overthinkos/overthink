@@ -23,3 +23,4 @@ use ./candy/plugin-file
 use ./candy/plugin-command
 use ./candy/plugin-service
 use ./candy/plugin-package
+use ./candy/plugin-init

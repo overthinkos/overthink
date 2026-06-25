@@ -83,7 +83,7 @@ type UnifiedFile struct {
 	Discover DiscoverConfig `yaml:"discover,omitempty" json:"discover,omitempty"`
 	// The build-vocabulary kinds (distro/builder/init) are no longer typed core maps:
 	// each was extracted into a dedicated plugin kind (plugin_distro.go /
-	// plugin_builder_kind.go / plugin_init.go), so a `distro:`/`builder:`/`init:` node
+	// plugin_builder_kind.go / the candy/plugin-init candy), so a `distro:`/`builder:`/`init:` node
 	// (incl. the binary-embedded build vocabulary) lands in PluginKinds. The name-keyed
 	// map[string]*XDef the generator/format code consumes is reconstructed on demand by
 	// the Distros() / Builders() / Inits() accessors (decoding the canonical bodies back
@@ -2027,7 +2027,7 @@ func (uf *UnifiedFile) Builders() map[string]*BuilderDef {
 }
 
 // Inits reconstructs the name-keyed init-system vocabulary from uf.PluginKinds["init"]
-// (the `init` plugin kind, plugin_init.go) into the map[string]*InitDef shape the
+// (the `init` plugin kind, candy/plugin-init) into the map[string]*InitDef shape the
 // generator consumed when init was a typed core map.
 func (uf *UnifiedFile) Inits() map[string]*InitDef {
 	return decodePluginKindMap[InitDef](uf, "init")

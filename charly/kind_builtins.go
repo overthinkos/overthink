@@ -27,9 +27,10 @@ package main
 
 // The build-vocabulary kinds (distro / builder / init / resource) and the Calamares
 // install `target` kind are no longer core builtin kinds — each was extracted into a
-// dedicated plugin UNIT (plugin_distro.go + plugin/builtins/distro, plugin_builder_kind.go
-// + plugin/builtins/builder, plugin_init.go + plugin/builtins/init, plugin_resource.go +
-// plugin/builtins/resource, plugin_target.go + plugin/builtins/target), mirroring the
+// dedicated plugin UNIT — distro/builder/resource/target as in-charly-module units
+// (plugin_distro.go + plugin/builtins/distro, plugin_builder_kind.go + plugin/builtins/builder,
+// plugin_resource.go + plugin/builtins/resource, plugin_target.go + plugin/builtins/target),
+// and init relocated to the compiled-in candy candy/plugin-init — mirroring the
 // sidecar/agent/module kind→plugin extractions. Such a node now routes through
 // runPluginKind (Invoke/OpLoad) into uf.PluginKinds["<kind>"], validated against the
 // plugin's served #<Kind>Input schema; the build-vocab accessors UnifiedFile.Distros() /

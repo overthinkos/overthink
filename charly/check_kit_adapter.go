@@ -56,6 +56,22 @@ func (a kitVerbAdapter) RunVerb(ctx context.Context, r *Runner, op *Op) CheckRes
 	}
 }
 
+// kitVerbActAdapter is the kitVerbAdapter variant for a host-coupled verb candy whose
+// kit.CheckVerbProvider ALSO implements kit.ProvisionActor — a MULTI-ROLE state-provision
+// verb (a check: probe AND a run:/build-act shell renderer). It adds the package-main
+// ProvisionActor role, delegating RenderProvisionScript to the kit verb. A pure check verb
+// stays a plain kitVerbAdapter, so it is NOT mis-resolved as a ProvisionActor by the act
+// dispatch (resolveProvisionScript's type-assert); registerCompiledCheckVerb picks this
+// variant only when the candy implements kit.ProvisionActor.
+type kitVerbActAdapter struct {
+	kitVerbAdapter
+	pa kit.ProvisionActor
+}
+
+func (a kitVerbActAdapter) RenderProvisionScript(op *Op, distros []string) (string, bool) {
+	return a.pa.RenderProvisionScript(op, distros)
+}
+
 func kitStatusToCheck(s kit.Status) CheckStatus {
 	switch s {
 	case kit.StatusFail:
@@ -83,8 +99,16 @@ func registerCompiledCheckVerb(kv kit.CheckVerbProvider, schemaFS fs.FS, schemaD
 	if err != nil {
 		panic("registerCompiledCheckVerb " + kv.Reserved() + ": concat schema: " + err.Error())
 	}
+	base := kitVerbAdapter{kv: kv}
+	var prov Provider = base
+	// A multi-role state-provision verb's kit verb also implements kit.ProvisionActor —
+	// register the act-aware variant so the act dispatch (resolveProvisionScript) resolves
+	// its RenderProvisionScript. A pure check verb stays the plain adapter (no act role).
+	if pa, ok := kv.(kit.ProvisionActor); ok {
+		prov = kitVerbActAdapter{kitVerbAdapter: base, pa: pa}
+	}
 	RegisterBuiltinPluginUnit(PluginUnit{
-		Providers: []Provider{kitVerbAdapter{kv: kv}},
+		Providers: []Provider{prov},
 		Schema:    PluginSchema{CueSource: cueSource, InputDefs: inputDefs},
 	})
 }

@@ -185,35 +185,6 @@ func (r *Runner) runUnixGroup(ctx context.Context, c *Op, group string, wantGID 
 	return passf(c, fmt.Sprintf("gid=%d", gid))
 }
 
-// runKernelParam reads a sysctl value and matches it via the value matchers. `sysctl -n
-// <key>` is exactly the contents of /proc/sys/<key-with-dots-as-slashes>, so the probe reads
-// that file DIRECTLY (inside the target, via r.Exec — kernel params are netns-scoped, so the
-// container's/VM's /proc/sys is the source of truth, NOT the host's). Reading the file needs
-// no procps-ng (`sysctl`), which minimal images like fedora-minimal omit — only coreutils
-// `cat`, which every base ships. The act half (RenderProvisionScript) keeps `sysctl -w`: it
-// runs in a deploy/runtime provisioning context where procps-ng is present. The key + value
-// matchers come from the `kernel-param` plugin's decoded plugin_input (the verb left #Op for
-// its dedicated builtin plugin unit) — c is retained for failf/passf reporting context.
-func (r *Runner) runKernelParam(ctx context.Context, c *Op, param string, want MatcherList) CheckResult {
-	path := "/proc/sys/" + strings.ReplaceAll(param, ".", "/")
-	probe := fmt.Sprintf(`cat %s 2>/dev/null`, shellSingleQuote(path))
-	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
-	if err != nil {
-		return failf(c, "probe: %v", err)
-	}
-	if exit != 0 {
-		return failf(c, "kernel param not readable (exit %d)", exit)
-	}
-	value := strings.TrimSpace(out)
-	if len(want) == 0 {
-		return passf(c, fmt.Sprintf("value=%s", value))
-	}
-	if err := sdk.MatchAll(value, want); err != nil {
-		return failf(c, "value=%s: %v", value, err)
-	}
-	return passf(c, fmt.Sprintf("value=%s", value))
-}
-
 // runMount: `findmnt -J <path>` — present ⇒ mounted. Optional source, filesystem, and opts
 // matching. The mountpoint + expected source/filesystem/opt matchers come from the `mount`
 // plugin's decoded plugin_input (the verb left #Op for its dedicated builtin plugin unit) —

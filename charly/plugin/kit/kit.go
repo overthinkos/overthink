@@ -132,3 +132,20 @@ type CheckVerbProvider interface {
 	Reserved() string
 	RunVerb(ctx context.Context, cc CheckContext, op *spec.Op) Result
 }
+
+// ProvisionActor is the OPTIONAL second role of a host-coupled verb candy: the do:act
+// renderer for a state-provision verb (kernel_param/mount/user/unix_group/file/command/
+// service/package), rendering the shell that ENACTS the op under the live init / package
+// manager. It is reached at install COMPILE+EMIT (a `run: {plugin: <verb>}` step → the
+// build-act RUN in emitTasks, and the local/vm deploy act) AND at runtime act. A candy
+// whose verb type implements this ALONGSIDE CheckVerbProvider is registered as a
+// multi-role provider (the host adapter then also satisfies the package-main
+// ProvisionActor). op is the spec.Op (the verb's plugin_input rides op.PluginInput);
+// distros is the image's distro tag list for package-name resolution. Returns
+// (script, ok); ok=false means "no act form for this op" (the host skips/errors per its
+// act path). This is the SHELL-string act role — a verb that instead lowers into a typed
+// InstallPlan step (service/package) additionally needs the kit step contract.
+type ProvisionActor interface {
+	Reserved() string
+	RenderProvisionScript(op *spec.Op, distros []string) (script string, ok bool)
+}

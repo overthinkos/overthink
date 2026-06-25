@@ -15,3 +15,4 @@ use ./candy/plugin-dns
 use ./candy/plugin-examplerunverb
 use ./candy/plugin-matching
 use ./candy/plugin-http
+use ./candy/plugin-kernel-param

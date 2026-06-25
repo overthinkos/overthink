@@ -5,4 +5,5 @@ go 1.26.0
 // charly.yml `compiled_plugins:`. `go build ./charly` resolves the compiled-in
 // candy imports in charly/plugins_generated.go through these `use` directives.
 use ./charly
+use ./candy/plugin-example
 use ./candy/plugin-example-external

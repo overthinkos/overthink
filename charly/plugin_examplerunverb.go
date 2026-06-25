@@ -11,8 +11,9 @@ import (
 // exampleRunVerbProvider is the canonical EXECUTION-NEEDING built-in plugin: it
 // provides the `examplerunverb` check verb as a CheckVerbProvider, so runPluginVerb
 // dispatches it IN-PROCESS via RunVerb — keeping the live *Runner that cannot cross
-// the wire. This is the in-proc analogue of exampleProbeProvider (which is reached
-// over the out-of-process Invoke envelope instead). It is the proof the dispatch fix
+// the wire. This is the *Runner-keeping analogue of the relocated candy/plugin-example
+// exampleprobe verb (which dispatches through the Invoke envelope via inprocProvider,
+// with no *Runner). It is the proof the dispatch fix
 // works: an execution-needing verb (one that reaches r.Exec / the *Runner) CAN be a
 // builtin plugin unit, the enabler that unblocks extracting file/port/command/… into
 // dedicated plugin units.

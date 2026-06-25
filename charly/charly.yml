@@ -30,6 +30,7 @@ providers:
 # (the coexist path). "which plugins are in the binary" is a normal candy-inclusion
 # choice; a consumer overrides it by pointing pluginsgen at its own charly.yml.
 compiled_plugins:
+    - plugin-example
     - plugin-example-external
 
 # context_ignore_baseline — the built-in build-context ignore patterns (VCS/binary

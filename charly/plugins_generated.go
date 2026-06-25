@@ -7,9 +7,11 @@
 package main
 
 import (
+	cp_plugin_example "github.com/overthinkos/overthink/candy/plugin-example"
 	cp_plugin_example_external "github.com/overthinkos/overthink/candy/plugin-example-external"
 )
 
 func init() {
+	registerCompiledPlugin(cp_plugin_example.NewProvider(), cp_plugin_example.NewMeta())
 	registerCompiledPlugin(cp_plugin_example_external.NewProvider(), cp_plugin_example_external.NewMeta())
 }

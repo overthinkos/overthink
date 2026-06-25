@@ -24,9 +24,10 @@ import (
 //
 // This file owns the verb's complete contract: the provider (Reserved/RunVerb), the
 // LiveVerbProvider method contract (Methods/MethodField), the mcpMethods method
-// allowlist, and the runMcp dispatcher. The shared kit.PosArgs builder library
-// (kit.PosMcpCommon/kit.PosMcpCall/kit.PosMcpRead), the kit.MethodSpec type, and
-// artifactValidatableMethods stay in checkrun_charly_verbs.go.
+// allowlist, and the runMcp dispatcher. The shared kit.MethodSpec type + the kit.PosX
+// builder library (kit.PosMcpCommon/kit.PosMcpCall/kit.PosMcpRead) live in
+// charly/plugin/kit/liveverb.go; the artifact-validatable set is derived from spec.Artifact.
+// The runCharlyVerb dispatcher stays in checkrun_charly_verbs.go.
 type mcpVerb struct{ builtinVerbBase }
 
 func (mcpVerb) Reserved() string { return "mcp" }

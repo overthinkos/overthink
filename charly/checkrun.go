@@ -170,9 +170,9 @@ type Runner struct {
 	TargetResolver func(target string) (*CheckVarResolver, DeployExecutor, error)
 
 	// ValidateAiArtifacts, when true, narrows artifact-producing
-	// state-dependent probes (the screenshot + record-stop methods in
-	// artifactValidatableMethods) to validate the AI's iteration
-	// artifact instead of re-running the capture. See HarnessScore's
+	// state-dependent probes (the screenshot + record-stop methods —
+	// those whose MethodSpec marks Artifact: true) to validate the AI's
+	// iteration artifact instead of re-running the capture. See HarnessScore's
 	// field of the same name for the design rationale. Always false in
 	// `charly check self-evaluate` invocations, regardless of score
 	// config — self-evaluate's job is to actually produce the
@@ -603,7 +603,6 @@ func failf(c *Op, format string, args ...any) CheckResult {
 func skipf(c *Op, msg string) CheckResult {
 	return CheckResult{Op: c, Status: TestSkip, Message: msg}
 }
-
 
 func trimPreview(s string) string {
 	s = strings.TrimSpace(s)

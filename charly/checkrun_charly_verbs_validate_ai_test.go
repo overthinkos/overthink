@@ -7,79 +7,26 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/overthinkos/overthink/charly/plugin/kit"
 )
 
-// Test plan for the validate_ai_artifacts narrowed-allowlist + freshness-mtime gate
+// Test plan for the validate_ai_artifacts artifact-method + freshness-mtime gate
 // behaviour added in 2026-04-27.
 //
-// The five verb/method pairs in artifactValidatableMethods are the
-// ONLY ones validate_ai_artifacts touches. ALL other probes always
-// re-run via the harness's own subprocess — the harness remains
-// authoritative for non-state-dependent probes.
+// The artifact-producing methods (those whose MethodSpec marks Artifact: true — e.g.
+// record/stop, the screenshot methods) are the ONLY ones validate_ai_artifacts touches.
+// ALL other probes always re-run via the harness's own subprocess — the harness remains
+// authoritative for non-state-dependent probes. runCharlyVerb derives the set from
+// spec.Artifact directly (no separate allowlist), so no drift is possible.
 //
-// Tested invariants:
-//   1. The allowlist EXACTLY matches the set of methods with
-//      spec.Artifact == true (no drift possible — load-bearing for
-//      anti-deception).
-//   2. Allowlisted method + flag set + file present + fresh mtime →
+// Tested invariants (each exercises a still-package-main artifact verb, record/stop):
+//   1. Artifact method + flag set + file present + fresh mtime →
 //      run validators against the file (no subprocess re-execution).
-//   3. Allowlisted method + flag set + file MISSING → fail with
+//   2. Artifact method + flag set + file MISSING → fail with
 //      actionable error pointing at self-evaluate.
-//   4. Allowlisted method + flag set + file present but STALE mtime
+//   3. Artifact method + flag set + file present but STALE mtime
 //      → fail with anti-deception error.
-//   5. Allowlisted method + flag set + stdout matcher present →
+//   4. Artifact method + flag set + stdout matcher present →
 //      fail (matchers require re-execution).
-
-// TestArtifactValidatableMethods_MatchesArtifactProducingMethodSpecs
-// is the load-bearing drift-prevention test. The allowlist (the seven
-// state-dependent capture methods) and the set of methodSpecs marked
-// Artifact:true MUST be identical — adding a new artifact-producing
-// method without updating the allowlist (or vice-versa) is a
-// regression in either direction. This test catches that drift at
-// `go test` time.
-func TestArtifactValidatableMethods_MatchesArtifactProducingMethodSpecs(t *testing.T) {
-	// Collect all kit.MethodSpec keys with Artifact:true across every
-	// verb's allowlist. The verb/method pair is "verb/method".
-	specMethods := make(map[string]bool)
-	for verb, table := range map[string]map[string]kit.MethodSpec{
-		"cdp":     cdpMethods,
-		"wl":      wlMethods,
-		"vnc":     vncMethods,
-		"libvirt": libvirtMethods,
-		"record":  recordMethods,
-		"dbus":    dbusMethods,
-		"mcp":     mcpMethods,
-		// kube/adb/appium/spice are NOT here — each is an EXTERNAL-CHARLY-VERB
-		// (candy/plugin-kube / candy/plugin-adb / candy/plugin-appium / candy/plugin-spice)
-		// with no in-proc method table; its artifact-method validation runs inside the
-		// plugin (sdk.RunArtifactValidators).
-	} {
-		for method, spec := range table {
-			if spec.Artifact {
-				specMethods[verb+"/"+method] = true
-			}
-		}
-	}
-
-	// Bidirectional comparison:
-	//   - Every allowlist entry must be in specMethods (no
-	//     "validate this even though spec doesn't mark it artifact").
-	//   - Every Artifact:true spec must be in the allowlist (no
-	//     "this method produces artifacts but harness will silently
-	//     re-run it bypassing the AI's iteration capture").
-	for key := range artifactValidatableMethods {
-		if !specMethods[key] {
-			t.Errorf("artifactValidatableMethods has %q but no kit.MethodSpec marks it Artifact:true — drift", key)
-		}
-	}
-	for key := range specMethods {
-		if !artifactValidatableMethods[key] {
-			t.Errorf("kit.MethodSpec %q has Artifact:true but is NOT in artifactValidatableMethods — drift; either add it or document why it should always re-run", key)
-		}
-	}
-}
 
 // TestRunCharlyVerb_ValidateAi_AllowlistedMethod_FilePresent_FreshMtime_ValidatorsRun
 // covers the happy Path: flag set, allowlisted method, file present
@@ -135,12 +82,11 @@ func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_FileMissing_FailsActionable(
 		IterStartTime:       time.Now().Add(-1 * time.Hour),
 	}
 	c := &Op{
-		Cdp:              "screenshot",
-		Tab:              "1",
-		Artifact:         "/nonexistent/cdp.png",
+		Record:           "stop",
+		Artifact:         "/nonexistent/cdp.cast",
 		ArtifactMinBytes: 100,
 	}
-	res := r.runCharlyVerb(context.Background(), c, "cdp", "screenshot", cdpMethods)
+	res := r.runCharlyVerb(context.Background(), c, "record", "stop", recordMethods)
 	if res.Status != TestFail {
 		t.Fatalf("expected fail, got %s: %s", res.Status, res.Message)
 	}
@@ -174,12 +120,11 @@ func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_StaleMtime_FailsAntiDeceptio
 		IterStartTime:       time.Now().Add(-30 * time.Minute), // iter started 30m ago, file is 2h old
 	}
 	c := &Op{
-		Cdp:              "screenshot",
-		Tab:              "1",
+		Record:           "stop",
 		Artifact:         stale,
 		ArtifactMinBytes: 1000,
 	}
-	res := r.runCharlyVerb(context.Background(), c, "cdp", "screenshot", cdpMethods)
+	res := r.runCharlyVerb(context.Background(), c, "record", "stop", recordMethods)
 	if res.Status != TestFail {
 		t.Fatalf("expected fail (anti-deception), got %s: %s", res.Status, res.Message)
 	}
@@ -266,13 +211,12 @@ func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_StdoutMatcher_FailsActionabl
 		IterStartTime:       time.Now().Add(-1 * time.Hour),
 	}
 	c := &Op{
-		Cdp:              "screenshot",
-		Tab:              "1",
+		Record:           "stop",
 		Artifact:         png,
 		ArtifactMinBytes: 1000,
 		Stdout:           MatcherList{Matcher{Op: "contains", Value: "ok"}},
 	}
-	res := r.runCharlyVerb(context.Background(), c, "cdp", "screenshot", cdpMethods)
+	res := r.runCharlyVerb(context.Background(), c, "record", "stop", recordMethods)
 	if res.Status != TestFail {
 		t.Fatalf("expected fail (stdout matcher incompatible), got %s: %s", res.Status, res.Message)
 	}

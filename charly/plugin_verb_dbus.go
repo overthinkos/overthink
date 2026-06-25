@@ -19,9 +19,10 @@ import (
 //
 // This file owns the verb's complete contract: the provider (Reserved/RunVerb), the
 // LiveVerbProvider method contract (Methods/MethodField), the dbusMethods method
-// allowlist, and the runDbus dispatcher. The shared kit.PosArgs builder library
-// (kit.PosDbusCall/kit.PosDbusIntrospect/kit.PosDbusNotify), the kit.MethodSpec type, and
-// artifactValidatableMethods stay in checkrun_charly_verbs.go.
+// allowlist, and the runDbus dispatcher. The shared kit.MethodSpec type + the kit.PosX
+// builder library (kit.PosDbusCall/kit.PosDbusIntrospect/kit.PosDbusNotify) live in
+// charly/plugin/kit/liveverb.go; the artifact-validatable set is derived from spec.Artifact.
+// The runCharlyVerb dispatcher stays in checkrun_charly_verbs.go.
 type dbusVerb struct{ builtinVerbBase }
 
 func (dbusVerb) Reserved() string { return "dbus" }

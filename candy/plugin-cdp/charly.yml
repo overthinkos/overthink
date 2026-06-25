@@ -1,0 +1,23 @@
+plugin-cdp:
+    candy:
+        version: 2026.176.2100
+        description: |-
+            The `cdp` live-container check verb relocated into a candy: Chrome DevTools
+            Protocol probing (open/list/click/eval/screenshot/SPA input/…) against a live
+            deployment. A SCHEMA-LESS host-coupled LIVE verb — its method-specific modifiers
+            (Tab/URL/Expression/Selector/…) ride the closed base #Op, so there is no
+            plugin_input and no served schema. Its RunVerb delegates to the host dispatcher
+            via kit.CheckContext.RunCharlyVerb (build `charly check cdp <method>` argv, exec
+            it, match), so it is COMPILED-IN-ONLY (the live context cannot cross a process
+            boundary). The FIRST live verb on the kit.LiveVerbProvider contract and the
+            relocation template for wl/vnc/dbus/mcp/record/libvirt.
+    plugin-cdp-decl:
+        plugin:
+            source: github.com/overthinkos/overthink/candy/plugin-cdp
+            providers:
+                - verb:cdp
+    cdp-verb-dispatches:
+        check: the cdp verb dispatches through the provider registry and reports the Chrome DevTools Protocol connection status on a live deployment with a CDP endpoint
+        id: cdp-verb-dispatches
+        cdp: status
+        context: [runtime]

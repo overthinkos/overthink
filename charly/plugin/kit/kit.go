@@ -78,6 +78,14 @@ type CheckContext interface {
 	// (a bare-Op run) or pid<=0. Used by a verb that fire-and-forgets a host process
 	// (the `command` verb's background path).
 	AddBackground(pid int)
+
+	// RunCharlyVerb is the live-verb dispatch delegation hook: a LiveVerbProvider candy's
+	// RunVerb calls it with the verb word, the authored method (op's selector field), and
+	// its MethodSpec allowlist; the host runs the shared dispatcher (build `charly check
+	// <verb> <method>` argv from the allowlist, exec it against the live deployment, run the
+	// matcher + artifact pipeline) and returns the verdict. The dispatch engine stays
+	// host-side; the candy owns only the verb's contract (allowlist + selector).
+	RunCharlyVerb(ctx context.Context, op *spec.Op, verb, method string, allowlist map[string]MethodSpec) Result
 }
 
 // Status is a check verdict (mirrors charly's CheckStatus ordering).
@@ -109,7 +117,7 @@ func Skipf(format string, a ...any) Result { return Skip(fmt.Sprintf(format, a..
 
 // ShellQuote wraps s in single quotes for safe interpolation into a shell command
 // (the importable analogue of charly's shellSingleQuote). Embedded single quotes are
-// escaped as '\''.
+// escaped as '\”.
 func ShellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

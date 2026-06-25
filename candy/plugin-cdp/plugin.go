@@ -1,45 +1,44 @@
-package main
+// Package cdp is the importable, COMPILED-IN host-coupled `cdp` LIVE-CONTAINER verb:
+// Chrome DevTools Protocol probing (open/list/click/eval/screenshot/…) against a live
+// deployment. It implements kit.LiveVerbProvider — a SCHEMA-LESS live verb whose
+// method-specific modifiers (Tab/URL/Expression/Selector/…) ride the closed base #Op, so
+// there is NO plugin_input and NO served schema. RunVerb delegates the dispatch to the host
+// via cc.RunCharlyVerb (build `charly check cdp <method>` argv from the allowlist, exec it
+// against the live deployment, run the matcher + artifact pipeline); the candy owns only the
+// verb's CONTRACT — the cdpMethods allowlist + the op.Cdp selector. Relocated out of charly's
+// module (formerly charly/plugin_verb_cdp.go); COMPILED-IN-ONLY (the live CheckContext
+// cannot cross a process boundary). The `charly check cdp` driver command stays host-side for
+// now (cc.RunCharlyVerb self-invokes it); relocating the driver is a follow-on step.
+package cdp
 
 import (
 	"context"
 
 	"github.com/overthinkos/overthink/charly/plugin/kit"
+	"github.com/overthinkos/overthink/charly/spec"
 )
 
-// cdpVerb is the BUILT-IN `cdp` LIVE-CONTAINER verb, extracted into its OWN dedicated
-// file (Phase 1, the live-container-verb relocation). Unlike the goss/state-provision
-// verbs (file/command/…), cdp stays a FIRST-CLASS #Op verb: it keeps its dedicated
-// `cdp:` discriminator and its method-specific modifiers (Tab/URL/Expression/Selector/
-// X/Y/Text/KeyName/…) on the closed base #Op — there is NO plugin_input and therefore
-// NO served plugin schema. So it self-registers via registerDedicatedBuiltin (the
-// schema-less dedicated-provider path, like the deploy-shape kinds / IR steps) rather
-// than the schema-carrying RegisterBuiltinPluginUnit the plugin_input verbs use; it is
-// INTENTIONALLY absent from BOTH builtinProviderInstances and the `providers:` manifest,
-// yet resolves + dispatches through the SAME providerRegistry (the verb + method-allowlist
-// bijection gates still see it). It embeds builtinVerbBase for Class()=ClassVerb + the
-// in-proc-only Invoke stub (a live verb carries the *Runner and never serves itself over
-// the wire).
-//
-// This file owns the verb's complete contract: the provider (Reserved/RunVerb), the
-// LiveVerbProvider method contract (Methods/MethodField — the required-modifier/artifact
-// rules the host's validateCharlyVerb reads through the registry), the cdpMethods method
-// allowlist (each method → its CLI subcommand path + required modifiers + kit.PosArgs
-// dispatch), and the runCdp dispatcher. The shared kit.PosArgs builder library + the
-// kit.MethodSpec type + artifactValidatableMethods stay in checkrun_charly_verbs.go (reused
-// across every live verb — R3).
-type cdpVerb struct{ builtinVerbBase }
+// NewLiveVerb returns the cdp verb as a kit.LiveVerbProvider for compiled-in registration
+// (charly's registerCompiledDedicatedVerb wraps it via the schema-less dedicated path).
+func NewLiveVerb() kit.LiveVerbProvider { return verb{} }
 
-func (cdpVerb) Reserved() string { return "cdp" }
+type verb struct{}
 
-func (cdpVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runCdp(ctx, op)
+func (verb) Reserved() string { return "cdp" }
+
+// RunVerb delegates to the host's shared live-verb dispatcher via cc.RunCharlyVerb, passing
+// the verb word, the authored method (op.Cdp), and the cdpMethods allowlist.
+func (verb) RunVerb(ctx context.Context, cc kit.CheckContext, op *spec.Op) kit.Result {
+	return cc.RunCharlyVerb(ctx, op, "cdp", op.Cdp, cdpMethods)
 }
 
-func (cdpVerb) Methods() map[string]kit.MethodSpec { return cdpMethods }
-func (cdpVerb) MethodField(c *Op) string           { return c.Cdp }
+func (verb) Methods() map[string]kit.MethodSpec { return cdpMethods }
+func (verb) MethodField(op *spec.Op) string     { return op.Cdp }
 
-// cdpMethods is the cdp verb's method allowlist (the dispatch data runCharlyVerb reads).
-// Hand-enumerated so authoring errors surface at `charly box validate` time.
+// cdpMethods is the cdp verb's method allowlist (the dispatch data the host's runCharlyVerb
+// reads). Hand-enumerated so authoring errors surface at `charly box validate` time. Each
+// entry maps a method → its `charly check cdp <method>` subcommand path + required modifiers
+// + the kit.PosX positional-arg builder.
 var cdpMethods = map[string]kit.MethodSpec{
 	// queries — produce assertable output
 	"status":     {Path: []string{"cdp", "status"}},
@@ -68,9 +67,3 @@ var cdpMethods = map[string]kit.MethodSpec{
 	"spa-key-combo": {Path: []string{"cdp", "spa", "key-combo"}, Required: []string{"Tab", "Combo"}, PosArgs: kit.PosTabCombo},
 	"spa-mouse":     {Path: []string{"cdp", "spa", "mouse"}, Required: []string{"Tab", "X", "Y"}, PosArgs: kit.PosTabXY},
 }
-
-func (r *Runner) runCdp(ctx context.Context, c *Op) CheckResult {
-	return r.runCharlyVerb(ctx, c, "cdp", c.Cdp, cdpMethods)
-}
-
-var _ = registerDedicatedBuiltin(cdpVerb{})

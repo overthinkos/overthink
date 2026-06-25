@@ -19,9 +19,10 @@ import (
 //
 // This file owns the verb's complete contract: the provider (Reserved/RunVerb), the
 // LiveVerbProvider method contract (Methods/MethodField), the vncMethods method allowlist,
-// and the runVnc dispatcher. The shared kit.PosArgs builder library (kit.PosArtifact/kit.PosXY/kit.PosText/
-// kit.PosKeyName/kit.PosCommand are all reused by wl/spice/… — R3), the kit.MethodSpec type, and the
-// artifactValidatableMethods allowlist stay in checkrun_charly_verbs.go.
+// and the runVnc dispatcher. The shared kit.MethodSpec type + the kit.PosX builder library
+// (kit.PosArtifact/kit.PosXY/kit.PosText/kit.PosKeyName/kit.PosCommand are reused by wl/… —
+// R3) live in charly/plugin/kit/liveverb.go; the artifact-validatable set is derived from
+// spec.Artifact. The runCharlyVerb dispatcher stays in checkrun_charly_verbs.go.
 type vncVerb struct{ builtinVerbBase }
 
 func (vncVerb) Reserved() string { return "vnc" }

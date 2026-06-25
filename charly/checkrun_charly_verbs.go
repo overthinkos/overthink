@@ -19,47 +19,23 @@ import (
 	"github.com/overthinkos/overthink/charly/plugin/sdk"
 )
 
-// artifactValidatableMethods lists the verb/method pairs that
-// `validate_ai_artifacts: true` swaps to AI-artifact validation. ALL
-// OTHER methods always re-run via the harness's own subprocess — the
-// harness is authoritative for non-state-dependent probes (status,
-// checkuation, listing, info, file/process/package/port/service/etc.).
-//
-// The justification for each entry is "re-running this probe a few
-// seconds later against the same logically-correct state can yield
-// different bytes" — chrome paints at vsync, wayland frame timing,
-// VNC/RFB framebuffer at re-capture moment, libvirt display
-// surfaces, terminal recordings (asciinema cast files become final
-// once `record stop` finalizes them). The `spice` capture methods
-// (screenshot/cursor) left this allowlist with the verb when it became
-// an EXTERNAL-CHARLY-VERB (candy/plugin-spice) — the out-of-process
-// plugin always re-runs and self-validates via sdk.RunArtifactValidators.
-//
-// Anti-deception properties around this allowlist:
-//
-//   - The set of `spec.Artifact == true` methods must be the SAME as
-//     this allowlist. Drift is caught at compile/test time by
-//     TestArtifactValidatableMethods_MatchesArtifactProducingMethodSpecs.
-//
-//   - When validate_ai_artifacts is true AND the method is in this
-//     allowlist, runCharlyVerb skips subprocess execution and runs the
-//     post-run validators (artifact_min_bytes / artifact_min_dimensions
-//     / artifact_not_uniform / artifact_min_cast_events) against the
-//     existing file at the plan-declared `artifact:` path.
-//
-//   - The freshness mtime gate (artifact mtime ≥ Runner.IterStartTime)
-//     prevents pre-staged or stale files from passing.
-var artifactValidatableMethods = map[string]bool{
-	"cdp/screenshot":     true,
-	"wl/screenshot":      true,
-	"vnc/screenshot":     true,
-	"libvirt/screenshot": true,
-	"record/stop":        true,
-}
+// The artifact-validatable set — the verb/method pairs `validate_ai_artifacts: true`
+// swaps to AI-artifact validation (skip the subprocess, validate the AI-produced file) —
+// is EXACTLY the set of methods whose kit.MethodSpec marks Artifact: true. There is no
+// separate allowlist: runCharlyVerb reads spec.Artifact off the looked-up MethodSpec
+// directly (the former hand-maintained artifactValidatableMethods map was a duplicate of
+// that flag — R3). The justification for an Artifact method is "re-running this probe a few
+// seconds later against the same logically-correct state can yield different bytes" — chrome
+// paints at vsync, wayland frame timing, VNC/RFB framebuffer at re-capture, libvirt display
+// surfaces, terminal recordings (asciinema casts finalize on `record stop`). When
+// validate_ai_artifacts is true AND spec.Artifact, runCharlyVerb skips the subprocess and
+// runs the post-run validators (artifact_min_bytes / _min_dimensions / _not_uniform /
+// _min_cast_events) against the file at the plan-declared `artifact:` path; a freshness
+// mtime gate (artifact mtime ≥ Runner.IterStartTime) rejects pre-staged/stale files.
 
 // checkrun_charly_verbs.go is the SHARED live-container-verb dispatch HOST: the
-// artifactValidatableMethods allowlist, the runCharlyVerb dispatcher, the artifact
-// validators, and resolveCheckApk — all reused by every live verb (R3). The verb
+// runCharlyVerb dispatcher, the artifact validators, and resolveCheckApk — all reused by
+// every live verb (R3). The verb
 // CONTRACT types (kit.MethodSpec, the kit.PosX positional-arg builder library, and the
 // kit.LiveVerbProvider interface) live in charly/plugin/kit/liveverb.go so a live-verb
 // CANDY can author its allowlist without importing package main; runCharlyVerb consumes
@@ -183,8 +159,8 @@ func (r *Runner) runCharlyVerb(ctx context.Context, c *Op, verb, method string, 
 
 	// Branch: AI-artifact validation mode for state-dependent capture
 	// probes ONLY. Activated when score.validate_ai_artifacts is set
-	// AND the verb/method is in the narrow artifactValidatableMethods
-	// allowlist. The harness scorer skips the subprocess re-execution
+	// AND the method's MethodSpec marks Artifact: true. The harness
+	// scorer skips the subprocess re-execution
 	// (which would overwrite the AI's iteration artifact and capture a
 	// different chrome/wayland/etc. moment) and instead validates the
 	// AI-produced file at the plan-declared `artifact:` path.
@@ -198,8 +174,11 @@ func (r *Runner) runCharlyVerb(ctx context.Context, c *Op, verb, method string, 
 	// mode: without re-running the command there is no captured
 	// output to match against. Authors hitting this combination need
 	// to either remove the matchers or split into separate steps.
-	key := verb + "/" + method
-	if r.ValidateAiArtifacts && artifactValidatableMethods[key] {
+	// The artifact-validatable set IS exactly the methods whose MethodSpec marks
+	// Artifact: true (the former hand-maintained artifactValidatableMethods allowlist
+	// was a duplicate of this flag — derive it directly, R3, so a candy-relocated verb's
+	// allowlist needs no parallel package-main entry).
+	if r.ValidateAiArtifacts && spec.Artifact {
 		if c.Stdout != nil || c.Stderr != nil || c.ExitStatus != nil {
 			return failf(c,
 				"%s: %s: validate_ai_artifacts skips command execution; "+

@@ -74,7 +74,7 @@ func generate(root, cfg string) (genGo, genWork []byte, err error) {
 		name   string // candy dir name under candy/
 		module string // go.mod module path (== the importable root package)
 		alias  string // import alias in the generated file
-		isKit  bool   // kit-shape (host-coupled check verb, NewCheckVerb) vs pb-shape (NewProvider/NewMeta)
+		shape  string // "kit" (NewCheckVerb, schema), "live" (NewLiveVerb, schema-less), or "pb" (NewProvider/NewMeta)
 	}
 	entries := make([]entry, 0, len(names))
 	for _, name := range names {
@@ -86,11 +86,11 @@ func generate(root, cfg string) (genGo, genWork []byte, err error) {
 		if err := requirePluginBlock(filepath.Join(candyDir, "charly.yml")); err != nil {
 			return nil, nil, fmt.Errorf("compiled plugin %q: %w", name, err)
 		}
-		isKit, err := detectKitShape(candyDir)
+		shape, err := detectShape(candyDir)
 		if err != nil {
 			return nil, nil, fmt.Errorf("compiled plugin %q: %w", name, err)
 		}
-		entries = append(entries, entry{name: name, module: mod, alias: goAlias(name), isKit: isKit})
+		entries = append(entries, entry{name: name, module: mod, alias: goAlias(name), shape: shape})
 	}
 
 	// --- plugins_generated.go ---
@@ -109,12 +109,18 @@ func generate(root, cfg string) (genGo, genWork []byte, err error) {
 		g.WriteString(")\n\n")
 		g.WriteString("func init() {\n")
 		for _, e := range entries {
-			if e.isKit {
+			switch e.shape {
+			case "live":
+				// live-verb shape: host-coupled SCHEMA-LESS live-container verb
+				// (cdp/wl/vnc/dbus/mcp/record/libvirt) — register through the dedicated
+				// (schema-less) path, the registerDedicatedBuiltin analogue.
+				fmt.Fprintf(&g, "\tregisterCompiledDedicatedVerb(%s.NewLiveVerb())\n", e.alias)
+			case "kit":
 				// kit-shape: host-coupled check verb, compiled-in-only — register through
 				// the kit adapter (charly concatenates the candy's raw schema FS).
 				fmt.Fprintf(&g, "\tregisterCompiledCheckVerb(%s.NewCheckVerb(), %s.SchemaFS, %s.SchemaDir, %s.InputDefs)\n",
 					e.alias, e.alias, e.alias, e.alias)
-			} else {
+			default:
 				// pb-shape: dual-placement plugin — in-proc via the served Describe channel.
 				fmt.Fprintf(&g, "\tregisterCompiledPlugin(%s.NewProvider(), %s.NewMeta())\n", e.alias, e.alias)
 			}
@@ -215,12 +221,14 @@ func requirePluginBlock(path string) error {
 	return nil
 }
 
-// detectKitShape reports whether a candy is a KIT-shape (host-coupled, compiled-in-only)
-// check-verb candy — it exports `func NewCheckVerb(` — vs a pb-shape DUAL-placement
-// candy (NewProvider/NewMeta). A textual scan of the candy's Go at codegen time (never
-// runtime); it avoids importing the candy module, keeping pluginsgen stdlib+yaml only.
-func detectKitShape(candyDir string) (bool, error) {
-	found := false
+// detectShape reports a candy's plugin shape from a textual scan of its Go at codegen
+// time (never runtime; avoids importing the candy module, keeping pluginsgen stdlib+yaml
+// only): "live" if it exports `func NewLiveVerb(` (a host-coupled SCHEMA-LESS live-container
+// verb — cdp/wl/vnc/dbus/mcp/record/libvirt), "kit" if it exports `func NewCheckVerb(` (a
+// host-coupled check verb WITH a schema), else "pb" (a dual-placement NewProvider/NewMeta
+// plugin). NewLiveVerb takes precedence — a candy carrying both is a live verb.
+func detectShape(candyDir string) (string, error) {
+	shape := "pb"
 	err := filepath.WalkDir(candyDir, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -232,12 +240,14 @@ func detectKitShape(candyDir string) (bool, error) {
 		if rerr != nil {
 			return rerr
 		}
-		if bytes.Contains(b, []byte("func NewCheckVerb(")) {
-			found = true
+		if bytes.Contains(b, []byte("func NewLiveVerb(")) {
+			shape = "live"
+		} else if bytes.Contains(b, []byte("func NewCheckVerb(")) && shape != "live" {
+			shape = "kit"
 		}
 		return nil
 	})
-	return found, err
+	return shape, err
 }
 
 // goAlias turns a candy dir name into a stable, valid Go import alias (cp_<sanitized>).

@@ -25,9 +25,10 @@ import (
 //
 // This file owns the verb's complete contract: the provider (Reserved/RunVerb), the
 // LiveVerbProvider method contract (Methods/MethodField), the recordMethods method
-// allowlist, and the runRecord dispatcher. The shared kit.PosArgs builder library
-// (kit.PosRecordStart/kit.PosRecordStop/kit.PosRecordCmd), the kit.MethodSpec type, and the
-// artifactValidatableMethods allowlist (record/stop) stay in checkrun_charly_verbs.go.
+// allowlist, and the runRecord dispatcher. The shared kit.MethodSpec type + the kit.PosX
+// builder library (kit.PosRecordStart/kit.PosRecordStop/kit.PosRecordCmd) live in
+// charly/plugin/kit/liveverb.go; the artifact-validatable set (e.g. record/stop) is derived
+// from spec.Artifact. The runCharlyVerb dispatcher stays in checkrun_charly_verbs.go.
 type recordVerb struct{ builtinVerbBase }
 
 func (recordVerb) Reserved() string { return "record" }

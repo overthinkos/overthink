@@ -20,9 +20,10 @@ import (
 //
 // This file owns the verb's complete contract: the provider (Reserved/RunVerb), the
 // LiveVerbProvider method contract (Methods/MethodField), the wlMethods method allowlist,
-// and the runWl dispatcher. The shared kit.PosArgs builder library (kit.PosXY/kit.PosText/kit.PosKeyName/
-// kit.PosTarget/kit.PosCommand/… are all reused by other verbs — R3), the kit.MethodSpec type, and
-// the artifactValidatableMethods allowlist stay in checkrun_charly_verbs.go.
+// and the runWl dispatcher. The shared kit.MethodSpec type + the kit.PosX builder library
+// (kit.PosXY/kit.PosText/kit.PosKeyName/kit.PosTarget/kit.PosCommand/… are reused by other
+// verbs — R3) live in charly/plugin/kit/liveverb.go; the artifact-validatable set is derived
+// from spec.Artifact. The runCharlyVerb dispatcher stays in checkrun_charly_verbs.go.
 type wlVerb struct{ builtinVerbBase }
 
 func (wlVerb) Reserved() string { return "wl" }

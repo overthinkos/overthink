@@ -25,10 +25,11 @@ import (
 //
 // This file owns the verb's complete contract: the provider (Reserved/RunVerb), the
 // LiveVerbProvider method contract (Methods/MethodField), the libvirtMethods method
-// allowlist, and the runLibvirt dispatcher. The shared kit.PosArgs builder library
-// (kit.PosArtifact/kit.PosKeyNameSplit/kit.PosText/kit.PosLibvirtQmp/kit.PosCommandFields/kit.PosTarget), the
-// kit.MethodSpec type, and the artifactValidatableMethods allowlist (libvirt/screenshot)
-// stay in checkrun_charly_verbs.go.
+// allowlist, and the runLibvirt dispatcher. The shared kit.MethodSpec type + the kit.PosX
+// builder library (kit.PosArtifact/kit.PosKeyNameSplit/kit.PosText/kit.PosLibvirtQmp/
+// kit.PosCommandFields/kit.PosTarget) live in charly/plugin/kit/liveverb.go; the
+// artifact-validatable set (e.g. libvirt/screenshot) is derived from spec.Artifact. The
+// runCharlyVerb dispatcher stays in checkrun_charly_verbs.go.
 type libvirtVerb struct{ builtinVerbBase }
 
 func (libvirtVerb) Reserved() string { return "libvirt" }

@@ -27,6 +27,21 @@ type MethodSpec struct {
 	SkipBox bool
 }
 
+// LiveVerbProvider is the self-describing contract a LIVE-CONTAINER verb candy
+// implements: a CheckVerbProvider whose RunVerb delegates to CheckContext.RunCharlyVerb,
+// PLUS its method allowlist + the #Op selector field the host reads (through the registry)
+// to validate authored methods. Schema-LESS — a live verb's modifiers ride the closed base
+// #Op, so a live-verb candy carries NO plugin schema (it is compiled in via the dedicated
+// schema-less path, the registerDedicatedBuiltin analogue).
+type LiveVerbProvider interface {
+	CheckVerbProvider
+	// Methods is the verb's method allowlist (method name → its MethodSpec).
+	Methods() map[string]MethodSpec
+	// MethodField returns the verb's authored method-selector value off the Op
+	// (e.g. op.Cdp for the cdp verb).
+	MethodField(op *spec.Op) string
+}
+
 // ---------------------------------------------------------------------------
 // positional-arg builders — the shared library reused across live verbs.
 // Each returns the positional args to insert AFTER the image name, BEFORE any

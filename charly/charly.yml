@@ -36,6 +36,7 @@ compiled_plugins:
     - plugin-process
     - plugin-interface
     - plugin-addr
+    - plugin-dns
 
 # context_ignore_baseline — the built-in build-context ignore patterns (VCS/binary
 # excludes + cache-hygiene globs), formerly the Go var baselineContextIgnore. Read by

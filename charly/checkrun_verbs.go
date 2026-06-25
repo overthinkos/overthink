@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net"
 	"slices"
 	"strconv"
 	"strings"
@@ -124,50 +123,6 @@ func (r *Runner) runService(ctx context.Context, c *Op, service string, running,
 		}
 	}
 	return passf(c, "ok")
-}
-
-// runDNS uses the charly process's resolver (host-side) under RunModeLive, and
-// `getent hosts` inside the container under RunModeBox. The hostname + modifiers
-// (resolvable/addrs) arrive from the `dns` plugin's typed plugin_input (params.DnsInput,
-// decoded by dnsVerb.RunVerb in plugin_dns.go) — the verb left the closed #Op, so they
-// no longer ride the (removed) Op.DNS/Resolvable/Addrs fields. c is retained for result
-// metadata + the shared r.Mode/r.Exec.
-func (r *Runner) runDNS(ctx context.Context, c *Op, dns string, resolvable *bool, addrs []string) CheckResult {
-	wantResolvable := true
-	if resolvable != nil {
-		wantResolvable = *resolvable
-	}
-	if r.Mode == RunModeBox {
-		probe := fmt.Sprintf(`getent hosts %s >/dev/null 2>&1`, shellSingleQuote(dns))
-		_, _, exit, err := r.Exec.RunCapture(ctx, probe)
-		if err != nil {
-			return failf(c, "probe: %v", err)
-		}
-		isResolvable := exit == 0
-		if isResolvable != wantResolvable {
-			return failf(c, "resolvable=%v, want %v", isResolvable, wantResolvable)
-		}
-		return passf(c, fmt.Sprintf("resolvable=%v", isResolvable))
-	}
-	// Host-side resolve
-	ips, err := net.LookupIP(dns)
-	isResolvable := err == nil && len(ips) > 0
-	if isResolvable != wantResolvable {
-		return failf(c, "resolvable=%v (err: %v), want %v", isResolvable, err, wantResolvable)
-	}
-	if len(addrs) > 0 && isResolvable {
-		want := map[string]bool{}
-		for _, a := range addrs {
-			want[a] = true
-		}
-		for _, ip := range ips {
-			if want[ip.String()] {
-				return passf(c, fmt.Sprintf("resolved to %s (match)", ip))
-			}
-		}
-		return failf(c, "no resolved address matched required list %v (got %v)", addrs, ips)
-	}
-	return passf(c, fmt.Sprintf("resolvable=%v", isResolvable))
 }
 
 // runUser: getent passwd. Parses uid/gid/home/shell for optional matching. The account

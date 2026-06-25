@@ -457,8 +457,8 @@ func migrationSteps() []MigrationStep {
 		// gone from the schema). See migrate_box_to_candy.go.
 		{mustCalVer("2026.172.0005"), "box-to-candy", false, MigrateBoxToCandy},
 		// 2026-06 matching-verb extraction: the `matching` check verb (pure in-process
-		// value matching) left the closed `#Op`/`spec.OpVerbs` and became a BUILTIN
-		// plugin unit (plugin/builtins/matching). A plan step authoring `matching:
+		// value matching) left the closed `#Op`/`spec.OpVerbs` and became a plugin unit
+		// (now the compiled-in candy candy/plugin-matching). A plan step authoring `matching:
 		// <value>` (+ optional `contains:`) now authors the generic plugin step
 		// `plugin: matching` + a typed `plugin_input:` ({matching, contains}). This
 		// step CONVERTS a deterministic `check:` step (matching:/contains: → plugin:

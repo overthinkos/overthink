@@ -3,8 +3,8 @@ package main
 // migrate_matching_to_plugin.go — the 2026-06 `matching` verb-extraction migration.
 //
 // The `matching` check verb (pure in-process value matching, no target probe) left
-// the closed `#Op`/`spec.OpVerbs` and became a BUILTIN plugin unit
-// (plugin/builtins/matching). A plan step that authored the verb inline as
+// the closed `#Op`/`spec.OpVerbs` and became a plugin unit (now the compiled-in
+// candy candy/plugin-matching). A plan step that authored the verb inline as
 // `matching: <value>` (+ optional goss-style `contains:` matchers) now authors it
 // through the generic plugin step: `plugin: matching` + a typed `plugin_input:`
 // ({matching, contains}) validated against the plugin's own #MatchingInput schema.

@@ -13,6 +13,7 @@ import (
 	cp_plugin_example_external "github.com/overthinkos/overthink/candy/plugin-example-external"
 	cp_plugin_examplerunverb "github.com/overthinkos/overthink/candy/plugin-examplerunverb"
 	cp_plugin_interface "github.com/overthinkos/overthink/candy/plugin-interface"
+	cp_plugin_matching "github.com/overthinkos/overthink/candy/plugin-matching"
 	cp_plugin_port "github.com/overthinkos/overthink/candy/plugin-port"
 	cp_plugin_process "github.com/overthinkos/overthink/candy/plugin-process"
 )
@@ -26,4 +27,5 @@ func init() {
 	registerCompiledCheckVerb(cp_plugin_addr.NewCheckVerb(), cp_plugin_addr.SchemaFS, cp_plugin_addr.SchemaDir, cp_plugin_addr.InputDefs)
 	registerCompiledCheckVerb(cp_plugin_dns.NewCheckVerb(), cp_plugin_dns.SchemaFS, cp_plugin_dns.SchemaDir, cp_plugin_dns.InputDefs)
 	registerCompiledCheckVerb(cp_plugin_examplerunverb.NewCheckVerb(), cp_plugin_examplerunverb.SchemaFS, cp_plugin_examplerunverb.SchemaDir, cp_plugin_examplerunverb.InputDefs)
+	registerCompiledPlugin(cp_plugin_matching.NewProvider(), cp_plugin_matching.NewMeta())
 }

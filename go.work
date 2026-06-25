@@ -13,3 +13,4 @@ use ./candy/plugin-interface
 use ./candy/plugin-addr
 use ./candy/plugin-dns
 use ./candy/plugin-examplerunverb
+use ./candy/plugin-matching

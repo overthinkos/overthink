@@ -7,3 +7,4 @@ go 1.26.0
 use ./charly
 use ./candy/plugin-example
 use ./candy/plugin-example-external
+use ./candy/plugin-port

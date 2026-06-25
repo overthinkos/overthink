@@ -27,6 +27,7 @@ import (
 	"flag"
 	"fmt"
 	"go/format"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -73,6 +74,7 @@ func generate(root, cfg string) (genGo, genWork []byte, err error) {
 		name   string // candy dir name under candy/
 		module string // go.mod module path (== the importable root package)
 		alias  string // import alias in the generated file
+		isKit  bool   // kit-shape (host-coupled check verb, NewCheckVerb) vs pb-shape (NewProvider/NewMeta)
 	}
 	entries := make([]entry, 0, len(names))
 	for _, name := range names {
@@ -84,7 +86,11 @@ func generate(root, cfg string) (genGo, genWork []byte, err error) {
 		if err := requirePluginBlock(filepath.Join(candyDir, "charly.yml")); err != nil {
 			return nil, nil, fmt.Errorf("compiled plugin %q: %w", name, err)
 		}
-		entries = append(entries, entry{name: name, module: mod, alias: goAlias(name)})
+		isKit, err := detectKitShape(candyDir)
+		if err != nil {
+			return nil, nil, fmt.Errorf("compiled plugin %q: %w", name, err)
+		}
+		entries = append(entries, entry{name: name, module: mod, alias: goAlias(name), isKit: isKit})
 	}
 
 	// --- plugins_generated.go ---
@@ -103,7 +109,15 @@ func generate(root, cfg string) (genGo, genWork []byte, err error) {
 		g.WriteString(")\n\n")
 		g.WriteString("func init() {\n")
 		for _, e := range entries {
-			fmt.Fprintf(&g, "\tregisterCompiledPlugin(%s.NewProvider(), %s.NewMeta())\n", e.alias, e.alias)
+			if e.isKit {
+				// kit-shape: host-coupled check verb, compiled-in-only — register through
+				// the kit adapter (charly concatenates the candy's raw schema FS).
+				fmt.Fprintf(&g, "\tregisterCompiledCheckVerb(%s.NewCheckVerb(), %s.SchemaFS, %s.SchemaDir, %s.InputDefs)\n",
+					e.alias, e.alias, e.alias, e.alias)
+			} else {
+				// pb-shape: dual-placement plugin — in-proc via the served Describe channel.
+				fmt.Fprintf(&g, "\tregisterCompiledPlugin(%s.NewProvider(), %s.NewMeta())\n", e.alias, e.alias)
+			}
 		}
 		g.WriteString("}\n")
 	}
@@ -199,6 +213,31 @@ func requirePluginBlock(path string) error {
 		return fmt.Errorf("candy has no plugin: block — only plugin candies may be compiled in")
 	}
 	return nil
+}
+
+// detectKitShape reports whether a candy is a KIT-shape (host-coupled, compiled-in-only)
+// check-verb candy — it exports `func NewCheckVerb(` — vs a pb-shape DUAL-placement
+// candy (NewProvider/NewMeta). A textual scan of the candy's Go at codegen time (never
+// runtime); it avoids importing the candy module, keeping pluginsgen stdlib+yaml only.
+func detectKitShape(candyDir string) (bool, error) {
+	found := false
+	err := filepath.WalkDir(candyDir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		b, rerr := os.ReadFile(path)
+		if rerr != nil {
+			return rerr
+		}
+		if bytes.Contains(b, []byte("func NewCheckVerb(")) {
+			found = true
+		}
+		return nil
+	})
+	return found, err
 }
 
 // goAlias turns a candy dir name into a stable, valid Go import alias (cp_<sanitized>).

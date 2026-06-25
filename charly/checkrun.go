@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -656,82 +655,6 @@ func normalizeFiletype(s string) string {
 		return "socket"
 	}
 	return s
-}
-
-// ---------------------------------------------------------------------------
-// port verb
-// ---------------------------------------------------------------------------
-
-// runPort dispatches between in-container "listening" check and host-side
-// reachability check based on attributes + run mode.
-//
-// Routing rules:
-//   - listening: true (default when unset) → probe via Exec (container-internal)
-//   - reachable/from-host semantics → dial 127.0.0.1:<HOST_PORT:N> from host
-//     (only meaningful in RunModeLive; RunModeBox skips with reason)
-//
-// runPort: the port number + modifiers (listening/reachable/ip) arrive from the
-// `port` plugin's typed plugin_input (params.PortInput, decoded by portVerb.RunVerb in
-// plugin_port.go) — the verb left the closed #Op, so they no longer ride the (removed)
-// Op.Port/Listening/IP fields. c is retained for result metadata + the shared
-// r.Mode/r.Exec/r.DialTimeout.
-func (r *Runner) runPort(ctx context.Context, c *Op, port int, listening, reachable *bool, ip string) CheckResult {
-	wantListening := true
-	if listening != nil {
-		wantListening = *listening
-	}
-
-	// If the user asked for outside-in reachability (listening:false with a
-	// HOST_PORT substitution already performed, or Reachable explicitly set),
-	// dial from host.
-	if reachable != nil || (listening != nil && !*listening) {
-		if r.Mode == RunModeBox {
-			return skipf(c, "host-side port check not meaningful under charly check box")
-		}
-		return r.dialPort(c, port, ip, reachable)
-	}
-
-	// In-container listening probe: ss first, netstat fallback.
-	probe := fmt.Sprintf(
-		`(ss -tlnH 2>/dev/null || netstat -tln 2>/dev/null) | awk '{print $4}' | grep -E ':%d$' >/dev/null`,
-		port)
-	_, stderr, exit, err := r.Exec.RunCapture(ctx, probe)
-	if err != nil {
-		return failf(c, "probe failed: %v (%s)", err, stderr)
-	}
-	isListening := exit == 0
-	if isListening != wantListening {
-		return failf(c, "listening=%v, want %v (on port %d)", isListening, wantListening, port)
-	}
-	return passf(c, fmt.Sprintf("port %d listening=%v", port, isListening))
-}
-
-// dialPort attempts a TCP dial on 127.0.0.1:<port> from the host. Used for
-// deploy-scope reachability checks where ${HOST_PORT:N} has been substituted
-// into the port value. If the port was remapped by charly.yml, the substituted
-// value is what we'll dial. The port/ip/reachable arrive decoded from the port
-// plugin's plugin_input (see runPort).
-func (r *Runner) dialPort(c *Op, port int, ip string, reachable *bool) CheckResult {
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	if ip != "" {
-		addr = fmt.Sprintf("%s:%d", ip, port)
-	}
-	conn, err := net.DialTimeout("tcp", addr, r.DialTimeout)
-	wantReachable := true
-	if reachable != nil {
-		wantReachable = *reachable
-	}
-	if err != nil {
-		if !wantReachable {
-			return passf(c, fmt.Sprintf("%s unreachable (as expected)", addr))
-		}
-		return failf(c, "dial %s: %v", addr, err)
-	}
-	_ = conn.Close()
-	if !wantReachable {
-		return failf(c, "%s reachable but wanted unreachable", addr)
-	}
-	return passf(c, fmt.Sprintf("%s reachable", addr))
 }
 
 // ---------------------------------------------------------------------------

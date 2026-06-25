@@ -106,7 +106,7 @@ type fileCheck struct {
 // #Op load normalizer that applied the same default to the file verb's `contains:` field
 // before extraction, so a migrated `plugin_input.contains` (the
 // authored bare-scalar / list / operator-map shorthand) keeps meaning "contents CONTAIN
-// X" — never the equals-default decodeMatcherList would impose. A nil value yields nil.
+// X" — never the equals-default a plain MatcherList decode would impose. A nil value yields nil.
 func decodeContainsList(v any) MatcherList {
 	if v == nil {
 		return nil

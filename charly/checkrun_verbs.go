@@ -6,8 +6,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-
-	"github.com/overthinkos/overthink/charly/plugin/sdk"
 )
 
 // ---------------------------------------------------------------------------
@@ -183,38 +181,5 @@ func (r *Runner) runUnixGroup(ctx context.Context, c *Op, group string, wantGID 
 		return failf(c, "gid=%d, want %d", gid, *wantGID)
 	}
 	return passf(c, fmt.Sprintf("gid=%d", gid))
-}
-
-// runMount: `findmnt -J <path>` — present ⇒ mounted. Optional source, filesystem, and opts
-// matching. The mountpoint + expected source/filesystem/opt matchers come from the `mount`
-// plugin's decoded plugin_input (the verb left #Op for its dedicated builtin plugin unit) —
-// c is retained for failf/passf reporting context.
-func (r *Runner) runMount(ctx context.Context, c *Op, mountPath, wantSource, wantFstype string, wantOpts MatcherList) CheckResult {
-	mp := shellSingleQuote(mountPath)
-	probe := fmt.Sprintf(`findmnt -n -o SOURCE,FSTYPE,OPTIONS %s 2>/dev/null`, mp)
-	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
-	if err != nil {
-		return failf(c, "probe: %v", err)
-	}
-	if exit != 0 {
-		return failf(c, "mount not found")
-	}
-	fields := strings.Fields(strings.TrimSpace(out))
-	if len(fields) < 3 {
-		return failf(c, "unexpected findmnt output: %q", out)
-	}
-	source, fstype, opts := fields[0], fields[1], fields[2]
-	if wantSource != "" && source != wantSource {
-		return failf(c, "source=%s, want %s", source, wantSource)
-	}
-	if wantFstype != "" && fstype != wantFstype {
-		return failf(c, "filesystem=%s, want %s", fstype, wantFstype)
-	}
-	if len(wantOpts) > 0 {
-		if err := sdk.MatchAll(opts, wantOpts); err != nil {
-			return failf(c, "opts %q: %v", opts, err)
-		}
-	}
-	return passf(c, fmt.Sprintf("source=%s fstype=%s", source, fstype))
 }
 

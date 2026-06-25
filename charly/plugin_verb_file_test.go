@@ -83,7 +83,7 @@ func TestDecodeContainsList(t *testing.T) {
 }
 
 // TestDecodeContainsList_Nil ensures an absent contains decodes to a nil list (no
-// matchers to assert), matching decodeMatcherList's nil handling.
+// matchers to assert), the standard nil-handling of a matcher-list decode.
 func TestDecodeContainsList_Nil(t *testing.T) {
 	if got := decodeContainsList(nil); got != nil {
 		t.Errorf("decodeContainsList(nil) = %v, want nil", got)

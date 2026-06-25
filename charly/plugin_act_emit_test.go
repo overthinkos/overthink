@@ -151,7 +151,8 @@ func TestRenderOpCommand_PluginAct_Mount(t *testing.T) {
 }
 
 // renderOpCommand turns a plugin: kernel-param run-Op into the sysctl -w shell. The `value`
-// matcher rides plugin_input and is read via the shared decodeMatcherList + firstMatcherScalar.
+// matcher rides plugin_input and is read via the kernel-param candy's matcher codec
+// (candy/plugin-kernel-param, resolved through the registry as a kit.ProvisionActor).
 func TestRenderOpCommand_PluginAct_KernelParam(t *testing.T) {
 	s := &OpStep{
 		Op:        &Op{Plugin: "kernel-param", PluginInput: map[string]any{"kernel-param": "vm.swappiness", "value": "10"}},

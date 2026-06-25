@@ -85,31 +85,18 @@ func (r *Runner) runProvisionAct(ctx context.Context, c *Op, verb string) (Check
 }
 
 // The do:act renderers — the ProvisionActor half of each state-provision verb
-// provider — live with their dedicated plugin units (file/package/service/user/
-// unix_group/kernel-param/mount RenderProvisionScript in plugin_verb_file.go /
-// plugin_verb_package.go / plugin_verb_service.go / plugin_user.go / plugin_unix_group.go /
-// plugin_kernel_param.go / plugin_mount.go) — each decodes plugin_input rather than the
-// removed Op.File/Exists/Owner/GroupOf/Filetype/Contains/Sha256 (mode + content stay
-// SHARED #Op modifiers the file act reads off the step Op) /
-// Op.Package/Installed/Versions/PackageMap / Op.Service/Running/Enabled /
-// Op.User/UID/Home/Shell / Op.UnixGroup/GID / Op.KernelParam/Value /
-// Op.Mount/MountSource/Filesystem/Opts fields. `package`'s and `service`'s
-// RenderProvisionScript are the RUNTIME/box-build live-act path (a `run: {plugin: package}`
-// / `run: {plugin: service}` step the check Runner executes, plus the box-build emitTasks
-// `case "plugin"` seam) — their build/deploy install timeline lowers into a TYPED
-// SystemPackagesStep / ServicePackagedStep via the TypedStepProvider (compileActOp), NOT
-// this shell. They still reuse the package-level firstMatcherScalar (below) +
-// shellSingleQuote via the shared decodeMatcherList codec.
-
-// firstMatcherScalar returns the first matcher's value rendered as a string,
-// used by the act renderers to read a desired scalar (sysctl value, mount
-// opts) out of a field that carries assertion matchers in do:assert mode.
-func firstMatcherScalar(ml MatcherList) (string, bool) {
-	for _, m := range ml {
-		if m.Value == nil {
-			continue
-		}
-		return fmt.Sprintf("%v", m.Value), true
-	}
-	return "", false
-}
+// provider — live with their providers: file/package/service/user/unix_group
+// RenderProvisionScript in plugin_verb_file.go / plugin_verb_package.go /
+// plugin_verb_service.go / plugin_user.go / plugin_unix_group.go (still in-module), and
+// kernel-param/mount in their relocated candies (candy/plugin-kernel-param,
+// candy/plugin-mount, each implementing kit.ProvisionActor with a candy-private matcher
+// codec). Each decodes plugin_input rather than the removed
+// Op.File/Exists/Owner/GroupOf/Filetype/Contains/Sha256 (mode + content stay SHARED #Op
+// modifiers the file act reads off the step Op) / Op.Package/Installed/Versions/PackageMap
+// / Op.Service/Running/Enabled / Op.User/UID/Home/Shell / Op.UnixGroup/GID /
+// Op.KernelParam/Value / Op.Mount/MountSource/Filesystem/Opts fields. `package`'s and
+// `service`'s RenderProvisionScript are the RUNTIME/box-build live-act path (a
+// `run: {plugin: package}` / `run: {plugin: service}` step the check Runner executes,
+// plus the box-build emitTasks `case "plugin"` seam) — their build/deploy install timeline
+// lowers into a TYPED SystemPackagesStep / ServicePackagedStep via the TypedStepProvider
+// (compileActOp), NOT this shell.

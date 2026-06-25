@@ -820,24 +820,6 @@ func skipf(c *Op, msg string) CheckResult {
 	return CheckResult{Op: c, Status: TestSkip, Message: msg}
 }
 
-// decodeMatcherList re-decodes a gengotypes-degraded matcher value (`any`) through the
-// shared MatcherList JSON codec into the typed []Matcher the verb runners consume (the
-// mount / kernel_param plugin units). A nil / unparseable value yields a nil list (no
-// matchers to assert). The relocated http / matching candies carry their own copy.
-func decodeMatcherList(v any) MatcherList {
-	if v == nil {
-		return nil
-	}
-	raw, err := json.Marshal(v)
-	if err != nil {
-		return nil
-	}
-	var ml MatcherList
-	if err := json.Unmarshal(raw, &ml); err != nil {
-		return nil
-	}
-	return ml
-}
 
 func trimPreview(s string) string {
 	s = strings.TrimSpace(s)

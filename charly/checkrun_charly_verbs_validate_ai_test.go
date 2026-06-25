@@ -7,7 +7,18 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 )
+
+// validateAiTestMethods is an INLINE fixture allowlist for the validate_ai tests — a single
+// artifact-producing method, decoupled from any specific live verb's allowlist (the live
+// verbs now live in candies, so the tests own their fixture rather than importing a verb's
+// map, which would create an import cycle). The validate_ai branch reads only spec.Artifact +
+// the artifact file, so PosArgs is unused here.
+var validateAiTestMethods = map[string]kit.MethodSpec{
+	"stop": {Path: []string{"record", "stop"}, Required: []string{"Artifact"}, Artifact: true},
+}
 
 // Test plan for the validate_ai_artifacts artifact-method + freshness-mtime gate
 // behaviour added in 2026-04-27.
@@ -63,7 +74,7 @@ func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_FilePresent_FreshMtime_Valid
 		ArtifactMinBytes:      50,
 		ArtifactMinCastEvents: 5,
 	}
-	res := r.runCharlyVerb(context.Background(), c, "record", "stop", recordMethods)
+	res := r.runCharlyVerb(context.Background(), c, "record", "stop", validateAiTestMethods)
 	if res.Status != TestPass {
 		t.Errorf("expected pass, got %s: %s", res.Status, res.Message)
 	}
@@ -86,7 +97,7 @@ func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_FileMissing_FailsActionable(
 		Artifact:         "/nonexistent/cdp.cast",
 		ArtifactMinBytes: 100,
 	}
-	res := r.runCharlyVerb(context.Background(), c, "record", "stop", recordMethods)
+	res := r.runCharlyVerb(context.Background(), c, "record", "stop", validateAiTestMethods)
 	if res.Status != TestFail {
 		t.Fatalf("expected fail, got %s: %s", res.Status, res.Message)
 	}
@@ -124,7 +135,7 @@ func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_StaleMtime_FailsAntiDeceptio
 		Artifact:         stale,
 		ArtifactMinBytes: 1000,
 	}
-	res := r.runCharlyVerb(context.Background(), c, "record", "stop", recordMethods)
+	res := r.runCharlyVerb(context.Background(), c, "record", "stop", validateAiTestMethods)
 	if res.Status != TestFail {
 		t.Fatalf("expected fail (anti-deception), got %s: %s", res.Status, res.Message)
 	}
@@ -187,7 +198,7 @@ func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_PhaseBoundary_AcceptsCrossPh
 		ArtifactMinBytes:      50,
 		ArtifactMinCastEvents: 5,
 	}
-	res := r.runCharlyVerb(context.Background(), c, "record", "stop", recordMethods)
+	res := r.runCharlyVerb(context.Background(), c, "record", "stop", validateAiTestMethods)
 	if res.Status != TestPass {
 		t.Errorf("phase-boundary cross-phase artifact MUST pass with run-start freshness floor; got %s: %s",
 			res.Status, res.Message)
@@ -216,7 +227,7 @@ func TestRunCharlyVerb_ValidateAi_AllowlistedMethod_StdoutMatcher_FailsActionabl
 		ArtifactMinBytes: 1000,
 		Stdout:           MatcherList{Matcher{Op: "contains", Value: "ok"}},
 	}
-	res := r.runCharlyVerb(context.Background(), c, "record", "stop", recordMethods)
+	res := r.runCharlyVerb(context.Background(), c, "record", "stop", validateAiTestMethods)
 	if res.Status != TestFail {
 		t.Fatalf("expected fail (stdout matcher incompatible), got %s: %s", res.Status, res.Message)
 	}

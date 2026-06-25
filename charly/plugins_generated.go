@@ -12,6 +12,7 @@ import (
 	cp_plugin_builder "github.com/overthinkos/overthink/candy/plugin-builder"
 	cp_plugin_cdp "github.com/overthinkos/overthink/candy/plugin-cdp"
 	cp_plugin_command "github.com/overthinkos/overthink/candy/plugin-command"
+	cp_plugin_dbus "github.com/overthinkos/overthink/candy/plugin-dbus"
 	cp_plugin_distro "github.com/overthinkos/overthink/candy/plugin-distro"
 	cp_plugin_dns "github.com/overthinkos/overthink/candy/plugin-dns"
 	cp_plugin_example "github.com/overthinkos/overthink/candy/plugin-example"
@@ -29,12 +30,15 @@ import (
 	cp_plugin_package_group "github.com/overthinkos/overthink/candy/plugin-package-group"
 	cp_plugin_port "github.com/overthinkos/overthink/candy/plugin-port"
 	cp_plugin_process "github.com/overthinkos/overthink/candy/plugin-process"
+	cp_plugin_record "github.com/overthinkos/overthink/candy/plugin-record"
 	cp_plugin_resource "github.com/overthinkos/overthink/candy/plugin-resource"
 	cp_plugin_service "github.com/overthinkos/overthink/candy/plugin-service"
 	cp_plugin_sidecar "github.com/overthinkos/overthink/candy/plugin-sidecar"
 	cp_plugin_target "github.com/overthinkos/overthink/candy/plugin-target"
 	cp_plugin_unix_group "github.com/overthinkos/overthink/candy/plugin-unix-group"
 	cp_plugin_user "github.com/overthinkos/overthink/candy/plugin-user"
+	cp_plugin_vnc "github.com/overthinkos/overthink/candy/plugin-vnc"
+	cp_plugin_wl "github.com/overthinkos/overthink/candy/plugin-wl"
 )
 
 func init() {
@@ -66,4 +70,8 @@ func init() {
 	registerCompiledPlugin(cp_plugin_sidecar.NewProvider(), cp_plugin_sidecar.NewMeta())
 	registerCompiledPlugin(cp_plugin_target.NewProvider(), cp_plugin_target.NewMeta())
 	registerCompiledDedicatedVerb(cp_plugin_cdp.NewLiveVerb())
+	registerCompiledDedicatedVerb(cp_plugin_wl.NewLiveVerb())
+	registerCompiledDedicatedVerb(cp_plugin_vnc.NewLiveVerb())
+	registerCompiledDedicatedVerb(cp_plugin_dbus.NewLiveVerb())
+	registerCompiledDedicatedVerb(cp_plugin_record.NewLiveVerb())
 }

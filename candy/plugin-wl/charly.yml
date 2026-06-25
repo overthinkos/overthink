@@ -1,0 +1,19 @@
+plugin-wl:
+    candy:
+        version: 2026.176.2200
+        description: |-
+            The `wl` live-container check verb relocated into a candy: Wayland/sway desktop
+            automation (input, windows, screenshots, sway IPC, overlay, atspi, clipboard)
+            against a live deployment. A SCHEMA-LESS host-coupled LIVE verb — its modifiers
+            ride the closed base #Op; RunVerb delegates dispatch to the host via
+            kit.CheckContext.RunCharlyVerb, so it is COMPILED-IN-ONLY.
+    plugin-wl-decl:
+        plugin:
+            source: github.com/overthinkos/overthink/candy/plugin-wl
+            providers:
+                - verb:wl
+    wl-verb-dispatches:
+        check: the wl verb dispatches through the provider registry and reports the Wayland/sway compositor status on a live desktop deployment
+        id: wl-verb-dispatches
+        wl: status
+        context: [runtime]

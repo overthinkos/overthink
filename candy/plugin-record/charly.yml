@@ -1,0 +1,19 @@
+plugin-record:
+    candy:
+        version: 2026.176.2200
+        description: |-
+            The `record` live-container check verb relocated into a candy: record terminal
+            sessions or desktop video inside a running deployment (list, start, stop, cmd)
+            against a live target. A SCHEMA-LESS host-coupled LIVE verb — its modifiers ride
+            the closed base #Op; RunVerb delegates dispatch to the host via
+            kit.CheckContext.RunCharlyVerb, so it is COMPILED-IN-ONLY.
+    plugin-record-decl:
+        plugin:
+            source: github.com/overthinkos/overthink/candy/plugin-record
+            providers:
+                - verb:record
+    record-verb-dispatches:
+        check: the record verb dispatches through the provider registry and lists the active recording sessions on a live deployment
+        id: record-verb-dispatches
+        record: list
+        context: [runtime]

@@ -1,0 +1,19 @@
+plugin-dbus:
+    candy:
+        version: 2026.176.2200
+        description: |-
+            The `dbus` live-container check verb relocated into a candy: interact with D-Bus
+            services inside a running deployment (list, call, introspect, notify) against a
+            live target. A SCHEMA-LESS host-coupled LIVE verb — its modifiers ride the closed
+            base #Op; RunVerb delegates dispatch to the host via kit.CheckContext.RunCharlyVerb,
+            so it is COMPILED-IN-ONLY.
+    plugin-dbus-decl:
+        plugin:
+            source: github.com/overthinkos/overthink/candy/plugin-dbus
+            providers:
+                - verb:dbus
+    dbus-verb-dispatches:
+        check: the dbus verb dispatches through the provider registry and lists the registered D-Bus services on a live deployment
+        id: dbus-verb-dispatches
+        dbus: list
+        context: [runtime]

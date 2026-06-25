@@ -33,3 +33,7 @@ use ./candy/plugin-resource
 use ./candy/plugin-sidecar
 use ./candy/plugin-target
 use ./candy/plugin-cdp
+use ./candy/plugin-wl
+use ./candy/plugin-vnc
+use ./candy/plugin-dbus
+use ./candy/plugin-record

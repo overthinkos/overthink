@@ -1,0 +1,19 @@
+plugin-vnc:
+    candy:
+        version: 2026.176.2200
+        description: |-
+            The `vnc` live-container check verb relocated into a candy: control a VNC desktop
+            in a running deployment (status, screenshot, input, RFB) against a live target. A
+            SCHEMA-LESS host-coupled LIVE verb — its modifiers ride the closed base #Op;
+            RunVerb delegates dispatch to the host via kit.CheckContext.RunCharlyVerb, so it
+            is COMPILED-IN-ONLY.
+    plugin-vnc-decl:
+        plugin:
+            source: github.com/overthinkos/overthink/candy/plugin-vnc
+            providers:
+                - verb:vnc
+    vnc-verb-dispatches:
+        check: the vnc verb dispatches through the provider registry and reports the VNC server status on a live desktop deployment
+        id: vnc-verb-dispatches
+        vnc: status
+        context: [runtime]

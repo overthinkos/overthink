@@ -85,12 +85,12 @@ func (r *Runner) runProvisionAct(ctx context.Context, c *Op, verb string) (Check
 }
 
 // The do:act renderers — the ProvisionActor half of each state-provision verb
-// provider — live with their providers: file/package/service/user/unix_group
-// RenderProvisionScript in plugin_verb_file.go / plugin_verb_package.go /
-// plugin_verb_service.go / plugin_user.go / plugin_unix_group.go (still in-module), and
-// kernel-param/mount in their relocated candies (candy/plugin-kernel-param,
-// candy/plugin-mount, each implementing kit.ProvisionActor with a candy-private matcher
-// codec). Each decodes plugin_input rather than the removed
+// provider — live with their providers: package/service RenderProvisionScript in
+// plugin_verb_package.go / plugin_verb_service.go (still in-charly-module), and
+// file/user/unix_group/kernel-param/mount in their relocated candies (candy/plugin-file,
+// candy/plugin-user, candy/plugin-unix-group, candy/plugin-kernel-param, candy/plugin-mount,
+// each implementing kit.ProvisionActor with a candy-private matcher codec). Each decodes
+// plugin_input rather than the removed
 // Op.File/Exists/Owner/GroupOf/Filetype/Contains/Sha256 (mode + content stay SHARED #Op
 // modifiers the file act reads off the step Op) / Op.Package/Installed/Versions/PackageMap
 // / Op.Service/Running/Enabled / Op.User/UID/Home/Shell / Op.UnixGroup/GID /

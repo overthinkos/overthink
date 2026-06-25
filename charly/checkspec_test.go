@@ -387,8 +387,8 @@ func TestTestVarRefPattern_BackwardCompatible(t *testing.T) {
 // TestContainsList_RealWorldHarnessProbe tested the base #Op `contains` load
 // normalizer, which left #Op with the `file` verb when it was
 // extracted into a plugin. The contains-default (a bare scalar → Op="contains") now
-// lives in the file plugin's decodeContainsList — covered by TestDecodeContainsList in
-// plugin_verb_file_test.go.
+// lives in the file candy's decodeContainsList — covered by TestDecodeContainsList in
+// candy/plugin-file.
 
 // TestMatcherList_BareScalarDefaultsToEquals ensures a typed MatcherList field
 // (stdout/body/…) keeps Op="equals" as the default for bare scalars, since

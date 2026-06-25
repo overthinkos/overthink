@@ -21,11 +21,13 @@ import "context"
 // per provider (checkrun_act.go) — runProvisionAct resolves + type-asserts it (C1b).
 
 // file / package / command / service / user / unix_group / kernel-param / mount are NOT
-// here — each is an extracted verb, a dedicated plugin UNIT (plugin_verb_file.go /
-// plugin_verb_package.go / plugin_verb_command.go / plugin_verb_service.go / plugin_user.go /
-// plugin_unix_group.go / plugin_kernel_param.go / plugin_mount.go) that self-registers via
+// here — each is an extracted verb, a dedicated plugin UNIT that self-registers via
 // RegisterBuiltinPluginUnit (absent from both builtinProviderInstances and the providers:
-// manifest). file/user/unix_group/kernel-param/mount are BOTH a CheckVerbProvider AND a
+// manifest). command/package/service remain in-charly-module (plugin_verb_command.go /
+// plugin_verb_package.go / plugin_verb_service.go); file/user/unix_group/kernel-param/mount
+// relocated to compiled-in candies (candy/plugin-file, candy/plugin-user,
+// candy/plugin-unix-group, candy/plugin-kernel-param, candy/plugin-mount).
+// file/user/unix_group/kernel-param/mount are BOTH a CheckVerbProvider AND a
 // ProvisionActor (touch+chmod / useradd / groupadd / sysctl-write / mount at install emit +
 // runtime act). `package` and `service` are the TYPED-STEP verbs — each a CheckVerbProvider
 // AND a TypedStepProvider (its act lowers to a SystemPackagesStep / ServicePackagedStep with

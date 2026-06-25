@@ -246,8 +246,8 @@ type Op struct {
 	// Op.Mode at deploy (deploy_target_local.go / deploy_target_vm.go via parseTaskMode),
 	// so it STAYS in #Op. The file-EXCLUSIVE fields (file/exists/owner/group_of/filetype/
 	// contains/sha256) LEFT #Op — they are read ONLY by the `file` plugin verb and now live
-	// in its #FileInput (charly/plugin/builtins/file, with the contains-default semantic
-	// reproduced via decodeContainsList). The state-provision migrator MOVES `mode` into a
+	// in its #FileInput (candy/plugin-file, with the contains-default semantic
+	// reproduced via the candy's decodeContainsList). The state-provision migrator MOVES `mode` into a
 	// file step's plugin_input while LEAVING it here for copy/write (the shared-companion
 	// pattern, like gid between unix_group and user).
 	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`

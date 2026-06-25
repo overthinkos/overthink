@@ -33,15 +33,14 @@ import (
 // none). See plugin_deploy_local.go, plugin_step_reboot.go, plugin_builder_cargo.go,
 // plugin_group.go, plugin_substrate.go, plugin_candy.go.
 var builtinProviderInstances = []Provider{
-	// verbs (ClassVerb) — file/package/command/service/http/interface/addr/unix_group/user/
-	// kernel-param/mount are NOT here: each is a dedicated plugin UNIT (plugin_verb_file.go /
-	// plugin_verb_package.go / plugin_verb_command.go / plugin_verb_service.go / plugin_http.go /
-	// plugin_interface.go / plugin_addr.go / plugin_unix_group.go / plugin_user.go /
-	// plugin_kernel_param.go / plugin_mount.go) that self-registers via RegisterBuiltinPluginUnit,
-	// absent from both this slice and the providers: manifest (the goss-verb→plugin + the
-	// state-provision-verb→plugin extractions, like process/port/dns; `file` is the LAST
-	// state-provision/goss-tier verb extracted; `command` is the install-task-act member and
-	// `package`/`service` are the TWO typed-step members of that set).
+	// verbs (ClassVerb) — none of the extracted verbs are here: each is a dedicated plugin
+	// UNIT that self-registers via RegisterBuiltinPluginUnit, absent from both this slice and
+	// the providers: manifest. command/package/service remain in-charly-module units
+	// (plugin_verb_command.go / plugin_verb_package.go / plugin_verb_service.go); the goss-tier
+	// + state-provision verbs (process/port/dns/http/interface/addr/matching/file/user/
+	// unix_group/kernel-param/mount) relocated to compiled-in candies (candy/plugin-*), each
+	// registering the same way. `command` is the install-task-act member and `package`/`service`
+	// are the TWO typed-step members of that set.
 	// cdp/vnc/wl/dbus/mcp/record/libvirt are NOT here — each is a live-container
 	// verb extracted into its OWN dedicated file (plugin_verb_<verb>.go), self-registering
 	// via registerDedicatedBuiltin (the schema-less dedicated-provider path, since their

@@ -19,3 +19,4 @@ use ./candy/plugin-kernel-param
 use ./candy/plugin-mount
 use ./candy/plugin-user
 use ./candy/plugin-unix-group
+use ./candy/plugin-file

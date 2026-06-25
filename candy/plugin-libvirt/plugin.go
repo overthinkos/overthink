@@ -1,47 +1,35 @@
-package main
+// Package libvirt is the importable, COMPILED-IN host-coupled `libvirt` LIVE-CONTAINER
+// verb: VM management via the libvirt API on a live deployment (info, screenshot, send-key,
+// QMP, qemu-guest-agent, snapshots, events). A SCHEMA-LESS kit.LiveVerbProvider — its
+// modifiers ride the closed base #Op; RunVerb delegates dispatch to the host via
+// cc.RunCharlyVerb. Relocated out of charly's module (formerly charly/plugin_verb_libvirt.go);
+// COMPILED-IN-ONLY. The `charly check libvirt` driver command (the go-libvirt-backed impl)
+// stays host-side for now (cc.RunCharlyVerb self-invokes it); relocating the driver — which
+// sheds the go-libvirt dep from charly's binary — is a follow-on step.
+package libvirt
 
 import (
 	"context"
 
 	"github.com/overthinkos/overthink/charly/plugin/kit"
+	"github.com/overthinkos/overthink/charly/spec"
 )
 
-// libvirtVerb is the BUILT-IN `libvirt` LIVE-CONTAINER verb, extracted into its OWN
-// dedicated file (Phase 1, the live-container-verb relocation). Like cdp/vnc, libvirt
-// stays a FIRST-CLASS #Op verb: it keeps its dedicated `libvirt:` discriminator and its
-// method-specific modifiers (KeyName/Text/Command/Target/Input/Artifact) on the closed
-// base #Op — there is NO plugin_input and therefore NO served plugin schema. So it
-// self-registers via registerDedicatedBuiltin (the schema-less dedicated-provider path),
-// INTENTIONALLY absent from BOTH builtinProviderInstances and the `providers:` manifest,
-// yet resolving + dispatching through the SAME providerRegistry (the verb +
-// method-allowlist bijection gates still see it). It embeds builtinVerbBase for
-// Class()=ClassVerb + the in-proc-only Invoke stub (a live verb carries the *Runner and
-// never serves itself over the wire).
-//
-// `charly check libvirt <method>` uses go-libvirt RPC against a running VM. Host-side;
-// only applicable to `vm:<name>` deploys. Nested subgroups (guest/*, snapshot/*) are
-// flattened via slash-separated method names so authors write `libvirt: guest/ping` or
-// `libvirt: snapshot/list`.
-//
-// This file owns the verb's complete contract: the provider (Reserved/RunVerb), the
-// LiveVerbProvider method contract (Methods/MethodField), the libvirtMethods method
-// allowlist, and the runLibvirt dispatcher. The shared kit.MethodSpec type + the kit.PosX
-// builder library (kit.PosArtifact/kit.PosKeyNameSplit/kit.PosText/kit.PosLibvirtQmp/
-// kit.PosCommandFields/kit.PosTarget) live in charly/plugin/kit/liveverb.go; the
-// artifact-validatable set (e.g. libvirt/screenshot) is derived from spec.Artifact. The
-// runCharlyVerb dispatcher stays in checkrun_charly_verbs.go.
-type libvirtVerb struct{ builtinVerbBase }
+// NewLiveVerb returns the libvirt verb as a kit.LiveVerbProvider for compiled-in registration.
+func NewLiveVerb() kit.LiveVerbProvider { return verb{} }
 
-func (libvirtVerb) Reserved() string { return "libvirt" }
+type verb struct{}
 
-func (libvirtVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
-	return r.runLibvirt(ctx, op)
+func (verb) Reserved() string { return "libvirt" }
+
+func (verb) RunVerb(ctx context.Context, cc kit.CheckContext, op *spec.Op) kit.Result {
+	return cc.RunCharlyVerb(ctx, op, "libvirt", op.Libvirt, libvirtMethods)
 }
 
-func (libvirtVerb) Methods() map[string]kit.MethodSpec { return libvirtMethods }
-func (libvirtVerb) MethodField(c *Op) string           { return c.Libvirt }
+func (verb) Methods() map[string]kit.MethodSpec { return libvirtMethods }
+func (verb) MethodField(op *spec.Op) string     { return op.Libvirt }
 
-// libvirtMethods is the libvirt verb's method allowlist (the dispatch data runCharlyVerb reads).
+// libvirtMethods is the libvirt verb's method allowlist (the dispatch data the host's runCharlyVerb reads).
 var libvirtMethods = map[string]kit.MethodSpec{
 	// Top-level verbs
 	"list":       {Path: []string{"libvirt", "list"}},
@@ -81,9 +69,3 @@ var libvirtMethods = map[string]kit.MethodSpec{
 	"snapshot/revert": {Path: []string{"libvirt", "snapshot", "revert"}, Required: []string{"Target"}, PosArgs: kit.PosTarget},
 	"snapshot/delete": {Path: []string{"libvirt", "snapshot", "delete"}, Required: []string{"Target"}, PosArgs: kit.PosTarget},
 }
-
-func (r *Runner) runLibvirt(ctx context.Context, c *Op) CheckResult {
-	return r.runCharlyVerb(ctx, c, "libvirt", c.Libvirt, libvirtMethods)
-}
-
-var _ = registerDedicatedBuiltin(libvirtVerb{})

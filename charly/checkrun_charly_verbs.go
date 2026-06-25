@@ -43,11 +43,12 @@ import (
 // <verb> <method>` CLI path — the test framework spawns a subprocess for each check,
 // captures stdout/stderr/exit, and feeds the output through the existing matcher pipeline
 // (Stdout/Stderr/ExitStatus + artifact size via ArtifactMinBytes). The per-verb providers
-// + their <verb>Methods allowlists + run<Verb> dispatchers live in dedicated
-// plugin_verb_<verb>.go files (cdp/vnc/wl/dbus/mcp/record/libvirt). NO dep-shedder
-// remains here — kube/adb/appium/spice are all extracted as external-charly-verbs
-// (candy/plugin-kube, candy/plugin-adb, candy/plugin-appium, candy/plugin-spice),
-// dispatching via invokeVerbProvider, never through this subprocess library.
+// + their <verb>Methods allowlists are compiled-in candies (candy/plugin-cdp/wl/vnc/dbus/
+// mcp/record/libvirt) — each a kit.LiveVerbProvider whose RunVerb delegates back here via
+// CheckContext.RunCharlyVerb; only this shared dispatcher stays host-side. kube/adb/appium/
+// spice are extracted as external-charly-verbs (candy/plugin-kube, candy/plugin-adb,
+// candy/plugin-appium, candy/plugin-spice), dispatching via invokeVerbProvider, never
+// through this subprocess library.
 //
 // Architectural notes:
 //   - Host-side only: the test runner invokes the host `charly` binary, which
@@ -103,9 +104,10 @@ func (r *Runner) resolveCheckApk(apk, origin string) (string, error) {
 // Verb dispatchers
 // ---------------------------------------------------------------------------
 
-// run<Verb> for cdp/vnc/wl/dbus/mcp/record/libvirt lives in each verb's dedicated
-// plugin_verb_<verb>.go file (Phase 1 live-container-verb relocation) — alongside its
-// provider + method allowlist. NO dep-shedder dispatcher remains here.
+// The cdp/vnc/wl/dbus/mcp/record/libvirt verbs are compiled-in candies (candy/plugin-<verb>)
+// — each a kit.LiveVerbProvider carrying its provider + method allowlist; their RunVerb
+// delegates to the shared runCharlyVerb below via CheckContext.RunCharlyVerb. NO per-verb
+// dispatcher remains here — only the shared runCharlyVerb.
 
 // The kube + adb + appium + spice runCharlyVerb dispatchers were removed in their
 // external-plugin dep-sheds — none dispatches through a `charly check <verb>` subprocess

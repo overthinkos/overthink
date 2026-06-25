@@ -2,39 +2,25 @@ package main
 
 import "context"
 
-// The built-in check verbs as CheckVerbProviders. Each wraps its existing
-// r.runX handler unchanged — the migration is behavior-preserving; only the
-// runOne dispatch switch is replaced by providerRegistry.ResolveVerb. NO
-// live-container verb remains here — the dep-shedders kube/adb/appium have all
-// been extracted as external-charly-verbs.
+// The remaining IN-CHARLY-MODULE built-in check verbs as CheckVerbProviders (summarize,
+// kill, plugin — defined below). These are internal/dispatch verbs, NOT user-authored
+// plugin: blocks; each wraps its r.runX handler, and runOne resolves them via
+// providerRegistry.ResolveVerb.
 //
-// cdp/vnc/wl/dbus/mcp/record/libvirt are NOT here — each is a live-container verb
-// extracted into its OWN dedicated file (plugin_verb_<verb>.go) carrying its provider +
-// LiveVerbProvider method contract + its <verb>Methods map + its runX dispatcher,
-// self-registering via registerDedicatedBuiltin (the schema-less dedicated-provider
-// path — no plugin_input, no served schema, since their modifiers stay on the closed
-// base #Op), absent from both builtinProviderInstances and the `providers:` manifest.
-// They dispatch identically through providerRegistry. (kube/adb/appium/spice are
-// extracted as external-charly-verbs.)
-//
-// The do-mode (act) half of the state-provision verbs is a ProvisionActor method
-// per provider (checkrun_act.go) — runProvisionAct resolves + type-asserts it (C1b).
-
-// file / package / command / service / user / unix_group / kernel-param / mount are NOT
-// here — each is an extracted verb, a dedicated plugin UNIT that self-registers via
-// RegisterBuiltinPluginUnit (absent from both builtinProviderInstances and the providers:
-// manifest). command/package/service remain in-charly-module (plugin_verb_command.go /
-// plugin_verb_package.go / plugin_verb_service.go); file/user/unix_group/kernel-param/mount
-// relocated to compiled-in candies (candy/plugin-file, candy/plugin-user,
-// candy/plugin-unix-group, candy/plugin-kernel-param, candy/plugin-mount).
-// file/user/unix_group/kernel-param/mount are BOTH a CheckVerbProvider AND a
-// ProvisionActor (touch+chmod / useradd / groupadd / sysctl-write / mount at install emit +
-// runtime act). `package` and `service` are the TYPED-STEP verbs — each a CheckVerbProvider
-// AND a TypedStepProvider (its act lowers to a SystemPackagesStep / ServicePackagedStep with
-// load-bearing reversals, NOT a RenderProvisionScript) AND a ProvisionActor (the
-// runtime/box-build live-act path); `package` is the simpler one (no PriorEnabled state).
-// `command` is a CheckVerbProvider ONLY — its act is the dedicated install-task emitCmd
-// branch (`plugin == "command"` in emitTasks/renderOpCommand), NOT a ProvisionActor.
+// Every OTHER verb has been relocated to a COMPILED-IN candy (candy/plugin-<name>):
+//   - The goss-tier + state-provision verbs (process/port/dns/http/interface/addr/matching/
+//     file/user/unix_group/kernel-param/mount/command/package/service) — RegisterBuiltinPluginUnit
+//     candies. `package`/`service` are TypedStepProviders (their act lowers to a
+//     SystemPackagesStep / ServicePackagedStep with load-bearing reversals via the host's
+//     materializeStep — the one piece that stays in package main); file/user/unix_group/
+//     kernel-param/mount are ProvisionActors; `command` is the install-task emitCmd branch.
+//   - The live-container verbs (cdp/vnc/wl/dbus/mcp/record/libvirt) — kit.LiveVerbProvider
+//     candies registered via registerCompiledDedicatedVerb (schema-less; their modifiers stay
+//     on the closed base #Op), delegating dispatch to the host's runCharlyVerb via
+//     cc.RunCharlyVerb.
+// All relocated verbs are absent from builtinProviderInstances + the `providers:` manifest;
+// they dispatch identically through providerRegistry. kube/adb/appium/spice are the four
+// out-of-process external-charly-verbs (below).
 
 // kube is NOT a built-in verb — it is an EXTERNAL-CHARLY-VERB served out-of-process by
 // candy/plugin-kube (the third dep-shed: the client-go + apimachinery stack

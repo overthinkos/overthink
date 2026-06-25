@@ -21,9 +21,9 @@ import (
 // use.
 //
 // The dispatcher pattern mirrors charly/dbus.go (parent struct + N leaf structs
-// with Run() methods + positional args + `-i` flag). Live-container wiring
-// (the mcpVerb provider, runMcp dispatcher + mcpMethods allowlist) lives in
-// plugin_verb_mcp.go.
+// with Run() methods + positional args + `-i` flag). The mcp live-container VERB
+// (provider + method allowlist) is a compiled-in candy (candy/plugin-mcp); this file is
+// only the `charly check mcp` driver COMMAND the verb self-invokes via cc.RunCharlyVerb.
 
 // McpCmd groups the seven `charly check mcp …` leaves.
 type McpCmd struct {

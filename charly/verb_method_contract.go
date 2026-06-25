@@ -8,9 +8,10 @@ package main
 // method contract here anymore — the dep-shedders kube/adb/appium have all been extracted.
 // The cross-field required-modifier/artifact rules now live on each verb's plugin.
 //
-// cdp/vnc/wl/dbus/mcp/record/libvirt have already been relocated: each owns its
-// Methods()/MethodField() contract alongside its provider + <verb>Methods map in its
-// dedicated plugin_verb_<verb>.go file.
+// cdp/vnc/wl/dbus/mcp/record/libvirt have been relocated to compiled-in candies
+// (candy/plugin-<verb>): each owns its Methods()/MethodField() contract + its <verb>Methods
+// map in its candy, registered via registerCompiledDedicatedVerb (the kitVerbLiveAdapter
+// exposes the contract through the same registry the host reads).
 
 // kube has NO in-proc method contract here — it is an EXTERNAL-CHARLY-VERB
 // (candy/plugin-kube). Its #KubeMethod method-name allowlist is enforced by the CUE enum on

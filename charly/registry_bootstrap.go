@@ -35,15 +35,14 @@ import (
 var builtinProviderInstances = []Provider{
 	// verbs (ClassVerb) — none of the extracted verbs are here: each is a dedicated plugin
 	// UNIT that self-registers via RegisterBuiltinPluginUnit, absent from both this slice and
-	// the providers: manifest. command/package/service remain in-charly-module units
-	// (plugin_verb_command.go / plugin_verb_package.go / plugin_verb_service.go); the goss-tier
-	// + state-provision verbs (process/port/dns/http/interface/addr/matching/file/user/
-	// unix_group/kernel-param/mount) relocated to compiled-in candies (candy/plugin-*), each
-	// registering the same way. `command` is the install-task-act member and `package`/`service`
-	// are the TWO typed-step members of that set.
-	// cdp/vnc/wl/dbus/mcp/record/libvirt are NOT here — each is a live-container
-	// verb extracted into its OWN dedicated file (plugin_verb_<verb>.go), self-registering
-	// via registerDedicatedBuiltin (the schema-less dedicated-provider path, since their
+	// the providers: manifest. The goss-tier + state-provision verbs (process/port/dns/http/
+	// interface/addr/matching/file/user/unix_group/kernel-param/mount/command/package/service)
+	// are ALL relocated to compiled-in candies (candy/plugin-*), each registering the same way.
+	// `command` is the install-task-act member and `package`/`service` are the TWO typed-step
+	// members of that set (their step materialization stays in package main via materializeStep).
+	// cdp/vnc/wl/dbus/mcp/record/libvirt are NOT here either — each is a live-container
+	// verb relocated to a compiled-in candy (candy/plugin-<verb>), self-registering
+	// via registerCompiledDedicatedVerb (the schema-less dedicated-provider path, since their
 	// modifiers stay on the closed base #Op — no plugin_input, no served schema), absent
 	// from both this slice and the providers: manifest. `appium` (FIRST), `adb` (SECOND),
 	// `kube` (THIRD), and `spice` (FOURTH) are the dep-shedders already EXTRACTED: each is

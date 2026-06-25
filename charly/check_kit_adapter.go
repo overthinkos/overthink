@@ -228,8 +228,8 @@ func registerCompiledCheckVerb(kv kit.CheckVerbProvider, schemaFS fs.FS, schemaD
 // (cdp/wl/vnc/dbus/mcp/record/libvirt). Unlike registerCompiledCheckVerb, a live verb is
 // SCHEMA-LESS — its method-specific modifiers ride the closed base #Op, so there is NO
 // plugin_input and NO served schema; it self-registers via registerDedicatedBuiltin (the
-// schema-less dedicated-provider path the still-in-charly-module live verbs — libvirtVerb,
-// mcpVerb — use), staying out
+// schema-less dedicated-provider path charly's other dedicated builtins — the IR-step,
+// builder, and command providers — register through), staying out
 // of both builtinProviderInstances and the providers: manifest while resolving + dispatching
 // through the SAME providerRegistry (the verb + method-allowlist bijection gates still see
 // it via the kitVerbLiveAdapter's LiveVerbProvider contract). Called from the generated

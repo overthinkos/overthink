@@ -1,0 +1,19 @@
+plugin-mcp:
+    candy:
+        version: 2026.176.2300
+        description: |-
+            The `mcp` live-container check verb relocated into a candy: probe MCP servers
+            declared via mcp_provides on a live deployment (ping, servers, list-tools/
+            resources/prompts, call, read). A SCHEMA-LESS host-coupled LIVE verb — its
+            modifiers ride the closed base #Op; RunVerb delegates dispatch to the host via
+            kit.CheckContext.RunCharlyVerb, so it is COMPILED-IN-ONLY.
+    plugin-mcp-decl:
+        plugin:
+            source: github.com/overthinkos/overthink/candy/plugin-mcp
+            providers:
+                - verb:mcp
+    mcp-verb-dispatches:
+        check: the mcp verb dispatches through the provider registry and pings the declared MCP servers on a live deployment
+        id: mcp-verb-dispatches
+        mcp: ping
+        context: [runtime]

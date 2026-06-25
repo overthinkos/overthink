@@ -73,6 +73,11 @@ type CheckContext interface {
 	// Distros is the image's distro tag list (e.g. ["fedora:43","fedora"]) for
 	// distro-specific package-name resolution.
 	Distros() []string
+	// AddBackground registers a host-side background process PID with the active plan run
+	// so plan teardown reaps it (SIGTERM). A no-op when the engine has no scenario context
+	// (a bare-Op run) or pid<=0. Used by a verb that fire-and-forgets a host process
+	// (the `command` verb's background path).
+	AddBackground(pid int)
 }
 
 // Status is a check verdict (mirrors charly's CheckStatus ordering).

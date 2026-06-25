@@ -26,8 +26,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	commandparams "github.com/overthinkos/overthink/charly/plugin/builtins/command/params"
 )
 
 // LocalDeployTarget executes plans on the host.
@@ -666,9 +664,10 @@ func renderOpCommand(s *OpStep) (string, error) {
 		// RenderProvisionScript). Rehydrate plugin_input.command and render it EXACTLY
 		// as the literal command case (taskShellPreamble + /ctx/ rewrite) via the shared
 		// helper (R3). Must precede the generic `case task.Plugin != "":` below.
-		var in commandparams.CommandInput
-		decodePluginInput(task.PluginInput, &in)
-		return renderTaskCommandBody(in.Command, ctxPath, s), nil
+		// Only the command string is needed; read it off the schema-validated
+		// plugin_input map (no dependency on the command candy's params package).
+		cmdStr, _ := task.PluginInput["command"].(string)
+		return renderTaskCommandBody(cmdStr, ctxPath, s), nil
 	case task.Mkdir != "":
 		mode := task.Mode
 		if mode == "" {
@@ -1281,9 +1280,7 @@ func taskSummary(task *Op) string {
 		// plugin_input after the extraction). Show the command body either way.
 		body := task.Command
 		if body == "" && task.Plugin == "command" {
-			var in commandparams.CommandInput
-			decodePluginInput(task.PluginInput, &in)
-			body = in.Command
+			body, _ = task.PluginInput["command"].(string)
 		}
 		if len(body) > 40 {
 			body = body[:40] + "…"

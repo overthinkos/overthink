@@ -7,13 +7,10 @@ import (
 	"io"
 	"maps"
 	"net/http"
-	"os/exec"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/overthinkos/overthink/charly/plugin/sdk"
 )
 
 // CheckStatus is the outcome of a single Check.
@@ -534,9 +531,6 @@ func (r *Runner) effectiveEnv() map[string]string {
 // command verb
 // ---------------------------------------------------------------------------
 
-// runCommand runs the command (in-container by default, from-host if
-// InContainer=false or FromHost=true) and matches against Exit/Stdout/Stderr.
-//
 // runKill resolves the PID in c.Kill (typically expanded from
 // ${CAPTURED:<name>} carrying a prior `command:` step's
 // "backgrounded pid=N" message via capture_extract), and sends a
@@ -580,13 +574,6 @@ func (r *Runner) runKill(_ context.Context, c *Op) CheckResult {
 	}
 }
 
-// Background mode: when cc.Background is true (from the command plugin_input), the
-// host-side command is spawned via cmd.Start() (no Wait); the PID is registered with the
-// plan-run context for SIGTERM-reap at plan teardown. Background
-// mode is host-side only — in-container backgrounding is the user's
-// responsibility (use `setsid nohup ... &` inside the bash given to
-// the container shell).
-
 // wrapContainerCommand guards an in-container command-check script against
 // stdin-consuming subcommands. The runner delivers in-container scripts to the
 // pod shell over a stdin heredoc (NestedExecutor.wrapWithJump, "stdin-attached
@@ -599,85 +586,6 @@ func (r *Runner) runKill(_ context.Context, c *Op) CheckResult {
 // stdin tied to /dev/null. The host path (`sh -c` argv, below) is unaffected.
 func wrapContainerCommand(script string) string {
 	return "{ " + script + "\n} </dev/null"
-}
-
-// commandCheck carries the command verb's plugin_input-decoded EXCLUSIVE fields,
-// passed from commandVerb.RunVerb (plugin_verb_command.go) since command/in_container/
-// background/from_host left #Op when the verb became a builtin plugin unit. The SHARED
-// matchers exit_status/stdout/stderr (also asserted by the 11 live-container verbs via
-// matchAll) and the general timeout stay base #Op fields, so the runner reads them off
-// the step Op (c) directly — the same pattern the relocated http candy uses.
-type commandCheck struct {
-	Command     string
-	InContainer *bool
-	Background  bool
-	FromHost    bool
-}
-
-func (r *Runner) runCommand(ctx context.Context, c *Op, cc commandCheck) CheckResult {
-	inContainer := true
-	if cc.InContainer != nil {
-		inContainer = *cc.InContainer
-	}
-	if cc.FromHost {
-		inContainer = false
-	}
-
-	// Background path — host-side only, fire-and-forget. Plan teardown
-	// reaps via SIGTERM. Returns immediately with PASS.
-	if cc.Background {
-		if inContainer {
-			return failf(c, "background: true is host-side only (set in_container: false or from_host: true)")
-		}
-		if r.Mode == RunModeBox {
-			return skipf(c, "background command not meaningful under charly check box")
-		}
-		cmd := exec.Command("sh", "-c", cc.Command) // not CommandContext — survives ctx cancel
-		if err := cmd.Start(); err != nil {
-			return failf(c, "background start: %v", err)
-		}
-		if r.Scenario != nil {
-			r.Scenario.AddBackground(cmd.Process.Pid)
-		}
-		// Reap asynchronously so `kill:` SIGKILL doesn't leave the
-		// process as a zombie (which `kill -0 PID` would still report
-		// as alive). Wait blocks until the process actually exits;
-		// either teardown's SIGTERM or an in-plan kill: SIGKILL
-		// will trigger that exit, after which Wait clears the zombie.
-		go func() { _ = cmd.Wait() }()
-		return passf(c, fmt.Sprintf("backgrounded pid=%d", cmd.Process.Pid))
-	}
-
-	var stdout, stderr string
-	var exit int
-	var err error
-	if inContainer {
-		stdout, stderr, exit, err = r.Exec.RunCapture(ctx, wrapContainerCommand(cc.Command))
-	} else {
-		if r.Mode == RunModeBox {
-			return skipf(c, "host-side command not meaningful under charly check box")
-		}
-		cmd := exec.CommandContext(ctx, "sh", "-c", cc.Command)
-		stdout, stderr, exit, err = runCaptureCmd(cmd)
-	}
-	if err != nil {
-		return failf(c, "execution error: %v", err)
-	}
-
-	wantExit := 0
-	if c.ExitStatus != nil {
-		wantExit = *c.ExitStatus
-	}
-	if exit != wantExit {
-		return failf(c, "exit=%d, want %d (stderr: %s)", exit, wantExit, trimPreview(stderr))
-	}
-	if err := sdk.MatchAll(stdout, c.Stdout); err != nil {
-		return failf(c, "stdout: %v (got: %s)", err, trimPreview(stdout))
-	}
-	if err := sdk.MatchAll(stderr, c.Stderr); err != nil {
-		return failf(c, "stderr: %v (got: %s)", err, trimPreview(stderr))
-	}
-	return passf(c, fmt.Sprintf("exit=%d", exit))
 }
 
 // ---------------------------------------------------------------------------

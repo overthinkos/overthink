@@ -14,7 +14,6 @@ import (
 	"strconv"
 	"strings"
 
-	commandparams "github.com/overthinkos/overthink/charly/plugin/builtins/command/params"
 	"github.com/overthinkos/overthink/charly/spec"
 )
 
@@ -687,9 +686,11 @@ func (g *Generator) emitTasks(b *strings.Builder, layer *Candy, img *ResolvedBox
 			// duplication. in_container/background/from_host are check/runtime-only and play
 			// no part in a Containerfile RUN, so they are intentionally not rehydrated here.
 			if t.Plugin == "command" {
-				var in commandparams.CommandInput
-				decodePluginInput(t.PluginInput, &in)
-				emitCmd(b, Op{Command: in.Command, RunAs: t.RunAs, Cache: t.Cache, Env: t.Env},
+				// The act needs only the command string; read it straight off the
+				// schema-validated plugin_input map (no dependency on the command
+				// candy's params package, which is compiled-in only when selected).
+				cmdStr, _ := t.PluginInput["command"].(string)
+				emitCmd(b, Op{Command: cmdStr, RunAs: t.RunAs, Cache: t.Cache, Env: t.Env},
 					layer.Name, img, runningUser == "0" || runningUser == "root")
 				break
 			}

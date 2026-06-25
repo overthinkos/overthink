@@ -24,6 +24,7 @@ func (c runnerCheckContext) DialTimeout() time.Duration { return c.r.DialTimeout
 func (c runnerCheckContext) Box() string                { return c.r.Box }
 func (c runnerCheckContext) Instance() string           { return c.r.Instance }
 func (c runnerCheckContext) Distros() []string          { return c.r.Distros }
+func (c runnerCheckContext) AddBackground(pid int)      { c.r.Scenario.AddBackground(pid) }
 func (c runnerCheckContext) Mode() kit.RunMode {
 	if c.r.Mode == RunModeBox {
 		return kit.ModeBox

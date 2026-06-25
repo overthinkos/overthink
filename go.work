@@ -10,3 +10,4 @@ use ./candy/plugin-example-external
 use ./candy/plugin-port
 use ./candy/plugin-process
 use ./candy/plugin-interface
+use ./candy/plugin-addr

@@ -7,6 +7,7 @@
 package main
 
 import (
+	cp_plugin_addr "github.com/overthinkos/overthink/candy/plugin-addr"
 	cp_plugin_example "github.com/overthinkos/overthink/candy/plugin-example"
 	cp_plugin_example_external "github.com/overthinkos/overthink/candy/plugin-example-external"
 	cp_plugin_interface "github.com/overthinkos/overthink/candy/plugin-interface"
@@ -20,4 +21,5 @@ func init() {
 	registerCompiledCheckVerb(cp_plugin_port.NewCheckVerb(), cp_plugin_port.SchemaFS, cp_plugin_port.SchemaDir, cp_plugin_port.InputDefs)
 	registerCompiledCheckVerb(cp_plugin_process.NewCheckVerb(), cp_plugin_process.SchemaFS, cp_plugin_process.SchemaDir, cp_plugin_process.InputDefs)
 	registerCompiledCheckVerb(cp_plugin_interface.NewCheckVerb(), cp_plugin_interface.SchemaFS, cp_plugin_interface.SchemaDir, cp_plugin_interface.InputDefs)
+	registerCompiledCheckVerb(cp_plugin_addr.NewCheckVerb(), cp_plugin_addr.SchemaFS, cp_plugin_addr.SchemaDir, cp_plugin_addr.InputDefs)
 }

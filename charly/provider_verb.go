@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 )
 
 // CheckVerbProvider is the typed in-process form of a check-verb Provider: it
@@ -36,7 +38,7 @@ type LiveVerbProvider interface {
 	// Methods is the verb's method allowlist: method name → its spec (required
 	// modifiers, artifact flag, posArgs dispatch). The provider OWNS this — it is
 	// the former central <verb>Methods map, now reached via the registry.
-	Methods() map[string]methodSpec
+	Methods() map[string]kit.MethodSpec
 	// MethodField returns the verb's authored method-selector value off *Op
 	// (e.g. c.Cdp for cdp) — the former per-verb validateCharlyVerb switch arm.
 	MethodField(c *Op) string

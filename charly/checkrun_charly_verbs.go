@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 	"github.com/overthinkos/overthink/charly/plugin/sdk"
 )
 
@@ -36,7 +37,7 @@ import (
 //
 // Anti-deception properties around this allowlist:
 //
-//   - The set of `spec.artifact == true` methods must be the SAME as
+//   - The set of `spec.Artifact == true` methods must be the SAME as
 //     this allowlist. Drift is caught at compile/test time by
 //     TestArtifactValidatableMethods_MatchesArtifactProducingMethodSpecs.
 //
@@ -56,10 +57,13 @@ var artifactValidatableMethods = map[string]bool{
 	"record/stop":        true,
 }
 
-// checkrun_charly_verbs.go is the SHARED live-container-verb dispatch library: the
-// methodSpec type, the posArgs builder library, the artifactValidatableMethods allowlist,
-// the runCharlyVerb dispatcher, and the artifact validators — all reused by every live
-// verb (R3). Each live verb is a thin wrapper around the corresponding `charly check
+// checkrun_charly_verbs.go is the SHARED live-container-verb dispatch HOST: the
+// artifactValidatableMethods allowlist, the runCharlyVerb dispatcher, the artifact
+// validators, and resolveCheckApk — all reused by every live verb (R3). The verb
+// CONTRACT types (kit.MethodSpec, the kit.PosX positional-arg builder library, and the
+// kit.LiveVerbProvider interface) live in charly/plugin/kit/liveverb.go so a live-verb
+// CANDY can author its allowlist without importing package main; runCharlyVerb consumes
+// that kit.MethodSpec map directly. Each live verb is a thin wrapper around the corresponding `charly check
 // <verb> <method>` CLI path — the test framework spawns a subprocess for each check,
 // captures stdout/stderr/exit, and feeds the output through the existing matcher pipeline
 // (Stdout/Stderr/ExitStatus + artifact size via ArtifactMinBytes). The per-verb providers
@@ -80,290 +84,6 @@ var artifactValidatableMethods = map[string]bool{
 //     errors surface at `charly box validate` time, not at test-run time. Drift between
 //     the CLI and the allowlist is a documentation issue — see /charly-internals:go for
 //     the maintenance rule.
-
-// methodSpec describes one method within a verb group.
-//
-//	path     — CLI subcommand path after "check", e.g. ["cdp", "eval"] or
-//	           ["cdp", "spa", "click"] for nested subcommands.
-//	required — Check struct field names that must be non-empty/non-zero at
-//	           validation time. Empty list ⇒ no method-specific modifiers.
-//	posArgs  — builds positional arguments (after image, before -i instance).
-//	           May be nil if the method takes only the image positional.
-//	artifact — true if the method produces an output file (screenshot etc.).
-//	           When true, an `artifact:` field in the Check is required and
-//	           is inserted as a positional arg at the right slot; callers may
-//	           also set `artifact_min_bytes:` for a post-run size assertion.
-type methodSpec struct {
-	path     []string
-	required []string
-	posArgs  func(c *Op) []string
-	artifact bool
-	// skipBox = true means the verb operates against a cluster or other
-	// non-image target, so the usual image/deploy-name positional must NOT
-	// be appended between the method path and posArgs. Used by kube verbs.
-	skipBox bool
-}
-
-// The live-container verbs cdp/vnc/wl/dbus/mcp/record/libvirt each live in their
-// OWN dedicated plugin_verb_<verb>.go file (Phase 1 live-container-verb relocation),
-// carrying that verb's provider + LiveVerbProvider method contract + its <verb>Methods
-// allowlist + its run<Verb> dispatcher. The shared posArgs builder library those verbs
-// reference (posTab/posURL/posXY/posText/posKeyName/posTarget/posCommand/posScroll/
-// posAtspi/posClipboard/posOverlayShow/posDbusCall/posMcpCommon/posRecordStart/
-// posKeyNameSplit/posLibvirtQmp/posCommandFields/…), the methodSpec type, and the
-// artifactValidatableMethods allowlist STAY here — reused across every live verb (R3).
-// NO dep-shedder remains here: kube/adb/appium/spice have all been extracted as
-// external-charly-verbs (candy/plugin-kube, candy/plugin-adb, candy/plugin-appium,
-// candy/plugin-spice).
-
-// The kube method allowlist + its positional-arg builders + the shared cluster-arg
-// renderer were removed in the kube → external-plugin dep-shed (the THIRD dep-shedder:
-// the client-go + apimachinery stack left charly's core go.mod). kube is now an
-// EXTERNAL-CHARLY-VERB served out-of-process by candy/plugin-kube: it keeps its
-// `kube:` discriminator + modifiers + #KubeMethod on core #Op (authoring unchanged) but
-// dispatches via invokeVerbProvider, NOT runCharlyVerb, so it has no in-proc method map
-// here. The host pre-resolves any --cluster profile to a concrete kubeconfig context
-// (provider_checkenv.go's preresolveKubeCluster) before marshaling the Op; the same
-// plugin's clientcmd-backed k3s kubeconfig-merge routes through it via k8s_plugin.go's
-// invokeKubePlugin.
-
-// The adb method allowlist + its positional-arg builders were removed in the adb →
-// external-plugin dep-shed (the SECOND dep-shedder: the goadb ADB-wire dependency left
-// charly's core go.mod). adb is now an EXTERNAL-CHARLY-VERB served out-of-process by
-// candy/plugin-adb: it keeps its `adb:` discriminator + modifiers + #AdbMethod on core #Op
-// (authoring unchanged) but dispatches via invokeVerbProvider, NOT runCharlyVerb, so it has
-// no in-proc method map here. The same plugin's goadb-backed deploy/status device ops route
-// through it via android_plugin.go's invokeAdbPlugin.
-
-// The appium method allowlist + its positional-arg builders were removed in the appium →
-// external-plugin dep-shed (the FIRST dep-shedder: github.com/tebeka/selenium left charly's
-// core go.mod). appium is now an EXTERNAL-CHARLY-VERB served out-of-process by
-// candy/plugin-appium: it keeps its `appium:` discriminator + modifiers + #AppiumMethod on
-// core #Op (authoring unchanged) but dispatches via invokeVerbProvider, NOT runCharlyVerb,
-// so it has no in-proc method map here.
-
-// The kube positional-arg builders (posKubeCluster/posKubeWaitNodes/posKubePods/
-// posKubeWaitReady/posKubeNamespaceOpt/posKubeLbExternal/posKubeAddons/posKubeApply/
-// posKubeRaw) and the shared kubeClusterArgs renderer were removed in the kube →
-// external-plugin dep-shed: kube no longer dispatches via runCharlyVerb (there is no
-// `charly check kube` subprocess), so its argv builders have no caller. The Kubernetes
-// probe dispatch now lives in candy/plugin-kube; the host pre-resolves the cluster
-// context in provider_checkenv.go's preresolveKubeCluster and marshals the full #Op.
-
-// ---------------------------------------------------------------------------
-// positional-arg builders — reused across verbs.
-// Each returns the positional args to insert AFTER the image name,
-// BEFORE any -i instance flag. They never fail: required-modifier checks
-// run before this point.
-// ---------------------------------------------------------------------------
-
-func posTab(c *Op) []string             { return []string{c.Tab} }
-func posURL(c *Op) []string             { return []string{c.URL} }
-func posText(c *Op) []string            { return []string{c.Text} }
-func posKeyName(c *Op) []string         { return []string{c.KeyName} }
-func posCombo(c *Op) []string           { return []string{c.Combo} }
-func posTarget(c *Op) []string          { return []string{c.Target} }
-func posCommand(c *Op) []string         { return []string{c.Command} }
-func posArtifact(c *Op) []string        { return []string{c.Artifact} }
-func posTabExpression(c *Op) []string   { return []string{c.Tab, c.Expression} }
-func posTabSelector(c *Op) []string     { return []string{c.Tab, c.Selector} }
-func posTabSelectorText(c *Op) []string { return []string{c.Tab, c.Selector, c.Text} }
-func posTabQuery(c *Op) []string {
-	if c.Query == "" {
-		return []string{c.Tab}
-	}
-	return []string{c.Tab, c.Query}
-}
-func posTabText(c *Op) []string    { return []string{c.Tab, c.Text} }
-func posTabKeyName(c *Op) []string { return []string{c.Tab, c.KeyName} }
-func posTabCombo(c *Op) []string   { return []string{c.Tab, c.Combo} }
-func posTabXY(c *Op) []string {
-	return []string{c.Tab, strconv.Itoa(c.X), strconv.Itoa(c.Y)}
-}
-func posTabArtifact(c *Op) []string { return []string{c.Tab, c.Artifact} }
-func posCdpRaw(c *Op) []string {
-	args := []string{c.Tab, c.Method}
-	if c.RequestBody != "" {
-		args = append(args, c.RequestBody)
-	}
-	return args
-}
-func posXY(c *Op) []string {
-	return []string{strconv.Itoa(c.X), strconv.Itoa(c.Y)}
-}
-
-// posXYXY emits four positionals (start + end) for verbs whose CLI
-// signature is `<image> <x1> <y1> <x2> <y2>` — e.g. `wl drag`.
-// Reuses X/Y as the start and X2/Y2 as the end so click/drag share
-// the X/Y idiom for the start point.
-func posXYXY(c *Op) []string {
-	return []string{strconv.Itoa(c.X), strconv.Itoa(c.Y), strconv.Itoa(c.X2), strconv.Itoa(c.Y2)}
-}
-func posScroll(c *Op) []string {
-	amount := c.Amount
-	if amount == 0 {
-		amount = 1
-	}
-	return []string{strconv.Itoa(c.X), strconv.Itoa(c.Y), c.Direction, strconv.Itoa(amount)}
-}
-func posAtspi(c *Op) []string {
-	args := []string{c.Action}
-	if c.Query != "" {
-		args = append(args, c.Query)
-	}
-	return args
-}
-func posClipboard(c *Op) []string {
-	args := []string{c.Action}
-	if c.Action == "set" && c.Text != "" {
-		args = append(args, c.Text)
-	}
-	return args
-}
-func posTargetOptional(c *Op) []string {
-	if c.Target == "" {
-		return nil
-	}
-	return []string{c.Target}
-}
-func posOverlayShow(c *Op) []string {
-	// Minimal overlay-show: --type text --text <text> [--name <target>]
-	args := []string{"--type", "text", "--text", c.Text}
-	if c.Target != "" {
-		args = append(args, "--name", c.Target)
-	}
-	return args
-}
-func posDbusCall(c *Op) []string {
-	args := make([]string, 0, 3+len(c.Args))
-	args = append(args, c.Dest, c.Path, c.Method)
-	args = append(args, c.Args...)
-	return args
-}
-func posDbusIntrospect(c *Op) []string { return []string{c.Dest, c.Path} }
-func posDbusNotify(c *Op) []string {
-	args := []string{c.Text} // text = title
-	// For the actual notification body arg, callers use c.Description as an authoring
-	// convention, or omit it for a title-only notification.
-	if c.Description != "" {
-		args = append(args, c.Description)
-	}
-	return args
-}
-
-// mcp positional builders. Any `--name` flag piggybacks on the positional
-// slice — Kong accepts flags in any position, so returning them alongside
-// positionals avoids extending methodSpec with a dedicated flag hook.
-
-func posMcpCommon(c *Op) []string {
-	if c.McpName == "" {
-		return nil
-	}
-	return []string{"--name", c.McpName}
-}
-
-func posMcpCall(c *Op) []string {
-	args := []string{c.Tool}
-	if c.Input != "" {
-		args = append(args, c.Input)
-	}
-	if c.McpName != "" {
-		args = append(args, "--name", c.McpName)
-	}
-	return args
-}
-
-func posMcpRead(c *Op) []string {
-	args := []string{c.URI}
-	if c.McpName != "" {
-		args = append(args, "--name", c.McpName)
-	}
-	return args
-}
-
-// record positional builders. The subprocess already defaults -n to "default"
-// when RecordName is empty, so omit the flag in that case.
-func posRecordStart(c *Op) []string {
-	var args []string
-	if c.RecordName != "" {
-		args = append(args, "-n", c.RecordName)
-	}
-	if c.RecordMode != "" {
-		args = append(args, "-m", c.RecordMode)
-	}
-	if c.RecordFps > 0 {
-		args = append(args, "--fps", strconv.Itoa(c.RecordFps))
-	}
-	if c.RecordAudio {
-		args = append(args, "--audio")
-	}
-	return args
-}
-
-func posRecordStop(c *Op) []string {
-	var args []string
-	if c.RecordName != "" {
-		args = append(args, "-n", c.RecordName)
-	}
-	// Artifact is required (methodSpec artifact:true) and becomes -o <path>
-	// so the recording ends up on the host filesystem for the size check.
-	if c.Artifact != "" {
-		args = append(args, "-o", c.Artifact)
-	}
-	return args
-}
-
-func posRecordCmd(c *Op) []string {
-	args := []string{c.Text}
-	if c.RecordName != "" {
-		args = append(args, "-n", c.RecordName)
-	}
-	return args
-}
-
-// libvirt positional builders.
-//
-// LibvirtSendKey takes a variadic `Keys []string` positional so
-// "ctrl alt F2" maps to three separate argv slots.
-func posKeyNameSplit(c *Op) []string {
-	return strings.Fields(c.KeyName)
-}
-
-// posCommandFields splits c.Command on whitespace into argv slots. Used for
-// libvirt:guest/exec where the check surface is `command: "uname -s"` and
-// the QEMU guest-agent wants a real argv list (no shell, no metachars).
-// Prefixes `--` so kong does not interpret embedded `-flag`-like tokens
-// (e.g. `-s` in `uname -s`, `-fsS` in `curl -fsS …`) as CLI flags of the
-// outer `charly check libvirt guest exec` invocation.
-// For commands containing real shell metacharacters (pipes, redirects,
-// quoted spaces), use `command: "sh -c '<full command>'"` so the check-side
-// argv is `sh`, `-c`, `<full command>`.
-func posCommandFields(c *Op) []string {
-	fields := strings.Fields(c.Command)
-	if len(fields) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(fields)+1)
-	out = append(out, "--")
-	out = append(out, fields...)
-	return out
-}
-
-// LibvirtQmp takes a method name + optional JSON args string. Text holds the
-// QMP method name (e.g. "query-status"); Input the JSON arg payload.
-func posLibvirtQmp(c *Op) []string {
-	args := []string{c.Text}
-	if c.Input != "" {
-		args = append(args, c.Input)
-	}
-	return args
-}
-
-// The adb positional-arg builders (posShellArgs/posPackageArg/posPropertyArg/posInstallApp,
-// plus posApkFlag/posArtifactFlag/posLogcatTail/posWaitForDevice below) were removed in the
-// adb → external-plugin dep-shed: adb no longer dispatches via runCharlyVerb (there is no
-// `charly check adb` subprocess), so its argv builders have no caller. The ADB method
-// dispatch now lives in candy/plugin-adb. (posKeyName stays — it is shared by wl/vnc.)
 
 // resolveCheckApk resolves a relative committed-APK path (the external adb / appium plugin's
 // install / install-app `apk: ./tests/data/...`) against the AUTHORING candy's
@@ -441,7 +161,7 @@ func vmDisplayDeviceAbsent(verb, stderr string) bool {
 }
 
 //nolint:gocyclo // verb dispatch with bifurcated artifact validation (ai-artifact vs exec mode) sharing post-validation; cohesive
-func (r *Runner) runCharlyVerb(ctx context.Context, c *Op, verb, method string, allowlist map[string]methodSpec) CheckResult {
+func (r *Runner) runCharlyVerb(ctx context.Context, c *Op, verb, method string, allowlist map[string]kit.MethodSpec) CheckResult {
 	if r.Mode == RunModeBox {
 		return skipf(c, fmt.Sprintf("%s: %s requires a running container (skip under charly check box)", verb, method))
 	}
@@ -457,7 +177,7 @@ func (r *Runner) runCharlyVerb(ctx context.Context, c *Op, verb, method string, 
 	// Required-modifier check mirrors validate_tests.go but guards against
 	// runs where validation was bypassed (e.g. tests loaded directly from a
 	// label without re-validating).
-	if err := checkRequiredFields(c, spec.required); err != nil {
+	if err := checkRequiredFields(c, spec.Required); err != nil {
 		return failf(c, "%s: %s: %v", verb, method, err)
 	}
 
@@ -529,17 +249,17 @@ func (r *Runner) runCharlyVerb(ctx context.Context, c *Op, verb, method string, 
 		}
 	}
 
-	// Build argv: ["check"] + spec.path + [image?] + spec.posArgs(c) + ["-i", instance]
-	// spec.skipBox=true elides the image/deploy-name positional (used by
+	// Build argv: ["check"] + spec.Path + [image?] + spec.PosArgs(c) + ["-i", instance]
+	// spec.SkipBox=true elides the image/deploy-name positional (used by
 	// kube verbs that operate against a cluster instead of an image).
-	argv := append([]string{"check"}, spec.path...)
-	if !spec.skipBox {
+	argv := append([]string{"check"}, spec.Path...)
+	if !spec.SkipBox {
 		argv = append(argv, r.Box)
 	}
-	if spec.posArgs != nil {
-		argv = append(argv, spec.posArgs(c)...)
+	if spec.PosArgs != nil {
+		argv = append(argv, spec.PosArgs(c)...)
 	}
-	if r.Instance != "" && !spec.skipBox {
+	if r.Instance != "" && !spec.SkipBox {
 		argv = append(argv, "-i", r.Instance)
 	}
 
@@ -575,7 +295,7 @@ func (r *Runner) runCharlyVerb(ctx context.Context, c *Op, verb, method string, 
 		return failf(c, "%s: %s: stderr: %v (got: %s)", verb, method, err, trimPreview(stderr))
 	}
 
-	if spec.artifact {
+	if spec.Artifact {
 		if err := runArtifactValidators(c); err != nil {
 			return failf(c, "%s: %s: %v", verb, method, err)
 		}

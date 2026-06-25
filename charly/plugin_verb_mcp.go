@@ -1,6 +1,10 @@
 package main
 
-import "context"
+import (
+	"context"
+
+	"github.com/overthinkos/overthink/charly/plugin/kit"
+)
 
 // mcpVerb is the BUILT-IN `mcp` LIVE-CONTAINER verb, extracted into its OWN dedicated
 // file (Phase 1, the live-container-verb relocation). Like cdp/vnc, mcp stays a
@@ -20,8 +24,8 @@ import "context"
 //
 // This file owns the verb's complete contract: the provider (Reserved/RunVerb), the
 // LiveVerbProvider method contract (Methods/MethodField), the mcpMethods method
-// allowlist, and the runMcp dispatcher. The shared posArgs builder library
-// (posMcpCommon/posMcpCall/posMcpRead), the methodSpec type, and
+// allowlist, and the runMcp dispatcher. The shared kit.PosArgs builder library
+// (kit.PosMcpCommon/kit.PosMcpCall/kit.PosMcpRead), the kit.MethodSpec type, and
 // artifactValidatableMethods stay in checkrun_charly_verbs.go.
 type mcpVerb struct{ builtinVerbBase }
 
@@ -31,18 +35,18 @@ func (mcpVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runMcp(ctx, op)
 }
 
-func (mcpVerb) Methods() map[string]methodSpec { return mcpMethods }
-func (mcpVerb) MethodField(c *Op) string       { return c.Mcp }
+func (mcpVerb) Methods() map[string]kit.MethodSpec { return mcpMethods }
+func (mcpVerb) MethodField(c *Op) string           { return c.Mcp }
 
 // mcpMethods is the mcp verb's method allowlist (the dispatch data runCharlyVerb reads).
-var mcpMethods = map[string]methodSpec{
-	"ping":           {path: []string{"mcp", "ping"}, posArgs: posMcpCommon},
-	"servers":        {path: []string{"mcp", "servers"}, posArgs: posMcpCommon},
-	"list-tools":     {path: []string{"mcp", "list-tools"}, posArgs: posMcpCommon},
-	"list-resources": {path: []string{"mcp", "list-resources"}, posArgs: posMcpCommon},
-	"list-prompts":   {path: []string{"mcp", "list-prompts"}, posArgs: posMcpCommon},
-	"call":           {path: []string{"mcp", "call"}, required: []string{"Tool"}, posArgs: posMcpCall},
-	"read":           {path: []string{"mcp", "read"}, required: []string{"URI"}, posArgs: posMcpRead},
+var mcpMethods = map[string]kit.MethodSpec{
+	"ping":           {Path: []string{"mcp", "ping"}, PosArgs: kit.PosMcpCommon},
+	"servers":        {Path: []string{"mcp", "servers"}, PosArgs: kit.PosMcpCommon},
+	"list-tools":     {Path: []string{"mcp", "list-tools"}, PosArgs: kit.PosMcpCommon},
+	"list-resources": {Path: []string{"mcp", "list-resources"}, PosArgs: kit.PosMcpCommon},
+	"list-prompts":   {Path: []string{"mcp", "list-prompts"}, PosArgs: kit.PosMcpCommon},
+	"call":           {Path: []string{"mcp", "call"}, Required: []string{"Tool"}, PosArgs: kit.PosMcpCall},
+	"read":           {Path: []string{"mcp", "read"}, Required: []string{"URI"}, PosArgs: kit.PosMcpRead},
 }
 
 func (r *Runner) runMcp(ctx context.Context, c *Op) CheckResult {

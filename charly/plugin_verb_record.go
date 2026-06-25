@@ -1,6 +1,10 @@
 package main
 
-import "context"
+import (
+	"context"
+
+	"github.com/overthinkos/overthink/charly/plugin/kit"
+)
 
 // recordVerb is the BUILT-IN `record` LIVE-CONTAINER verb, extracted into its OWN
 // dedicated file (Phase 1, the live-container-verb relocation). Like cdp/vnc, record
@@ -21,8 +25,8 @@ import "context"
 //
 // This file owns the verb's complete contract: the provider (Reserved/RunVerb), the
 // LiveVerbProvider method contract (Methods/MethodField), the recordMethods method
-// allowlist, and the runRecord dispatcher. The shared posArgs builder library
-// (posRecordStart/posRecordStop/posRecordCmd), the methodSpec type, and the
+// allowlist, and the runRecord dispatcher. The shared kit.PosArgs builder library
+// (kit.PosRecordStart/kit.PosRecordStop/kit.PosRecordCmd), the kit.MethodSpec type, and the
 // artifactValidatableMethods allowlist (record/stop) stay in checkrun_charly_verbs.go.
 type recordVerb struct{ builtinVerbBase }
 
@@ -32,21 +36,21 @@ func (recordVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runRecord(ctx, op)
 }
 
-func (recordVerb) Methods() map[string]methodSpec { return recordMethods }
-func (recordVerb) MethodField(c *Op) string       { return c.Record }
+func (recordVerb) Methods() map[string]kit.MethodSpec { return recordMethods }
+func (recordVerb) MethodField(c *Op) string           { return c.Record }
 
 // recordMethods is the record verb's method allowlist (the dispatch data runCharlyVerb reads).
-var recordMethods = map[string]methodSpec{
-	"list":  {path: []string{"record", "list"}},
-	"start": {path: []string{"record", "start"}, posArgs: posRecordStart},
-	// stop's artifact: true asserts the recording was copied out AND (when
+var recordMethods = map[string]kit.MethodSpec{
+	"list":  {Path: []string{"record", "list"}},
+	"start": {Path: []string{"record", "start"}, PosArgs: kit.PosRecordStart},
+	// stop's Artifact: true asserts the recording was copied out AND (when
 	// ArtifactMinBytes is set) that the file is at least N bytes — a strong
 	// "the recorder actually produced output" invariant.
-	"stop": {path: []string{"record", "stop"}, required: []string{"Artifact"}, posArgs: posRecordStop, artifact: true},
+	"stop": {Path: []string{"record", "stop"}, Required: []string{"Artifact"}, PosArgs: kit.PosRecordStop, Artifact: true},
 	// `record: cmd` sends a text line into the recording's tmux session.
 	// Text (not Command) is used because Command is itself a verb
 	// discriminator — setting both would trip the Kind() uniqueness check.
-	"cmd": {path: []string{"record", "cmd"}, required: []string{"Text"}, posArgs: posRecordCmd},
+	"cmd": {Path: []string{"record", "cmd"}, Required: []string{"Text"}, PosArgs: kit.PosRecordCmd},
 }
 
 func (r *Runner) runRecord(ctx context.Context, c *Op) CheckResult {

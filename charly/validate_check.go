@@ -176,27 +176,27 @@ func validateCharlyVerb(c *Op, verb, loc string, errs *ValidationError) {
 		errs.Add("%s: %s: verb is runtime-context only (needs a running container); not legal in build context", loc, verb)
 	}
 
-	for _, f := range spec.required {
+	for _, f := range spec.Required {
 		if isZeroField(c, f) {
 			errs.Add("%s: %s: %s requires modifier %q", loc, verb, method, strings.ToLower(f))
 		}
 	}
 
-	if spec.artifact && c.Artifact == "" {
+	if spec.Artifact && c.Artifact == "" {
 		errs.Add("%s: %s: %s is an artifact-producing method; set artifact: <path>", loc, verb, method)
 	}
 
 	if c.ArtifactMinDimensions != "" {
-		if !spec.artifact {
+		if !spec.Artifact {
 			errs.Add("%s: %s: %s is not an artifact-producing method; artifact_min_dimensions is not applicable", loc, verb, method)
 		} else if !validWxH(c.ArtifactMinDimensions) {
 			errs.Add("%s: %s: %s: artifact_min_dimensions must be %q form with positive ints, got %q", loc, verb, method, "WxH", c.ArtifactMinDimensions)
 		}
 	}
-	if c.ArtifactNotUniform && !spec.artifact {
+	if c.ArtifactNotUniform && !spec.Artifact {
 		errs.Add("%s: %s: %s is not an artifact-producing method; artifact_not_uniform is not applicable", loc, verb, method)
 	}
-	if c.ArtifactMinCastEvents > 0 && !spec.artifact {
+	if c.ArtifactMinCastEvents > 0 && !spec.Artifact {
 		errs.Add("%s: %s: %s is not an artifact-producing method; artifact_min_cast_events is not applicable", loc, verb, method)
 	}
 

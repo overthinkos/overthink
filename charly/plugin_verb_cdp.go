@@ -1,6 +1,10 @@
 package main
 
-import "context"
+import (
+	"context"
+
+	"github.com/overthinkos/overthink/charly/plugin/kit"
+)
 
 // cdpVerb is the BUILT-IN `cdp` LIVE-CONTAINER verb, extracted into its OWN dedicated
 // file (Phase 1, the live-container-verb relocation). Unlike the goss/state-provision
@@ -19,9 +23,9 @@ import "context"
 // This file owns the verb's complete contract: the provider (Reserved/RunVerb), the
 // LiveVerbProvider method contract (Methods/MethodField — the required-modifier/artifact
 // rules the host's validateCharlyVerb reads through the registry), the cdpMethods method
-// allowlist (each method → its CLI subcommand path + required modifiers + posArgs
-// dispatch), and the runCdp dispatcher. The shared posArgs builder library + the
-// methodSpec type + artifactValidatableMethods stay in checkrun_charly_verbs.go (reused
+// allowlist (each method → its CLI subcommand path + required modifiers + kit.PosArgs
+// dispatch), and the runCdp dispatcher. The shared kit.PosArgs builder library + the
+// kit.MethodSpec type + artifactValidatableMethods stay in checkrun_charly_verbs.go (reused
 // across every live verb — R3).
 type cdpVerb struct{ builtinVerbBase }
 
@@ -31,38 +35,38 @@ func (cdpVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runCdp(ctx, op)
 }
 
-func (cdpVerb) Methods() map[string]methodSpec { return cdpMethods }
-func (cdpVerb) MethodField(c *Op) string       { return c.Cdp }
+func (cdpVerb) Methods() map[string]kit.MethodSpec { return cdpMethods }
+func (cdpVerb) MethodField(c *Op) string           { return c.Cdp }
 
 // cdpMethods is the cdp verb's method allowlist (the dispatch data runCharlyVerb reads).
 // Hand-enumerated so authoring errors surface at `charly box validate` time.
-var cdpMethods = map[string]methodSpec{
+var cdpMethods = map[string]kit.MethodSpec{
 	// queries — produce assertable output
-	"status":     {path: []string{"cdp", "status"}},
-	"list":       {path: []string{"cdp", "list"}},
-	"url":        {path: []string{"cdp", "url"}, required: []string{"Tab"}, posArgs: posTab},
-	"text":       {path: []string{"cdp", "text"}, required: []string{"Tab"}, posArgs: posTab},
-	"html":       {path: []string{"cdp", "html"}, required: []string{"Tab"}, posArgs: posTab},
-	"eval":       {path: []string{"cdp", "eval"}, required: []string{"Tab", "Expression"}, posArgs: posTabExpression},
-	"axtree":     {path: []string{"cdp", "axtree"}, required: []string{"Tab"}, posArgs: posTabQuery},
-	"coords":     {path: []string{"cdp", "coords"}, required: []string{"Tab", "Selector"}, posArgs: posTabSelector},
-	"raw":        {path: []string{"cdp", "raw"}, required: []string{"Tab", "Method"}, posArgs: posCdpRaw},
-	"wait":       {path: []string{"cdp", "wait"}, required: []string{"Tab", "Selector"}, posArgs: posTabSelector},
-	"screenshot": {path: []string{"cdp", "screenshot"}, required: []string{"Tab", "Artifact"}, posArgs: posTabArtifact, artifact: true},
+	"status":     {Path: []string{"cdp", "status"}},
+	"list":       {Path: []string{"cdp", "list"}},
+	"url":        {Path: []string{"cdp", "url"}, Required: []string{"Tab"}, PosArgs: kit.PosTab},
+	"text":       {Path: []string{"cdp", "text"}, Required: []string{"Tab"}, PosArgs: kit.PosTab},
+	"html":       {Path: []string{"cdp", "html"}, Required: []string{"Tab"}, PosArgs: kit.PosTab},
+	"eval":       {Path: []string{"cdp", "eval"}, Required: []string{"Tab", "Expression"}, PosArgs: kit.PosTabExpression},
+	"axtree":     {Path: []string{"cdp", "axtree"}, Required: []string{"Tab"}, PosArgs: kit.PosTabQuery},
+	"coords":     {Path: []string{"cdp", "coords"}, Required: []string{"Tab", "Selector"}, PosArgs: kit.PosTabSelector},
+	"raw":        {Path: []string{"cdp", "raw"}, Required: []string{"Tab", "Method"}, PosArgs: kit.PosCdpRaw},
+	"wait":       {Path: []string{"cdp", "wait"}, Required: []string{"Tab", "Selector"}, PosArgs: kit.PosTabSelector},
+	"screenshot": {Path: []string{"cdp", "screenshot"}, Required: []string{"Tab", "Artifact"}, PosArgs: kit.PosTabArtifact, Artifact: true},
 
 	// side-effect actions — pass on exit 0
-	"open":  {path: []string{"cdp", "open"}, required: []string{"URL"}, posArgs: posURL},
-	"close": {path: []string{"cdp", "close"}, required: []string{"Tab"}, posArgs: posTab},
-	"click": {path: []string{"cdp", "click"}, required: []string{"Tab", "Selector"}, posArgs: posTabSelector},
-	"type":  {path: []string{"cdp", "type"}, required: []string{"Tab", "Selector", "Text"}, posArgs: posTabSelectorText},
+	"open":  {Path: []string{"cdp", "open"}, Required: []string{"URL"}, PosArgs: kit.PosURL},
+	"close": {Path: []string{"cdp", "close"}, Required: []string{"Tab"}, PosArgs: kit.PosTab},
+	"click": {Path: []string{"cdp", "click"}, Required: []string{"Tab", "Selector"}, PosArgs: kit.PosTabSelector},
+	"type":  {Path: []string{"cdp", "type"}, Required: []string{"Tab", "Selector", "Text"}, PosArgs: kit.PosTabSelectorText},
 
 	// SPA nested subcommands
-	"spa-status":    {path: []string{"cdp", "spa", "status"}, required: []string{"Tab"}, posArgs: posTab},
-	"spa-click":     {path: []string{"cdp", "spa", "click"}, required: []string{"Tab", "X", "Y"}, posArgs: posTabXY},
-	"spa-type":      {path: []string{"cdp", "spa", "type"}, required: []string{"Tab", "Text"}, posArgs: posTabText},
-	"spa-key":       {path: []string{"cdp", "spa", "key"}, required: []string{"Tab", "KeyName"}, posArgs: posTabKeyName},
-	"spa-key-combo": {path: []string{"cdp", "spa", "key-combo"}, required: []string{"Tab", "Combo"}, posArgs: posTabCombo},
-	"spa-mouse":     {path: []string{"cdp", "spa", "mouse"}, required: []string{"Tab", "X", "Y"}, posArgs: posTabXY},
+	"spa-status":    {Path: []string{"cdp", "spa", "status"}, Required: []string{"Tab"}, PosArgs: kit.PosTab},
+	"spa-click":     {Path: []string{"cdp", "spa", "click"}, Required: []string{"Tab", "X", "Y"}, PosArgs: kit.PosTabXY},
+	"spa-type":      {Path: []string{"cdp", "spa", "type"}, Required: []string{"Tab", "Text"}, PosArgs: kit.PosTabText},
+	"spa-key":       {Path: []string{"cdp", "spa", "key"}, Required: []string{"Tab", "KeyName"}, PosArgs: kit.PosTabKeyName},
+	"spa-key-combo": {Path: []string{"cdp", "spa", "key-combo"}, Required: []string{"Tab", "Combo"}, PosArgs: kit.PosTabCombo},
+	"spa-mouse":     {Path: []string{"cdp", "spa", "mouse"}, Required: []string{"Tab", "X", "Y"}, PosArgs: kit.PosTabXY},
 }
 
 func (r *Runner) runCdp(ctx context.Context, c *Op) CheckResult {

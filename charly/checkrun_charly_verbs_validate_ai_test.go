@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 )
 
 // Test plan for the validate_ai_artifacts narrowed-allowlist + freshness-mtime gate
@@ -19,7 +21,7 @@ import (
 //
 // Tested invariants:
 //   1. The allowlist EXACTLY matches the set of methods with
-//      spec.artifact == true (no drift possible — load-bearing for
+//      spec.Artifact == true (no drift possible — load-bearing for
 //      anti-deception).
 //   2. Allowlisted method + flag set + file present + fresh mtime →
 //      run validators against the file (no subprocess re-execution).
@@ -33,15 +35,15 @@ import (
 // TestArtifactValidatableMethods_MatchesArtifactProducingMethodSpecs
 // is the load-bearing drift-prevention test. The allowlist (the seven
 // state-dependent capture methods) and the set of methodSpecs marked
-// artifact:true MUST be identical — adding a new artifact-producing
+// Artifact:true MUST be identical — adding a new artifact-producing
 // method without updating the allowlist (or vice-versa) is a
 // regression in either direction. This test catches that drift at
 // `go test` time.
 func TestArtifactValidatableMethods_MatchesArtifactProducingMethodSpecs(t *testing.T) {
-	// Collect all methodSpec keys with artifact:true across every
+	// Collect all kit.MethodSpec keys with Artifact:true across every
 	// verb's allowlist. The verb/method pair is "verb/method".
 	specMethods := make(map[string]bool)
-	for verb, table := range map[string]map[string]methodSpec{
+	for verb, table := range map[string]map[string]kit.MethodSpec{
 		"cdp":     cdpMethods,
 		"wl":      wlMethods,
 		"vnc":     vncMethods,
@@ -55,7 +57,7 @@ func TestArtifactValidatableMethods_MatchesArtifactProducingMethodSpecs(t *testi
 		// plugin (sdk.RunArtifactValidators).
 	} {
 		for method, spec := range table {
-			if spec.artifact {
+			if spec.Artifact {
 				specMethods[verb+"/"+method] = true
 			}
 		}
@@ -64,23 +66,23 @@ func TestArtifactValidatableMethods_MatchesArtifactProducingMethodSpecs(t *testi
 	// Bidirectional comparison:
 	//   - Every allowlist entry must be in specMethods (no
 	//     "validate this even though spec doesn't mark it artifact").
-	//   - Every artifact:true spec must be in the allowlist (no
+	//   - Every Artifact:true spec must be in the allowlist (no
 	//     "this method produces artifacts but harness will silently
 	//     re-run it bypassing the AI's iteration capture").
 	for key := range artifactValidatableMethods {
 		if !specMethods[key] {
-			t.Errorf("artifactValidatableMethods has %q but no methodSpec marks it artifact:true — drift", key)
+			t.Errorf("artifactValidatableMethods has %q but no kit.MethodSpec marks it Artifact:true — drift", key)
 		}
 	}
 	for key := range specMethods {
 		if !artifactValidatableMethods[key] {
-			t.Errorf("methodSpec %q has artifact:true but is NOT in artifactValidatableMethods — drift; either add it or document why it should always re-run", key)
+			t.Errorf("kit.MethodSpec %q has Artifact:true but is NOT in artifactValidatableMethods — drift; either add it or document why it should always re-run", key)
 		}
 	}
 }
 
 // TestRunCharlyVerb_ValidateAi_AllowlistedMethod_FilePresent_FreshMtime_ValidatorsRun
-// covers the happy path: flag set, allowlisted method, file present
+// covers the happy Path: flag set, allowlisted method, file present
 // with fresh mtime, validators succeed.
 //
 // Strategy: build a minimal Runner with ValidateAiArtifacts=true and

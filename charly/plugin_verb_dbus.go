@@ -1,6 +1,10 @@
 package main
 
-import "context"
+import (
+	"context"
+
+	"github.com/overthinkos/overthink/charly/plugin/kit"
+)
 
 // dbusVerb is the BUILT-IN `dbus` LIVE-CONTAINER verb, extracted into its OWN dedicated
 // file (Phase 1, the live-container-verb relocation). Like cdp/vnc, dbus stays a
@@ -15,8 +19,8 @@ import "context"
 //
 // This file owns the verb's complete contract: the provider (Reserved/RunVerb), the
 // LiveVerbProvider method contract (Methods/MethodField), the dbusMethods method
-// allowlist, and the runDbus dispatcher. The shared posArgs builder library
-// (posDbusCall/posDbusIntrospect/posDbusNotify), the methodSpec type, and
+// allowlist, and the runDbus dispatcher. The shared kit.PosArgs builder library
+// (kit.PosDbusCall/kit.PosDbusIntrospect/kit.PosDbusNotify), the kit.MethodSpec type, and
 // artifactValidatableMethods stay in checkrun_charly_verbs.go.
 type dbusVerb struct{ builtinVerbBase }
 
@@ -26,15 +30,15 @@ func (dbusVerb) RunVerb(ctx context.Context, r *Runner, op *Op) CheckResult {
 	return r.runDbus(ctx, op)
 }
 
-func (dbusVerb) Methods() map[string]methodSpec { return dbusMethods }
-func (dbusVerb) MethodField(c *Op) string       { return c.Dbus }
+func (dbusVerb) Methods() map[string]kit.MethodSpec { return dbusMethods }
+func (dbusVerb) MethodField(c *Op) string           { return c.Dbus }
 
 // dbusMethods is the dbus verb's method allowlist (the dispatch data runCharlyVerb reads).
-var dbusMethods = map[string]methodSpec{
-	"list":       {path: []string{"dbus", "list"}},
-	"call":       {path: []string{"dbus", "call"}, required: []string{"Dest", "Path", "Method"}, posArgs: posDbusCall},
-	"introspect": {path: []string{"dbus", "introspect"}, required: []string{"Dest", "Path"}, posArgs: posDbusIntrospect},
-	"notify":     {path: []string{"dbus", "notify"}, required: []string{"Text"}, posArgs: posDbusNotify},
+var dbusMethods = map[string]kit.MethodSpec{
+	"list":       {Path: []string{"dbus", "list"}},
+	"call":       {Path: []string{"dbus", "call"}, Required: []string{"Dest", "Path", "Method"}, PosArgs: kit.PosDbusCall},
+	"introspect": {Path: []string{"dbus", "introspect"}, Required: []string{"Dest", "Path"}, PosArgs: kit.PosDbusIntrospect},
+	"notify":     {Path: []string{"dbus", "notify"}, Required: []string{"Text"}, PosArgs: kit.PosDbusNotify},
 }
 
 func (r *Runner) runDbus(ctx context.Context, c *Op) CheckResult {

@@ -14,11 +14,9 @@ require (
 	github.com/fatih/color v1.15.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/gordonklaus/portaudio v0.0.0-20200911161147-bb74aa485641 // indirect
 	github.com/hashicorp/go-hclog v1.6.3 // indirect
 	github.com/hashicorp/go-plugin v1.8.0 // indirect
 	github.com/hashicorp/yamux v0.1.2 // indirect
-	github.com/hraban/opus v0.0.0-20210415224706-ab1467d63813 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.17 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
@@ -40,6 +38,8 @@ require (
 // tagged charly version instead.
 replace github.com/overthinkos/overthink/charly => ../../charly
 
-// The vendored Shells-com/spice library (moved out of charly's core tree). Built
-// WITHOUT `-tags spice_audio` so its cgo opus/portaudio audio channels are not linked.
+// The vendored Shells-com/spice library (moved out of charly's core tree). The cgo
+// opus/portaudio audio channels were removed entirely (no build tag, no cgo), so the
+// library is unambiguously pure Go — framebuffer / input / cursor / clipboard / webdav
+// channels only.
 replace github.com/Shells-com/spice => ./third_party/spice

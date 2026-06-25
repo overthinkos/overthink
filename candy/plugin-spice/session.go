@@ -15,8 +15,8 @@ package main
 // It spins up goroutines for each SPICE channel (main, display, inputs, cursor,
 // playback, record, webdav). Our Driver is a stub that doesn't render — it just
 // stashes the latest framebuffer/cursor into mutex-guarded fields the methods read
-// back. Audio channels are present but never exercised; the binary is built WITHOUT
-// `-tags spice_audio`, so the cgo opus/portaudio decoders are not linked.
+// back. Audio channels are NOT implemented (the cgo audio path was removed entirely),
+// so no opus/portaudio decoders are linked — the binary is pure Go.
 
 import (
 	"fmt"

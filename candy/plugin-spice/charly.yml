@@ -7,12 +7,11 @@ plugin-spice:
             SPICE remote-desktop protocol over go-plugin gRPC via the charly plugin
             SDK (charly/plugin/sdk). charly's loader fetches this candy's repo,
             go-builds the provider binary on the HOST, and serves it OUT-OF-PROCESS
-            via LocalTransport — so the github.com/Shells-com/spice library AND its
-            cgo audio transitives github.com/hraban/opus + github.com/gordonklaus/
-            portaudio (vendored under third_party/spice, built WITHOUT
-            `-tags spice_audio` so the opus/portaudio channels are never linked) live
-            HERE, out of charly's core go.mod (the fourth dep-shed after
-            candy/plugin-appium, candy/plugin-adb, candy/plugin-kube). `spice:`
+            via LocalTransport — so the github.com/Shells-com/spice library lives
+            HERE (vendored under third_party/spice), out of charly's core go.mod, with
+            its cgo audio channels (the opus/portaudio decoders) removed ENTIRELY so it
+            is unambiguously pure Go — no opus/portaudio/asound/jack (the fourth
+            dep-shed after candy/plugin-appium, candy/plugin-adb, candy/plugin-kube). `spice:`
             authoring stays unchanged: the verb keeps its `spice:` discriminator +
             every modifier + the #SpiceMethod enum on charly's core #Op, and
             dispatches through the provider registry exactly like a built-in

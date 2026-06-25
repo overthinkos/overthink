@@ -7,9 +7,9 @@
 // provider registry exactly like a built-in — with the verb keeping its `spice:`
 // discriminator + every modifier on charly's core #Op (authoring unchanged). The
 // fourth external dep-shed (after candy/plugin-appium, candy/plugin-adb,
-// candy/plugin-kube); the FULL Shells-com/spice + opus + portaudio dependency lives
-// HERE (vendored under third_party/spice, built WITHOUT `-tags spice_audio` so the
-// cgo opus/portaudio channels are never linked).
+// candy/plugin-kube); the Shells-com/spice library lives HERE (vendored under
+// third_party/spice), with its cgo opus/portaudio audio channels removed entirely so
+// it is pure Go — no opus/portaudio dependency, no cgo, no build tag.
 //
 // The plugin DIALS a pre-resolved SPICE endpoint (host:port or UNIX socket) the host
 // hands it via the check env — the host owns the go-libvirt VM resolution

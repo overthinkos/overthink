@@ -43,6 +43,7 @@ compiled_plugins:
     - plugin-kernel-param
     - plugin-mount
     - plugin-user
+    - plugin-unix-group
 
 # context_ignore_baseline — the built-in build-context ignore patterns (VCS/binary
 # excludes + cache-hygiene globs), formerly the Go var baselineContextIgnore. Read by

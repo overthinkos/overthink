@@ -295,30 +295,34 @@ func (e *SSHExecutor) WaitForSSH(ctx context.Context) error {
 	return nil
 }
 
-// WaitForCloudInit runs `cloud-init status --wait` on the guest,
-// blocking until cloud-init finishes (or fails). Only meaningful for
-// cloud-image VMs; callers should skip this for bootc sources with
-// no cidata ISO attached.
+// WaitForCloudInit polls `sudo cloud-init status` on the guest until cloud-init
+// settles (status done/error/disabled). Only meaningful for cloud-image VMs;
+// callers should skip this for bootc sources with no cidata ISO attached.
 func (e *SSHExecutor) WaitForCloudInit(ctx context.Context) error {
 	// On first boot cloud-init regenerates the SSH host keys and restarts
 	// sshd AFTER the initial sshd start (i.e. after WaitForSSH already
 	// passed). That restart drops in-flight connections and resets the next
 	// one mid-key-exchange ("kex_exchange_identification: Connection reset by
 	// peer"), which otherwise fails the scp in EnsureCharlyInGuest. Retry until an
-	// ssh connection SURVIVES `cloud-init status --wait` — that is the
+	// ssh connection SURVIVES a `cloud-init status` poll — that is the
 	// deterministic signal that cloud-init has settled and sshd is stable
 	// (not a sleep-and-pray). `|| true` tolerates a non-zero cloud-init result
 	// (error/degraded): we wait for cloud-init to be DONE, not necessarily OK,
 	// and a non-zero status delivered over a live connection still proves sshd
 	// is stable.
-	// POLLED non-wait status (was a blocking `cloud-init status --wait`, which
-	// could not honor a per-attempt bound): each tick runs the quick `cloud-init
-	// status` and is ready when the ssh connection SURVIVES (sshd stable after
-	// first-boot key regen) AND cloud-init is no longer "running". Cap-only at the
-	// GENEROUS config cap (poll.go), replacing the fixed 5m that was too short for
-	// a heavy first boot (GMS/Play-Store) under parallel load. A non-cloud-init
-	// guest reports "done" immediately.
-	script := `if command -v cloud-init >/dev/null 2>&1; then cloud-init status 2>/dev/null || true; else echo "status: done"; fi`
+	//
+	// POLLED status, run as ROOT via sudo (charly-managed guests have passwordless
+	// sudo): each tick runs the quick `sudo cloud-init status` and is ready when the
+	// ssh connection SURVIVES (sshd stable after first-boot key regen) AND cloud-init
+	// is no longer "running". Cap-only at the GENEROUS config cap (poll.go), replacing
+	// the fixed 5m that was too short for a heavy first boot under parallel load. A
+	// non-cloud-init guest reports "done" immediately. (Was a blocking `cloud-init
+	// status --wait`, which could not honor a per-attempt bound; then a non-wait
+	// NON-ROOT `cloud-init status`, which — on cloud-init 25.2 / Fedora 43 — crashes
+	// with PermissionError reading the root-only /run/cloud-init/cloud.cfg, emitting
+	// blank stdout that the poll mistook for "keep polling" → a 30-min silent hang of
+	// every VM check-live. sudo restores a real terminal status token.)
+	script := `if command -v cloud-init >/dev/null 2>&1; then sudo cloud-init status 2>/dev/null || true; else echo "status: done"; fi`
 	cfg := loadedReadiness().WaitCapped(fmt.Sprintf("cloud-init %s:%d", e.Host, e.Port), PollRemote, 0)
 	if err := pollUntil(ctx, cfg, func(actx context.Context) (bool, float64, error) {
 		var buf bytes.Buffer

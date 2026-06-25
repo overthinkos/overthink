@@ -389,7 +389,7 @@ func (c *CheckLiveCmd) runVm() error {
 	// instead of one clear "VM not ready" signal — and a cloud-init that
 	// triggers a reboot would otherwise be tested mid-restart. WaitForSSH (poll
 	// until sshd answers) and WaitForCloudInit (retry until an ssh connection
-	// survives `cloud-init status --wait`) are real synchronization primitives,
+	// survives a `cloud-init status` poll) are real synchronization primitives,
 	// not fixed sleeps — the same SSHExecutor preflight VmDeployTarget.Emit runs
 	// at deploy time. Fast no-op on an already-settled guest (zero added
 	// latency); the VM analog of waitForContainerReady for the bed runner.

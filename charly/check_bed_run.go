@@ -808,7 +808,7 @@ func runCaptureCtx(ctx context.Context, exe string, args []string) ([]byte, erro
 // settled, using the SAME deterministic SSHExecutor preflight the VM check-live
 // path (check_cmd.go) and VmDeployTarget.Emit run — NOT a fixed sleep. WaitForSSH
 // polls until sshd answers; WaitForCloudInit retries until an ssh connection
-// survives `cloud-init status --wait` (the deterministic cloud-init-settled
+// survives a `cloud-init status` poll (the deterministic cloud-init-settled
 // signal — so deploy-add never races a still-running first-boot pacman). vmName
 // is the kind:vm entity name. Best-effort: silent on timeout — the downstream
 // deploy-add surfaces the real error.

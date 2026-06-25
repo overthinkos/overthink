@@ -32,7 +32,7 @@ func (verb) MethodField(op *spec.Op) string     { return op.Libvirt }
 // libvirtMethods is the libvirt verb's method allowlist (the dispatch data the host's runCharlyVerb reads).
 var libvirtMethods = map[string]kit.MethodSpec{
 	// Top-level verbs
-	"list":       {Path: []string{"libvirt", "list"}},
+	"list":       {Path: []string{"libvirt", "list"}, SkipBox: true},
 	"info":       {Path: []string{"libvirt", "info"}},
 	"screenshot": {Path: []string{"libvirt", "screenshot"}, PosArgs: kit.PosArtifact, Artifact: true},
 	"send-key":   {Path: []string{"libvirt", "send-key"}, Required: []string{"KeyName"}, PosArgs: kit.PosKeyNameSplit},

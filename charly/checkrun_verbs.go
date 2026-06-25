@@ -230,42 +230,6 @@ func (r *Runner) runUnixGroup(ctx context.Context, c *Op, group string, wantGID 
 	return passf(c, fmt.Sprintf("gid=%d", gid))
 }
 
-// runInterface: `ip -o addr show <name>` — verifies existence; addrs + mtu
-// checks parse the ip output. The interface name + mtu/addrs modifiers arrive from the
-// `interface` plugin's typed plugin_input (params.InterfaceInput, decoded by
-// interfaceVerb.RunVerb in plugin_interface.go) — the verb left the closed #Op, so they
-// no longer ride the (removed) Op.Interface/MTU/Addrs fields. c is retained for result
-// metadata + the shared r.Exec.
-func (r *Runner) runInterface(ctx context.Context, c *Op, iface string, mtu *int, addrs []string) CheckResult {
-	probe := fmt.Sprintf(`ip -o addr show %s 2>/dev/null`, shellSingleQuote(iface))
-	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
-	if err != nil {
-		return failf(c, "probe: %v", err)
-	}
-	if exit != 0 || strings.TrimSpace(out) == "" {
-		return failf(c, "interface not found")
-	}
-	// MTU check via `ip link show`
-	if mtu != nil {
-		mtuOut, _, exit, err := r.Exec.RunCapture(ctx, fmt.Sprintf(`ip -o link show %s 2>/dev/null | awk '{for(i=1;i<=NF;i++)if($i=="mtu"){print $(i+1);exit}}'`, shellSingleQuote(iface)))
-		if err != nil || exit != 0 {
-			return failf(c, "mtu probe exit %d err %v", exit, err)
-		}
-		got, _ := strconv.Atoi(strings.TrimSpace(mtuOut))
-		if got != *mtu {
-			return failf(c, "mtu=%d, want %d", got, *mtu)
-		}
-	}
-	if len(addrs) > 0 {
-		for _, want := range addrs {
-			if !strings.Contains(out, want) {
-				return failf(c, "missing address %s", want)
-			}
-		}
-	}
-	return passf(c, "ok")
-}
-
 // runKernelParam reads a sysctl value and matches it via the value matchers. `sysctl -n
 // <key>` is exactly the contents of /proc/sys/<key-with-dots-as-slashes>, so the probe reads
 // that file DIRECTLY (inside the target, via r.Exec — kernel params are netns-scoped, so the

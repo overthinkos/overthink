@@ -159,11 +159,29 @@ type ServicePackagedDesc struct {
 }
 
 // SystemPackagesDesc is the candy-decodable construction input for a system-packages step
-// (the `package` verb): the plugin_input-derived package set + per-distro map; the host
-// materializer resolves the image format + builds the SystemPackagesStep.
+// (the `package` verb): the authored package name + per-distro map. The host materializer
+// resolves the cross-distro name (ResolvePackageName against the image's tags), sets the
+// image format + PhaseInstall, and builds the SystemPackagesStep.
 type SystemPackagesDesc struct {
-	Packages   []string
+	Package    string
 	PackageMap map[string]string
+}
+
+// ResolvePackageName picks the correct package name for the running image's distro: if
+// packageMap has a key matching any of the image's distro tags (first match wins — tags
+// are authored most-specific-first, "fedora:43" before "fedora"), that mapping is used;
+// otherwise the bare pkg name. The single cross-distro name resolver shared by the
+// `package` candy's check + act AND the host's step materializer (R3).
+func ResolvePackageName(pkg string, packageMap map[string]string, distros []string) string {
+	if len(packageMap) == 0 {
+		return pkg
+	}
+	for _, tag := range distros {
+		if name, ok := packageMap[tag]; ok && name != "" {
+			return name
+		}
+	}
+	return pkg
 }
 
 // StepDescriptor is the candy-decodable construction input for a TYPED install-plan step

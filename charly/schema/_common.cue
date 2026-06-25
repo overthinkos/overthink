@@ -234,7 +234,7 @@
 	exclude_distro?: [...string] @go(ExcludeDistros)
 
 	// `package`/`installed`/`version`/`package_map` are NOT here — `package` is an
-	// extracted plugin verb (plugin: package + #PackageInput, charly/plugin/builtins/package).
+	// extracted plugin verb (plugin: package + #PackageInput, candy/plugin-package).
 	// It left #OpVerb/spec.OpVerbs, and installed/version/package_map (read ONLY by the
 	// package verb off the step Op) MOVED into #PackageInput with it. The shared
 	// `exclude_distro` modifier above is NOT package-exclusive and stays on #Op.

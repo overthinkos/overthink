@@ -70,7 +70,7 @@ tasks:
         #    examples that compile generated params against their own module
         #    (plugin-example-external — a verb; plugin-example-command — a command).
         ROOT="$PWD"
-        for SCHEMA_DIR in charly/plugin/builtins/*/schema candy/plugin-example/schema candy/plugin-port/schema candy/plugin-process/schema candy/plugin-interface/schema candy/plugin-addr/schema candy/plugin-dns/schema candy/plugin-examplerunverb/schema candy/plugin-matching/schema candy/plugin-http/schema candy/plugin-kernel-param/schema candy/plugin-mount/schema candy/plugin-user/schema candy/plugin-unix-group/schema candy/plugin-file/schema candy/plugin-command/schema candy/plugin-service/schema candy/plugin-example-external/schema candy/plugin-example-command/schema; do
+        for SCHEMA_DIR in charly/plugin/builtins/*/schema candy/plugin-example/schema candy/plugin-port/schema candy/plugin-process/schema candy/plugin-interface/schema candy/plugin-addr/schema candy/plugin-dns/schema candy/plugin-examplerunverb/schema candy/plugin-matching/schema candy/plugin-http/schema candy/plugin-kernel-param/schema candy/plugin-mount/schema candy/plugin-user/schema candy/plugin-unix-group/schema candy/plugin-file/schema candy/plugin-command/schema candy/plugin-service/schema candy/plugin-package/schema candy/plugin-example-external/schema candy/plugin-example-command/schema; do
           test -d "$SCHEMA_DIR" || continue
           PARAMS_DIR="$(dirname "$SCHEMA_DIR")/params"
           mkdir -p "$PARAMS_DIR"

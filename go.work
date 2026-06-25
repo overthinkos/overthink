@@ -22,3 +22,4 @@ use ./candy/plugin-unix-group
 use ./candy/plugin-file
 use ./candy/plugin-command
 use ./candy/plugin-service
+use ./candy/plugin-package

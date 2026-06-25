@@ -119,6 +119,15 @@ func materializeStep(desc kit.StepDescriptor, op *Op, layer *Candy, img *Resolve
 			Enable:      desc.ServicePackaged.Enable,
 			CandyName:   layer.Name,
 		}
+	case desc.SystemPackages != nil:
+		// Repos/Copr/Options come from the top-level package cascade
+		// (compileSystemPackageSteps), NOT a per-op run: {package} step — match the
+		// pre-extraction lowering (Format + PhaseInstall + the cross-distro-resolved name).
+		return &SystemPackagesStep{
+			Format:   img.Pkg,
+			Phase:    PhaseInstall,
+			Packages: []string{kit.ResolvePackageName(desc.SystemPackages.Package, desc.SystemPackages.PackageMap, img.Tags)},
+		}
 	default:
 		panic("materializeStep: empty StepDescriptor for verb in candy " + layer.Name)
 	}

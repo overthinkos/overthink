@@ -29,6 +29,7 @@ var ResourceKinds = []string{
 
 // DocDirectives is the reserved document directives (#NodeDoc top-level keys).
 var DocDirectives = []string{
+	"compiled_plugins",
 	"context_ignore_baseline",
 	"defaults",
 	"device_descriptions",

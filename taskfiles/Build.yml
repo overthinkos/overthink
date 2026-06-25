@@ -6,6 +6,13 @@ tasks:
     dir: "{{.ROOT_DIR}}"
     cmds:
       - mkdir -p bin candy/charly/bin
+      # Regenerate the compiled-in plugin wiring from charly.yml `compiled_plugins:`
+      # BEFORE the go build that needs it: pluginsgen emits charly/plugins_generated.go
+      # (registerCompiledPlugin per selected plugin candy) + the repo-root go.work (the
+      # `use` directives that let `go build ./charly` resolve those candy imports).
+      # GOWORK=off so a stale go.work can't fail workspace load before regeneration;
+      # the generator imports only stdlib+yaml and runs without a pre-built charly.
+      - cd charly && GOWORK=off go run ./internal/pluginsgen -root .. -config charly/charly.yml -out charly/plugins_generated.go -gowork go.work
       # Stamp the binary's CalVer identity (`charly version` → main.BuildCalVer) at
       # build time, from the shared pkg/arch/calver.sh — ALWAYS the HEAD commit's
       # UTC date (deterministic: same commit → same version, whether the tree is

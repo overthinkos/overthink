@@ -214,8 +214,26 @@ func buildPluginBinary(ctx context.Context, srcDir, name string) (string, error)
 	// slashes; flatten it to ONE safe filename so `go build -o` lands a regular file
 	// in cacheDir (a slash would imply non-existent nested dirs).
 	bin := filepath.Join(cacheDir, safePluginBinName(name))
-	cmd := exec.CommandContext(ctx, "go", "build", "-o", bin, ".")
+	// An OUT-OF-PROCESS plugin binary builds STANDALONE in the candy's own module
+	// (its go.mod + `replace …/charly => ../../charly`), NEVER in the repo
+	// workspace: set GOWORK=off so a repo-root go.work — which lists only the
+	// COMPILED-IN plugin candies (the `compiled_plugins:` selection) — cannot
+	// reject a non-member candy dir ("current directory is contained in a module
+	// that is not one of the workspace modules listed in go.work"). The dual
+	// placement (compiled-in vs out-of-process) is exactly why the out-of-process
+	// build must ignore the workspace.
+	//
+	// The serve shim lives conventionally at ./cmd/serve (the importable provider
+	// package sits at the candy root for the in-proc placement; the shim wraps it
+	// for the out-of-process one). Fall back to the candy root for a candy that has
+	// not yet adopted the shim layout.
+	target := "."
+	if st, statErr := os.Stat(filepath.Join(srcDir, "cmd", "serve")); statErr == nil && st.IsDir() {
+		target = "./cmd/serve"
+	}
+	cmd := exec.CommandContext(ctx, "go", "build", "-o", bin, target)
 	cmd.Dir = srcDir
+	cmd.Env = append(os.Environ(), "GOWORK=off")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("plugin %q: go build in %s: %w\n%s", name, srcDir, err, out)
 	}
@@ -380,6 +398,18 @@ func pluginAlreadyConnected(name string, p *CandyPluginDecl) (bool, error) {
 		}
 		origin, found := providerRegistry.registeredOrigin(class, word)
 		if !found {
+			continue
+		}
+		// COEXIST SWITCH: a word already registered as a COMPILED-IN plugin (origin
+		// "builtin", registered at init() by registerCompiledPlugin from the
+		// charly.yml `compiled_plugins:` selection) means this candy is compiled INTO
+		// the running charly — the out-of-process host build + connect is redundant,
+		// so SKIP it rather than reporting a collision. This is THE placement-coexist
+		// path: a plugin NOT in compiled_plugins loads out-of-process here; one that IS
+		// compiled in is served in-proc and skipped. Placement is a per-charly-build
+		// choice, invisible above the registry.
+		if origin == originBuiltin {
+			connected = true
 			continue
 		}
 		if origin != p.Source {

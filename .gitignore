@@ -25,9 +25,12 @@ profile.cov
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
-# Go workspace file
-go.work
-go.work.sum
+# Go workspace file — COMMITTED (not ignored): go.work is a generated artifact
+# (pluginsgen, from charly.yml compiled_plugins:) that maps the charly module + every
+# compiled-in plugin candy, so `go build ./charly` / `go test ./...` resolve the candy
+# imports in charly/plugins_generated.go WITHOUT first running `task build:charly`.
+# go.work.sum is its checksum lock (committed for reproducible/offline builds). The
+# reproducibility gate is TestPluginsGenReproducible.
 
 # env files and GPG-encrypted secrets
 .env

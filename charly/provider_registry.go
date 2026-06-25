@@ -74,11 +74,18 @@ func (r *Registry) registeredOrigin(class ProviderClass, word string) (string, b
 	return o, ok
 }
 
+// originBuiltin is the registry origin tag for an in-process provider compiled into
+// charly — a core builtin (RegisterBuiltinProvider) OR a plugin candy compiled in via
+// the charly.yml compiled_plugins selection (registerCompiledPlugin). The coexist
+// switch in pluginAlreadyConnected keys on it to skip the redundant out-of-process
+// build+connect for an already-compiled-in word.
+const originBuiltin = "builtin"
+
 // RegisterBuiltinProvider is called from init() for an in-process built-in. It
 // panics on conflict (a startup invariant, like the bijection gate) — a built-in
 // duplicate is a programming error caught at process start.
 func RegisterBuiltinProvider(p Provider) {
-	if err := providerRegistry.register(p, "builtin"); err != nil {
+	if err := providerRegistry.register(p, originBuiltin); err != nil {
 		panic("RegisterBuiltinProvider: " + err.Error())
 	}
 }
@@ -101,7 +108,7 @@ var builtinPluginUnits []PluginUnit
 func RegisterBuiltinPluginUnit(u PluginUnit) {
 	builtinPluginUnits = append(builtinPluginUnits, u)
 	for _, p := range u.Providers {
-		if err := providerRegistry.register(p, "builtin"); err != nil {
+		if err := providerRegistry.register(p, originBuiltin); err != nil {
 			panic("RegisterBuiltinPluginUnit: " + err.Error())
 		}
 	}

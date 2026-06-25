@@ -130,6 +130,12 @@ _reservedNode: "^(candy|pod|vm|k8s|local|android|group)$"
 	// recognized here so a document carrying it is not mis-read as a node named
 	// "providers". A gate keeps it in bijection with the compiled-in instances.
 	providers?: {[string]: [...string]}
+	// compiled_plugins — the plugin CANDIES compiled into the charly binary (in-proc
+	// placement). Read by the pluginsgen generator to emit charly/plugins_generated.go
+	// (registerCompiledPlugin per entry) + the repo-root go.work; recognized here so a
+	// document carrying it is not mis-read as a node named "compiled_plugins". A plugin
+	// candy not listed still loads OUT-OF-PROCESS when referenced (the coexist path).
+	compiled_plugins?: [...string]
 	// context_ignore_baseline — the built-in build-context ignore patterns (VCS/binary
 	// excludes + cache-hygiene globs), formerly the Go var baselineContextIgnore, now
 	// data in the embedded charly.yml. Read by generate.go to emit .containerignore /
@@ -170,5 +176,5 @@ _reservedNode: "^(candy|pod|vm|k8s|local|android|group)$"
 	// formerly the inline switches in ovmfCandidatesForDistro + ovmfNotFoundError
 	// (ovmf_paths.go); an unlisted distro tries the union of all families (logic).
 	ovmf_distro_aliases?: {[string]: string}
-	{[!~"^(version|repo|import|discover|defaults|provides|providers|context_ignore_baseline|install_hints|ovmf_paths|device_descriptions|device_patterns|gpu_vendors|pci_class_labels|distro_package_managers|distro_family_map|ovmf_distro_aliases)$"]: #Node}
+	{[!~"^(version|repo|import|discover|defaults|provides|providers|compiled_plugins|context_ignore_baseline|install_hints|ovmf_paths|device_descriptions|device_patterns|gpu_vendors|pci_class_labels|distro_package_managers|distro_family_map|ovmf_distro_aliases)$"]: #Node}
 })

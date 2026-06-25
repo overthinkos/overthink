@@ -19,6 +19,7 @@ import (
 	cp_plugin_mount "github.com/overthinkos/overthink/candy/plugin-mount"
 	cp_plugin_port "github.com/overthinkos/overthink/candy/plugin-port"
 	cp_plugin_process "github.com/overthinkos/overthink/candy/plugin-process"
+	cp_plugin_user "github.com/overthinkos/overthink/candy/plugin-user"
 )
 
 func init() {
@@ -34,4 +35,5 @@ func init() {
 	registerCompiledCheckVerb(cp_plugin_http.NewCheckVerb(), cp_plugin_http.SchemaFS, cp_plugin_http.SchemaDir, cp_plugin_http.InputDefs)
 	registerCompiledCheckVerb(cp_plugin_kernel_param.NewCheckVerb(), cp_plugin_kernel_param.SchemaFS, cp_plugin_kernel_param.SchemaDir, cp_plugin_kernel_param.InputDefs)
 	registerCompiledCheckVerb(cp_plugin_mount.NewCheckVerb(), cp_plugin_mount.SchemaFS, cp_plugin_mount.SchemaDir, cp_plugin_mount.InputDefs)
+	registerCompiledCheckVerb(cp_plugin_user.NewCheckVerb(), cp_plugin_user.SchemaFS, cp_plugin_user.SchemaDir, cp_plugin_user.InputDefs)
 }

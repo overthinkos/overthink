@@ -17,3 +17,4 @@ use ./candy/plugin-matching
 use ./candy/plugin-http
 use ./candy/plugin-kernel-param
 use ./candy/plugin-mount
+use ./candy/plugin-user

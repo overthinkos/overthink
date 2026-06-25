@@ -123,42 +123,6 @@ func (r *Runner) runService(ctx context.Context, c *Op, service string, running,
 	return passf(c, "ok")
 }
 
-// runUser: getent passwd. Parses uid/gid/home/shell for optional matching. The account
-// name + expected uid/gid/home/shell come from the `user` plugin's decoded plugin_input
-// (the verb left #Op for its dedicated builtin plugin unit) — c is retained for failf/passf
-// reporting context.
-func (r *Runner) runUser(ctx context.Context, c *Op, user string, wantUID, wantGID *int, wantHome, wantShell string) CheckResult {
-	probe := fmt.Sprintf(`getent passwd %s`, shellSingleQuote(user))
-	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
-	if err != nil {
-		return failf(c, "probe: %v", err)
-	}
-	if exit != 0 {
-		return failf(c, "user not found")
-	}
-	// Fields: user:x:uid:gid:gecos:home:shell
-	parts := strings.SplitN(strings.TrimSpace(out), ":", 7)
-	if len(parts) < 7 {
-		return failf(c, "unexpected passwd line: %q", out)
-	}
-	uid, _ := strconv.Atoi(parts[2])
-	gid, _ := strconv.Atoi(parts[3])
-	home, shell := parts[5], parts[6]
-	if wantUID != nil && uid != *wantUID {
-		return failf(c, "uid=%d, want %d", uid, *wantUID)
-	}
-	if wantGID != nil && gid != *wantGID {
-		return failf(c, "gid=%d, want %d", gid, *wantGID)
-	}
-	if wantHome != "" && home != wantHome {
-		return failf(c, "home=%s, want %s", home, wantHome)
-	}
-	if wantShell != "" && shell != wantShell {
-		return failf(c, "shell=%s, want %s", shell, wantShell)
-	}
-	return passf(c, fmt.Sprintf("uid=%d gid=%d", uid, gid))
-}
-
 // runUnixGroup: getent group. Parses gid and members. The group name + expected gid come
 // from the unix_group plugin's decoded plugin_input (the verb left #Op for its dedicated
 // builtin plugin unit) — c is retained for failf/passf reporting context.

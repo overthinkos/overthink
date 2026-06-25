@@ -82,8 +82,8 @@ type UnifiedFile struct {
 	Import   ImportList     `yaml:"import,omitempty" json:"import,omitempty"`
 	Discover DiscoverConfig `yaml:"discover,omitempty" json:"discover,omitempty"`
 	// The build-vocabulary kinds (distro/builder/init) are no longer typed core maps:
-	// each was extracted into a dedicated plugin kind (plugin_distro.go /
-	// plugin_builder_kind.go / the candy/plugin-init candy), so a `distro:`/`builder:`/`init:` node
+	// each was extracted into a dedicated plugin kind (candy/plugin-distro /
+	// candy/plugin-builder / the candy/plugin-init candy), so a `distro:`/`builder:`/`init:` node
 	// (incl. the binary-embedded build vocabulary) lands in PluginKinds. The name-keyed
 	// map[string]*XDef the generator/format code consumes is reconstructed on demand by
 	// the Distros() / Builders() / Inits() accessors (decoding the canonical bodies back
@@ -117,7 +117,7 @@ type UnifiedFile struct {
 
 	// Agent catalog (kind:agent) — the AI-CLI graders the iterate loop drives — is no
 	// longer a typed core map: it was extracted into a dedicated plugin kind
-	// (plugin_agent.go), so an `agent:` entity lands in PluginKinds["agent"]. The
+	// (candy/plugin-agent), so an `agent:` entity lands in PluginKinds["agent"]. The
 	// name-keyed map[string]*AgentConfig the harness consumes is reconstructed on
 	// demand by the Agents() accessor (decodes the canonical bodies back into
 	// AgentConfig = spec.Agent). See agent_config.go + Agents().
@@ -145,7 +145,7 @@ type UnifiedFile struct {
 	// Calamares-aligned kinds. The Calamares install `target:` (settings.conf), the
 	// netinstall package group (`package-group:`), and the installer module (`module:`)
 	// are no longer core typed maps — each was extracted into a dedicated plugin kind
-	// (plugin_target.go / plugin_package_group.go / plugin_module.go), so such an entity
+	// (candy/plugin-target / candy/plugin-package-group / candy/plugin-module), so such an entity
 	// lands in PluginKinds, not here. Calamares has zero core readers yet
 	// (importers/emitters deferred), so — like module/package-group — `target` has no
 	// accessor; the canonical body sits in PluginKinds for a future importer.
@@ -153,14 +153,14 @@ type UnifiedFile struct {
 	// Resource (kind:resource) — exclusive host-resource definitions (a token name →
 	// an optional gpu.vendor selector that drives GPU auto-allocation at `charly vm
 	// create`) — is no longer a typed core map either: it was extracted into a dedicated
-	// plugin kind (plugin_resource.go), so a `resource:` node lands in PluginKinds. The
+	// plugin kind (candy/plugin-resource), so a `resource:` node lands in PluginKinds. The
 	// name-keyed map[string]*ResourceDef the GPU-arbitration code consumes is
 	// reconstructed on demand by the Resources() accessor; the binary-embedded default
 	// set merges UNDER a project's own entries via the generic mergePluginKindsMap.
 
 	// Sidecar — the reusable sidecar-container template library — is no longer a
 	// typed core map: it was extracted into a dedicated plugin kind
-	// (plugin_sidecar.go), so a `sidecar:` node (incl. the binary-embedded `tailscale`
+	// (candy/plugin-sidecar), so a `sidecar:` node (incl. the binary-embedded `tailscale`
 	// template) lands in PluginKinds["sidecar"]. The name-keyed map[string]SidecarDef
 	// the deploy/quadlet code consumes is reconstructed on demand by the Sidecars()
 	// accessor (decodes the canonical bodies back into SidecarDef = spec.Sidecar) and
@@ -2007,7 +2007,7 @@ func (uf *UnifiedFile) projectConfigCached(cache map[*UnifiedFile]*Config) *Conf
 }
 
 // Distros reconstructs the name-keyed per-distro build vocabulary from uf.PluginKinds.
-// The `distro` kind is a plugin kind (plugin_distro.go) — a `distro:` node (incl. the
+// The `distro` kind is a plugin kind (candy/plugin-distro) — a `distro:` node (incl. the
 // binary-embedded vocabulary) lands in uf.PluginKinds["distro"][<name>] as canonical
 // spec.Distro JSON (produced by the plugin's Invoke). This accessor decodes each body
 // back into a *DistroDef (= *spec.Distro), yielding the SAME map[string]*DistroDef shape
@@ -2020,7 +2020,7 @@ func (uf *UnifiedFile) Distros() map[string]*DistroDef {
 }
 
 // Builders reconstructs the name-keyed multi-stage builder vocabulary from
-// uf.PluginKinds["builder"] (the `builder` plugin kind, plugin_builder_kind.go) into the
+// uf.PluginKinds["builder"] (the `builder` plugin kind, candy/plugin-builder) into the
 // map[string]*BuilderDef shape the generator consumed when builder was a typed core map.
 func (uf *UnifiedFile) Builders() map[string]*BuilderDef {
 	return decodePluginKindMap[BuilderDef](uf, "builder")
@@ -2034,7 +2034,7 @@ func (uf *UnifiedFile) Inits() map[string]*InitDef {
 }
 
 // Resources reconstructs the name-keyed exclusive-host-resource vocabulary from
-// uf.PluginKinds["resource"] (the `resource` plugin kind, plugin_resource.go) into the
+// uf.PluginKinds["resource"] (the `resource` plugin kind, candy/plugin-resource) into the
 // map[string]*ResourceDef shape the GPU-arbitration code consumed when resource was a
 // typed core map.
 func (uf *UnifiedFile) Resources() map[string]*ResourceDef {

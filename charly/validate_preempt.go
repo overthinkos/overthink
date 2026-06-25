@@ -101,7 +101,7 @@ func validatePreemptibleUnified(uf *UnifiedFile) error {
 //     on its VM entity — a PCI <hostdev> does not render under the qemu backend,
 //     so auto-allocation would silently fail at create time.
 func validateResourceDefs(uf *UnifiedFile, errs *ValidationError) {
-	// resource is a plugin kind now (plugin_resource.go); decode the name-keyed vocab once.
+	// resource is a plugin kind now (candy/plugin-resource); decode the name-keyed vocab once.
 	resources := uf.Resources()
 	for name, rdef := range resources {
 		if rdef == nil {

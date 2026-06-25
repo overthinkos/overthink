@@ -35,8 +35,8 @@ func embeddedDefaults() (*UnifiedFile, error) {
 //
 // The embedded set is the BASE; the project's entries are the overlay that wins.
 // The build vocabulary (distro/builder/init/resource) AND the sidecar template library
-// are ALL plugin kinds now (plugin_distro.go / plugin_builder_kind.go / candy/plugin-init /
-// plugin_resource.go / plugin_sidecar.go): the embedded entries land in
+// are ALL plugin kinds now (candy/plugin-distro / candy/plugin-builder / candy/plugin-init /
+// candy/plugin-resource / candy/plugin-sidecar): the embedded entries land in
 // def.PluginKinds, merged UNDER the project's own entries by the generic name-keyed
 // root-wins mergePluginKindsMap (copy a name only when ABSENT). So a project's
 // `distro: fedora` / `sidecar: tailscale` overrides the embedded one. Calling this AFTER

@@ -114,7 +114,7 @@ func TestEmbeddedDefaults_SameLoaderPath(t *testing.T) {
 	if def.Resources()["nvidia-gpu"] == nil {
 		t.Error("embedded resource nvidia-gpu missing from unified parse")
 	}
-	// Sidecar-template view — sidecar is a plugin kind now (plugin_sidecar.go), so the
+	// Sidecar-template view — sidecar is a plugin kind now (candy/plugin-sidecar), so the
 	// embedded tailscale template is read back via the Sidecars() accessor (over
 	// def.PluginKinds["sidecar"]) from the SAME parse, the SAME UnifiedFile.
 	ts, ok := def.Sidecars()["tailscale"]

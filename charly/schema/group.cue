@@ -1,6 +1,6 @@
 // CUE entity shape for the Calamares-style netinstall package group. #Group is no
 // longer a registered core kind — the `package-group:` kind was extracted into a
-// dedicated plugin unit (plugin/builtins/package-group), which ships its OWN
+// dedicated plugin unit (candy/plugin-package-group), which ships its OWN
 // self-contained #PackageGroupInput reproduction for host-side input validation.
 // #Group remains the canonical core entity TYPE (it generates spec.Group), the
 // decode/consumer reference the plugin's Invoke returns and a consumer reads back.

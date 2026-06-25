@@ -69,7 +69,7 @@ var (
 // ---------------------------------------------------------------------------
 
 // Agents reconstructs the name-keyed AI-CLI grader catalog from uf.PluginKinds.
-// The `agent` kind is a plugin kind (plugin_agent.go) — an `agent:` node lands in
+// The `agent` kind is a plugin kind (candy/plugin-agent) — an `agent:` node lands in
 // uf.PluginKinds["agent"][<name>] as canonical spec.Agent JSON (produced by the
 // plugin's Invoke). This accessor decodes each body back into *AgentConfig
 // (= *spec.Agent), yielding the SAME map[string]*AgentConfig shape the harness

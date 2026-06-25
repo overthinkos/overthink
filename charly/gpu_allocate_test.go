@@ -188,7 +188,7 @@ func TestAutoAllocate_QemuBackendRejected(t *testing.T) {
 // TestResourceKind_Loads verifies a node-form resource: kind loads through the plugin
 // path (runPluginKind → uf.PluginKinds["resource"], validated against the served
 // #ResourceInput) and is read back into the typed map[string]*ResourceDef by the
-// Resources() accessor — resource is a plugin kind now (plugin_resource.go), no longer a
+// Resources() accessor — resource is a plugin kind now (candy/plugin-resource), no longer a
 // typed core map (the former uf.Resource).
 func TestResourceKind_Loads(t *testing.T) {
 	dir := t.TempDir()

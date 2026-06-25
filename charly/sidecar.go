@@ -13,7 +13,7 @@ import (
 )
 
 // Sidecars reconstructs the name-keyed sidecar-template library from uf.PluginKinds.
-// The `sidecar` kind is a plugin kind (plugin_sidecar.go) — a `sidecar:` node (incl.
+// The `sidecar` kind is a plugin kind (candy/plugin-sidecar) — a `sidecar:` node (incl.
 // the binary-embedded `tailscale` template) lands in uf.PluginKinds["sidecar"][<name>]
 // as canonical spec.Sidecar JSON (produced by the plugin's Invoke). This accessor
 // decodes each body back into a SidecarDef (= spec.Sidecar) value, yielding the SAME

@@ -8,7 +8,10 @@ package main
 
 import (
 	cp_plugin_addr "github.com/overthinkos/overthink/candy/plugin-addr"
+	cp_plugin_agent "github.com/overthinkos/overthink/candy/plugin-agent"
+	cp_plugin_builder "github.com/overthinkos/overthink/candy/plugin-builder"
 	cp_plugin_command "github.com/overthinkos/overthink/candy/plugin-command"
+	cp_plugin_distro "github.com/overthinkos/overthink/candy/plugin-distro"
 	cp_plugin_dns "github.com/overthinkos/overthink/candy/plugin-dns"
 	cp_plugin_example "github.com/overthinkos/overthink/candy/plugin-example"
 	cp_plugin_example_external "github.com/overthinkos/overthink/candy/plugin-example-external"
@@ -19,11 +22,16 @@ import (
 	cp_plugin_interface "github.com/overthinkos/overthink/candy/plugin-interface"
 	cp_plugin_kernel_param "github.com/overthinkos/overthink/candy/plugin-kernel-param"
 	cp_plugin_matching "github.com/overthinkos/overthink/candy/plugin-matching"
+	cp_plugin_module "github.com/overthinkos/overthink/candy/plugin-module"
 	cp_plugin_mount "github.com/overthinkos/overthink/candy/plugin-mount"
 	cp_plugin_package "github.com/overthinkos/overthink/candy/plugin-package"
+	cp_plugin_package_group "github.com/overthinkos/overthink/candy/plugin-package-group"
 	cp_plugin_port "github.com/overthinkos/overthink/candy/plugin-port"
 	cp_plugin_process "github.com/overthinkos/overthink/candy/plugin-process"
+	cp_plugin_resource "github.com/overthinkos/overthink/candy/plugin-resource"
 	cp_plugin_service "github.com/overthinkos/overthink/candy/plugin-service"
+	cp_plugin_sidecar "github.com/overthinkos/overthink/candy/plugin-sidecar"
+	cp_plugin_target "github.com/overthinkos/overthink/candy/plugin-target"
 	cp_plugin_unix_group "github.com/overthinkos/overthink/candy/plugin-unix-group"
 	cp_plugin_user "github.com/overthinkos/overthink/candy/plugin-user"
 )
@@ -48,4 +56,12 @@ func init() {
 	registerCompiledCheckVerb(cp_plugin_service.NewCheckVerb(), cp_plugin_service.SchemaFS, cp_plugin_service.SchemaDir, cp_plugin_service.InputDefs)
 	registerCompiledCheckVerb(cp_plugin_package.NewCheckVerb(), cp_plugin_package.SchemaFS, cp_plugin_package.SchemaDir, cp_plugin_package.InputDefs)
 	registerCompiledPlugin(cp_plugin_init.NewProvider(), cp_plugin_init.NewMeta())
+	registerCompiledPlugin(cp_plugin_agent.NewProvider(), cp_plugin_agent.NewMeta())
+	registerCompiledPlugin(cp_plugin_builder.NewProvider(), cp_plugin_builder.NewMeta())
+	registerCompiledPlugin(cp_plugin_distro.NewProvider(), cp_plugin_distro.NewMeta())
+	registerCompiledPlugin(cp_plugin_module.NewProvider(), cp_plugin_module.NewMeta())
+	registerCompiledPlugin(cp_plugin_package_group.NewProvider(), cp_plugin_package_group.NewMeta())
+	registerCompiledPlugin(cp_plugin_resource.NewProvider(), cp_plugin_resource.NewMeta())
+	registerCompiledPlugin(cp_plugin_sidecar.NewProvider(), cp_plugin_sidecar.NewMeta())
+	registerCompiledPlugin(cp_plugin_target.NewProvider(), cp_plugin_target.NewMeta())
 }

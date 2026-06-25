@@ -8,7 +8,7 @@ import (
 
 // TestAgentPlugin_OutputFormat_RejectedAtLoad proves the `agent` plugin kind's served
 // #AgentInput schema rejects an illegal output_format at LOAD. The agent kind was
-// externalized into a dedicated plugin unit (plugin_agent.go), so this validation
+// externalized into a dedicated plugin unit (candy/plugin-agent), so this validation
 // moved from the core #NodeDoc gate to runPluginKind → validateAuthoredPluginInput
 // against the plugin's #AgentInput (output_format: *"" | "stream-json"). A valid agent
 // normalizes cleanly; `output_format: bogus` is a hard load error. It fails LOUDLY if

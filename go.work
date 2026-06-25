@@ -24,3 +24,11 @@ use ./candy/plugin-command
 use ./candy/plugin-service
 use ./candy/plugin-package
 use ./candy/plugin-init
+use ./candy/plugin-agent
+use ./candy/plugin-builder
+use ./candy/plugin-distro
+use ./candy/plugin-module
+use ./candy/plugin-package-group
+use ./candy/plugin-resource
+use ./candy/plugin-sidecar
+use ./candy/plugin-target

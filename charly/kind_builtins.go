@@ -18,8 +18,7 @@ package main
 // #Candy/#Box (#NodeDoc) gate (registerCueKind("candy", "#Candy"), cue_kind_candy.go).
 
 // The `sidecar` KIND (the sidecar-container template library) is no longer a core
-// builtin kind — it was extracted into a dedicated plugin UNIT (plugin_sidecar.go +
-// plugin/builtins/sidecar), mirroring the agent/module kind→plugin extractions. A
+// builtin kind — it was extracted into a dedicated plugin UNIT (candy/plugin-sidecar), mirroring the agent/module kind→plugin extractions. A
 // `sidecar:` node now routes through runPluginKind (Invoke/OpLoad) into
 // uf.PluginKinds["sidecar"], validated against the plugin's served #SidecarInput schema;
 // UnifiedFile.Sidecars() reads it back into the name-keyed map[string]SidecarDef the
@@ -28,8 +27,8 @@ package main
 // The build-vocabulary kinds (distro / builder / init / resource) and the Calamares
 // install `target` kind are no longer core builtin kinds — each was extracted into a
 // dedicated plugin UNIT — distro/builder/resource/target as in-charly-module units
-// (plugin_distro.go + plugin/builtins/distro, plugin_builder_kind.go + plugin/builtins/builder,
-// plugin_resource.go + plugin/builtins/resource, plugin_target.go + plugin/builtins/target),
+// (candy/plugin-distro, candy/plugin-builder,
+// candy/plugin-resource, candy/plugin-target),
 // and init relocated to the compiled-in candy candy/plugin-init — mirroring the
 // sidecar/agent/module kind→plugin extractions. Such a node now routes through
 // runPluginKind (Invoke/OpLoad) into uf.PluginKinds["<kind>"], validated against the
@@ -41,7 +40,7 @@ package main
 // through the SAME plugin path and merges root-wins via the generic mergePluginKindsMap.
 
 // The `agent` KIND (the AI-CLI grader catalog) is no longer a core builtin kind — it
-// was extracted into a dedicated plugin UNIT (plugin_agent.go + plugin/builtins/agent),
+// was extracted into a dedicated plugin UNIT (candy/plugin-agent),
 // mirroring the package-group kind→plugin extraction. An `agent:` node now routes
 // through runPluginKind (Invoke/OpLoad) into uf.PluginKinds["agent"], validated against
 // the plugin's served #AgentInput schema; UnifiedFile.Agents() reads it back into the
@@ -56,14 +55,12 @@ package main
 // the `providers:` manifest and self-registers via registerDedicatedBuiltin.
 
 // The Calamares package group (`package-group:`) is no longer a core builtin kind —
-// it was extracted into a dedicated plugin UNIT (plugin_package_group.go +
-// plugin/builtins/package-group), the first kind→plugin extraction. A
+// it was extracted into a dedicated plugin UNIT (candy/plugin-package-group), the first kind→plugin extraction. A
 // `package-group:` node now routes through runPluginKind (Invoke/OpLoad) into
 // uf.PluginKinds, validated against the plugin's served #PackageGroupInput schema.
 
 // The `module` KIND (the Calamares installer module) is no longer a core builtin kind
-// — it was extracted into a dedicated plugin UNIT (plugin_module.go +
-// plugin/builtins/module), mirroring the package-group kind→plugin extraction. A
+// — it was extracted into a dedicated plugin UNIT (candy/plugin-module), mirroring the package-group kind→plugin extraction. A
 // `module:` node now routes through runPluginKind (Invoke/OpLoad) into
 // uf.PluginKinds["module"], validated against the plugin's served #ModuleInput schema.
 

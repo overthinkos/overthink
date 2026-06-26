@@ -53,11 +53,17 @@ func FetchQcow2(src VmSource) (FetchedImage, error) {
 	// Resolve expected sha256.
 	expected := resolveExpectedSHA256(src)
 
-	// Cache hit: verify recorded sha256 matches (if we have one), then
-	// re-verify file sha256 periodically. To avoid re-hashing large
-	// qcow2 files on every VM build, trust a recorded sidecar sum that
-	// matches the expected value.
-	if existing := readRecordedSum(cacheSumPath); existing != "" && expected != "" && existing == expected {
+	// Cache hit: reuse the cached image when a recorded sidecar sum + the cached file
+	// both exist AND either (a) it matches the pinned expected sha256, or (b) nothing
+	// is pinned (expected == ""). Case (b) lets a rolling/unpinned cloud_image (e.g.
+	// box/arch's images/latest/ URL, which cannot take a static pin) be reused via its
+	// own download-computed sum instead of re-fetching the full image on EVERY VM build
+	// — the cache is content-addressed by URL and self-consistent via the recorded sum.
+	// This stops unpinned rolling URLs from re-downloading hundreds of MiB per build and
+	// tripping mirror rate limits (the failure mode that took down check-fedora-vm before
+	// fedora-vm was pinned). Pinned images keep the stronger expected==recorded check. To
+	// avoid re-hashing large qcow2 files on every build, the recorded sidecar sum is trusted.
+	if existing := readRecordedSum(cacheSumPath); existing != "" && (expected == "" || existing == expected) {
 		if _, err := os.Stat(cachePath); err == nil {
 			return FetchedImage{Path: cachePath, SHA256: existing}, nil
 		}

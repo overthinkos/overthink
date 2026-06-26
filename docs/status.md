@@ -170,7 +170,16 @@ control overstep is recorded here for transparency.
   built-in + `CHARLY_READINESS_*` env defaults only. Fix: thread the host-resolved poll
   gates through the create RPC (mirror FU-1's host→plugin payload). R10 gate: a
   `check-fedora-vm` variant with a non-default `defaults.readiness`.
-- **Still OPEN:** **FU-4** (box/arch rolling `images/latest/` cloud_image → immutable dated
-  URL + pin; its own box/arch cutover + check-arch-vm bed) and **FU-7** (above). **FU-5**
-  remains an accepted deferral; **FU-6** — the per-cutover R10s satisfy "R10 of all cutovers",
-  a full-roster `/verify-beds` sweep is optional.
+- **FU-4 — ✅ DONE.** Unpinned cloud_image cache-reuse (NOT a dated pin — a rolling URL can't
+  take one): `http_fetch.go` reuses the cache for an unpinned URL via its recorded sum. charly
+  core only (box/arch config untouched). R10: check-arch-vm.
+- **FU-8 — ✅ DONE (NEW; 3 sub-fixes).** The go-libvirt shed's externalized VM/spice/libvirt
+  check verbs regressed in 3 ways, all surfaced + fixed via check-arch-vm's R10: (2) operator-side
+  VM-domain-name remap (host threads `vmTargetName()` through `snapshotCheckEnv.CheckEnv.Box`),
+  (3) SPICE `TunnelNeeded` misclassification (`uriNeedsTunnel` — the local default
+  `qemu:///session` is not remote), (4) out-of-process verb stderr not captured (`captureStdout`
+  → `captureOutput`). + the R1/R5 skill sweep (spice + libvirt SKILL.md). R10: check-arch-vm PASS
+  run `2026.177.1342` (13 steps, check-live 60/60 incl. the fresh-rebuild re-verification).
+- **Still OPEN:** **FU-7** (readiness threading, minor — above). **FU-5** remains an accepted
+  deferral; **FU-6** — the per-cutover R10s satisfy "R10 of all cutovers", a full-roster
+  `/verify-beds` sweep is optional.

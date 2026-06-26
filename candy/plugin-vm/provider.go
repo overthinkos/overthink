@@ -117,13 +117,16 @@ func (vmProvider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRe
 		return resultJSON("skip", fmt.Sprintf("libvirt: %s requires a running VM (skip under charly check box)", method))
 	}
 
-	out, runErr := dispatchLibvirtVerb(&op, env.Box)
+	out, capturedStderr, runErr := dispatchLibvirtVerb(&op, env.Box)
 
 	exit := 0
-	stderr := ""
+	stderr := capturedStderr // the verb's real os.Stderr (e.g. guest/ping's "agent responsive")
 	if runErr != nil {
 		exit = 1
-		stderr = runErr.Error()
+		if stderr != "" {
+			stderr += "\n"
+		}
+		stderr += runErr.Error()
 	}
 	wantExit := 0
 	if op.ExitStatus != nil {
@@ -151,11 +154,11 @@ func (vmProvider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRe
 
 // dispatchLibvirtVerb runs one libvirt method through the in-process LibvirtCmd Kong tree,
 // reusing the libvirtMethods allowlist (op→subcommand-path + positional args) so the nested
-// guest/* + snapshot/* subgroups dispatch without a per-method switch. Returns captured stdout.
-func dispatchLibvirtVerb(op *spec.Op, box string) (string, error) {
+// guest/* + snapshot/* subgroups dispatch without a per-method switch. Returns captured stdout + stderr.
+func dispatchLibvirtVerb(op *spec.Op, box string) (stdout, stderr string, err error) {
 	ms, ok := libvirtMethods[op.Libvirt]
 	if !ok {
-		return "", fmt.Errorf("unknown libvirt method %q", op.Libvirt)
+		return "", "", fmt.Errorf("unknown libvirt method %q", op.Libvirt)
 	}
 	args := append([]string{}, ms.Path[1:]...) // drop the leading "libvirt"
 	if !ms.SkipBox {
@@ -167,7 +170,7 @@ func dispatchLibvirtVerb(op *spec.Op, box string) (string, error) {
 	if op.URI != "" {
 		args = append(args, "--uri", op.URI)
 	}
-	return captureStdout(func() error {
+	return captureOutput(func() error {
 		var cli LibvirtCmd
 		parser, err := kong.New(&cli, kong.Name("libvirt"), kong.Exit(func(int) {}))
 		if err != nil {
@@ -181,27 +184,40 @@ func dispatchLibvirtVerb(op *spec.Op, box string) (string, error) {
 	})
 }
 
-// stdoutMu serializes the os.Stdout redirect in captureStdout — verb Invokes can overlap and
-// the redirect is process-global.
-var stdoutMu sync.Mutex
+// captureMu serializes the os.Stdout/os.Stderr redirect in captureOutput — verb Invokes can
+// overlap and the redirect is process-global.
+var captureMu sync.Mutex
 
-// captureStdout runs fn with os.Stdout redirected to a pipe and returns what it wrote. The
-// libvirt handlers print their verb output to os.Stdout (the matcher target).
-func captureStdout(fn func() error) (string, error) {
-	stdoutMu.Lock()
-	defer stdoutMu.Unlock()
-	old := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		return "", err
+// captureOutput runs fn with BOTH os.Stdout and os.Stderr redirected to pipes and returns what
+// each wrote. The libvirt handlers print verb output to os.Stdout (the stdout: matcher target)
+// AND some print status lines to os.Stderr (e.g. guest/ping's "agent responsive" — the stderr:
+// matcher target), so both streams must be captured for a plan step's stdout:/stderr: matchers
+// to see the out-of-process verb's real output. (Check-verb output is small — well under the
+// pipe buffer — so the read-after-close pattern cannot deadlock here.)
+func captureOutput(fn func() error) (stdout, stderr string, err error) {
+	captureMu.Lock()
+	defer captureMu.Unlock()
+	oldOut, oldErr := os.Stdout, os.Stderr
+	rOut, wOut, perr := os.Pipe()
+	if perr != nil {
+		return "", "", perr
 	}
-	os.Stdout = w
+	rErr, wErr, perr := os.Pipe()
+	if perr != nil {
+		_ = wOut.Close()
+		_ = rOut.Close()
+		return "", "", perr
+	}
+	os.Stdout, os.Stderr = wOut, wErr
 	runErr := fn()
-	_ = w.Close()
-	os.Stdout = old
-	data, _ := io.ReadAll(r)
-	_ = r.Close()
-	return string(data), runErr
+	_ = wOut.Close()
+	_ = wErr.Close()
+	os.Stdout, os.Stderr = oldOut, oldErr
+	outData, _ := io.ReadAll(rOut)
+	errData, _ := io.ReadAll(rErr)
+	_ = rOut.Close()
+	_ = rErr.Close()
+	return string(outData), string(errData), runErr
 }
 
 // dispatchInternalOp handles a host-initiated VM-resolution RPC (env.VmOp) and returns the

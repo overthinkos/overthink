@@ -235,7 +235,10 @@ func (r *Runner) runCharlyVerb(ctx context.Context, c *Op, verb, method string, 
 	// kube verbs that operate against a cluster instead of an image).
 	argv := append([]string{"check"}, spec.Path...)
 	if !spec.SkipBox {
-		argv = append(argv, r.Box)
+		// vmTargetName() == r.Box for a pod deployment (the container name), but the
+		// resolved vm: ENTITY name for a VM deployment — so the operator-side libvirt
+		// verb addresses the live domain charly-<vm-entity>, not charly-<deploy-name>.
+		argv = append(argv, r.vmTargetName())
 	}
 	if spec.PosArgs != nil {
 		argv = append(argv, spec.PosArgs(c)...)

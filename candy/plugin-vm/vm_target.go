@@ -145,6 +145,17 @@ type DisplayEndpoint struct {
 	TunnelNeeded bool
 }
 
+// uriNeedsTunnel reports whether a libvirt URI reaches the hypervisor over SSH
+// (qemu+ssh://…), in which case a SPICE/VNC endpoint must be SSH-forwarded to be
+// dialable host-side. A LOCAL URI ("" / qemu:///session / qemu:///system) needs no
+// tunnel — the endpoint (a unix socket or a 127.0.0.1 port) is directly dialable. The
+// resolve-spice/resolve-vnc handler defaults an empty URI to qemu:///session, so this
+// MUST test the remote SCHEME, not non-emptiness (else a local VM's endpoint is wrongly
+// SSH-tunnelled to an empty target — "ssh tunnel to @:0").
+func uriNeedsTunnel(uri string) bool {
+	return strings.HasPrefix(uri, "qemu+ssh")
+}
+
 // SpiceEndpoint walks the domain XML and returns the SPICE graphics
 // endpoint (socket or TCP) with tunneling requirements annotated.
 //
@@ -164,7 +175,7 @@ func (t *VmTarget) SpiceEndpoint() (DisplayEndpoint, error) {
 		ep := DisplayEndpoint{
 			Kind:         "spice",
 			Password:     s.Passwd,
-			TunnelNeeded: t.Uri != "",
+			TunnelNeeded: uriNeedsTunnel(t.Uri),
 		}
 		// Prefer socket listeners — that's what virt-manager and our
 		// CLI want on remote hypervisors.
@@ -205,7 +216,7 @@ func (t *VmTarget) VncEndpoint() (DisplayEndpoint, error) {
 		ep := DisplayEndpoint{
 			Kind:         "vnc",
 			Password:     v.Passwd,
-			TunnelNeeded: t.Uri != "",
+			TunnelNeeded: uriNeedsTunnel(t.Uri),
 		}
 		for _, l := range v.Listeners {
 			if l.Socket != nil && l.Socket.Socket != "" {

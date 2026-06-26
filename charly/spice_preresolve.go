@@ -53,7 +53,7 @@ func (r *Runner) preresolveSpiceEndpoint(c *Op) (env *SpiceEnv, cleanup func(), 
 	// Resolve the VM's SPICE endpoint via the out-of-process vm plugin (the go-libvirt
 	// ResolveVmTarget+SpiceEndpoint moved there); the no-display-device skip + the SpiceEnv build
 	// + any ssh tunnel stay host-side.
-	raw, ok := invokeVmPlugin("resolve-spice", r.Box, uri)
+	raw, ok := invokeVmPlugin("resolve-spice", r.vmTargetName(), uri)
 	if !ok {
 		res := failf(c, "spice: %s: vm plugin unavailable (go-libvirt resolution is out-of-process)", c.Spice)
 		return nil, noop, &res

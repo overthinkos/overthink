@@ -44,7 +44,12 @@ func runModeName(m RunMode) string {
 // snapshotCheckEnv captures the serializable invocation context for a verb
 // provider call.
 func snapshotCheckEnv(r *Runner, _ *Op) *CheckEnv {
-	ce := &CheckEnv{Box: r.Box, Instance: r.Instance, Distros: r.Distros, Mode: runModeName(r.Mode)}
+	// Box is the verb's TARGET name across the wire. For a VM deployment it must be the
+	// resolved vm: ENTITY name (vmTargetName) — the out-of-process vm/spice/libvirt plugins
+	// prefix charly- onto it to address the live domain and cannot LoadUnified to remap a
+	// deploy/bed name themselves (the go-libvirt shed dropped that in-core remap). A
+	// pod/k8s/android deployment leaves VmName empty, so vmTargetName() == Box (unchanged).
+	ce := &CheckEnv{Box: r.vmTargetName(), Instance: r.Instance, Distros: r.Distros, Mode: runModeName(r.Mode)}
 	// The container name is meaningful only for a live (non-box) run with a real box —
 	// the same condition under which a live-container verb runs at all.
 	if r.Mode != RunModeBox && r.Box != "" && r.Box != "." {

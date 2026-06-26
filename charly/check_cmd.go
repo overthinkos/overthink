@@ -488,6 +488,13 @@ func (c *CheckLiveCmd) runVm() error {
 		runner.Box = c.Box
 		runner.Instance = c.Instance
 	}
+	// Box stays the deploy/bed name (container + DEPLOY_NAME identity); VmName is the
+	// resolved vm: ENTITY name (deploy name remapped via uf.Bundle[box].From). The
+	// operator-side libvirt/spice verbs must address the live libvirt domain
+	// charly-<VmName>, so they read vmTargetName() — the out-of-process vm plugin
+	// cannot LoadUnified to remap the name itself, so the host threads the
+	// already-resolved entity name through.
+	runner.VmName = vmName
 	// Cross-deployment support for a VM SUBJECT (the `on:` driver dispatch +
 	// ${HOST}/${HOST} resolution) — the SAME wiring the pod
 	// (CheckLiveCmd.Run) and local (runLocalCheck) paths already do (R3). Without

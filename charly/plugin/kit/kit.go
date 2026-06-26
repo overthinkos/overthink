@@ -122,6 +122,28 @@ func ShellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
+// TrimPreview truncates s to a 200-char preview (trailing "…") for compact check-output
+// display — the importable analogue of charly's trimPreview.
+func TrimPreview(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) > 200 {
+		return s[:200] + "…"
+	}
+	return s
+}
+
+// WrapContainerCommand guards an in-container command-check script against stdin-consuming
+// subcommands. The runner delivers in-container scripts to the pod shell over a stdin heredoc
+// ("stdin-attached exec"); without this guard the FIRST subcommand that reads stdin — adb shell,
+// ssh, read, cat — consumes the REST of the heredoc (the not-yet-executed script lines), silently
+// truncating the check to its first command. Wrapping the whole script in a brace group with stdin
+// redirected from /dev/null fixes it generically: the shell reads the entire group before executing
+// it (so the heredoc is fully drained by parse time), then runs every subcommand with stdin tied to
+// /dev/null. The host path (a plain `sh -c` argv) is unaffected.
+func WrapContainerCommand(script string) string {
+	return "{ " + script + "\n} </dev/null"
+}
+
 // DecodeInput decodes an Op's plugin_input (map[string]any) into a candy's
 // CUE-generated typed params struct via a JSON round-trip — the importable analogue
 // of charly's decodePluginInput. A nil/empty input leaves out at its zero value;

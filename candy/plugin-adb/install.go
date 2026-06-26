@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 	"github.com/overthinkos/overthink/charly/spec"
 )
 
@@ -89,11 +90,8 @@ else
 fi`
 }
 
-// shellSingleQuote wraps a string in single quotes for safe bash interpolation
-// (mirrors charly's shellSingleQuote — this module cannot import package main).
-func shellSingleQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
+// shellSingleQuote is the shared kit helper (FU-11 — formerly duplicated in core + plugins).
+var shellSingleQuote = kit.ShellQuote
 
 // installByPackage downloads an app by package id via apkeep and installs it onto
 // the device. In-pod runs the script via `engine exec`; host/endpoint runs it via

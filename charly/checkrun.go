@@ -594,20 +594,6 @@ func (r *Runner) runKill(_ context.Context, c *Op) CheckResult {
 	}
 }
 
-// wrapContainerCommand guards an in-container command-check script against
-// stdin-consuming subcommands. The runner delivers in-container scripts to the
-// pod shell over a stdin heredoc (NestedExecutor.wrapWithJump, "stdin-attached
-// exec"); without this guard the FIRST subcommand that reads stdin — adb shell,
-// ssh, read, cat — consumes the REST of the heredoc (the not-yet-executed
-// script lines), silently truncating the check to its first command. Wrapping
-// the whole script in a brace group with stdin redirected from /dev/null fixes
-// it generically: the shell reads the entire group before executing it (so the
-// heredoc is fully drained by parse time), then runs it with every subcommand's
-// stdin tied to /dev/null. The host path (`sh -c` argv, below) is unaffected.
-func wrapContainerCommand(script string) string {
-	return "{ " + script + "\n} </dev/null"
-}
-
 // ---------------------------------------------------------------------------
 // Result helpers
 // ---------------------------------------------------------------------------
@@ -622,14 +608,6 @@ func failf(c *Op, format string, args ...any) CheckResult {
 
 func skipf(c *Op, msg string) CheckResult {
 	return CheckResult{Op: c, Status: TestSkip, Message: msg}
-}
-
-func trimPreview(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) > 200 {
-		return s[:200] + "…"
-	}
-	return s
 }
 
 // ---------------------------------------------------------------------------

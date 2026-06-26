@@ -202,6 +202,20 @@ control overstep is recorded here for transparency.
   the now-dead `VmDiskDir` injection seam in `vmshared/hooks.go`. (The snapshot/qemu-shutdown
   host-wrapper↔plugin-impl pairs were NOT dups — a `\b`-broken awk had inflated my count to 21; the
   real set was 11. R10 check-fedora-vm PASS run `2026.177.1601`.)
-- **All follow-ups CLOSED.** FU-1/2/3/4/7/8/9/10 implemented + R10'd; **FU-5** remains an accepted plan
-  deferral (out-of-process top-level command nesting); **FU-6** — the per-cutover R10s satisfy "R10
-  of all cutovers" (a full-roster `/verify-beds` sweep stays optional).
+- **FU-11 — ✅ DONE.** A whole-repo R3 scan (after FU-10) found 3 small pure helpers duplicated
+  byte-for-byte core↔plugin (NOT vm-specific): `trimPreview` (core + plugin-command + plugin-http),
+  `wrapContainerCommand` (core + plugin-command), `shellSingleQuote` (core + plugin-adb). Consolidated
+  into the importable host-engine kit (`charly/plugin/kit` — `TrimPreview`/`WrapContainerCommand` added;
+  `shellSingleQuote` folded onto the pre-existing byte-identical `kit.ShellQuote`); core + the 3 plugins
+  alias the lowercase names. R10 check-pod PASS run `2026.177.1713` (core check runner + command + http
+  verbs); the adb leg is byte-identical + build-proven.
+- **FU-12 — OPEN (R2 immediate-next, surfaced by FU-11's check-android run).** `bd701d86`'s
+  `loadProjectPlugins` perf-scoping does NOT load the `adb` plugin for the android DEPLOY mechanism
+  (`AndroidUnifiedTarget` uses `invokeAdbPlugin`, but `deployNodePluginContext` only references the
+  substrate-kind word + plan verb-words — never "adb"), so the android device deploy fails with "adb
+  plugin not loaded". A 174→177 regression (check-android passed on 2026.174.x), independent of FU-11.
+  Fix: `deployNodePluginContext` must reference "adb" when the deploy is the android substrate. R10:
+  check-android-emulator-pod (which then also runtime-confirms FU-11's adb leg).
+- **Follow-ups status.** FU-1/2/3/4/7/8/9/10/11 implemented + R10'd; **FU-12** open (above, the
+  immediate-next); **FU-5** an accepted plan deferral (out-of-proc top-level command nesting); **FU-6**
+  satisfied by per-cutover R10s.

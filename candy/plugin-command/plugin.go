@@ -14,7 +14,6 @@ import (
 	"embed"
 	"errors"
 	"os/exec"
-	"strings"
 
 	"github.com/overthinkos/overthink/candy/plugin-command/params"
 	"github.com/overthinkos/overthink/charly/plugin/kit"
@@ -105,10 +104,8 @@ func (verb) RunVerb(ctx context.Context, cc kit.CheckContext, op *spec.Op) kit.R
 	return kit.Passf("exit=%d", exitCode)
 }
 
-// wrapContainerCommand guards an in-container command against stdin reads (mirrors charly).
-func wrapContainerCommand(script string) string {
-	return "{ " + script + "\n} </dev/null"
-}
+// wrapContainerCommand is the shared kit helper (FU-11 — formerly duplicated in core + plugins).
+var wrapContainerCommand = kit.WrapContainerCommand
 
 // captureCmd runs a host *exec.Cmd, capturing stdout/stderr/exit (mirrors runCaptureCmd).
 func captureCmd(cmd *exec.Cmd) (string, string, int, error) {
@@ -126,11 +123,5 @@ func captureCmd(cmd *exec.Cmd) (string, string, int, error) {
 	return stdout.String(), stderr.String(), 0, nil
 }
 
-// trimPreview trims + caps a captured stream for error messages.
-func trimPreview(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) > 200 {
-		return s[:200] + "…"
-	}
-	return s
-}
+// trimPreview is the shared kit helper (FU-11 — formerly duplicated in core + plugins).
+var trimPreview = kit.TrimPreview

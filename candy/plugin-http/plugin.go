@@ -219,11 +219,5 @@ func decodeMatcherList(v any) spec.MatcherList {
 	return ml
 }
 
-// trimPreview trims + caps a captured stream for error messages.
-func trimPreview(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) > 200 {
-		return s[:200] + "…"
-	}
-	return s
-}
+// trimPreview is the shared kit helper (FU-11 — formerly duplicated in core + plugins).
+var trimPreview = kit.TrimPreview

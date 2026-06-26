@@ -61,12 +61,6 @@ func taskUnresolvedRefs(s string, known map[string]bool) []string {
 	return out
 }
 
-// shellSingleQuote quotes s for safe embedding in bash-c '...' by escaping
-// embedded single quotes via the standard '\” trick.
-func shellSingleQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
-
 // resolveUserSpec converts a task's `user:` field to (userDirective, chownPair).
 //   - userDirective: the value to emit in `USER <value>` (numeric or name).
 //   - chownPair: the numeric "<uid>:<gid>" for COPY --chown (empty if not needed).

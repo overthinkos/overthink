@@ -9,11 +9,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// vm_phaseA_shims.go — small impl helpers extracted from charly/vm.go (which stayed core, as the
-// `charly vm` command host) plus one transitional Phase-A stub. The extracts are REAL impl the
-// out-of-process plugin needs (the plugin runs on the host). They are tiny and currently
-// DUPLICATED with core's vm.go; Phase B either extracts them to a shared package or accepts the
-// per-module copy (R3 decision). The one true shim is unmarshalEmbeddedDefaults — see below.
+// vm_phaseA_shims.go — small host-side impl helpers the out-of-process plugin needs (it runs on the
+// host). vmDiskDir + unmarshalEmbeddedDefaults implement the vmshared.VmDiskDir +
+// vmshared.UnmarshalEmbeddedDefaults injection seams (charly/vmshared/hooks.go, wired in
+// vmshared_aliases.go). libvirtSessionURI / qemuSystemBinary / startLibvirtUserSession are a
+// deliberate per-module copy of core's charly/vm.go host-detection helpers (a const + two tiny funcs,
+// ~13 lines): the SUBSTANTIAL shared VM code already lives in vmshared, and these are below the bar
+// for exporting trivia across the module boundary (R3 — the shared-vs-trivial line). NOT transitional.
 
 // libvirtSessionURI is the rootless per-user libvirt endpoint (extract from vm.go).
 const libvirtSessionURI = "qemu:///session"
@@ -47,10 +49,10 @@ func vmDiskDir(vmName string) string {
 //go:embed build_defaults.yml
 var embeddedCharlyDefaults []byte
 
-// unmarshalEmbeddedDefaults decodes the plugin's embedded build vocab (a copy of charly's
-// charly.yml — the ovmf_paths/distro sections the OVMF resolver reads). The out-of-process plugin
-// self-resolves OVMF firmware paths from its own embedded vocab since it cannot reach charly's
-// embed. DUP with core's charly.yml — Phase B+ extracts to a shared OVMF data file.
+// unmarshalEmbeddedDefaults decodes the plugin's embedded build vocab (build_defaults.yml, a copy of
+// charly's charly.yml — the ovmf_paths/distro sections the OVMF resolver reads). The out-of-process
+// plugin self-resolves OVMF firmware paths from its own embedded vocab since it cannot reach charly's
+// //go:embed. Implements the vmshared.UnmarshalEmbeddedDefaults seam (wired in vmshared_aliases.go).
 func unmarshalEmbeddedDefaults(dst any) {
 	_ = yaml.Unmarshal(embeddedCharlyDefaults, dst)
 }

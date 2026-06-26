@@ -54,11 +54,9 @@ func RenderDomainXML(spec *VmSpec, rt VmRuntimeParams) (string, error) {
 		return "", fmt.Errorf("marshaling domain XML: %w", err)
 	}
 	xmlStr := string(out) + "\n"
-	// Egress gate: best-effort koala XML validation of the rendered domain
-	// (libvirt's DomainDefineXML is the authoritative gate — see /charly-internals:egress).
-	if err := ValidateXMLEgress("libvirt_domain_xml", "libvirt-domain:"+rt.Name, xmlStr); err != nil {
-		return "", err
-	}
+	// Egress is validated HOST-SIDE — the out-of-process plugin must not carry the egress
+	// subsystem. runVmSpecCreate's two-phase ValidateOnly create renders + RETURNS this XML, the
+	// host runs the real ValidateXMLEgress, then authorizes create (charly/vm_create_spec.go).
 	return xmlStr, nil
 }
 

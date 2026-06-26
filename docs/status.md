@@ -153,3 +153,24 @@ control overstep is recorded here for transparency.
 3. Each FU lands as its own atomic cutover through its R10 gate (above), pushed
    with the live SSH socket, tagged `v<CalVer>`, with a `CHANGELOG/2026-06.md`
    entry per repo.
+
+## 6. Resolution log
+
+**2026-06-26 (continued):**
+- **FU-1 — ✅ DONE.** Egress validation restored via a two-phase `ValidateOnly` create
+  (the plugin renders + RETURNS the libvirt domain XML; the host runs the real
+  `ValidateXMLEgress`; then creates). R10: `check-fedora-vm` PASS (run `2026.177.1052`);
+  coverage `TestVmCreate_HostEgressValidatesReturnedDomainXML`. See CHANGELOG/2026-06.md.
+- **FU-2 — ✅ DONE.** All stale "Phase-A/Phase-B" transitional comments swept across
+  candy/plugin-vm (R5 sweep clean).
+- **FU-3 — ✅ DONE.** Documented R3 decision: keep the ~13-line host-detection trio
+  (`libvirtSessionURI`/`qemuSystemBinary`/`startLibvirtUserSession`) as a per-module copy.
+- **FU-7 — NEW, OPEN (minor).** Found during the FU-2 sweep: the host's project-configured
+  `defaults.readiness` is NOT threaded through the create RPC — the plugin polls with
+  built-in + `CHARLY_READINESS_*` env defaults only. Fix: thread the host-resolved poll
+  gates through the create RPC (mirror FU-1's host→plugin payload). R10 gate: a
+  `check-fedora-vm` variant with a non-default `defaults.readiness`.
+- **Still OPEN:** **FU-4** (box/arch rolling `images/latest/` cloud_image → immutable dated
+  URL + pin; its own box/arch cutover + check-arch-vm bed) and **FU-7** (above). **FU-5**
+  remains an accepted deferral; **FU-6** — the per-cutover R10s satisfy "R10 of all cutovers",
+  a full-roster `/verify-beds` sweep is optional.

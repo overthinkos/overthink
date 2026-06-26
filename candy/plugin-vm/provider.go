@@ -1,12 +1,12 @@
 package main
 
-// provider.go is the OUT-OF-PROCESS vm-plugin provider's Invoke. Phase B wiring: the `libvirt`
+// provider.go is the OUT-OF-PROCESS vm-plugin provider's Invoke. The `libvirt`
 // check verb dispatches here (the verb keeps its `libvirt:` discriminator + every #LibvirtMethod
 // modifier on charly's core #Op, authoring unchanged), and Invoke OWNS the verdict — it runs the
 // in-process LibvirtCmd Kong tree (which carries the go-libvirt impl this plugin extracted) and
 // self-evaluates the matchers, exactly like candy/plugin-kube. The internal VM-resolution + the
 // lifecycle ops (resolve-target / domain-state / list-domains / create / start / stop …) are
-// added below as Phase B proceeds; today the libvirt verb is wired.
+// all wired below alongside the libvirt verb.
 
 import (
 	"context"
@@ -70,6 +70,10 @@ type vmCreateReq struct {
 	Name         string          `json:"name"`
 	Backend      string          `json:"backend"`
 	VmStateDir   string          `json:"vm_state_dir"`
+	// ValidateOnly: render + RETURN the libvirt domain XML for host-side egress
+	// validation (ValidateXMLEgress) WITHOUT creating; the host then issues a
+	// second create call. Matches charly's vmCreateReq.
+	ValidateOnly bool `json:"validate_only,omitempty"`
 }
 
 type pluginResult struct {
@@ -203,7 +207,7 @@ func captureStdout(fn func() error) (string, error) {
 // dispatchInternalOp handles a host-initiated VM-resolution RPC (env.VmOp) and returns the
 // structured JSON result the host's invokeVmPlugin decodes. The stateful libvirt connection stays
 // IN the plugin (it cannot cross the process boundary); the host sends a high-level op + args.
-// resolve-spice/resolve-vnc (the DisplayEndpoint path) are added as Phase B continues.
+// resolve-spice/resolve-vnc (the DisplayEndpoint path) are handled below.
 func dispatchInternalOp(env vmEnv) (*pb.InvokeReply, error) {
 	uri := env.URI
 	if uri == "" {
@@ -296,6 +300,21 @@ func dispatchInternalOp(env vmEnv) (*pb.InvokeReply, error) {
 		r := env.Create
 		if r == nil {
 			return internalJSON(map[string]any{"error": "create: missing request payload"})
+		}
+		// ValidateOnly: render the libvirt domain XML and RETURN it for host-side
+		// egress validation (the out-of-process plugin no-ops egress; the host runs
+		// the real ValidateXMLEgress, then issues a second create call). QEMU has no
+		// domain XML (its cloud-init is already egress-validated host-side via the
+		// host's RegenerateSeedISO), so the validate pass returns empty.
+		if r.ValidateOnly {
+			if r.Backend == "libvirt" {
+				xmlStr, xerr := RenderDomainXML(r.Spec, r.RT)
+				if xerr != nil {
+					return internalJSON(map[string]any{"error": xerr.Error()})
+				}
+				return internalJSON(map[string]any{"ok": true, "rendered_domain_xml": xmlStr})
+			}
+			return internalJSON(map[string]any{"ok": true})
 		}
 		var cerr error
 		switch r.Backend {

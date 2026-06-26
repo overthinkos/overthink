@@ -157,10 +157,31 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 	// Backend dispatch → the out-of-process vm plugin (RenderDomainXML + defineAndStartDomain /
 	// qemu exec moved there). The host fully resolved spec + rt (OVMF/NVRAM/smbios/ports) above;
 	// the plugin renders + creates the domain/process.
-	raw, ok := invokeVmCreate(vmCreateReq{
+	//
+	// Two-phase create for host-side EGRESS validation: the out-of-process plugin must not carry
+	// the egress subsystem, so phase 1 (ValidateOnly) has the plugin RENDER + RETURN the libvirt
+	// domain XML; the host runs the real ValidateXMLEgress; only then phase 2 creates. The
+	// cloud-init seed is already egress-validated host-side above (RegenerateSeedISO →
+	// RenderCloudInit → ValidateEgress). QEMU returns no XML, so its validate pass is a no-op gate.
+	baseReq := vmCreateReq{
 		Spec: spec, RT: rt, VmDomainName: vmDomainName, Home: home,
 		VmName: vmName, Name: name, Backend: backend, VmStateDir: vmStateDir,
-	})
+	}
+	validateReq := baseReq
+	validateReq.ValidateOnly = true
+	rawV, okV := invokeVmCreate(validateReq)
+	if !okV {
+		return fmt.Errorf("vm plugin unavailable (go-libvirt create is out-of-process)")
+	}
+	if e := vmPluginOpError(rawV); e != "" {
+		return fmt.Errorf("rendering VM %s for egress validation: %s", vmDomainName, e)
+	}
+	if xmlStr := vmCreateRenderedXML(rawV); xmlStr != "" {
+		if err := ValidateXMLEgress("libvirt_domain_xml", "vm:"+vmName, xmlStr); err != nil {
+			return fmt.Errorf("egress validation of VM %s domain XML: %w", vmDomainName, err)
+		}
+	}
+	raw, ok := invokeVmCreate(baseReq)
 	if !ok {
 		return fmt.Errorf("vm plugin unavailable (go-libvirt create is out-of-process)")
 	}

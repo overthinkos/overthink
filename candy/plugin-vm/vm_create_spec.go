@@ -36,7 +36,7 @@ func runVmSpecCreateLibvirt(spec *VmSpec, rt VmRuntimeParams, vmDomainName, home
 		}
 		fmt.Fprintf(os.Stderr, "Autostart enabled for %s\n", vmDomainName)
 		// HOST-PASSES-DATA: the boot-autostart prereqs (systemd linger + the user boot unit) are
-		// a HOST-side systemd concern; the host applies them after the create RPC returns (Phase B).
+		// a HOST-side systemd concern; the host applies them after the create RPC returns.
 	}
 
 	// Inject any raw libvirt snippets from candy/spec.libvirt.snippets.
@@ -46,7 +46,7 @@ func runVmSpecCreateLibvirt(spec *VmSpec, rt VmRuntimeParams, vmDomainName, home
 		}
 	}
 	// HOST-PASSES-DATA: publishing the managed ssh-config alias is a host-side ~/.config concern;
-	// the host writes it (VmSshStanza / EnsureSshConfigInclude) after the create RPC (Phase B).
+	// the host writes it (VmSshStanza / EnsureSshConfigInclude) after the create RPC.
 	fmt.Fprintf(os.Stderr, "Console: charly vm console %s\n", vmName)
 	return nil
 }
@@ -88,14 +88,14 @@ func runVmSpecCreateQemu(spec *VmSpec, rt VmRuntimeParams, vmDomainName, home, v
 	}
 	fmt.Fprintf(os.Stderr, "Created and started VM %s (QEMU)\n", vmDomainName)
 	// HOST-PASSES-DATA: publishing the managed ssh-config alias is a host-side ~/.config concern;
-	// the host writes it (VmSshStanza / EnsureSshConfigInclude) after the create RPC (Phase B).
+	// the host writes it (VmSshStanza / EnsureSshConfigInclude) after the create RPC.
 	fmt.Fprintf(os.Stderr, "Console: charly vm console %s\n", vmName)
 	return nil
 }
 
 // publishVmSshAlias (the managed ssh-config alias + per-VM known_hosts refresh) moved HOST-side:
 // it manages the operator's ~/.config/charly/ssh_config + ~/.ssh/config — a host concern the
-// out-of-process plugin must not touch. The host runs it after the create RPC returns (Phase B),
+// out-of-process plugin must not touch. The host runs it after the create RPC returns,
 // reusing the VmSshStanza / WriteVmSshStanza / EnsureSshConfigInclude that stay in core.
 
 // resolveVmRam picks the spec-declared RAM or falls back to "4G".

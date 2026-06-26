@@ -82,9 +82,10 @@ var (
 func loadedReadiness() ResolvedReadiness {
 	readinessOnce.Do(func() {
 		// HOST-PASSES-DATA: the out-of-process plugin cannot LoadUnified, so it uses the
-		// built-in readiness defaults (env-overridable via readinessResolve). The host's
-		// project-configured defaults.readiness is applied host-side (Phase B threads the
-		// resolved poll gates through the RPC).
+		// built-in readiness defaults (env-overridable via readinessResolve). NOTE: the host's
+		// project-configured defaults.readiness is NOT yet threaded through the create RPC — the
+		// plugin polls with built-in defaults + CHARLY_READINESS_* env overrides only. Threading
+		// the host-resolved poll gates through the RPC is a tracked follow-up (docs/status.md FU-7).
 		rr, _ := readinessResolve(nil)
 		readinessCached = rr
 	})

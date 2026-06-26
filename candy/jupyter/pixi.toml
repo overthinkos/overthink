@@ -1,4 +1,4 @@
-[project]
+[workspace]
 name = "jupyter"
 channels = ["conda-forge"]
 platforms = ["linux-64", "linux-aarch64"]

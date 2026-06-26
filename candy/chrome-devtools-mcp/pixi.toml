@@ -1,4 +1,4 @@
-[project]
+[workspace]
 name = "chrome-devtools-mcp"
 channels = ["conda-forge"]
 platforms = ["linux-64"]

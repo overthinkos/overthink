@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 )
 
 // WlCmd manages Wayland-native desktop interaction in running containers.
@@ -1576,10 +1578,9 @@ func collectSwayMatches(node *swayNode, appID string, matches *[]swayNode) {
 	}
 }
 
-// shellQuote wraps a string in single quotes for shell safety.
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
-}
+// shellQuote wraps a string in single quotes for shell safety. FU-14 folded it onto kit.ShellQuote
+// — the shared POSIX single-quoter (equivalence proven by TestShellSingleQuoters_CanonicalPOSIX), R3.
+var shellQuote = kit.ShellQuote
 
 // --- Helper functions ---
 

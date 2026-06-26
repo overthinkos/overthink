@@ -222,9 +222,17 @@ control overstep is recorded here for transparency.
 - **FU-13 — ✅ DONE (R3, the last shell-quoter residual flagged in FU-11).** `deployShellQuote`
   (`charly/deploy_executor.go`, a 4th byte-builder POSIX single-quoter, 35 deploy sites) folded onto
   `kit.ShellQuote` (`var deployShellQuote = kit.ShellQuote`; byte-builder deleted) — behavioral
-  equivalence PROVEN by `TestDeployShellQuote_CanonicalPOSIX` (an adversarial corpus passing against
+  equivalence PROVEN by `TestShellSingleQuoters_CanonicalPOSIX` (an adversarial corpus passing against
   BOTH impls). R10 check-pod PASS run `2026.177.2003`.
-- **All follow-ups CLOSED.** FU-1/2/3/4/7/8/9/10/11/12/13 implemented + R10'd. The core↔plugin dup
+- **FU-14 — ✅ DONE (R3, completes the shell-quoter dedup).** A whole-codebase sweep found 4 more
+  POSIX single-quoters; the 2 PURE dups of `kit.ShellQuote` — `shellSingleQuoteSSH`
+  (`deploy_executor_ssh.go`) + `wl.shellQuote` (`wl.go`) — folded onto `kit.ShellQuote` (aliases;
+  byte-builders deleted; equivalence proven by the renamed/extended `TestShellSingleQuoters_CanonicalPOSIX`).
+  The other 2 (`reverse_ops.shellQuoteSimple` conditional-skip, `shell.shellQuoteArgs` `[]string`+alt-escape)
+  are DISTINCT operations, intentionally left. R10 check-fedora-vm PASS `2026.177.2017` (SSH quoter) +
+  check-sway-browser-vnc-pod PASS `2026.177.2017` (wl quoter). `kit.ShellQuote` is now the sole POSIX
+  single-quoter.
+- **All follow-ups CLOSED.** FU-1/2/3/4/7/8/9/10/11/12/13/14 implemented + R10'd. The core↔plugin dup
   surface is fully audited (vm helpers FU-10, cross-plugin helpers FU-11, plugin-loading FU-12,
-  shell-quoters FU-13). **FU-5** an accepted plan deferral (out-of-proc top-level command nesting);
+  shell-quoters FU-13/14). **FU-5** an accepted plan deferral (out-of-proc top-level command nesting);
   **FU-6** satisfied by per-cutover R10s.

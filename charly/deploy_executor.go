@@ -313,6 +313,6 @@ func fmtOctal(mode uint32) string {
 // bash script. Handles embedded single quotes via the standard
 // 'foo'\”bar' trick.
 // (FU-13: folded onto kit.ShellQuote — the behaviourally identical POSIX single-quoter, proven by
-// TestDeployShellQuote_CanonicalPOSIX, that core already shares with the plugins/check path; the
+// TestShellSingleQuoters_CanonicalPOSIX, that core already shares with the plugins/check path; the
 // shell-single-quote transform now lives ONCE — R3.)
 var deployShellQuote = kit.ShellQuote

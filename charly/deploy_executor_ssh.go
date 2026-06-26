@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 )
 
 // SSHExecutor implements DeployExecutor against an SSH-reachable guest.
@@ -251,13 +253,10 @@ func (e *SSHExecutor) ResolveHome(ctx context.Context, user string) (string, err
 	return home, nil
 }
 
-// shellSingleQuoteSSH quotes `s` for safe inclusion in a bash -c script
-// passed via ssh. Mirrors the shellQuote helper in wl.go but kept local
-// to deploy_executor_ssh.go so the SSH-quoting concern stays bundled
-// with the SSH transport code.
-func shellSingleQuoteSSH(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
-}
+// shellSingleQuoteSSH quotes `s` for safe inclusion in a bash -c script passed via ssh. FU-14
+// folded it onto kit.ShellQuote — the shared POSIX single-quoter (behavioural equivalence proven by
+// TestShellSingleQuoters_CanonicalPOSIX) — so the transform lives ONCE (R3).
+var shellSingleQuoteSSH = kit.ShellQuote
 
 // WaitForSSH polls the guest's sshd until it accepts connections
 // (bounded by maxWaitSeconds). Returns nil on first successful

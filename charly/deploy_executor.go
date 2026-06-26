@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 )
 
 // DeployExecutor abstracts shell execution + file placement for deploy
@@ -310,21 +312,7 @@ func fmtOctal(mode uint32) string {
 // deployShellQuote wraps a string in single-quotes for safe embedding in a
 // bash script. Handles embedded single quotes via the standard
 // 'foo'\”bar' trick.
-func deployShellQuote(s string) string {
-	// Empty string → ''
-	if s == "" {
-		return "''"
-	}
-	// Replace each ' with '\''
-	var b []byte
-	b = append(b, '\'')
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\'' {
-			b = append(b, '\'', '\\', '\'', '\'')
-			continue
-		}
-		b = append(b, s[i])
-	}
-	b = append(b, '\'')
-	return string(b)
-}
+// (FU-13: folded onto kit.ShellQuote — the behaviourally identical POSIX single-quoter, proven by
+// TestDeployShellQuote_CanonicalPOSIX, that core already shares with the plugins/check path; the
+// shell-single-quote transform now lives ONCE — R3.)
+var deployShellQuote = kit.ShellQuote

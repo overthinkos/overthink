@@ -219,5 +219,12 @@ control overstep is recorded here for transparency.
   (which already did, for the deploy node's plan; the asymmetry was the bug). R10
   check-android-emulator-pod PASS run `2026.177.1830` (15/15, check-live 267/0, full fresh-rebuild) —
   which also runtime-confirmed FU-11's `kit.ShellQuote` adb leg.
-- **All follow-ups CLOSED.** FU-1/2/3/4/7/8/9/10/11/12 implemented + R10'd; **FU-5** an accepted plan
-  deferral (out-of-proc top-level command nesting); **FU-6** satisfied by per-cutover R10s.
+- **FU-13 — ✅ DONE (R3, the last shell-quoter residual flagged in FU-11).** `deployShellQuote`
+  (`charly/deploy_executor.go`, a 4th byte-builder POSIX single-quoter, 35 deploy sites) folded onto
+  `kit.ShellQuote` (`var deployShellQuote = kit.ShellQuote`; byte-builder deleted) — behavioral
+  equivalence PROVEN by `TestDeployShellQuote_CanonicalPOSIX` (an adversarial corpus passing against
+  BOTH impls). R10 check-pod PASS run `2026.177.2003`.
+- **All follow-ups CLOSED.** FU-1/2/3/4/7/8/9/10/11/12/13 implemented + R10'd. The core↔plugin dup
+  surface is fully audited (vm helpers FU-10, cross-plugin helpers FU-11, plugin-loading FU-12,
+  shell-quoters FU-13). **FU-5** an accepted plan deferral (out-of-proc top-level command nesting);
+  **FU-6** satisfied by per-cutover R10s.

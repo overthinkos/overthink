@@ -9,7 +9,6 @@ import (
 	"strings"
 )
 
-
 // runVmSpecCreateLibvirt creates the VM via the libvirt backend: render the
 // domain XML, define+start it, apply autostart + raw snippets, and publish the
 // managed ssh-config alias.

@@ -18,11 +18,11 @@ import (
 // vmPluginEnv is the host→plugin env for an internal VM-resolution RPC (matches candy/plugin-vm's
 // vmEnv VmOp/VmName/URI json fields).
 type vmPluginEnv struct {
-	VmOp       string       `json:"vm_op"`
-	VmName     string       `json:"vm_name"`
-	URI        string       `json:"uri"`
-	Force      bool         `json:"force,omitempty"`
-	DeleteDisk bool         `json:"delete_disk,omitempty"`
+	VmOp       string             `json:"vm_op"`
+	VmName     string             `json:"vm_name"`
+	URI        string             `json:"uri"`
+	Force      bool               `json:"force,omitempty"`
+	DeleteDisk bool               `json:"delete_disk,omitempty"`
 	Create     *vmCreateReq       `json:"create,omitempty"`
 	Snap       *vmSnapInternalReq `json:"snap,omitempty"`
 	StateDir   string             `json:"state_dir,omitempty"`

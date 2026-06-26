@@ -1,3 +1,3 @@
-package main
+package vmshared
 
 // --- Per-device structs ---

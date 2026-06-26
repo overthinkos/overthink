@@ -1,4 +1,4 @@
-package main
+package vmshared
 
 import (
 	"encoding/json"
@@ -114,7 +114,7 @@ func vmDiskPath(vmName string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	candidate := filepath.Join(cwd, vmDiskDir(vmName), "disk.qcow2")
+	candidate := filepath.Join(cwd, VmDiskDir(vmName), "disk.qcow2")
 	if _, err := os.Stat(candidate); err == nil {
 		return candidate, nil
 	}
@@ -127,7 +127,7 @@ func vmDiskPath(vmName string) (string, error) {
 	if _, err := os.Stat(candidate); err == nil {
 		return candidate, nil
 	}
-	return "", fmt.Errorf("vm %q: cannot locate primary disk (looked in %s/disk.qcow2 and ~/.local/share/charly/vm/charly-%s/disk.qcow2)", vmName, vmDiskDir(vmName), vmName)
+	return "", fmt.Errorf("vm %q: cannot locate primary disk (looked in %s/disk.qcow2 and ~/.local/share/charly/vm/charly-%s/disk.qcow2)", vmName, VmDiskDir(vmName), vmName)
 }
 
 // registryPath returns the registry.json path for a VM.
@@ -291,12 +291,12 @@ func CreateSnapshot(opts SnapshotCreateOpts) (*SnapshotEntry, error) {
 		if err := os.MkdirAll(filepath.Dir(diskPath), 0o755); err != nil {
 			return nil, fmt.Errorf("creating snapshot dir: %w", err)
 		}
-		if err := createExternalSnapshot(opts, diskPath); err != nil {
+		if err := CreateExternalSnapshot(opts, diskPath); err != nil {
 			return nil, fmt.Errorf("vm %q: external snapshot %q: %w", opts.VmName, opts.SnapName, err)
 		}
 		entry.DiskPath = diskPath
 	case "internal":
-		if err := createInternalSnapshot(opts); err != nil {
+		if err := CreateInternalSnapshot(opts); err != nil {
 			return nil, fmt.Errorf("vm %q: internal snapshot %q: %w", opts.VmName, opts.SnapName, err)
 		}
 	}
@@ -355,7 +355,7 @@ func DeleteSnapshot(opts SnapshotDeleteOpts) error {
 
 	switch entry.Mode {
 	case "external":
-		if err := deleteExternalSnapshot(opts.VmName, entry); err != nil {
+		if err := DeleteExternalSnapshot(opts.VmName, entry); err != nil {
 			return fmt.Errorf("vm %q: external snapshot %q: %w", opts.VmName, opts.SnapName, err)
 		}
 		// Remove the per-snapshot directory + meta.json.
@@ -364,7 +364,7 @@ func DeleteSnapshot(opts SnapshotDeleteOpts) error {
 			_ = os.RemoveAll(filepath.Join(dir, opts.SnapName))
 		}
 	case "internal":
-		if err := deleteInternalSnapshot(opts.VmName, entry); err != nil {
+		if err := DeleteInternalSnapshot(opts.VmName, entry); err != nil {
 			return fmt.Errorf("vm %q: internal snapshot %q: %w", opts.VmName, opts.SnapName, err)
 		}
 	default:
@@ -387,9 +387,9 @@ func RevertSnapshot(vmName, snapName string) error {
 	}
 	switch entry.Mode {
 	case "external":
-		return revertExternalSnapshot(vmName, entry)
+		return RevertExternalSnapshot(vmName, entry)
 	case "internal":
-		return revertInternalSnapshot(vmName, entry)
+		return RevertInternalSnapshot(vmName, entry)
 	default:
 		return fmt.Errorf("vm %q: snapshot %q has unknown mode %q", vmName, snapName, entry.Mode)
 	}
@@ -420,7 +420,7 @@ func PromoteSnapshot(vmName, snapName string) (*SnapshotEntry, error) {
 	if err := os.MkdirAll(filepath.Dir(diskPath), 0o755); err != nil {
 		return nil, fmt.Errorf("creating snapshot dir: %w", err)
 	}
-	if err := promoteInternalToExternal(vmName, entry, diskPath); err != nil {
+	if err := PromoteInternalToExternal(vmName, entry, diskPath); err != nil {
 		return nil, fmt.Errorf("vm %q: promoting snapshot %q: %w", vmName, snapName, err)
 	}
 	entry.Mode = "external"

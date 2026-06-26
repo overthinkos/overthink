@@ -1,4 +1,4 @@
-package main
+package vmshared
 
 // Shared "`-` means stdout" convention for file-output args across
 // charly verbs. Used by `charly check libvirt screenshot`, `charly check vnc vm

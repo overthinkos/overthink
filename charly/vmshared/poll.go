@@ -1,4 +1,4 @@
-package main
+package vmshared
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 //
 // Before this, charly had ~14 hand-rolled poll/wait/timeout loops (stepReady,
 // waitForContainerReady, WaitForSSH, WaitForCloudInit, execReboot, waitStopped,
-// gracefulStopDomain, the InjectLibvirtXML shutoff loop, runWithEventually,
+// gracefulStopDomain, the libvirt-XML shutoff loop, runWithEventually,
 // GuestAgent.ExecAndWait, ProgressWatchdog, …), each with its OWN fixed
 // wall-clock deadline (6m / 5m / 120s / 30s / 60s / 10s …). That is an R3
 // duplication AND an R4 magic-number problem: under heavy PARALLEL testing,

@@ -246,7 +246,7 @@ func NewRunner(exec DeployExecutor, resolver *CheckVarResolver, mode RunMode) *R
 		Mode:         mode,
 		HTTPClient:   &http.Client{Timeout: 10 * time.Second},
 		DialTimeout:  3 * time.Second,
-		ProbeTimeout: loadedReadiness().perAttempt(),
+		ProbeTimeout: loadedReadiness().PerAttemptFor(PollLocal),
 	}
 }
 

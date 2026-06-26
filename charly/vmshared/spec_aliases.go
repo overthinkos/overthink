@@ -14,7 +14,7 @@
 // spec.CalVer scalar), CandyRef (refs.go ref struct, vs the spec.CandyRef
 // scalar), Candy (layers.go resolved-candy runtime struct, vs spec.Candy the
 // param — aliased as CandyYAML instead).
-package main
+package vmshared
 
 import "github.com/overthinkos/overthink/charly/spec"
 

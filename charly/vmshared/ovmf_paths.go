@@ -1,10 +1,11 @@
-package main
+package vmshared
 
 import (
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 // OvmfPaths is the pair of firmware image paths needed to boot a UEFI
@@ -68,7 +69,7 @@ type ovmfFamilyPaths struct {
 // directive in the embedded charly.yml (Phase 4: the path DATA moved out of Go). The
 // alias→family resolution, secure selection, and unknown-distro union remain logic in
 // ovmfCandidatesForDistro below.
-var ovmfPathTable = parseEmbeddedOvmfPaths()
+var ovmfPathTable = sync.OnceValue(parseEmbeddedOvmfPaths)
 
 func parseEmbeddedOvmfPaths() map[string]ovmfFamilyPaths {
 	var doc struct {
@@ -77,7 +78,7 @@ func parseEmbeddedOvmfPaths() map[string]ovmfFamilyPaths {
 			Nonsecure []ovmfPathYAML `yaml:"nonsecure"`
 		} `yaml:"ovmf_paths"`
 	}
-	unmarshalEmbeddedDefaults(&doc)
+	UnmarshalEmbeddedDefaults(&doc)
 	if len(doc.OvmfPaths) == 0 {
 		panic("ovmf: embedded charly.yml has no ovmf_paths: directive")
 	}
@@ -100,13 +101,13 @@ func parseEmbeddedOvmfPaths() map[string]ovmfFamilyPaths {
 // moved out of Go). An unlisted distro has no entry — ovmfCandidatesForDistro then unions
 // all families and ovmfNotFoundError emits the generic install hint. Both readers derive
 // the family from this ONE map (R3 — no duplicated alias grouping).
-var ovmfDistroAliases = parseEmbeddedOvmfDistroAliases()
+var ovmfDistroAliases = sync.OnceValue(parseEmbeddedOvmfDistroAliases)
 
 func parseEmbeddedOvmfDistroAliases() map[string]string {
 	var doc struct {
 		OvmfDistroAliases map[string]string `yaml:"ovmf_distro_aliases"`
 	}
-	unmarshalEmbeddedDefaults(&doc)
+	UnmarshalEmbeddedDefaults(&doc)
 	if len(doc.OvmfDistroAliases) == 0 {
 		panic("ovmf: embedded charly.yml has no ovmf_distro_aliases: directive")
 	}
@@ -120,7 +121,7 @@ func parseEmbeddedOvmfDistroAliases() map[string]string {
 // in the embedded charly.yml; this selects secure/nonsecure and unions the three families
 // for an unknown distro.
 func ovmfCandidatesForDistro(distroID string, secure bool) []OvmfPaths {
-	family, ok := ovmfDistroAliases[distroID]
+	family, ok := ovmfDistroAliases()[distroID]
 	if !ok {
 		// Unknown distro — try the union of common paths.
 		fedora := ovmfCandidatesForDistro("fedora", secure)
@@ -132,7 +133,7 @@ func ovmfCandidatesForDistro(distroID string, secure bool) []OvmfPaths {
 		merged = append(merged, debian...)
 		return merged
 	}
-	fp := ovmfPathTable[family]
+	fp := ovmfPathTable()[family]
 	if secure {
 		return fp.Secure
 	}
@@ -143,7 +144,7 @@ func ovmfCandidatesForDistro(distroID string, secure bool) []OvmfPaths {
 // install instructions.
 func ovmfNotFoundError(distroID string, secure bool) error {
 	var installHint string
-	switch ovmfDistroAliases[distroID] {
+	switch ovmfDistroAliases()[distroID] {
 	case "fedora":
 		installHint = "sudo dnf install edk2-ovmf"
 	case "arch":

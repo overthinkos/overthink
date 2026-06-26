@@ -86,12 +86,12 @@ func connectRemoteLibvirtSession(parsed LibvirtURI) (*libvirtConn, error) {
 	if err != nil {
 		return nil, fmt.Errorf("ssh to %s: %w", parsed.Remote, err)
 	}
-	sockPath, err := remoteVirtqemudSocketPath(tunnel.client)
+	sockPath, err := remoteVirtqemudSocketPath(tunnel.Client())
 	if err != nil {
 		_ = tunnel.Close()
 		return nil, fmt.Errorf("discovering remote virtqemud socket: %w", err)
 	}
-	conn, err := tunnel.client.Dial("unix", sockPath)
+	conn, err := tunnel.Client().Dial("unix", sockPath)
 	if err != nil {
 		_ = tunnel.Close()
 		return nil, fmt.Errorf("dialing remote socket %s via ssh: %w", sockPath, err)

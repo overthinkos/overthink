@@ -1,4 +1,4 @@
-package main
+package vmshared
 
 // Libvirt URI parsing — bridges our CLI's `--uri` flag / vm.yml
 // fields to the go-libvirt transport.

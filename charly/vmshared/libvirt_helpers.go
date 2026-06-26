@@ -1,4 +1,4 @@
-package main
+package vmshared
 
 // Helpers shared by the libvirt YAML bridge + qemu_render argv emitter.
 // Moved here from the old libvirt_render.go as part of the libvirtxml

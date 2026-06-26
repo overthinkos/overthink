@@ -1,4 +1,4 @@
-package main
+package vmshared
 
 // Shared SSH client plumbing for programmatic TCP/UNIX forwarding
 // (charly/ssh_tunnel.go) and for SPICE/VNC auto-tunneling inside the

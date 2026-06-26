@@ -1,4 +1,4 @@
-package main
+package vmshared
 
 // SSH local-forward helper built on golang.org/x/crypto/ssh. Used by
 // `charly check libvirt|vnc --uri qemu+ssh://…` auto-tunneling, by the `spice:`
@@ -52,6 +52,11 @@ func NewSSHTunnel(t SSHTarget) (*SSHTunnel, error) {
 	}
 	return &SSHTunnel{client: client}, nil
 }
+
+// Client returns the underlying SSH client, for consumers that open their own
+// channels over the same connection (e.g. dialing a remote unix socket). The
+// client stays owned by the tunnel — use Close to disconnect.
+func (t *SSHTunnel) Client() *ssh.Client { return t.client }
 
 // Close tears down all open forwards, then disconnects. Idempotent.
 func (t *SSHTunnel) Close() error {

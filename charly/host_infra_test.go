@@ -59,7 +59,7 @@ func TestHostDistroTagsAndFormatHint(t *testing.T) {
 		},
 	}
 	for _, tc := range tests {
-		tc.hd.populateTags()
+		tc.hd.PopulateTags()
 		if got := tc.hd.PrimaryTag(); got != tc.wantTag {
 			t.Errorf("PrimaryTag() = %q, want %q", got, tc.wantTag)
 		}

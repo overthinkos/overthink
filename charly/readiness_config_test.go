@@ -14,7 +14,7 @@ func TestReadinessConfig_ResolveDefaults(t *testing.T) {
 	if rr.NoProgress != readinessNoProgressFallback || rr.AbsoluteCap != readinessAbsoluteCapFallback || rr.StopGrace != readinessStopGraceFallback {
 		t.Fatalf("defaults wrong: %+v", rr)
 	}
-	if err := rr.validateOrdering(); err != nil {
+	if err := rr.ValidateOrdering(); err != nil {
 		t.Fatalf("default ordering must be valid: %v", err)
 	}
 }

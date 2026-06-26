@@ -1,4 +1,4 @@
-package main
+package vmshared
 
 // hostdistro.go — host distro + glibc detection for LocalDeployTarget.
 //
@@ -72,7 +72,7 @@ func DetectHostDistro() (*HostDistro, error) {
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("DetectHostDistro: scanning /etc/os-release: %w", err)
 	}
-	hd.populateTags()
+	hd.PopulateTags()
 	return hd, nil
 }
 
@@ -119,12 +119,12 @@ var distroIDAliases = map[string]string{
 	"rhel":        "fedora",
 }
 
-// populateTags derives HostDistro.Tags from the other fields. The
+// PopulateTags derives HostDistro.Tags from the other fields. The
 // resulting list includes both the os-release ID (exact match for
 // candy tag sections like `arch:`) and the embedded vocabulary's
 // (charly/charly.yml) canonical name
 // (for DistroConfig.ResolveDistro to find the format definitions).
-func (hd *HostDistro) populateTags() {
+func (hd *HostDistro) PopulateTags() {
 	hd.Tags = hd.Tags[:0]
 	if hd.ID != "" {
 		if hd.VersionID != "" {

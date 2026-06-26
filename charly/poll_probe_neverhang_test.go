@@ -103,24 +103,24 @@ func TestRunner_ProbeNeverHang_HonorsAuthorTimeout(t *testing.T) {
 // single-probe per-attempt — the poll.go half of the load-robustness fix.
 func TestResolvedReadiness_PerAttemptHeavyForPollHeavy(t *testing.T) {
 	var rr ResolvedReadiness // zero value → all fallback constants
-	if rr.perAttemptHeavy() != readinessPerAttemptHeavyFallback {
-		t.Fatalf("perAttemptHeavy fallback = %s, want %s", rr.perAttemptHeavy(), readinessPerAttemptHeavyFallback)
+	if rr.PerAttemptFor(PollHeavy) != readinessPerAttemptHeavyFallback {
+		t.Fatalf("perAttemptHeavy fallback = %s, want %s", rr.PerAttemptFor(PollHeavy), readinessPerAttemptHeavyFallback)
 	}
 	for _, class := range []PollClass{PollLocal, PollRemote} {
-		if got := rr.WaitCapped("x", class, 0).PerAttempt; got != rr.perAttempt() {
-			t.Errorf("WaitCapped(class=%d).PerAttempt = %s, want single-probe %s", class, got, rr.perAttempt())
+		if got := rr.WaitCapped("x", class, 0).PerAttempt; got != rr.PerAttemptFor(PollLocal) {
+			t.Errorf("WaitCapped(class=%d).PerAttempt = %s, want single-probe %s", class, got, rr.PerAttemptFor(PollLocal))
 		}
 	}
-	if got := rr.WaitCapped("x", PollHeavy, 0).PerAttempt; got != rr.perAttemptHeavy() {
-		t.Errorf("WaitCapped(PollHeavy).PerAttempt = %s, want heavy %s", got, rr.perAttemptHeavy())
+	if got := rr.WaitCapped("x", PollHeavy, 0).PerAttempt; got != rr.PerAttemptFor(PollHeavy) {
+		t.Errorf("WaitCapped(PollHeavy).PerAttempt = %s, want heavy %s", got, rr.PerAttemptFor(PollHeavy))
 	}
-	if got := rr.Wait("x", PollHeavy).PerAttempt; got != rr.perAttemptHeavy() {
-		t.Errorf("Wait(PollHeavy).PerAttempt = %s, want heavy %s", got, rr.perAttemptHeavy())
+	if got := rr.Wait("x", PollHeavy).PerAttempt; got != rr.PerAttemptFor(PollHeavy) {
+		t.Errorf("Wait(PollHeavy).PerAttempt = %s, want heavy %s", got, rr.PerAttemptFor(PollHeavy))
 	}
 	// The heavy bound must be generously larger than the single-probe one — the
 	// whole point is to stop the 120s mid-pass guillotine.
-	if rr.perAttemptHeavy() <= rr.perAttempt() {
-		t.Errorf("perAttemptHeavy (%s) must be > perAttempt (%s)", rr.perAttemptHeavy(), rr.perAttempt())
+	if rr.PerAttemptFor(PollHeavy) <= rr.PerAttemptFor(PollLocal) {
+		t.Errorf("perAttemptHeavy (%s) must be > perAttempt (%s)", rr.PerAttemptFor(PollHeavy), rr.PerAttemptFor(PollLocal))
 	}
 }
 

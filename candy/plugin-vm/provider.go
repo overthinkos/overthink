@@ -36,9 +36,9 @@ type vmEnv struct {
 	// VmOp selects an internal (non-verb) VM-resolution op: "domain-state" | "list-domains" |
 	// "resolve-spice" | "resolve-vnc". Empty for a `libvirt:` verb check.
 	VmOp       string `json:"vm_op,omitempty"`
-	VmName     string `json:"vm_name,omitempty"` // the full libvirt domain name (charly-<vm>) for domain-state
-	URI        string `json:"uri,omitempty"`     // libvirt URI ("" = local qemu:///session)
-	Force      bool   `json:"force,omitempty"`   // stop: destroy vs graceful shutdown
+	VmName     string `json:"vm_name,omitempty"`     // the full libvirt domain name (charly-<vm>) for domain-state
+	URI        string `json:"uri,omitempty"`         // libvirt URI ("" = local qemu:///session)
+	Force      bool   `json:"force,omitempty"`       // stop: destroy vs graceful shutdown
 	DeleteDisk bool   `json:"delete_disk,omitempty"` // destroy: undefine with storage removal
 	// Create carries the fully host-resolved create request (the host did override/GPU/defaults/
 	// disk/seed/SSH/smbios/OVMF resolution; the plugin just renders + creates the domain/process).

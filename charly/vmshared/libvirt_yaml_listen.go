@@ -1,4 +1,4 @@
-package main
+package vmshared
 
 // Structured <listen> support for LibvirtGraphics.
 //
@@ -20,5 +20,5 @@ package main
 //       address: 127.0.0.1
 //
 // All three unmarshal into LibvirtGraphicsListeners (a list of
-// LibvirtGraphicsListen). The bridge in libvirt_yaml_bridge.go
+// LibvirtGraphicsListen). The libvirt-XML bridge in the VM plugin
 // iterates the list and emits one <listen> element per entry.

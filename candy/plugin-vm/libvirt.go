@@ -55,7 +55,6 @@ func isDeviceElement(snippet string) bool {
 	}
 }
 
-
 // InjectLibvirtXML modifies a libvirt domain's XML to include the given snippets.
 // Device elements are inserted into <devices>, others replace/insert at <domain> level.
 func InjectLibvirtXML(vmName string, snippets []string) error {

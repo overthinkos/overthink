@@ -73,16 +73,16 @@ type CheckCmd struct {
 	Feature CheckFeatureCmd `cmd:"" help:"Run a running deployment's baked plan as acceptance tests; agent steps are agent-graded (Agent Driven Evaluation)"`
 
 	// Live-container probe verbs (each requires a running target)
-	Cdp     CdpCmd     `cmd:"" help:"Chrome DevTools Protocol (open, list, click, check)"`
-	Dbus    DbusCmd    `cmd:"" help:"Interact with D-Bus services inside containers"`
+	Cdp  CdpCmd  `cmd:"" help:"Chrome DevTools Protocol (open, list, click, check)"`
+	Dbus DbusCmd `cmd:"" help:"Interact with D-Bus services inside containers"`
 	// `libvirt` is NOT a CLI subcommand here — the VM/libvirt-API probe verb (`charly check
 	// libvirt`) is served by the out-of-process candy/plugin-vm verb plugin, nested under
 	// `charly check` at runtime via attachNestedCheckPlugins exactly like `kube`/`adb`/`appium`.
 	// This shed go-libvirt + kata-containers/govmm + libvirt.org/go/libvirtxml from charly's core.
-	Mcp McpCmd `cmd:"" help:"Probe MCP servers declared via mcp_provides"`
-	Record  RecordCmd  `cmd:"" help:"Record terminal sessions or desktop video inside running containers"`
-	Vnc     VncCmd     `cmd:"" help:"Control VNC desktop in running containers"`
-	Wl      WlCmd      `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
+	Mcp    McpCmd    `cmd:"" help:"Probe MCP servers declared via mcp_provides"`
+	Record RecordCmd `cmd:"" help:"Record terminal sessions or desktop video inside running containers"`
+	Vnc    VncCmd    `cmd:"" help:"Control VNC desktop in running containers"`
+	Wl     WlCmd     `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
 	// `kube` is NOT a CLI subcommand here — the Kubernetes cluster-probe implementation (+ the
 	// client-go + apimachinery dependency) was dep-shed into the out-of-tree
 	// candy/plugin-kube module. `kube` is now a DECLARATIVE check VERB that dispatches to that

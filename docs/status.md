@@ -209,13 +209,15 @@ control overstep is recorded here for transparency.
   `shellSingleQuote` folded onto the pre-existing byte-identical `kit.ShellQuote`); core + the 3 plugins
   alias the lowercase names. R10 check-pod PASS run `2026.177.1713` (core check runner + command + http
   verbs); the adb leg is byte-identical + build-proven.
-- **FU-12 — OPEN (R2 immediate-next, surfaced by FU-11's check-android run).** `bd701d86`'s
-  `loadProjectPlugins` perf-scoping does NOT load the `adb` plugin for the android DEPLOY mechanism
-  (`AndroidUnifiedTarget` uses `invokeAdbPlugin`, but `deployNodePluginContext` only references the
-  substrate-kind word + plan verb-words — never "adb"), so the android device deploy fails with "adb
-  plugin not loaded". A 174→177 regression (check-android passed on 2026.174.x), independent of FU-11.
-  Fix: `deployNodePluginContext` must reference "adb" when the deploy is the android substrate. R10:
-  check-android-emulator-pod (which then also runtime-confirms FU-11's adb leg).
-- **Follow-ups status.** FU-1/2/3/4/7/8/9/10/11 implemented + R10'd; **FU-12** open (above, the
-  immediate-next); **FU-5** an accepted plan deferral (out-of-proc top-level command nesting); **FU-6**
-  satisfied by per-cutover R10s.
+- **FU-12 — ✅ DONE (R2 immediate-next, surfaced by FU-11's check-android run).** `bd701d86`'s
+  `loadProjectPlugins` perf-scoping regressed the android device deploy AND its check-live:
+  `collectReferencedPluginWords` scanned candy/box PLANS for `Op.Plugin` but NOT `op.Kind()` (the
+  closed-#Op verb discriminator), so an EXTERNAL closed-#Op verb (libvirt/spice/kube/adb/appium)
+  authored in a candy plan was scoped OUT → `adb plugin not loaded` at the device deploy + `unknown
+  verb adb/appium` at check-live (a 174→177 regression). FIX: `collectReferencedPluginWords` now
+  surfaces BOTH `Op.Plugin` AND `op.Kind()` per candy/box plan step — MIRRORING `deployNodePluginContext`
+  (which already did, for the deploy node's plan; the asymmetry was the bug). R10
+  check-android-emulator-pod PASS run `2026.177.1830` (15/15, check-live 267/0, full fresh-rebuild) —
+  which also runtime-confirmed FU-11's `kit.ShellQuote` adb leg.
+- **All follow-ups CLOSED.** FU-1/2/3/4/7/8/9/10/11/12 implemented + R10'd; **FU-5** an accepted plan
+  deferral (out-of-proc top-level command nesting); **FU-6** satisfied by per-cutover R10s.

@@ -294,18 +294,31 @@ func collectReferencedPluginWords(candies map[string]*Candy, boxes map[string]Bo
 	for _, w := range extra {
 		add(w)
 	}
+	// addStep references a step's explicit plugin: word AND its closed-#Op verb discriminator. A
+	// closed-#Op EXTERNAL check verb (libvirt/spice/kube/adb/appium) authored in a candy/box PLAN
+	// is NOT a plugin: word, so without op.Kind() the perf-scoping never connects the candy serving
+	// it — e.g. an android bed's `adb:`/`appium:` assertions live in the android-emulator candy
+	// plan, and their plugins must load at BOTH the device deploy and check-live. This MIRRORS the
+	// op.Kind() surfacing deployNodePluginContext already does for the deploy NODE's plan (R3).
+	// Over-load safe: a builtin verb's candy is already registered; a non-plugin verb has no candy.
+	addStep := func(op *Op) {
+		add(op.Plugin)
+		if v, err := op.Kind(); err == nil {
+			add(v)
+		}
+	}
 	for _, candy := range candies {
 		if candy == nil {
 			continue
 		}
 		add(candy.ExternalBuilder)
 		for i := range candy.plan {
-			add(candy.plan[i].Op.Plugin)
+			addStep(&candy.plan[i].Op)
 		}
 	}
 	for _, box := range boxes {
 		for i := range box.Plan {
-			add(box.Plan[i].Op.Plugin)
+			addStep(&box.Plan[i].Op)
 		}
 	}
 	return refs

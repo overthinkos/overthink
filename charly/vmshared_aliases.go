@@ -115,6 +115,11 @@ type (
 	VolumeYAML               = vmshared.VolumeYAML
 )
 
+// readinessResolve aliases the shared config→resolved readiness resolver — the logic + the
+// CHARLY_READINESS_* field table live ONCE in vmshared (FU-9), shared with the out-of-process
+// plugins; loadedReadiness (readiness_config.go) feeds it the project's defaults.readiness.
+var readinessResolve = vmshared.ResolveReadiness
+
 var (
 	allDigits                   = vmshared.AllDigits
 	CompareGlibc                = vmshared.CompareGlibc

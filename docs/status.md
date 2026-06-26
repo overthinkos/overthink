@@ -183,8 +183,16 @@ control overstep is recorded here for transparency.
 - **FU-7 — ✅ DONE.** The host threads its RESOLVED readiness into an external plugin's spawn env
   as `CHARLY_READINESS_*` (`readinessPluginEnv` → `LocalTransport.Connect` cmd.Env), so the
   out-of-process vm plugin inherits the project's `defaults.readiness` (it can't LoadUnified). R3:
-  one `readinessSpecs` table (resolve reads / emit writes). Coverage `TestReadinessPluginEnv_RoundTrips`;
+  one `readinessSpecs` table (resolve reads / emit writes — relocated to `charly/vmshared` by FU-9).
+  Coverage the host→env→re-resolve round-trip (`TestResolveReadiness_PluginEnvRoundTrips`, vmshared);
   R10 check-fedora-vm PASS run `2026.177.1438`.
-- **All follow-ups CLOSED.** FU-1/2/3/4/7/8 implemented + R10'd; **FU-5** remains an accepted plan
+- **FU-9 — ✅ DONE.** R3/R1 cleanup surfaced while verifying FU-7: the readiness resolver
+  (`resolveReadinessDuration` + `readinessResolve` + the `CHARLY_READINESS_*` field table) was
+  DUPLICATED core↔`candy/plugin-vm` (a residual the file-level vmshared dedup missed; FU-7 diverged
+  it). Consolidated into `charly/vmshared/readiness_resolve.go` (`ResolveReadiness` + the
+  `ResolvedReadiness.PluginEnv` emitter); each module keeps a thin `readinessResolve` alias + its own
+  `loadedReadiness` entry. Also corrected the plugin's stale "FU-7 not yet threaded" comment.
+  R10 check-fedora-vm PASS run `2026.177.1514`.
+- **All follow-ups CLOSED.** FU-1/2/3/4/7/8/9 implemented + R10'd; **FU-5** remains an accepted plan
   deferral (out-of-process top-level command nesting); **FU-6** — the per-cutover R10s satisfy "R10
   of all cutovers" (a full-roster `/verify-beds` sweep stays optional).

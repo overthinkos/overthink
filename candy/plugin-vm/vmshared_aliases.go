@@ -59,6 +59,12 @@ type (
 	VmSpec                   = vmshared.VmSpec
 )
 
+// readinessResolve aliases the shared config→resolved readiness resolver — the logic + the
+// CHARLY_READINESS_* field table live ONCE in vmshared (FU-9). The out-of-process plugin passes
+// nil (no project loader) and inherits the host-resolved bounds via the CHARLY_READINESS_* env
+// the host threads into its spawn (charly's LocalTransport.Connect → ResolvedReadiness.PluginEnv).
+var readinessResolve = vmshared.ResolveReadiness
+
 var (
 	boolPtrDefaultTrue       = vmshared.BoolPtrDefaultTrue
 	boolPtrToYesNo           = vmshared.BoolPtrToYesNo

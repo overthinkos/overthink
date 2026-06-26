@@ -1,79 +1,18 @@
 package main
 
 import (
-	"fmt"
-	"os"
 	"sync"
-	"time"
 )
 
-// readiness_config.go — the `defaults.readiness:` block: the config-sourced,
-// env-overridable, load-validated bounds for the unified pollUntil readiness
-// primitive (poll.go). This is the R4 half of the unified-readiness cutover:
-// every poll bound is NAMED (the readiness*Fallback consts in poll.go),
-// CONFIG-SOURCED (this block), and VALIDATED on load (Resolve → validate, on the
-// RESOLVED post-env values — so an env override cannot smuggle in a nonsensical
-// bound). No magic literal survives at any call site.
+// readiness_config.go — the out-of-process plugin's readiness ENTRY. The config→resolved resolver
+// AND the CHARLY_READINESS_* field table live ONCE in charly/vmshared (ResolveReadiness, aliased
+// here as readinessResolve via vmshared_aliases.go), shared with charly core.
 
-// resolveReadinessDuration: env (CHARLY_READINESS_*) wins over the config
-// string, which wins over the named fallback. Parses + rejects non-positive.
-func resolveReadinessDuration(field, envKey, cfgVal string, fallback time.Duration) (time.Duration, error) {
-	raw := cfgVal
-	if e := os.Getenv(envKey); e != "" {
-		raw = e
-	}
-	if raw == "" {
-		return fallback, nil
-	}
-	d, err := time.ParseDuration(raw)
-	if err != nil {
-		return 0, fmt.Errorf("readiness.%s: invalid duration %q: %w", field, raw, err)
-	}
-	if d <= 0 {
-		return 0, fmt.Errorf("readiness.%s: must be > 0, got %s", field, d)
-	}
-	return d, nil
-}
-
-// Resolve materializes the validated ResolvedReadiness from this block plus env
-// overrides plus the named fallbacks. Nil-safe (nil → all fallbacks).
-func readinessResolve(rc *ReadinessConfig) (ResolvedReadiness, error) {
-	if rc == nil {
-		rc = &ReadinessConfig{}
-	}
-	var rr ResolvedReadiness
-	specs := []struct {
-		name, env, val string
-		fb             time.Duration
-		dst            *time.Duration
-	}{
-		{"poll_interval_local", "CHARLY_READINESS_POLL_LOCAL", rc.PollIntervalLocal, readinessIntervalLocalFallback, &rr.IntervalLocal},
-		{"poll_interval_remote", "CHARLY_READINESS_POLL_REMOTE", rc.PollIntervalRemote, readinessIntervalRemoteFallback, &rr.IntervalRemote},
-		{"poll_interval_heavy", "CHARLY_READINESS_POLL_HEAVY", rc.PollIntervalHeavy, readinessIntervalHeavyFallback, &rr.IntervalHeavy},
-		{"per_attempt", "CHARLY_READINESS_PER_ATTEMPT", rc.PerAttempt, readinessPerAttemptFallback, &rr.PerAttempt},
-		{"per_attempt_heavy", "CHARLY_READINESS_PER_ATTEMPT_HEAVY", rc.PerAttemptHeavy, readinessPerAttemptHeavyFallback, &rr.PerAttemptHeavy},
-		{"no_progress", "CHARLY_READINESS_NO_PROGRESS", rc.NoProgress, readinessNoProgressFallback, &rr.NoProgress},
-		{"absolute_cap", "CHARLY_READINESS_ABSOLUTE_CAP", rc.AbsoluteCap, readinessAbsoluteCapFallback, &rr.AbsoluteCap},
-		{"stop_grace", "CHARLY_READINESS_STOP_GRACE", rc.StopGrace, readinessStopGraceFallback, &rr.StopGrace},
-	}
-	for _, s := range specs {
-		d, err := resolveReadinessDuration(s.name, s.env, s.val, s.fb)
-		if err != nil {
-			return ResolvedReadiness{}, err
-		}
-		*s.dst = d
-	}
-	if err := rr.ValidateOrdering(); err != nil {
-		return ResolvedReadiness{}, err
-	}
-	return rr, nil
-}
-
-// loadedReadiness resolves the project's readiness bounds ONCE (config + env,
-// validated). A site deep in the executors that has no threaded ResolvedReadiness
-// calls this. On absence/error it falls back to the named constants (always
-// safe + never-hang) with a logged warning — a bad config block degrades to the
-// built-in defaults rather than breaking every deploy.
+// loadedReadiness resolves this plugin process's readiness bounds ONCE. The out-of-process plugin
+// cannot LoadUnified to read the project's defaults.readiness, so it passes nil — but the host
+// threads its RESOLVED project readiness into this process's env as CHARLY_READINESS_* at spawn
+// (charly's LocalTransport.Connect → ResolvedReadiness.PluginEnv), which readinessResolve re-reads.
+// So the plugin's poll-gates honor the project's defaults.readiness (FU-7) without a project loader.
 var (
 	readinessOnce   sync.Once
 	readinessCached ResolvedReadiness
@@ -81,11 +20,6 @@ var (
 
 func loadedReadiness() ResolvedReadiness {
 	readinessOnce.Do(func() {
-		// HOST-PASSES-DATA: the out-of-process plugin cannot LoadUnified, so it uses the
-		// built-in readiness defaults (env-overridable via readinessResolve). NOTE: the host's
-		// project-configured defaults.readiness is NOT yet threaded through the create RPC — the
-		// plugin polls with built-in defaults + CHARLY_READINESS_* env overrides only. Threading
-		// the host-resolved poll gates through the RPC is a tracked follow-up (docs/status.md FU-7).
 		rr, _ := readinessResolve(nil)
 		readinessCached = rr
 	})

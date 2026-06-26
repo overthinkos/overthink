@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 
 	plugin "github.com/hashicorp/go-plugin"
@@ -53,10 +54,16 @@ func (t *LocalTransport) Connect(ctx context.Context) (*PluginUnit, io.Closer, e
 	if len(args) == 0 {
 		args = []string{"__plugin", "serve"}
 	}
+	cmd := exec.Command(t.BinPath, args...)
+	// Thread the host's RESOLVED readiness (project defaults.readiness ⊕ host env) into the
+	// plugin via CHARLY_READINESS_* env — the out-of-process plugin cannot LoadUnified, so its
+	// readinessResolve picks these up instead of only the built-in fallbacks. Other plugins
+	// ignore the unknown env; the vm plugin's poll-gates honor it.
+	cmd.Env = append(os.Environ(), readinessPluginEnv()...)
 	client := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig:  sdk.Handshake,
 		Plugins:          sdk.PluginMap(nil, nil),
-		Cmd:              exec.Command(t.BinPath, args...),
+		Cmd:              cmd,
 		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
 		AutoMTLS:         true,
 	})

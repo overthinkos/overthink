@@ -180,6 +180,11 @@ control overstep is recorded here for transparency.
   `qemu:///session` is not remote), (4) out-of-process verb stderr not captured (`captureStdout`
   → `captureOutput`). + the R1/R5 skill sweep (spice + libvirt SKILL.md). R10: check-arch-vm PASS
   run `2026.177.1342` (13 steps, check-live 60/60 incl. the fresh-rebuild re-verification).
-- **Still OPEN:** **FU-7** (readiness threading, minor — above). **FU-5** remains an accepted
-  deferral; **FU-6** — the per-cutover R10s satisfy "R10 of all cutovers", a full-roster
-  `/verify-beds` sweep is optional.
+- **FU-7 — ✅ DONE.** The host threads its RESOLVED readiness into an external plugin's spawn env
+  as `CHARLY_READINESS_*` (`readinessPluginEnv` → `LocalTransport.Connect` cmd.Env), so the
+  out-of-process vm plugin inherits the project's `defaults.readiness` (it can't LoadUnified). R3:
+  one `readinessSpecs` table (resolve reads / emit writes). Coverage `TestReadinessPluginEnv_RoundTrips`;
+  R10 check-fedora-vm PASS run `2026.177.1438`.
+- **All follow-ups CLOSED.** FU-1/2/3/4/7/8 implemented + R10'd; **FU-5** remains an accepted plan
+  deferral (out-of-process top-level command nesting); **FU-6** — the per-cutover R10s satisfy "R10
+  of all cutovers" (a full-roster `/verify-beds` sweep stays optional).

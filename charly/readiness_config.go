@@ -37,36 +37,60 @@ func resolveReadinessDuration(field, envKey, cfgVal string, fallback time.Durati
 
 // Resolve materializes the validated ResolvedReadiness from this block plus env
 // overrides plus the named fallbacks. Nil-safe (nil → all fallbacks).
+// readinessSpec is one readiness field: its config-key name, its CHARLY_READINESS_*
+// env override, its built-in fallback, and accessors for the config value (in) and
+// the resolved field pointer (out). readinessSpecs is the SINGLE source for the field
+// set (R3): readinessResolve READS it (config/env/fallback → resolved); readinessPluginEnv
+// WRITES it (resolved → the CHARLY_READINESS_* env an out-of-process plugin re-reads).
+type readinessSpec struct {
+	name, env string
+	fb        time.Duration
+	cfg       func(*ReadinessConfig) string
+	dst       func(*ResolvedReadiness) *time.Duration
+}
+
+var readinessSpecs = []readinessSpec{
+	{"poll_interval_local", "CHARLY_READINESS_POLL_LOCAL", readinessIntervalLocalFallback, func(rc *ReadinessConfig) string { return rc.PollIntervalLocal }, func(rr *ResolvedReadiness) *time.Duration { return &rr.IntervalLocal }},
+	{"poll_interval_remote", "CHARLY_READINESS_POLL_REMOTE", readinessIntervalRemoteFallback, func(rc *ReadinessConfig) string { return rc.PollIntervalRemote }, func(rr *ResolvedReadiness) *time.Duration { return &rr.IntervalRemote }},
+	{"poll_interval_heavy", "CHARLY_READINESS_POLL_HEAVY", readinessIntervalHeavyFallback, func(rc *ReadinessConfig) string { return rc.PollIntervalHeavy }, func(rr *ResolvedReadiness) *time.Duration { return &rr.IntervalHeavy }},
+	{"per_attempt", "CHARLY_READINESS_PER_ATTEMPT", readinessPerAttemptFallback, func(rc *ReadinessConfig) string { return rc.PerAttempt }, func(rr *ResolvedReadiness) *time.Duration { return &rr.PerAttempt }},
+	{"per_attempt_heavy", "CHARLY_READINESS_PER_ATTEMPT_HEAVY", readinessPerAttemptHeavyFallback, func(rc *ReadinessConfig) string { return rc.PerAttemptHeavy }, func(rr *ResolvedReadiness) *time.Duration { return &rr.PerAttemptHeavy }},
+	{"no_progress", "CHARLY_READINESS_NO_PROGRESS", readinessNoProgressFallback, func(rc *ReadinessConfig) string { return rc.NoProgress }, func(rr *ResolvedReadiness) *time.Duration { return &rr.NoProgress }},
+	{"absolute_cap", "CHARLY_READINESS_ABSOLUTE_CAP", readinessAbsoluteCapFallback, func(rc *ReadinessConfig) string { return rc.AbsoluteCap }, func(rr *ResolvedReadiness) *time.Duration { return &rr.AbsoluteCap }},
+	{"stop_grace", "CHARLY_READINESS_STOP_GRACE", readinessStopGraceFallback, func(rc *ReadinessConfig) string { return rc.StopGrace }, func(rr *ResolvedReadiness) *time.Duration { return &rr.StopGrace }},
+}
+
 func readinessResolve(rc *ReadinessConfig) (ResolvedReadiness, error) {
 	if rc == nil {
 		rc = &ReadinessConfig{}
 	}
 	var rr ResolvedReadiness
-	specs := []struct {
-		name, env, val string
-		fb             time.Duration
-		dst            *time.Duration
-	}{
-		{"poll_interval_local", "CHARLY_READINESS_POLL_LOCAL", rc.PollIntervalLocal, readinessIntervalLocalFallback, &rr.IntervalLocal},
-		{"poll_interval_remote", "CHARLY_READINESS_POLL_REMOTE", rc.PollIntervalRemote, readinessIntervalRemoteFallback, &rr.IntervalRemote},
-		{"poll_interval_heavy", "CHARLY_READINESS_POLL_HEAVY", rc.PollIntervalHeavy, readinessIntervalHeavyFallback, &rr.IntervalHeavy},
-		{"per_attempt", "CHARLY_READINESS_PER_ATTEMPT", rc.PerAttempt, readinessPerAttemptFallback, &rr.PerAttempt},
-		{"per_attempt_heavy", "CHARLY_READINESS_PER_ATTEMPT_HEAVY", rc.PerAttemptHeavy, readinessPerAttemptHeavyFallback, &rr.PerAttemptHeavy},
-		{"no_progress", "CHARLY_READINESS_NO_PROGRESS", rc.NoProgress, readinessNoProgressFallback, &rr.NoProgress},
-		{"absolute_cap", "CHARLY_READINESS_ABSOLUTE_CAP", rc.AbsoluteCap, readinessAbsoluteCapFallback, &rr.AbsoluteCap},
-		{"stop_grace", "CHARLY_READINESS_STOP_GRACE", rc.StopGrace, readinessStopGraceFallback, &rr.StopGrace},
-	}
-	for _, s := range specs {
-		d, err := resolveReadinessDuration(s.name, s.env, s.val, s.fb)
+	for _, s := range readinessSpecs {
+		d, err := resolveReadinessDuration(s.name, s.env, s.cfg(rc), s.fb)
 		if err != nil {
 			return ResolvedReadiness{}, err
 		}
-		*s.dst = d
+		*s.dst(&rr) = d
 	}
 	if err := rr.ValidateOrdering(); err != nil {
 		return ResolvedReadiness{}, err
 	}
 	return rr, nil
+}
+
+// readinessPluginEnv emits the CHARLY_READINESS_* entries (KEY=VALUE) for the host's
+// RESOLVED readiness, so an out-of-process plugin — which cannot LoadUnified to read
+// the project's defaults.readiness — re-reads the host-resolved bounds via its own
+// readinessResolve. Appended to a plugin's spawn env; durations round-trip through
+// String() ⟷ resolveReadinessDuration. Resolved values that already came from a host
+// CHARLY_READINESS_* env re-emit identically (no ambiguity on the duplicate key).
+func readinessPluginEnv() []string {
+	rr := loadedReadiness()
+	out := make([]string, 0, len(readinessSpecs))
+	for _, s := range readinessSpecs {
+		out = append(out, s.env+"="+(*s.dst(&rr)).String())
+	}
+	return out
 }
 
 // loadedReadiness resolves the project's readiness bounds ONCE (config + env,

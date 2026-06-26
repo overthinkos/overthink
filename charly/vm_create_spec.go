@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // runVmSpecCreate is the VmCreateCmd.Run branch for kind:vm entities.
@@ -237,45 +235,4 @@ func publishVmSshAlias(home, vmName, deployName string, spec *VmSpec, rt VmRunti
 		return err
 	}
 	return EnsureSshConfigInclude(home)
-}
-
-// resolveVmRam picks the spec-declared RAM or falls back to "4G".
-func resolveVmRam(spec *VmSpec) string {
-	if spec.Ram != "" {
-		return spec.Ram
-	}
-	return "4G"
-}
-
-// resolveVmCpus picks the spec-declared CPU count or falls back to 2.
-func resolveVmCpus(spec *VmSpec) int {
-	if spec.Cpus > 0 {
-		return spec.Cpus
-	}
-	return 2
-}
-
-// detectRuntimeHostVendor reads /proc/cpuinfo to identify the host CPU
-// vendor (GenuineIntel | AuthenticAMD | ""). Used by RenderDomain /
-// RenderQemuArgv to auto-append the correct nested-virt feature (vmx
-// vs svm) per D16.
-func detectRuntimeHostVendor() string {
-	f, err := os.Open("/proc/cpuinfo")
-	if err != nil {
-		return ""
-	}
-	defer f.Close() //nolint:errcheck
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "vendor_id") {
-			if idx := strings.Index(line, ":"); idx > 0 {
-				return strings.TrimSpace(line[idx+1:])
-			}
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: /proc/cpuinfo scan error: %v\n", err)
-	}
-	return ""
 }

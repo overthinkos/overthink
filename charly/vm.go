@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -281,28 +280,6 @@ func lingerEnabled(username string) bool {
 		return false
 	}
 	return strings.TrimSpace(string(out)) == "Linger=yes"
-}
-
-// qemuSystemBinary returns the architecture-appropriate QEMU binary name.
-func qemuSystemBinary() string {
-	switch runtime.GOARCH {
-	case "arm64":
-		return "qemu-system-aarch64"
-	default:
-		return "qemu-system-x86_64"
-	}
-}
-
-// vmDiskDir returns the per-VM directory holding a built disk image
-// (disk.qcow2) and, for cloud_image/bootstrap/clone sources, its NoCloud
-// seed.iso. The path is namespaced by VM name so building or creating one VM
-// never reuses a SIBLING VM's disk or — critically — its stale seed.iso,
-// whose embedded SSH key would mismatch this VM's own id_ed25519 and silently
-// break the deploy's authentication. (A `disk.qcow2` absent here makes
-// `charly vm create` fail with a clear "run charly vm build" error instead of
-// adopting whatever a previous VM happened to leave in a shared directory.)
-func vmDiskDir(vmName string) string {
-	return filepath.Join("output", "qcow2", vmName)
 }
 
 // --- VmCreateCmd ---

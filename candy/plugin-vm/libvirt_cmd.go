@@ -1025,11 +1025,3 @@ func (c *LibvirtSnapshotDeleteCmd) Run() error {
 	fmt.Fprintf(os.Stderr, "deleted snapshot %s of %s\n", c.Name, t.DomName)
 	return nil
 }
-
-// ---------------- shared helpers ----------------
-
-func writeJSON(w io.Writer, v any) error {
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(v)
-}

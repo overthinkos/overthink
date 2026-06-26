@@ -193,6 +193,15 @@ control overstep is recorded here for transparency.
   `ResolvedReadiness.PluginEnv` emitter); each module keeps a thin `readinessResolve` alias + its own
   `loadedReadiness` entry. Also corrected the plugin's stale "FU-7 not yet threaded" comment.
   R10 check-fedora-vm PASS run `2026.177.1514`.
-- **All follow-ups CLOSED.** FU-1/2/3/4/7/8/9 implemented + R10'd; **FU-5** remains an accepted plan
+- **FU-10 — ✅ DONE.** A post-FU-9 R3 scan found 11 pure VM helpers duplicated byte-for-byte
+  core↔`candy/plugin-vm` (the shell/path/parse layer the go-libvirt/govmm shed left in both;
+  `ResolveVmRam`/`ResolveVmCpus`/`DetectRuntimeHostVendor`/`QemuSystemBinary`/`VmDiskDir`/`KillQemuByPID`/
+  `LibvirtSessionSocket`(+`WithProbes`)/`WriteJSON`/`IsDeviceElement`/`ValidateLibvirtSnippet` + the
+  `libvirtDeviceElements` map). Consolidated into `charly/vmshared/vm_helpers.go` (one copy); each
+  module keeps thin `var <lower> = vmshared.<Pascal>` aliases. Deleted `charly/vm_host_helpers.go` +
+  the now-dead `VmDiskDir` injection seam in `vmshared/hooks.go`. (The snapshot/qemu-shutdown
+  host-wrapper↔plugin-impl pairs were NOT dups — a `\b`-broken awk had inflated my count to 21; the
+  real set was 11. R10 check-fedora-vm PASS run `2026.177.1601`.)
+- **All follow-ups CLOSED.** FU-1/2/3/4/7/8/9/10 implemented + R10'd; **FU-5** remains an accepted plan
   deferral (out-of-process top-level command nesting); **FU-6** — the per-cutover R10s satisfy "R10
   of all cutovers" (a full-roster `/verify-beds` sweep stays optional).

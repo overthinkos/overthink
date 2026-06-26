@@ -2,58 +2,12 @@ package main
 
 import (
 	"context"
-	"encoding/xml"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
 	libvirt "github.com/digitalocean/go-libvirt"
 )
-
-// libvirtDeviceElements lists element names that belong inside <devices> in libvirt domain XML.
-var libvirtDeviceElements = map[string]bool{
-	"channel":    true,
-	"disk":       true,
-	"controller": true,
-	"filesystem": true,
-	"hostdev":    true,
-	"interface":  true,
-	"serial":     true,
-	"console":    true,
-	"input":      true,
-	"graphics":   true,
-	"video":      true,
-	"sound":      true,
-	"audio":      true,
-	"watchdog":   true,
-	"memballoon": true,
-	"rng":        true,
-	"tpm":        true,
-	"redirdev":   true,
-	"smartcard":  true,
-	"hub":        true,
-	"panic":      true,
-	"shmem":      true,
-	"memory":     true,
-	"iommu":      true,
-	"vsock":      true,
-}
-
-// isDeviceElement returns true if the XML snippet's root element belongs inside <devices>.
-func isDeviceElement(snippet string) bool {
-	decoder := xml.NewDecoder(strings.NewReader(snippet))
-	for {
-		tok, err := decoder.Token()
-		if err != nil {
-			return false
-		}
-		if se, ok := tok.(xml.StartElement); ok {
-			return libvirtDeviceElements[se.Name.Local]
-		}
-	}
-}
 
 // InjectLibvirtXML modifies a libvirt domain's XML to include the given snippets.
 // Device elements are inserted into <devices>, others replace/insert at <domain> level.
@@ -145,29 +99,4 @@ func InjectLibvirtXML(vmName string, snippets []string) error {
 
 	fmt.Fprintf(os.Stderr, "Injected %d libvirt config snippet(s) into VM %s\n", len(snippets), vmName)
 	return nil
-}
-
-// ValidateLibvirtSnippet checks that a string is valid XML with at least one element.
-func ValidateLibvirtSnippet(snippet string) error {
-	snippet = strings.TrimSpace(snippet)
-	if snippet == "" {
-		return fmt.Errorf("empty snippet")
-	}
-	decoder := xml.NewDecoder(strings.NewReader(snippet))
-	foundElement := false
-	for {
-		tok, err := decoder.Token()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				if !foundElement {
-					return fmt.Errorf("snippet must contain an XML element")
-				}
-				return nil
-			}
-			return fmt.Errorf("invalid XML: %w", err)
-		}
-		if _, ok := tok.(xml.StartElement); ok {
-			foundElement = true
-		}
-	}
 }

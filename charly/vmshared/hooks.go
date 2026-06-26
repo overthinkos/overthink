@@ -30,9 +30,6 @@ var ValidateEgress func(kind, label string, data []byte) error
 // build_defaults.yml.
 var UnmarshalEmbeddedDefaults func(dst any)
 
-// VmDiskDir is the per-VM qcow2 disk directory.
-var VmDiskDir func(vmName string) string
-
 // Snapshot backends. Core wires host-side RPC wrappers (vm_snapshot_client.go)
 // that drive the out-of-process plugin; the plugin wires the in-process
 // go-libvirt implementations (vm_snapshot_internal.go / vm_snapshot_libvirt.go).

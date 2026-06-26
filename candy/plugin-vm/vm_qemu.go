@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
 
 	govmmQemu "github.com/kata-containers/govmm/qemu"
@@ -68,22 +66,4 @@ func qemuForceShutdown(stateDir string) error {
 	}
 
 	return nil
-}
-
-// killQemuByPID reads the PID file and kills the QEMU process.
-func killQemuByPID(stateDir string) {
-	pidFile := filepath.Join(stateDir, "qemu.pid")
-	data, err := os.ReadFile(pidFile)
-	if err != nil {
-		return
-	}
-	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-	if err != nil {
-		return
-	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return
-	}
-	_ = proc.Kill()
 }

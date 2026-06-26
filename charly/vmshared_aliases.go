@@ -171,6 +171,23 @@ var (
 	WriteSeedISO                = vmshared.WriteSeedISO
 )
 
+// Pure VM helper functions consolidated into vmshared (vm_helpers.go) — the
+// former core↔plugin byte-for-byte duplication (FU-10). These aliases keep the
+// package-main call sites unchanged.
+var (
+	resolveVmRam                   = vmshared.ResolveVmRam
+	resolveVmCpus                  = vmshared.ResolveVmCpus
+	detectRuntimeHostVendor        = vmshared.DetectRuntimeHostVendor
+	qemuSystemBinary               = vmshared.QemuSystemBinary
+	vmDiskDir                      = vmshared.VmDiskDir
+	killQemuByPID                  = vmshared.KillQemuByPID
+	libvirtSessionSocket           = vmshared.LibvirtSessionSocket
+	libvirtSessionSocketWithProbes = vmshared.LibvirtSessionSocketWithProbes
+	writeJSON                      = vmshared.WriteJSON
+	isDeviceElement                = vmshared.IsDeviceElement
+	ValidateLibvirtSnippet         = vmshared.ValidateLibvirtSnippet
+)
+
 const (
 	PollHeavy                        = vmshared.PollHeavy
 	PollLocal                        = vmshared.PollLocal
@@ -188,7 +205,6 @@ const (
 func init() {
 	vmshared.ValidateEgress = ValidateEgress
 	vmshared.UnmarshalEmbeddedDefaults = unmarshalEmbeddedDefaults
-	vmshared.VmDiskDir = vmDiskDir
 	vmshared.CreateInternalSnapshot = createInternalSnapshot
 	vmshared.DeleteInternalSnapshot = deleteInternalSnapshot
 	vmshared.RevertInternalSnapshot = revertInternalSnapshot

@@ -75,8 +75,11 @@ type CheckCmd struct {
 	// Live-container probe verbs (each requires a running target)
 	Cdp     CdpCmd     `cmd:"" help:"Chrome DevTools Protocol (open, list, click, check)"`
 	Dbus    DbusCmd    `cmd:"" help:"Interact with D-Bus services inside containers"`
-	Libvirt LibvirtCmd `cmd:"" help:"VM management via libvirt API (info, screenshot, send-key, QMP, guest-agent, snapshots, events)"`
-	Mcp     McpCmd     `cmd:"" help:"Probe MCP servers declared via mcp_provides"`
+	// `libvirt` is NOT a CLI subcommand here — the VM/libvirt-API probe verb (`charly check
+	// libvirt`) is served by the out-of-process candy/plugin-vm verb plugin, nested under
+	// `charly check` at runtime via attachNestedCheckPlugins exactly like `kube`/`adb`/`appium`.
+	// This shed go-libvirt + kata-containers/govmm + libvirt.org/go/libvirtxml from charly's core.
+	Mcp McpCmd `cmd:"" help:"Probe MCP servers declared via mcp_provides"`
 	Record  RecordCmd  `cmd:"" help:"Record terminal sessions or desktop video inside running containers"`
 	Vnc     VncCmd     `cmd:"" help:"Control VNC desktop in running containers"`
 	Wl      WlCmd      `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
@@ -703,6 +706,13 @@ func attachCheckRunnerContext(runner *Runner, box, instance string, distros []st
 	// the bed plan, with no candy in the image closure requiring it) would otherwise
 	// leave the plugin unloaded and the `spice:` step failing as an unknown verb.
 	addCandy, refWords := deployNodePluginContext(dir, box)
+	// The VM plugin candy (verb:libvirt) is external (out-of-process) and in no box's image
+	// closure, so a bed whose plan dispatches `libvirt:` (e.g. check-fedora-vm's libvirt-verb-
+	// dispatches step) needs it pulled in by its canonical ref — the same host-side-plugin pattern
+	// as a bed add_candy'ing plugin-spice for `spice:`. Harmless for non-VM beds: loadProjectPlugins
+	// build-connects it only if the plan references libvirt; in a bed CHARLY_REPO_OVERRIDE resolves
+	// the ref to the local superproject under development.
+	addCandy = append(addCandy, vmPluginCandyRef())
 	candyMap, scanErr := ScanAllCandyWithConfigOpts(dir, cfg, ResolveOpts{ExtraCandyRefs: addCandy})
 	if scanErr != nil {
 		runner.CandyScanErr = fmt.Errorf("scanning candy source dirs: %w", scanErr)
@@ -759,8 +769,17 @@ func deployNodePluginContext(dir, name string) (addCandy []string, refWords []st
 		refWords = append(refWords, node.Target)
 	}
 	for i := range node.Plan {
-		if w := node.Plan[i].Op.Plugin; w != "" {
+		op := &node.Plan[i].Op
+		if w := op.Plugin; w != "" {
 			refWords = append(refWords, w)
+		}
+		// Also surface each step's VERB discriminator. A closed-#Op EXTERNAL check verb
+		// (libvirt/spice/kube/adb/appium) is NOT a `plugin:` word, so without this the loader
+		// never build-connects the out-of-process plugin candy serving it — e.g. a bed's
+		// `libvirt: list` step would SKIP with "unknown verb". Over-load safe: a compiled-in
+		// verb's candy is already registered, and a non-plugin verb has no candy to load.
+		if v, err := op.Kind(); err == nil && v != "" {
+			refWords = append(refWords, v)
 		}
 	}
 	return addCandy, refWords

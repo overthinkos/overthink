@@ -317,7 +317,11 @@ var VerbCatalog = map[string]VerbSpec{
 	"vnc":     {ctxRuntimeOnly, DoAssert, false},
 	"mcp":     {ctxRuntimeOnly, DoAssert, false},
 	"record":  {ctxRuntimeOnly, DoAssert, false},
-	"libvirt": {ctxRuntimeOnly, DoAssert, false},
+	// `libvirt` is NOT here — it is an EXTERNAL-CHARLY-VERB served out-of-process by
+	// candy/plugin-vm. It left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc CheckVerbProvider)
+	// but keeps its `libvirt:` discriminator + modifiers + the #LibvirtMethod enum on core #Op
+	// (authoring unchanged); the registered external provider resolves at dispatch (the host
+	// pre-resolves any VM display endpoint host-side).
 	// `kube` is NOT here — it is an EXTERNAL-CHARLY-VERB served out-of-process by
 	// candy/plugin-kube. It left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc
 	// CheckVerbProvider) but keeps its `kube:` discriminator + modifiers + the #KubeMethod

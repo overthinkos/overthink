@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"maps"
@@ -956,12 +957,15 @@ func holderStart(addr holderAddr) error {
 // dual-backend probe `charly vm list` uses (libvirt domain state, then qemu
 // pidfile liveness).
 func vmIsRunning(name string) bool {
-	if conn, err := connectLibvirt(""); err == nil {
-		defer conn.Close() //nolint:errcheck
-		if dom, lerr := conn.lookupDomain(name); lerr == nil {
-			if st, serr := conn.domainState(dom); serr == nil {
-				return domainStateString(st) == "running"
-			}
+	// Libvirt-backed liveness via the out-of-process vm plugin (the go-libvirt impl moved there);
+	// graceful-degrades to the qemu pidfile probe below when the plugin is absent or the domain
+	// is not libvirt-running.
+	if raw, ok := invokeVmPlugin("domain-state", name, ""); ok {
+		var st struct {
+			Running bool `json:"running"`
+		}
+		if json.Unmarshal(raw, &st) == nil && st.Running {
+			return true
 		}
 	}
 	dir, err := vmDir()

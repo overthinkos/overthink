@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"image/png"
 	"io"
@@ -65,16 +66,20 @@ func (s *vmVncSession) Close() {
 // UNIX-socket local (via a bridge listener), UNIX-socket remote
 // (forwarded socket → bridge listener → TCP dial).
 func openVncForVm(vmName, uri string) (*vmVncSession, error) {
-	t, err := ResolveVmTarget(vmName, uri)
-	if err != nil {
+	// Resolve the VNC endpoint via the out-of-process vm plugin (go-libvirt moved there).
+	raw, ok := invokeVmPlugin("resolve-vnc", vmName, uri)
+	if !ok {
+		return nil, fmt.Errorf("vm plugin unavailable (go-libvirt resolution is out-of-process)")
+	}
+	var rr vmResolveResult
+	if err := json.Unmarshal(raw, &rr); err != nil {
 		return nil, err
 	}
-	ep, err := t.VncEndpoint()
-	tunnelTarget := t.Uri
-	_ = t.Close()
-	if err != nil {
-		return nil, err
+	if rr.Error != "" {
+		return nil, fmt.Errorf("%s", rr.Error)
 	}
+	ep := rr.Endpoint
+	tunnelTarget := rr.TunnelTarget
 
 	// Build a TCP address the VNCClient can dial: either directly, or
 	// via a bridge listener that pipes bytes to a UNIX socket (local

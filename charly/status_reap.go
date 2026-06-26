@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -62,19 +63,22 @@ func (c *ReapOrphansCmd) Run() error {
 func ephemeralUnderlyingResourceAlive(name string, node BundleNode) bool {
 	switch node.Target {
 	case "vm":
-		conn, err := connectLibvirt(libvirtSessionURI)
-		if err != nil {
-			return true // can't probe → conservative: assume alive
-		}
-		defer conn.Close() //nolint:errcheck
 		domName := "charly-" + node.From
 		if node.VmState != nil && node.VmState.Ephemeral != nil && node.VmState.Ephemeral.InstanceName != "" {
 			domName = "charly-" + node.VmState.Ephemeral.InstanceName
 		}
-		if _, err := conn.lookupDomain(domName); err != nil {
-			return false
+		// Probe the domain via the out-of-process vm plugin (the go-libvirt impl moved there).
+		raw, ok := invokeVmPlugin("domain-state", domName, "")
+		if !ok {
+			return true // can't probe → conservative: assume alive
 		}
-		return true
+		var st struct {
+			Exists bool `json:"exists"`
+		}
+		if json.Unmarshal(raw, &st) != nil {
+			return true // decode failed → conservative
+		}
+		return st.Exists
 	case "pod", "container":
 		check := exec.Command("podman", "container", "exists", "charly-"+name)
 		return check.Run() == nil

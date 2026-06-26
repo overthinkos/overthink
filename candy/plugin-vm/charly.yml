@@ -1,0 +1,24 @@
+plugin-vm:
+    candy:
+        version: 2026.177.0400
+        description: |-
+            The VM subsystem relocated into an OUT-OF-PROCESS candy — the `libvirt` live check verb
+            (list, info, screenshot, send-key, QMP, qemu-guest-agent, snapshots, events), the VM
+            lifecycle, and the internal VM-resolution ops (resolve-target / domain-state /
+            list-domains the host's spice/vnc/ssh/status/preempt consumers call). All of it is
+            backed by go-libvirt + kata-containers/govmm + libvirt.org/go/libvirtxml, which this
+            plugin keeps OUT of charly's core go.mod — the dep-shed. The host go-builds + serves it
+            over gRPC; the `libvirt:` verb dispatches through the provider registry exactly like a
+            built-in (the verb keeps its #LibvirtMethod modifiers on the closed #Op — authoring
+            unchanged), running the extracted LibvirtCmd Kong tree IN this plugin's process. The
+            out-of-process home of the charly VM subsystem: the libvirt check verb + the in-process VM lifecycle/render helpers.
+    plugin-vm-decl:
+        plugin:
+            source: github.com/overthinkos/overthink/candy/plugin-vm
+            providers:
+                - verb:libvirt
+    vm-libvirt-verb-dispatches:
+        check: the libvirt verb dispatches through the external vm plugin and lists the libvirt domains for a live VM deployment
+        id: vm-libvirt-verb-dispatches
+        libvirt: list
+        context: [runtime]

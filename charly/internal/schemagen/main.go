@@ -186,7 +186,9 @@ var liveVerbs = []struct{ verb, def string }{
 	{"vnc", "#VncMethod"},
 	{"mcp", "#McpMethod"},
 	{"record", "#RecordMethod"},
-	{"libvirt", "#LibvirtMethod"},
+	// libvirt is NOT here: it is an EXTERNAL-CHARLY-VERB (candy/plugin-vm, served OUT-OF-PROCESS),
+	// so it has no in-proc LiveVerbProvider to gate — like candy/plugin-spice / candy/plugin-appium.
+	// Its #LibvirtMethod enum still lives on the closed #Op (authoring `libvirt: list` is unchanged).
 }
 
 func writeVocab(dir, out string) error {

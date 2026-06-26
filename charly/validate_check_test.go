@@ -198,35 +198,17 @@ func TestValidateOps_SpiceClean(t *testing.T) {
 	}
 }
 
-func TestValidateOps_LibvirtRejectedInBuildContext(t *testing.T) {
-	layers := map[string]*Candy{
-		"vm": opsCandy("vm", Op{Libvirt: "info", Context: []string{"build"}}),
-	}
-	got := runValidateOps(t, &Config{Box: map[string]BoxConfig{}}, layers)
-	if !strings.Contains(got, "libvirt:") || !strings.Contains(got, "runtime-context only") {
-		t.Errorf("expected runtime-context-only error for libvirt: %s", got)
-	}
-}
+// TestValidateOps_LibvirtRejectedInBuildContext removed with libvirt's externalization: like
+// kube/adb, libvirt left VerbCatalog (so core no longer holds its context-legality gate). A
+// build-context libvirt op is now caught LOUDLY at build — emitPluginFragment finds no OpEmit
+// fragment for a check verb — rather than at core authoring validation; the runtime-only contract
+// is the external candy/plugin-vm's.
 
-func TestValidateOps_LibvirtGuestExecRequiresCommand(t *testing.T) {
-	layers := map[string]*Candy{
-		"vm": opsCandy("vm", Op{Libvirt: "guest/exec"}),
-	}
-	got := runValidateOps(t, &Config{Box: map[string]BoxConfig{}}, layers)
-	if !strings.Contains(got, "libvirt") || !strings.Contains(got, "command") {
-		t.Errorf("expected libvirt: guest/exec command-required error: %s", got)
-	}
-}
-
-func TestValidateOps_LibvirtSnapshotCreateRequiresTarget(t *testing.T) {
-	layers := map[string]*Candy{
-		"vm": opsCandy("vm", Op{Libvirt: "snapshot/create"}),
-	}
-	got := runValidateOps(t, &Config{Box: map[string]BoxConfig{}}, layers)
-	if !strings.Contains(got, "libvirt") || !strings.Contains(got, "target") {
-		t.Errorf("expected libvirt: snapshot/create target-required error: %s", got)
-	}
-}
+// TestValidateOps_LibvirtGuestExecRequiresCommand + ..._LibvirtSnapshotCreateRequiresTarget moved
+// with the libvirt verb to candy/plugin-vm. libvirt is now an EXTERNAL-CHARLY-VERB, so its
+// per-method argument validation (guest/exec needs a command, snapshot/create needs a target) is
+// the plugin's LibvirtCmd Kong dispatch at runtime, NOT core authoring validation — exactly as for
+// the other external verbs kube/adb (core no longer holds the libvirt method specs).
 
 func TestValidateOps_LibvirtClean(t *testing.T) {
 	layers := map[string]*Candy{

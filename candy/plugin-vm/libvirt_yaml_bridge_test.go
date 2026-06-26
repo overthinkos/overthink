@@ -131,34 +131,26 @@ devices:
 // accepted YAML shapes for the `listen:` field on a <graphics>
 // element: scalar, single mapping, and sequence.
 func TestRenderDomainXML_GraphicsListen_AllForms(t *testing.T) {
+	// charly's CUE loader coerces the polymorphic `listen:` YAML (scalar / map / list) into the
+	// LibvirtGraphicsListeners slice (that coercion is covered by charly's loader tests); here we
+	// pin that the RENDERER (RenderDomainXML) emits the right <listen> XML for each coerced shape.
 	cases := []struct {
-		name    string
-		yamlStr string
-		want    []string
-		notWant []string
+		name     string
+		graphics LibvirtGraphics
+		want     []string
+		notWant  []string
 	}{
 		{
-			name: "scalar address",
-			yamlStr: `
-devices:
-  graphics:
-    - type: vnc
-      listen: 127.0.0.1
-`,
+			name:     "scalar address → address listener",
+			graphics: LibvirtGraphics{Type: "vnc", Listen: LibvirtGraphicsListeners{{Type: "address", Address: "127.0.0.1"}}},
 			want: []string{
 				`<graphics type="vnc"`,
 				`<listen type="address" address="127.0.0.1">`,
 			},
 		},
 		{
-			name: "socket-only mapping",
-			yamlStr: `
-devices:
-  graphics:
-    - type: spice
-      listen:
-        type: socket
-`,
+			name:     "socket-only mapping",
+			graphics: LibvirtGraphics{Type: "spice", Listen: LibvirtGraphicsListeners{{Type: "socket"}}},
 			want: []string{
 				`<graphics type="spice">`,
 				`<listen type="socket">`,
@@ -168,16 +160,8 @@ devices:
 			},
 		},
 		{
-			name: "list of socket + address",
-			yamlStr: `
-devices:
-  graphics:
-    - type: spice
-      listen:
-        - type: socket
-        - type: address
-          address: 127.0.0.1
-`,
+			name:     "list of socket + address",
+			graphics: LibvirtGraphics{Type: "spice", Listen: LibvirtGraphicsListeners{{Type: "socket"}, {Type: "address", Address: "127.0.0.1"}}},
 			want: []string{
 				`<graphics type="spice">`,
 				`<listen type="socket">`,
@@ -187,10 +171,7 @@ devices:
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			var lv LibvirtDomain
-			if err := decodeViaCUEForTest(t, tc.yamlStr, &lv); err != nil {
-				t.Fatalf("yaml unmarshal: %v", err)
-			}
+			lv := LibvirtDomain{Devices: &LibvirtDevices{Graphics: []LibvirtGraphics{tc.graphics}}}
 			out, err := RenderDomainXML(&VmSpec{Libvirt: &lv},
 				VmRuntimeParams{Name: "charly-listen-test", RamMB: 512, Cpus: 1, HostArch: "x86_64"})
 			if err != nil {

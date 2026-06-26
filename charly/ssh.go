@@ -12,6 +12,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -61,22 +62,24 @@ func (c *SshTunnelVncCmd) Run() error {
 // appropriate forward, prints a connect URL, and blocks until
 // SIGINT/SIGTERM.
 func runSshTunnel(vmName, uri string, forceTCP bool, kind string) error {
-	t, err := ResolveVmTarget(vmName, uri)
-	if err != nil {
+	// Resolve the display endpoint via the out-of-process vm plugin (go-libvirt moved there).
+	resolveOp := "resolve-spice"
+	if kind == "vnc" {
+		resolveOp = "resolve-vnc"
+	}
+	raw, ok := invokeVmPlugin(resolveOp, vmName, uri)
+	if !ok {
+		return fmt.Errorf("vm plugin unavailable (go-libvirt resolution is out-of-process)")
+	}
+	var rr vmResolveResult
+	if err := json.Unmarshal(raw, &rr); err != nil {
 		return err
 	}
-	var ep DisplayEndpoint
-	switch kind {
-	case "spice":
-		ep, err = t.SpiceEndpoint()
-	case "vnc":
-		ep, err = t.VncEndpoint()
+	if rr.Error != "" {
+		return fmt.Errorf("%s", rr.Error)
 	}
-	tunnelTarget := t.Uri
-	_ = t.Close()
-	if err != nil {
-		return err
-	}
+	ep := rr.Endpoint
+	tunnelTarget := rr.TunnelTarget
 
 	// Decide transport. If the VM uses a UNIX socket and --tcp is not
 	// set, we preserve socket-ness (and print a spice+unix:// /

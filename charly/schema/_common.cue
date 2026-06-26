@@ -17,7 +17,7 @@
 // the `--- verb discriminators ---` group in #Op.
 #OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" |
 	"cdp" | "wl" | "dbus" | "vnc" | "mcp" | "record" |
-	"libvirt" | "summarize" | "kill" | "plugin") @go(-)
+	"summarize" | "kill" | "plugin") @go(-)
 
 // ---------------------------------------------------------------------------
 // Plan steps: the unified run/check/agent-run/agent-check/include vocabulary.
@@ -73,6 +73,15 @@
 	// registered external provider, after the host pre-resolves the VM's live SPICE
 	// endpoint to a dialable address — the plugin needs no go-libvirt).
 	spice?:          #SpiceMethod
+	// `libvirt` is an EXTERNAL-CHARLY-VERB: its go-libvirt + kata-containers/govmm +
+	// libvirt.org/go/libvirtxml VM implementation lives in the out-of-tree candy/plugin-vm module,
+	// served OUT-OF-PROCESS. Like spice/kube/adb (and unlike file/package/service/command, which
+	// left #Op entirely, re-authored as `plugin: <verb>`), libvirt KEEPS its `libvirt:` discriminator
+	// + every #LibvirtMethod modifier on this closed #Op — authoring is unchanged (`libvirt: list`,
+	// not `plugin: libvirt`). It therefore left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc
+	// CheckVerbProvider to gate) BUT keeps this field + #LibvirtMethod here, so `libvirt: list` still
+	// validates against the method enum and VerbsSet still classifies the op (then dispatch resolves
+	// the registered external provider; the host pre-resolves any VM display endpoint host-side).
 	libvirt?:        #LibvirtMethod
 	// `kube` is an EXTERNAL-CHARLY-VERB: its implementation (+ the heavy
 	// client-go + apimachinery dependency) lives in the out-of-tree

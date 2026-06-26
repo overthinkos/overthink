@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -49,25 +50,32 @@ func (r *Runner) preresolveSpiceEndpoint(c *Op) (env *SpiceEnv, cleanup func(), 
 	// The declarative verb honours CHARLY_LIBVIRT_URI for a remote hypervisor, exactly
 	// as the former `charly check spice` subprocess did (its --uri flag carried that env).
 	uri := os.Getenv("CHARLY_LIBVIRT_URI")
-	t, err := ResolveVmTarget(r.Box, uri)
-	if err != nil {
-		res := failf(c, "spice: %s: %v", c.Spice, err)
+	// Resolve the VM's SPICE endpoint via the out-of-process vm plugin (the go-libvirt
+	// ResolveVmTarget+SpiceEndpoint moved there); the no-display-device skip + the SpiceEnv build
+	// + any ssh tunnel stay host-side.
+	raw, ok := invokeVmPlugin("resolve-spice", r.Box, uri)
+	if !ok {
+		res := failf(c, "spice: %s: vm plugin unavailable (go-libvirt resolution is out-of-process)", c.Spice)
 		return nil, noop, &res
 	}
-	ep, epErr := t.SpiceEndpoint()
-	tunnelTarget := t.Uri
-	_ = t.Close() // read the endpoint, then release the resolver's libvirt connection
-	if epErr != nil {
+	var rr vmResolveResult
+	if err := json.Unmarshal(raw, &rr); err != nil {
+		res := failf(c, "spice: %s: decode resolve: %v", c.Spice, err)
+		return nil, noop, &res
+	}
+	tunnelTarget := rr.TunnelTarget
+	if rr.Error != "" {
 		// "VM <name> has no SPICE graphics device declared in vm.yml" → N/A SKIP (the
 		// SPICE-less cachyos-gpu operator vs the SPICE-having check bed); any other
 		// resolver error is a real FAIL.
-		if strings.Contains(epErr.Error(), noVmDisplayDeviceErr) {
+		if strings.Contains(rr.Error, noVmDisplayDeviceErr) {
 			res := skipf(c, fmt.Sprintf("spice %s — N/A: deployment has no SPICE graphics device (SPICE-less GPU desktop)", c.Spice))
 			return nil, noop, &res
 		}
-		res := failf(c, "spice: %s: %v", c.Spice, epErr)
+		res := failf(c, "spice: %s: %s", c.Spice, rr.Error)
 		return nil, noop, &res
 	}
+	ep := rr.Endpoint
 
 	// Local endpoint — hand the plugin the direct address, no tunnel.
 	if !ep.TunnelNeeded {

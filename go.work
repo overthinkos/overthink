@@ -38,4 +38,3 @@ use ./candy/plugin-vnc
 use ./candy/plugin-dbus
 use ./candy/plugin-record
 use ./candy/plugin-mcp
-use ./candy/plugin-libvirt

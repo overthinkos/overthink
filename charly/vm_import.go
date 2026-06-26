@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"os"
@@ -96,20 +97,22 @@ func ImportFromLibvirt(domainName, targetName string) (string, *VmSpec, error) {
 		return "", nil, fmt.Errorf("import: domain name is required")
 	}
 
-	conn, err := connectLibvirt(libvirtSessionURI)
-	if err != nil {
-		return "", nil, fmt.Errorf("connecting to libvirt: %w", err)
+	// Read the domain XML via the out-of-process vm plugin (go-libvirt moved there).
+	raw, ok := invokeVmPlugin("domain-xml", domainName, libvirtSessionURI)
+	if !ok {
+		return "", nil, fmt.Errorf("vm plugin unavailable (go-libvirt is out-of-process)")
 	}
-	defer conn.Close() //nolint:errcheck
-
-	dom, err := conn.lookupDomain(domainName)
-	if err != nil {
-		return "", nil, fmt.Errorf("looking up domain %q: %w", domainName, err)
+	var dr struct {
+		XML   string `json:"xml"`
+		Error string `json:"error"`
 	}
-	xmlStr, err := conn.l.DomainGetXMLDesc(dom, 0)
-	if err != nil {
-		return "", nil, fmt.Errorf("reading domain XML for %q: %w", domainName, err)
+	if err := json.Unmarshal(raw, &dr); err != nil {
+		return "", nil, err
 	}
+	if dr.Error != "" {
+		return "", nil, fmt.Errorf("reading domain XML for %q: %s", domainName, dr.Error)
+	}
+	xmlStr := dr.XML
 
 	var parsed libvirtDomainXMLForImport
 	if err := xml.Unmarshal([]byte(xmlStr), &parsed); err != nil {
@@ -244,27 +247,32 @@ func mapNetworkToSpec(ifaces []libvirtInterfaceForImport, spec *VmSpec) {
 // ListUnmanagedDomains returns libvirt domains that are NOT recorded
 // in charly's vm.yml (not yet imported).
 func ListUnmanagedDomains() ([]string, error) {
-	conn, err := connectLibvirt(libvirtSessionURI)
-	if err != nil {
-		return nil, fmt.Errorf("connecting to libvirt: %w", err)
+	// List all domains via the out-of-process vm plugin (go-libvirt moved there).
+	raw, ok := invokeVmPlugin("list-all-domains", "", libvirtSessionURI)
+	if !ok {
+		return nil, fmt.Errorf("vm plugin unavailable (go-libvirt is out-of-process)")
 	}
-	defer conn.Close() //nolint:errcheck
-
-	domains, _, err := conn.l.ConnectListAllDomains(1, 0)
-	if err != nil {
-		return nil, fmt.Errorf("listing domains: %w", err)
+	var lr struct {
+		Names []string `json:"names"`
+		Error string   `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &lr); err != nil {
+		return nil, err
+	}
+	if lr.Error != "" {
+		return nil, fmt.Errorf("listing domains: %s", lr.Error)
 	}
 
 	managed, _ := loadManagedVmSet()
 	var out []string
-	for _, d := range domains {
+	for _, name := range lr.Names {
 		// Filter charly-managed domains (those with the charly- prefix that
 		// also appear in vm.yml).
-		charlyName := strings.TrimPrefix(d.Name, "charly-")
-		if managed[charlyName] || managed[d.Name] {
+		charlyName := strings.TrimPrefix(name, "charly-")
+		if managed[charlyName] || managed[name] {
 			continue
 		}
-		out = append(out, d.Name)
+		out = append(out, name)
 	}
 	return out, nil
 }

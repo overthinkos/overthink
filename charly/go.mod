@@ -5,12 +5,11 @@ go 1.26.0
 require (
 	cuelang.org/go v0.16.1
 	github.com/alecthomas/kong v1.14.0
-	github.com/digitalocean/go-libvirt v0.0.0-20260217163227-273eaa321819
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/google/go-containerregistry v0.20.7
 	github.com/hashicorp/go-plugin v1.8.0
-	github.com/kata-containers/govmm v0.0.0-20220119175834-88960a15dacd
 	github.com/modelcontextprotocol/go-sdk v1.5.0
+	github.com/overthinkos/overthink/candy/plugin-example-external v0.0.0-20260625134322-595471add643
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.49.0
 	golang.org/x/net v0.52.0
@@ -20,7 +19,6 @@ require (
 	google.golang.org/grpc v1.61.0
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
 	gopkg.in/yaml.v3 v3.0.1
-	libvirt.org/go/libvirtxml v1.12002.0
 )
 
 require (

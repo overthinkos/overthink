@@ -257,7 +257,6 @@ var OpVerbs = []string{
 	"vnc",
 	"mcp",
 	"record",
-	"libvirt",
 	"summarize",
 	"kill",
 	"plugin",
@@ -394,11 +393,10 @@ var AuthoringVerbs = []string{
 // (the #<Name>Method enums) — the SAME allowlists checkrun_charly_verbs.go
 // enforces, now from one CUE source.
 var LiveVerbMethods = map[string][]string{
-	"cdp":     {"status", "list", "url", "text", "html", "eval", "axtree", "coords", "raw", "wait", "screenshot", "open", "close", "click", "type", "spa-status", "spa-click", "spa-type", "spa-key", "spa-key-combo", "spa-mouse"},
-	"wl":      {"status", "toplevel", "windows", "geometry", "xprop", "atspi", "screenshot", "clipboard", "click", "double-click", "mouse", "scroll", "drag", "type", "key", "key-combo", "focus", "close", "fullscreen", "minimize", "exec", "resolution", "overlay-list", "overlay-status", "overlay-show", "overlay-hide", "sway-tree", "sway-workspaces", "sway-outputs", "sway-msg", "sway-focus", "sway-move", "sway-resize", "sway-layout", "sway-workspace", "sway-kill", "sway-floating", "sway-reload"},
-	"dbus":    {"list", "call", "introspect", "notify"},
-	"vnc":     {"status", "screenshot", "click", "mouse", "type", "key", "rfb", "passwd"},
-	"mcp":     {"ping", "servers", "list-tools", "list-resources", "list-prompts", "call", "read"},
-	"record":  {"list", "start", "stop", "cmd"},
-	"libvirt": {"list", "info", "screenshot", "send-key", "passwd", "qmp", "domain-xml", "console", "events", "guest/ping", "guest/info", "guest/os-info", "guest/time", "guest/hostname", "guest/users", "guest/interfaces", "guest/disks", "guest/fsinfo", "guest/vcpus", "guest/exec", "guest/fstrim", "snapshot/list", "snapshot/create", "snapshot/info", "snapshot/revert", "snapshot/delete"},
+	"cdp":    {"status", "list", "url", "text", "html", "eval", "axtree", "coords", "raw", "wait", "screenshot", "open", "close", "click", "type", "spa-status", "spa-click", "spa-type", "spa-key", "spa-key-combo", "spa-mouse"},
+	"wl":     {"status", "toplevel", "windows", "geometry", "xprop", "atspi", "screenshot", "clipboard", "click", "double-click", "mouse", "scroll", "drag", "type", "key", "key-combo", "focus", "close", "fullscreen", "minimize", "exec", "resolution", "overlay-list", "overlay-status", "overlay-show", "overlay-hide", "sway-tree", "sway-workspaces", "sway-outputs", "sway-msg", "sway-focus", "sway-move", "sway-resize", "sway-layout", "sway-workspace", "sway-kill", "sway-floating", "sway-reload"},
+	"dbus":   {"list", "call", "introspect", "notify"},
+	"vnc":    {"status", "screenshot", "click", "mouse", "type", "key", "rfb", "passwd"},
+	"mcp":    {"ping", "servers", "list-tools", "list-resources", "list-prompts", "call", "read"},
+	"record": {"list", "start", "stop", "cmd"},
 }

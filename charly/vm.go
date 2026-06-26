@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -16,7 +17,6 @@ import (
 	"syscall"
 	"text/tabwriter"
 
-	libvirt "github.com/digitalocean/go-libvirt"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
 )
@@ -444,18 +444,12 @@ func startVM(box, instance string) error {
 
 	switch backend {
 	case "libvirt":
-		conn, err := connectLibvirt("")
-		if err != nil {
-			return err
+		raw, ok := invokeVmPlugin("start", name, "")
+		if !ok {
+			return fmt.Errorf("VM %s: vm plugin unavailable (go-libvirt is out-of-process)", name)
 		}
-		defer conn.Close() //nolint:errcheck
-
-		dom, err := conn.lookupDomain(name)
-		if err != nil {
-			return fmt.Errorf("VM %s not found: %w", name, err)
-		}
-		if err := conn.startDomain(dom); err != nil {
-			return fmt.Errorf("starting VM %s: %w", name, err)
+		if e := vmPluginOpError(raw); e != "" {
+			return fmt.Errorf("starting VM %s: %s", name, e)
 		}
 		fmt.Fprintf(os.Stderr, "Started VM %s\n", name)
 	case "qemu":
@@ -525,22 +519,12 @@ func stopVM(box, instance string, force bool) error {
 
 	switch backend {
 	case "libvirt":
-		conn, err := connectLibvirt("")
-		if err != nil {
-			return err
+		raw, ok := invokeVmPluginEnv(vmPluginEnv{VmOp: "stop", VmName: name, Force: force})
+		if !ok {
+			return fmt.Errorf("VM %s: vm plugin unavailable (go-libvirt is out-of-process)", name)
 		}
-		defer conn.Close() //nolint:errcheck
-
-		dom, err := conn.lookupDomain(name)
-		if err != nil {
-			return fmt.Errorf("VM %s not found: %w", name, err)
-		}
-		if force {
-			_ = conn.destroyDomain(dom)
-		} else {
-			if err := conn.shutdownDomain(dom); err != nil {
-				return fmt.Errorf("shutting down VM %s: %w", name, err)
-			}
+		if e := vmPluginOpError(raw); e != "" {
+			return fmt.Errorf("stopping VM %s: %s", name, e)
 		}
 		fmt.Fprintf(os.Stderr, "Stopped VM %s\n", name)
 	case "qemu":
@@ -605,29 +589,17 @@ func (c *VmDestroyCmd) Run() error {
 
 	switch backend {
 	case "libvirt":
-		conn, err := connectLibvirt("")
-		if err != nil {
-			return err
+		// Destroy via the out-of-process vm plugin (the op graceful-stops + undefines, and is
+		// idempotent on an already-gone domain); the charly.yml + ssh-config cleanup below still
+		// runs so a lingering config whose domain is already destroyed is still removed.
+		raw, ok := invokeVmPluginEnv(vmPluginEnv{VmOp: "destroy", VmName: name, DeleteDisk: c.Disk})
+		if !ok {
+			return fmt.Errorf("VM %s: vm plugin unavailable (go-libvirt is out-of-process)", name)
 		}
-		defer conn.Close() //nolint:errcheck
-
-		dom, err := conn.lookupDomain(name)
-		if err != nil {
-			// Already gone (or never defined) — idempotent: fall through to the
-			// charly.yml + ssh-config cleanup below so a lingering config whose
-			// domain is already destroyed is still removed (otherwise the entry
-			// can never be cleaned once the domain is gone).
-			fmt.Fprintf(os.Stderr, "VM %s already destroyed (or not defined)\n", name)
-		} else {
-			// Stop if running — gracefully (flush the guest filesystem, incl. the
-			// in-guest podman overlay store), forcing only if it won't power off.
-			conn.gracefulStopDomain(dom)
-			// Undefine
-			if err := conn.undefineDomain(dom, c.Disk); err != nil {
-				return fmt.Errorf("undefining VM %s: %w", name, err)
-			}
-			fmt.Fprintf(os.Stderr, "Destroyed VM %s\n", name)
+		if e := vmPluginOpError(raw); e != "" {
+			return fmt.Errorf("undefining VM %s: %s", name, e)
 		}
+		fmt.Fprintf(os.Stderr, "Destroyed VM %s\n", name)
 
 	case "qemu":
 		dir, err := vmDir()
@@ -714,19 +686,18 @@ func (c *VmListCmd) Run() error {
 	var rows []vmRow
 	var probeNotes []string
 
-	// libvirt probe
-	if conn, err := connectLibvirt(""); err == nil {
-		defer conn.Close() //nolint:errcheck
-		domains, derr := conn.listCharlyDomains()
-		if derr != nil {
-			probeNotes = append(probeNotes, fmt.Sprintf("(libvirt: listing failed: %v)", derr))
-		} else {
+	// libvirt probe via the out-of-process vm plugin (go-libvirt moved there).
+	if raw, ok := invokeVmPlugin("list-domains", "", ""); ok {
+		var domains []domainInfo
+		if json.Unmarshal(raw, &domains) == nil {
 			for _, d := range domains {
 				rows = append(rows, vmRow{Name: d.Name, Backend: "libvirt", State: d.State})
 			}
+		} else {
+			probeNotes = append(probeNotes, "(libvirt: listing failed)")
 		}
 	} else {
-		probeNotes = append(probeNotes, fmt.Sprintf("(libvirt session daemon not reachable: %v)", err))
+		probeNotes = append(probeNotes, "(libvirt: vm plugin unavailable)")
 	}
 
 	// QEMU pidfile scan
@@ -804,13 +775,13 @@ func (c *VmListCmd) Run() error {
 // DomainUndefineFlags(libvirt.DomainUndefineNvram) and removes the
 // per-VM state directory.
 func (c *VmListCmd) runCleanOrphans() error {
-	conn, err := connectLibvirt("")
-	if err != nil {
-		return fmt.Errorf("connecting to libvirt: %w", err)
+	// List + undefine orphans via the out-of-process vm plugin (go-libvirt moved there).
+	raw, ok := invokeVmPlugin("list-domains", "", "")
+	if !ok {
+		return fmt.Errorf("vm plugin unavailable (go-libvirt is out-of-process)")
 	}
-	defer conn.Close() //nolint:errcheck
-	domains, err := conn.listCharlyDomains()
-	if err != nil {
+	var domains []domainInfo
+	if err := json.Unmarshal(raw, &domains); err != nil {
 		return fmt.Errorf("listing domains: %w", err)
 	}
 	stateRoot, err := vmDir()
@@ -823,8 +794,7 @@ func (c *VmListCmd) runCleanOrphans() error {
 			continue
 		}
 		stateDir := filepath.Join(stateRoot, d.Name)
-		_, statErr := os.Stat(stateDir)
-		if statErr == nil {
+		if _, statErr := os.Stat(stateDir); statErr == nil {
 			continue // state dir present → not an orphan
 		}
 		orphans = append(orphans, d.Name)
@@ -834,13 +804,14 @@ func (c *VmListCmd) runCleanOrphans() error {
 		return nil
 	}
 	for _, name := range orphans {
-		dom, derr := conn.lookupDomain(name)
-		if derr != nil {
-			fmt.Fprintf(os.Stderr, "warning: lookup %s: %v\n", name, derr)
+		// destroy with DeleteDisk:false → the plugin's undefine (NVRAM-aware) on a non-running orphan.
+		r, rok := invokeVmPluginEnv(vmPluginEnv{VmOp: "destroy", VmName: name})
+		if !rok {
+			fmt.Fprintf(os.Stderr, "warning: undefine %s: vm plugin unavailable\n", name)
 			continue
 		}
-		if uerr := conn.l.DomainUndefineFlags(dom, libvirt.DomainUndefineNvram); uerr != nil {
-			fmt.Fprintf(os.Stderr, "warning: undefine %s: %v\n", name, uerr)
+		if e := vmPluginOpError(r); e != "" {
+			fmt.Fprintf(os.Stderr, "warning: undefine %s: %s\n", name, e)
 			continue
 		}
 		fmt.Printf("undefined orphan: %s\n", name)

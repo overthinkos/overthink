@@ -25,8 +25,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -53,42 +51,11 @@ type VmTarget struct {
 // The domain-name convention matches `charly vm start`: "charly-<vmName>".
 // For entity names already prefixed with "charly-" (rare), the prefix is
 // not doubled. Pass uri == "" for the default local qemu:///session.
+// ResolveVmTarget connects to the VM's running libvirt domain and parses its live XML. It does
+// NOT load charly.yml: the old impl loaded the project only to populate VmTarget.Spec, which NO
+// caller ever reads, and the domain lookup below already validates the VM exists. (The plugin is
+// out-of-process and cannot reach core's project loader anyway — host-passes-data principle.)
 func ResolveVmTarget(vmName, uri string) (*VmTarget, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return nil, fmt.Errorf("getting working directory: %w", err)
-	}
-
-	// Load the vm.yml entity.
-	uf, ok, err := LoadUnified(dir)
-	if err != nil {
-		return nil, fmt.Errorf("loading charly.yml: %w", err)
-	}
-	if !ok || uf.VM == nil {
-		return nil, fmt.Errorf("no kind:vm entities declared in charly.yml")
-	}
-	// Schema v4: callers may pass either a kind:vm entity name directly
-	// (e.g. "arch") or a kind:deployment name with target:vm (e.g.
-	// "arch-vm") whose Vm field points at the actual entity.
-	spec, present := uf.VM[vmName]
-	if !present && uf.Bundle != nil {
-		if entry, ok := uf.Bundle[vmName]; ok && entry.Target == "vm" && entry.From != "" {
-			if s, okSpec := uf.VM[entry.From]; okSpec {
-				spec = s
-				vmName = entry.From
-				present = true
-			}
-		}
-	}
-	if !present {
-		known := make([]string, 0, len(uf.VM))
-		for k := range uf.VM {
-			known = append(known, k)
-		}
-		sort.Strings(known)
-		return nil, fmt.Errorf("no vm.yml entity named %q; known: %s", vmName, strings.Join(known, ", "))
-	}
-
 	// Open libvirt (local or remote per uri).
 	conn, err := connectLibvirt(uri)
 	if err != nil {
@@ -119,7 +86,6 @@ func ResolveVmTarget(vmName, uri string) (*VmTarget, error) {
 		Conn:    conn,
 		Domain:  dom,
 		XML:     parsed,
-		Spec:    spec,
 		VmName:  vmName,
 		DomName: domName,
 		Uri:     uri,
@@ -223,7 +189,7 @@ func (t *VmTarget) SpiceEndpoint() (DisplayEndpoint, error) {
 		}
 		return ep, nil
 	}
-	return DisplayEndpoint{}, fmt.Errorf("VM %s has no SPICE graphics device declared in vm.yml", t.VmName)
+	return DisplayEndpoint{}, fmt.Errorf("VM %s has no SPICE %s", t.VmName, noVmDisplayDeviceErr)
 }
 
 // VncEndpoint is the VNC counterpart of SpiceEndpoint.
@@ -264,7 +230,7 @@ func (t *VmTarget) VncEndpoint() (DisplayEndpoint, error) {
 		}
 		return ep, nil
 	}
-	return DisplayEndpoint{}, fmt.Errorf("VM %s has no VNC graphics device declared in vm.yml", t.VmName)
+	return DisplayEndpoint{}, fmt.Errorf("VM %s has no VNC %s", t.VmName, noVmDisplayDeviceErr)
 }
 
 // SpiceAddress returns the TCP form of the SPICE endpoint — provided

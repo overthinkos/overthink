@@ -1,11 +1,6 @@
 package main
 
-import (
-	"strings"
-	"testing"
-
-	libvirtxml "libvirt.org/go/libvirtxml"
-)
+import "testing"
 
 // TestVmDisplayDeviceAbsent pins the in-proc VNC precondition-not-met SKIP gate:
 // the `vnc` VM-display verb against a deployment with no VNC display device is N/A
@@ -35,26 +30,5 @@ func TestVmDisplayDeviceAbsent(t *testing.T) {
 	}
 }
 
-// TestSpiceEndpoint_NoDevice_MatchesSkipSentinel proves the host-side no-SPICE-device
-// SKIP is wired correctly: when a resolved VM declares no <graphics type='spice'>,
-// SpiceEndpoint must return an error whose text contains noVmDisplayDeviceErr — the
-// SAME substring preresolveSpiceEndpoint (spice_preresolve.go) keys off to return a
-// SKIP (the SPICE-less cachyos-gpu operator) rather than a FAIL. This pins the
-// resolver-error ⇄ skip-sentinel contract so a change to either side that breaks the
-// no-device skip is caught at `go test` time, with no live VM needed.
-func TestSpiceEndpoint_NoDevice_MatchesSkipSentinel(t *testing.T) {
-	// A domain with a VNC head but NO spice device.
-	parsed := &libvirtxml.Domain{}
-	if err := parsed.Unmarshal(`<domain><devices><graphics type='vnc' port='5900'/></devices></domain>`); err != nil {
-		t.Fatalf("unmarshal domain XML: %v", err)
-	}
-	tgt := &VmTarget{XML: parsed, VmName: "cachyos-gpu", DomName: "charly-cachyos-gpu"}
-	_, err := tgt.SpiceEndpoint()
-	if err == nil {
-		t.Fatal("SpiceEndpoint on a spice-less domain: want error, got nil")
-	}
-	if !strings.Contains(err.Error(), noVmDisplayDeviceErr) {
-		t.Errorf("SpiceEndpoint no-device error %q does not contain the skip sentinel %q — "+
-			"preresolveSpiceEndpoint would FAIL instead of SKIP", err, noVmDisplayDeviceErr)
-	}
-}
+// TestSpiceEndpoint_NoDevice_MatchesSkipSentinel moved to candy/plugin-vm/spice_endpoint_test.go
+// with the VmTarget/SpiceEndpoint resolver (the go-libvirt + libvirtxml shed).

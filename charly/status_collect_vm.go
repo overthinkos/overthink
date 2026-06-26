@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strings"
 )
@@ -29,12 +30,16 @@ type VMCollector struct {
 var listLibvirtCharlyDomains = defaultListLibvirtCharlyDomains
 
 func defaultListLibvirtCharlyDomains() ([]domainInfo, error) {
-	conn, err := connectLibvirt("")
-	if err != nil {
+	// List the libvirt domains via the out-of-process vm plugin (the go-libvirt impl moved there).
+	raw, ok := invokeVmPlugin("list-domains", "", "")
+	if !ok {
+		return nil, nil // plugin absent → no libvirt-backed VMs surface (graceful degrade)
+	}
+	var doms []domainInfo
+	if err := json.Unmarshal(raw, &doms); err != nil {
 		return nil, err
 	}
-	defer conn.Close() //nolint:errcheck
-	return conn.listCharlyDomains()
+	return doms, nil
 }
 
 func init() {

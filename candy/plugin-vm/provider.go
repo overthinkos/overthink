@@ -27,7 +27,7 @@ import (
 
 // vmEnv is the plugin-side decode of the host's CheckEnv (for a `libvirt:` check — the run mode
 // plus the VM/deploy name the host appends as the verb's positional, mirroring the old
-// runCharlyVerb r.Box append) AND the internal VM-resolution RPC (when VmOp is set — the host's
+// host-side r.Box append) AND the internal VM-resolution RPC (when VmOp is set — the host's
 // invokeVmPlugin path the spice/vnc/ssh/status/preempt consumers call, bypassing the verb
 // pipeline). Exactly one of {Mode/Box for a verb} / {VmOp for an internal op} is meaningful.
 type vmEnv struct {
@@ -90,7 +90,7 @@ func resultJSON(status, msg string) (*pb.InvokeReply, error) {
 }
 
 // Invoke runs one `libvirt:` verb method against the in-process libvirt impl and self-evaluates
-// the authored matchers (mirrors the former host runCharlyVerb pipeline).
+// the authored matchers (mirrors the former host-side matcher pipeline).
 func (vmProvider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeReply, error) {
 	var op spec.Op
 	if len(req.GetParamsJson()) > 0 {
@@ -112,7 +112,7 @@ func (vmProvider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRe
 	method := op.Libvirt
 
 	// libvirt probes a running VM — skip under `charly check box` (no live domain on a
-	// disposable build container), mirroring runCharlyVerb's RunModeBox skip.
+	// disposable build container), mirroring the host's RunModeBox/box-mode skip.
 	if env.Mode == "box" {
 		return resultJSON("skip", fmt.Sprintf("libvirt: %s requires a running VM (skip under charly check box)", method))
 	}

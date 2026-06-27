@@ -14,8 +14,8 @@ import (
 // provider.go is the out-of-process appium verb provider — charly's host dispatches an
 // `appium:` check step to it through the registry (ResolveVerb("appium") → this
 // grpcProvider → Provider.Invoke) with the FULL #Op marshaled as params_json and a
-// CheckEnv snapshot as env. Because the out-of-process path does NOT run the host's
-// runCharlyVerb matcher pipeline, this Invoke OWNS the whole verdict: dispatch the
+// CheckEnv snapshot as env. Because the out-of-process path does NOT run a host-side
+// matcher pipeline, this Invoke OWNS the whole verdict: dispatch the
 // method, then evaluate the stdout/stderr/exit_status matchers + artifact validators
 // itself (via the shared sdk matcher implementation — R3), and return the wire
 // {status,message} the host's invokeVerbProvider decodes.
@@ -64,7 +64,7 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	method := string(op.Appium)
 
 	// Live-container verb: skip under `charly check box` (no port mappings on a
-	// disposable `podman run --rm`) — mirrors runCharlyVerb's RunModeBox skip.
+	// disposable `podman run --rm`) — mirrors the host's RunModeBox/box-mode skip.
 	if env.Mode == "box" {
 		return resultJSON("skip", fmt.Sprintf("appium: %s requires a running container (skip under charly check box)", method))
 	}
@@ -98,7 +98,7 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	}
 
 	// Artifact validators run for the one artifact-producing method (screenshot) —
-	// mirrors runCharlyVerb's spec.artifact branch. The validators are the SHARED
+	// mirrors the host's spec.artifact branch. The validators are the SHARED
 	// SDK implementation (sdk.RunArtifactValidators), the ONE copy every artifact-
 	// producing verb plugin reuses (R3).
 	if method == "screenshot" {

@@ -74,7 +74,7 @@ func generate(root, cfg string) (genGo, genWork []byte, err error) {
 		name   string // candy dir name under candy/
 		module string // go.mod module path (== the importable root package)
 		alias  string // import alias in the generated file
-		shape  string // "kit" (NewCheckVerb, schema), "live" (NewLiveVerb, schema-less), or "pb" (NewProvider/NewMeta)
+		shape  string // "kit" (NewCheckVerb, schema) or "pb" (NewProvider/NewMeta)
 	}
 	entries := make([]entry, 0, len(names))
 	for _, name := range names {
@@ -110,14 +110,6 @@ func generate(root, cfg string) (genGo, genWork []byte, err error) {
 		g.WriteString("func init() {\n")
 		for _, e := range entries {
 			switch e.shape {
-			case "live":
-				// live-verb shape: host-coupled SCHEMA-LESS live-container verb —
-				// register through the dedicated (schema-less) path, the
-				// registerDedicatedBuiltin analogue. No compiled-in candy currently uses
-				// this shape: `wl` (the last one) externalized into candy/plugin-wl, so
-				// every live-container verb is now an out-of-process plugin. The shape is
-				// retained for a future compiled-in live verb.
-				fmt.Fprintf(&g, "\tregisterCompiledDedicatedVerb(%s.NewLiveVerb())\n", e.alias)
 			case "kit":
 				// kit-shape: host-coupled check verb, compiled-in-only — register through
 				// the kit adapter (charly concatenates the candy's raw schema FS).
@@ -226,11 +218,8 @@ func requirePluginBlock(path string) error {
 
 // detectShape reports a candy's plugin shape from a textual scan of its Go at codegen
 // time (never runtime; avoids importing the candy module, keeping pluginsgen stdlib+yaml
-// only): "live" if it exports `func NewLiveVerb(` (a host-coupled SCHEMA-LESS live-container
-// verb — no compiled-in candy currently uses this shape after `wl` externalized), "kit" if
-// it exports `func NewCheckVerb(` (a
-// host-coupled check verb WITH a schema), else "pb" (a dual-placement NewProvider/NewMeta
-// plugin). NewLiveVerb takes precedence — a candy carrying both is a live verb.
+// only): "kit" if it exports `func NewCheckVerb(` (a host-coupled check verb WITH a
+// schema, compiled-in-only), else "pb" (a dual-placement NewProvider/NewMeta plugin).
 func detectShape(candyDir string) (string, error) {
 	shape := "pb"
 	err := filepath.WalkDir(candyDir, func(path string, d fs.DirEntry, walkErr error) error {
@@ -244,9 +233,7 @@ func detectShape(candyDir string) (string, error) {
 		if rerr != nil {
 			return rerr
 		}
-		if bytes.Contains(b, []byte("func NewLiveVerb(")) {
-			shape = "live"
-		} else if bytes.Contains(b, []byte("func NewCheckVerb(")) && shape != "live" {
+		if bytes.Contains(b, []byte("func NewCheckVerb(")) {
 			shape = "kit"
 		}
 		return nil

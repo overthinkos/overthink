@@ -16,7 +16,7 @@ import (
 // (ping/servers/list-tools/list-resources/list-prompts/call/read) was refactored from
 // CLI Run() methods that PRINTED to stdout into functions that RETURN the captured
 // output string — so provider.go can feed the output through the shared sdk matcher
-// pipeline (the host's runCharlyVerb matcher step does not run for an out-of-process
+// pipeline (a host-side matcher step does not run for an out-of-process
 // verb). The transport dispatch, the SDK connect, and the tab-separated formatters
 // (formatTool/formatResource/formatPrompt/firstLine/extractToolText) are unchanged, so
 // a bed authored against the in-tree verb passes unchanged. `servers` is metadata-only
@@ -25,8 +25,8 @@ import (
 const defaultMcpTimeout = 30 * time.Second
 
 // requiredModifiers mirrors the in-tree mcpMethods required-field specs (the host's
-// validate-time + runtime required-modifier check keyed off the in-proc
-// LiveVerbProvider, which an external verb no longer is — so the check moves HERE, at
+// validate-time + runtime required-modifier check keyed off the former in-proc
+// live-verb seam, which an external verb is not — so the check moves HERE, at
 // dispatch). call needs a tool name; read needs a resource URI.
 var requiredModifiers = map[string][]string{
 	"call": {"tool"},

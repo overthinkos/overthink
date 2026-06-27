@@ -168,18 +168,6 @@ func writeConcat(dir, out, pkg string) error {
 // vocab mode
 // ----------------------------------------------------------------------------
 
-// liveVerbs maps each IN-PROC live-container verb to the #<Name>Method enum def that is
-// its method allowlist, projected as spec.LiveVerbMethods + gated against each verb's
-// in-proc LiveVerbProvider by checkMethodAllowlists. It is now EMPTY: `wl` was the LAST
-// IN-PROC live-container verb, and it externalized into candy/plugin-wl — so every
-// live-container verb (cdp/wl/vnc/dbus/mcp/record/kube/adb/appium/spice/libvirt) is now an
-// EXTERNAL-CHARLY-VERB served OUT-OF-PROCESS, with no in-proc LiveVerbProvider to gate.
-// Each left this list with #OpVerb/VerbCatalog; their #*Method enums stay in the schema
-// (they still validate `<verb>: <method>` on core #Op) but are no longer LiveVerbMethods
-// entries. spec.LiveVerbMethods is therefore an empty map, matching an empty
-// liveVerbDispatch registry (checkMethodAllowlists compares two empty sets).
-var liveVerbs = []struct{ verb, def string }{}
-
 func writeVocab(dir, out string) error {
 	// FULL schema (nil exclude): the vocab generator needs #Node's arms
 	// (node.cue) to derive KindWords, so this concatenation matches the runtime
@@ -249,17 +237,6 @@ func writeVocab(dir, out string) error {
 	}
 	dataKeys := unionSorted(candyData, deployData)
 
-	methods := make(map[string][]string, len(liveVerbs))
-	verbOrder := make([]string, 0, len(liveVerbs))
-	for _, lv := range liveVerbs {
-		vals, err := enumValues(schema, lv.def)
-		if err != nil {
-			return fmt.Errorf("verb %s: %w", lv.verb, err)
-		}
-		methods[lv.verb] = vals
-		verbOrder = append(verbOrder, lv.verb)
-	}
-
 	code := renderVocab(vocabSets{
 		kinds:          kinds,
 		resourceKinds:  resourceKinds,
@@ -270,8 +247,6 @@ func writeVocab(dir, out string) error {
 		opFields:       opFields,
 		opVerbs:        opVerbs,
 		authoringVerbs: authoringVerbs,
-		verbOrder:      verbOrder,
-		methods:        methods,
 	})
 	formatted, err := format.Source([]byte(code))
 	if err != nil {
@@ -476,8 +451,6 @@ type vocabSets struct {
 	opFields       []string
 	opVerbs        []string
 	authoringVerbs []string
-	verbOrder      []string
-	methods        map[string][]string
 }
 
 func renderVocab(s vocabSets) string {
@@ -498,22 +471,6 @@ func renderVocab(s vocabSets) string {
 	writeStrSlice(&b, "OpFields", "every #Op verb/modifier field name (the flat Op vocabulary).", s.opFields)
 	writeStrSlice(&b, "OpVerbs", "the verb DISCRIMINATOR vocabulary (#OpVerb) — the exactly-one-set verb subset of #Op fields (Op.Kind() + the VerbCatalog dispatch table gate against it).", s.opVerbs)
 	writeStrSlice(&b, "AuthoringVerbs", "the AUTHORABLE #Op field vocabulary (#Op fields minus the runtime-derived origin/venue/intent_do).", s.authoringVerbs)
-
-	b.WriteString("// LiveVerbMethods maps each live-container verb to its method allowlist\n")
-	b.WriteString("// (the #<Name>Method enums) — the SAME allowlists checkrun_charly_verbs.go\n")
-	b.WriteString("// enforces, now from one CUE source.\n")
-	b.WriteString("var LiveVerbMethods = map[string][]string{\n")
-	for _, v := range s.verbOrder {
-		fmt.Fprintf(&b, "\t%q: {", v)
-		for i, m := range s.methods[v] {
-			if i > 0 {
-				b.WriteString(", ")
-			}
-			fmt.Fprintf(&b, "%q", m)
-		}
-		b.WriteString("},\n")
-	}
-	b.WriteString("}\n")
 	return b.String()
 }
 

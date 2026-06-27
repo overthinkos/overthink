@@ -16,7 +16,7 @@ import (
 // invokeVerbProvider) with the FULL #Op marshaled as params_json, a CheckEnv snapshot as
 // env, AND — because wl is EXEC-based — the host's live DeployExecutor attached over the
 // E3b reverse channel (the executorInvoker branch in invokeVerbProvider). Because the
-// out-of-process path does NOT run the host's runCharlyVerb matcher pipeline, this Invoke
+// out-of-process path does NOT run a host-side matcher pipeline, this Invoke
 // OWNS the whole verdict: get the venue executor (sdk.ExecutorFromInvoke), dispatch the
 // method (RunCapture-driven; `screenshot` also GetFile-pulls the PNG to op.Artifact), then
 // evaluate the stdout/stderr/exit_status matchers + the artifact validators itself (via the
@@ -70,7 +70,7 @@ func (p provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.Invoke
 	method := string(op.Wl)
 
 	// Live-deployment verb: skip under `charly check box` (no running desktop with a
-	// compositor in a disposable `podman run --rm`) — mirrors runCharlyVerb's RunModeBox skip.
+	// compositor in a disposable `podman run --rm`) — mirrors the host's RunModeBox/box-mode skip.
 	if env.Mode == "box" {
 		return resultJSON("skip", fmt.Sprintf("wl: %s requires a running deployment (skip under charly check box)", method))
 	}
@@ -112,7 +112,7 @@ func (p provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.Invoke
 	// Artifact-producing method (`screenshot`): the PNG was already GetFile-pulled to
 	// op.Artifact (the host path) inside dispatch, BEFORE this point, so the validators
 	// (min_bytes / min_dimensions / not_uniform) read a real file. A no-op for every other
-	// method (op.Artifact empty), mirroring the host's runCharlyVerb post-run pipeline.
+	// method (op.Artifact empty), mirroring the host's post-run pipeline.
 	if op.Artifact != "" {
 		if err := sdk.RunArtifactValidators(&op); err != nil {
 			return resultJSON("fail", fmt.Sprintf("wl: %s: artifact: %v", method, err))

@@ -18,7 +18,7 @@ import (
 // deploy + `charly status` collector device ops: those callers (android_plugin.go's
 // AdbInvoker) build a synthetic #Op (adb: install / uninstall / getprop / devices)
 // + an AdbDeviceEnv carrying an already-resolved AdbAddr, and read the result's
-// Message. Because the out-of-process path does NOT run the host's runCharlyVerb
+// Message. Because the out-of-process path does NOT run a host-side
 // matcher pipeline, this Invoke OWNS the whole verdict: dispatch the method, then
 // evaluate the stdout/stderr/exit_status matchers + artifact validators itself (via
 // the shared sdk implementation — R3), and return the wire {status,message} the
@@ -57,12 +57,12 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	method := string(op.Adb)
 
 	// Live-container verb: skip under `charly check box` (no host-mapped adb port
-	// on a disposable `podman run --rm`) — mirrors runCharlyVerb's RunModeBox skip.
+	// on a disposable `podman run --rm`) — mirrors the host's RunModeBox/box-mode skip.
 	if env.Mode == "box" {
 		return resultJSON("skip", fmt.Sprintf("adb: %s requires a running container (skip under charly check box)", method))
 	}
 	// No device context at all (no resolved adb addr, no container) → skip, the
-	// check-verb analogue of runCharlyVerb's empty-box skip. The deploy/status
+	// check-verb analogue of the host's empty-box skip. The deploy/status
 	// seams always set AdbAddr, so they never hit this.
 	if env.AdbAddr == "" && env.inPodContainer() == "" {
 		return resultJSON("skip", fmt.Sprintf("adb: %s has no device context (box=%q)", method, env.Box))

@@ -177,29 +177,6 @@ type Runner struct {
 	// runner then reports the step as FAIL with a clear message.
 	TargetResolver func(target string) (*CheckVarResolver, DeployExecutor, error)
 
-	// ValidateAiArtifacts, when true, narrows artifact-producing
-	// state-dependent probes (the screenshot + record-stop methods —
-	// those whose MethodSpec marks Artifact: true) to validate the AI's
-	// iteration artifact instead of re-running the capture. See HarnessScore's
-	// field of the same name for the design rationale. Always false in
-	// `charly check self-evaluate` invocations, regardless of score
-	// config — self-evaluate's job is to actually produce the
-	// artifacts that the harness scorer then validates.
-	ValidateAiArtifacts bool
-
-	// IterStartTime is the freshness floor for AI-artifact mtime
-	// checks. The harness scorer populates this with the BENCHMARK
-	// start time (not per-iter start) so artifacts produced
-	// legitimately in earlier phases survive scoring across phase
-	// boundaries — a record/stop cast file written in phase 6
-	// remains valid in phase 7 + 8 scoring. Zero value = no
-	// freshness check (validators only see file existence +
-	// content). Non-zero = artifact mtime MUST be ≥ this time or
-	// the probe fails with the stale-artifact anti-deception error.
-	// The field name is historical; semantically the floor is the
-	// run/benchmark start.
-	IterStartTime time.Time
-
 	// HostVars carries pre-resolved cross-deployment address variables —
 	// ${HOST:name} and ${HOST:name:port} (check_members.go) — that
 	// let a driven probe (a check with `on: <driver>`) TARGET a SEPARATE

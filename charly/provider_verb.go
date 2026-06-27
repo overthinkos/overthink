@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-
-	"github.com/overthinkos/overthink/charly/plugin/kit"
 )
 
 // CheckVerbProvider is the typed in-process form of a check-verb Provider: it
@@ -21,31 +19,13 @@ type CheckVerbProvider interface {
 	RunVerb(ctx context.Context, rt *Runner, op *Op) CheckResult
 }
 
-// LiveVerbProvider is the self-describing form of an IN-PROC LIVE-CONTAINER verb provider:
-// beyond running the probe
-// (CheckVerbProvider), it OWNS its method contract — the method allowlist (each
-// method's required-modifier + artifact spec + posArgs dispatch) and the accessor for
-// its method-selector field on *Op. The host's generic verb validation
-// (validateCharlyVerb) and the method-allowlist bijection gate read the contract FROM
-// the provider; the central per-verb validateCharlyVerb switch and the liveVerbDispatch
-// registry are gone (E4). NO compiled-in candy currently implements this — `wl` (the last
-// one) externalized into candy/plugin-wl — so this interface is retained for a future
-// compiled-in live verb but has no current implementer. A goss verb (file/port/…) has no
-// method contract and does NOT implement this. The EXTERNAL-CHARLY-VERBS
-// kube/adb/appium/spice/mcp/record/cdp/vnc/dbus/wl are live-container verbs too but are served
-// OUT-OF-PROCESS (candy/plugin-*); they do NOT implement this in-proc contract — their method
-// allowlist + required-modifier checks live in the plugin, and their method-name enum is
-// enforced by CUE on core #Op.
-type LiveVerbProvider interface {
-	CheckVerbProvider
-	// Methods is the verb's method allowlist: method name → its spec (required
-	// modifiers, artifact flag, posArgs dispatch). The provider OWNS this — it is
-	// the former central <verb>Methods map, now reached via the registry.
-	Methods() map[string]kit.MethodSpec
-	// MethodField returns the verb's authored method-selector value off *Op
-	// (e.g. c.Wl for wl) — the former per-verb validateCharlyVerb switch arm.
-	MethodField(c *Op) string
-}
+// The EXTERNAL-CHARLY-VERBS kube/adb/appium/spice/mcp/record/cdp/vnc/dbus/wl/libvirt are
+// live-container verbs served OUT-OF-PROCESS (candy/plugin-*); they are reached via the
+// generic `plugin:` Invoke envelope (invokeVerbProvider), NOT a typed in-proc contract —
+// their method allowlist + required-modifier checks live in the plugin, and their
+// method-name enum is enforced by CUE on core #Op. The former in-proc live-verb seam
+// (a compiled-in live verb owning its method contract + the host's subprocess dispatcher)
+// was deleted once the externalization orphaned it.
 
 // ProvisionActor is the optional do:act half of a verb provider: it renders the
 // shell that performs a state-provision verb's side-effect on the live target

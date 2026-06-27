@@ -7,7 +7,7 @@ import (
 )
 
 // fakeExternalVerb is an OUT-OF-PROCESS-style verb Provider: a real Provider for a live
-// verb word that is NOT a CheckVerbProvider (it has no typed RunVerb / runCharlyVerb
+// verb word that is NOT a CheckVerbProvider (it has no typed in-proc RunVerb dispatch
 // path), exactly the shape a verb takes once its implementation moves out-of-tree. It
 // records the Operation it is handed so the test can prove the FULL Op crossed.
 type fakeExternalVerb struct {
@@ -30,7 +30,7 @@ func (f *fakeExternalVerb) Invoke(_ context.Context, op *Operation) (*Result, er
 // hands the plugin the FULL Op as params_json. So a verb's params stay authored in #Op
 // (`kube: apply`, `namespace: demo`) with NO migration when the verb's implementation
 // moves out-of-tree — the plugin reads them from the Op it is handed, exactly as the
-// in-proc runCharlyVerb did. This is the additive enabler for Phase-1 verb extraction.
+// former in-proc dispatcher did. This is the additive enabler for Phase-1 verb extraction.
 func TestInvokeVerbProvider_ExternalCharlyVerb(t *testing.T) {
 	r := &Runner{Mode: RunModeBox}
 	fake := &fakeExternalVerb{reply: `{"status":"pass","message":"saw-op"}`}

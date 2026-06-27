@@ -18,18 +18,19 @@ import (
 // Artifact validators
 //
 // The post-run artifact-reality assertions (min_bytes / min_dimensions /
-// not_uniform / min_cast_events) are the SINGLE implementation shared by
-// charly's core check runner (checkrun_charly_verbs.go) AND every out-of-tree
-// verb plugin that produces an artifact (appium screenshot, adb screencap).
-// Lifting them into the SDK keeps ONE implementation across consumers (R3) —
-// the same property motivating MatchAll's home here.
+// not_uniform / min_cast_events) are the SINGLE implementation (R3) every
+// out-of-tree verb plugin that produces an artifact (appium screenshot, adb
+// screencap, cdp/wl/vnc/record captures) calls — the same property motivating
+// MatchAll's home here. Every live-container verb is now served out-of-process,
+// so this SDK copy is the sole implementation (the former host duplicate in
+// charly's core check runner was deleted with the in-proc live-verb runtime).
 // ---------------------------------------------------------------------------
 
 // RunArtifactValidators runs every artifact assertion the Op declares against
 // the file at op.Artifact: min_bytes, min_dimensions (WxH), not_uniform, and
 // min_cast_events. Returns nil when every declared validator passes, or the
 // first validator's error. A plugin that produces an artifact calls this after
-// writing the file, mirroring the host's runCharlyVerb post-run pipeline.
+// writing the file as the post-run validation pipeline.
 func RunArtifactValidators(op *spec.Op) error {
 	if op.ArtifactMinBytes > 0 {
 		info, err := os.Stat(op.Artifact)

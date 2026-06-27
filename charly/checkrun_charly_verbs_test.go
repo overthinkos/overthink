@@ -123,9 +123,9 @@ func TestResolveLocalImageRef_ShortNameNoMatch(t *testing.T) {
 	}
 }
 
-// --- runCharlyVerb skip behavior + method allowlist tests ---
+// --- live-container verb box-mode skip ---
 
-func TestRunCharlyVerb_SkipsUnderImageTest(t *testing.T) {
+func TestLiveVerb_SkipsUnderBoxMode(t *testing.T) {
 	r, _ := newFakeRunner(t, RunModeBox)
 	r.Box = "jupyter"
 	res := r.Run(context.Background(), []Op{{Wl: "status"}})
@@ -142,14 +142,14 @@ func TestRunCharlyVerb_SkipsUnderImageTest(t *testing.T) {
 
 // --- §D validation tests ---
 
-// TestRunCharlyVerb_UnknownMethodFails + the TestValidateCharlyVerb_* cases were removed when
-// `wl` (the LAST in-proc live verb) externalized into candy/plugin-wl. validateCharlyVerb is
-// now a no-op (no in-proc LiveVerbProvider remains), and the former in-proc wl checks moved:
-// unknown-method + build-context rejection are CUE concerns (the per-verb #*Method enums + the
-// #Op context rules — see TestCueTightening_RejectsAndAccepts "candy cdp bogus method rejected"
-// and the mcp/spice/libvirt bogus-method cases), and the required-modifier check lives in the
-// plugin (candy/plugin-wl/methods_test.go's TestCheckRequiredModifiers). The box-mode skip
-// stays covered by TestRunCharlyVerb_SkipsUnderImageTest above.
+// The former in-proc live-verb validation tests were removed when every live verb
+// externalized into its candy/plugin-* and the compiled-in live-verb runtime was
+// deleted: unknown-method + build-context rejection are CUE concerns (the per-verb
+// #*Method enums + the #Op context rules — see TestCueTightening_RejectsAndAccepts
+// "candy cdp bogus method rejected" and the mcp/spice/libvirt bogus-method cases),
+// and the required-modifier check lives in the plugin (candy/plugin-wl/methods_test.go's
+// TestCheckRequiredModifiers). The box-mode skip stays covered by
+// TestLiveVerb_SkipsUnderBoxMode above.
 
 // --- Check.Kind() recognizes the new verbs ---
 

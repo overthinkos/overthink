@@ -9,7 +9,7 @@ import (
 
 // methods_test.go covers the PLUGIN-side helpers ported out-of-process from
 // charly/record.go (the deleted host-side RecordCmd): the pure path/name builders and the
-// required-modifier check that moved here from the host's in-proc LiveVerbProvider contract.
+// required-modifier check that moved here from the host's former in-proc live-verb contract.
 // The venue-driving methods (start/stop/list/cmd) need a live executor reverse channel and
 // are exercised by the R10 bed (the sway-browser-vnc `record: start`), not these unit tests.
 

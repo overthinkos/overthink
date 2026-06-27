@@ -15,7 +15,7 @@ import (
 // refactored from CLI Run() methods that PRINTED to stdout/stderr into functions that
 // RETURN the captured output string (status) or WRITE a PNG artifact + return a one-line
 // confirmation (screenshot) — so provider.go can feed the output through the shared sdk
-// matcher pipeline + sdk.RunArtifactValidators (the host's runCharlyVerb matcher step does
+// matcher pipeline + sdk.RunArtifactValidators (a host-side matcher step does
 // not run for an out-of-process verb). The RFB wire behaviour, the X11 keysym tables, and
 // the status tokens are unchanged, so a bed authored against the in-tree verb passes
 // unchanged. The RFB client (vnc_client.go) lives in THIS module now; the host pre-resolves
@@ -27,8 +27,8 @@ import (
 // `vnc: click` uses x/y desktop-absolute coordinates directly).
 
 // requiredModifiers mirrors the in-tree vncMethods required-field specs (the host's
-// validate-time + runtime required-modifier check keyed off the in-proc LiveVerbProvider,
-// which an external verb no longer is — so the check moves HERE, at dispatch).
+// validate-time + runtime required-modifier check keyed off the former in-proc live-verb seam,
+// which an external verb is not — so the check moves HERE, at dispatch).
 // click/mouse need x+y, type needs text, key needs the key name, screenshot needs the
 // artifact output path, rfb needs the RFB sub-method.
 var requiredModifiers = map[string][]string{

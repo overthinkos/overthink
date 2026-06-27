@@ -15,14 +15,14 @@ import (
 // methods.go is the adb method dispatcher: the 12-method surface moved from
 // charly/adb.go, refactored from CLI Run() methods that PRINTED to stdout into
 // functions that RETURN the captured output string (so provider.go can feed it
-// through the shared sdk matcher pipeline — the host's runCharlyVerb matcher step
+// through the shared sdk matcher pipeline — a host-side matcher step
 // does not run for an out-of-process verb). The wire protocol, output tokens, and
 // timeouts are unchanged, so a bed authored against the in-tree verb passes
 // unchanged.
 
 // requiredModifiers mirrors the in-tree adbMethods required-field specs. The
-// host's validate-time + runtime required-modifier check keyed off the in-proc
-// LiveVerbProvider, which an external verb no longer is — so the check moves HERE,
+// host's validate-time + runtime required-modifier check keyed off the former
+// in-proc live-verb seam, which an external verb is not — so the check moves HERE,
 // at dispatch, preserving the "missing required modifier(s): X" failure.
 var requiredModifiers = map[string][]string{
 	"shell":       {"arg"},

@@ -187,7 +187,7 @@ func (r *Runner) invokeVerbProvider(ctx context.Context, prov Provider, word str
 	// Resolve a relative committed-APK path (appium: install-app, `apk: ./tests/data/…`)
 	// against the ORIGINATING candy's source tree HOST-side, BEFORE marshaling — an
 	// out-of-process verb has no Runner.CandyDirs, so it cannot anchor the fixture itself.
-	// Same walk-up the in-proc adb verb uses in runCharlyVerb (R3); the plugin then sees
+	// Same candy-anchored walk-up the host APK resolver uses (R3); the plugin then sees
 	// an absolute, candy-anchored path.
 	if c.Apk != "" {
 		resolved, err := r.resolveCheckApk(c.Apk, c.Origin)

@@ -98,7 +98,7 @@
 	// alongside on the shared network) — gengotypes can't express a pattern-keyed
 	// self-referential map, so the Go type is pinned explicitly.
 	nested?: {[=~"^[^.]+$"]: #Deploy} @go(Children,type=map[string]*Deploy)
-	peer?: {[=~"^[^.]+$"]:   #Deploy} @go(Members,type=map[string]*Deploy)
+	peer?: {[=~"^[^.]+$"]: #Deploy} @go(Members,type=map[string]*Deploy)
 }
 
 // #Check — a kind:check bed. Structurally IDENTICAL to #Deploy (same BundleNode
@@ -135,7 +135,7 @@
 	init?:   string
 	path_append?: [...string] @go(PathAppend)
 	path?:     string
-	priority?: int @go(,type=int)
+	priority?: int        @go(,type=int)
 	bash?:     #ShellSpec @go(Bash,optional=nillable)
 	zsh?:      #ShellSpec @go(Zsh,optional=nillable)
 	fish?:     #ShellSpec @go(Fish,optional=nillable)
@@ -174,7 +174,7 @@
 	type?:        "volume" | "bind" | "encrypted"
 	host?:        string & !=""
 	path?:        string & =~"^/"
-	data_seeded?: bool   @go(DataSeeded)
+	data_seeded?: bool          @go(DataSeeded)
 	data_source?: string & !="" @go(DataSource)
 }
 #DeploySecret: {
@@ -226,11 +226,10 @@
 }) @go(-) // gengotypes: hand PreemptibleConfig
 #Iterate: {
 	agent?: [...(string & !="")]
-	sandbox!:               string & !=""
-	plateau_iteration?:     int & >=0 @go(PlateauIteration,type=int)
-	prompt?:                string
-	note?:                  bool @go(,type=*bool)
-	env?:                   #StrMap
-	mcp_endpoint?:          string @go(MCPEndpoint,type=*string)
-	validate_ai_artifacts?: bool   @go(ValidateAiArtifacts)
+	sandbox!:           string & !=""
+	plateau_iteration?: int & >=0 @go(PlateauIteration,type=int)
+	prompt?:            string
+	note?:              bool @go(,type=*bool)
+	env?:               #StrMap
+	mcp_endpoint?:      string @go(MCPEndpoint,type=*string)
 }

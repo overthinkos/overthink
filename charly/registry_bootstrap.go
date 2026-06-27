@@ -42,9 +42,9 @@ var builtinProviderInstances = []Provider{
 	// members of that set (their step materialization stays in package main via materializeStep).
 	// wl is NOT here either — it is an EXTERNAL-CHARLY-VERB served OUT-OF-PROCESS
 	// (candy/plugin-wl), like dbus/record/cdp/vnc/mcp. wl was the LAST live-container verb
-	// compiled into charly; after it, ZERO check verbs are in-core (the
-	// registerCompiledDedicatedVerb schema-less dedicated-provider path is retained for a
-	// future compiled-in live verb but currently has no user). `appium` (FIRST), `adb` (SECOND),
+	// compiled into charly; after it externalized, ZERO check verbs are in-core and the
+	// compiled-in live-verb seam was deleted (the live-verb externalization orphaned it).
+	// `appium` (FIRST), `adb` (SECOND),
 	// `kube` (THIRD), and `spice` (FOURTH) are the dep-shedders already EXTRACTED: each is
 	// an external-charly-verb (candy/plugin-appium, candy/plugin-adb, candy/plugin-kube,
 	// candy/plugin-spice, source github.com/…) served out-of-process — NOT a compiled-in
@@ -171,7 +171,6 @@ func init() {
 	}
 	for _, gate := range []func() error{
 		func() error { return checkVerbProviderBijection(spec.OpVerbs) },
-		func() error { return checkMethodAllowlists(spec.LiveVerbMethods) },
 		func() error { return checkKindProviderBijection(spec.KindWords) },
 		checkDeployProviderBijection,
 		checkStepProviderBijection,

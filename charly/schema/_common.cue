@@ -395,9 +395,9 @@
 	record_audio?: bool      @go(RecordAudio)
 }
 
-// Live-container verb method allowlists — exact mirrors of the Go maps in
-// checkrun_charly_verbs.go (cdpMethods/wlMethods/…). A method outside the set
-// is rejected (validateCharlyVerb parity, now enforced declaratively in CUE).
+// Live-container verb method allowlists — the per-verb method-name enums on core
+// #Op. A method outside the set is rejected declaratively in CUE; the per-verb
+// method contract + required-modifier checks live in each verb's out-of-process plugin.
 #CdpMethod:     ("status" | "list" | "url" | "text" | "html" | "eval" | "axtree" | "coords" | "raw" | "wait" | "screenshot" | "open" | "close" | "click" | "type" | "spa-status" | "spa-click" | "spa-type" | "spa-key" | "spa-key-combo" | "spa-mouse") @go(-)
 #WlMethod:      "status" | "toplevel" | "windows" | "geometry" | "xprop" | "atspi" | "screenshot" | "clipboard" | "click" | "double-click" | "mouse" | "scroll" | "drag" | "type" | "key" | "key-combo" | "focus" | "close" | "fullscreen" | "minimize" | "exec" | "resolution" | "overlay-list" | "overlay-status" | "overlay-show" | "overlay-hide" | "sway-tree" | "sway-workspaces" | "sway-outputs" | "sway-msg" | "sway-focus" | "sway-move" | "sway-resize" | "sway-layout" | "sway-workspace" | "sway-kill" | "sway-floating" | "sway-reload" @go(-)
 #DbusMethod:    "list" | "call" | "introspect" | "notify" @go(-)

@@ -472,8 +472,10 @@ func attachIterate(bed, score *yaml.Node) {
 	}
 	// Carry the verbatim orchestration fields the new schema keeps. The retired
 	// `progressive` field is deliberately dropped (the single-phase iterate loop
-	// never consulted it — IterateConfig carries no Progressive field).
-	for _, k := range []string{"agent", "plateau_iteration", "prompt", "note", "env", "mcp_endpoint", "validate_ai_artifacts"} {
+	// never consulted it — IterateConfig carries no Progressive field), as is the
+	// retired AI-artifact-validation flag (later removed with the in-proc live-verb
+	// runtime; the drop-validate-ai-artifacts step strips any residual key).
+	for _, k := range []string{"agent", "plateau_iteration", "prompt", "note", "env", "mcp_endpoint"} {
 		if v := findMappingValue(score, k); v != nil {
 			iter.Content = append(iter.Content,
 				&yaml.Node{Kind: yaml.ScalarNode, Value: k}, v)

@@ -13,8 +13,8 @@ import (
 // methods.go is the dbus method dispatcher + the venue-driving layer. The 4-method surface
 // (list/call/introspect/notify) drives the venue's session bus with gdbus over the host
 // executor reverse channel (sdk.Executor.RunCapture) and RETURNS the captured output string —
-// so provider.go can feed the output through the shared sdk matcher pipeline (the host's
-// runCharlyVerb matcher step does not run for an out-of-process verb). The plugin speaks gdbus
+// so provider.go can feed the output through the shared sdk matcher pipeline (a host-side
+// matcher step does not run for an out-of-process verb). The plugin speaks gdbus
 // to the venue's bus directly — no godbus, no in-container self-delegation; gdbus is the
 // session-bus client every desktop carries. A bed authored against the verb passes unchanged.
 
@@ -24,8 +24,8 @@ import (
 const sessionBusExport = `export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/tmp/dbus-session}" && `
 
 // requiredModifiers mirrors the in-tree dbusMethods required-field specs (the host's
-// validate-time + runtime required-modifier check keyed off the in-proc LiveVerbProvider,
-// which an external verb no longer is — so the check moves HERE, at dispatch). call needs a
+// validate-time + runtime required-modifier check keyed off the former in-proc live-verb seam,
+// which an external verb is not — so the check moves HERE, at dispatch). call needs a
 // dest/path/method; introspect needs a dest/path; notify needs the text (the title).
 var requiredModifiers = map[string][]string{
 	"call":       {"dest", "path", "method"},

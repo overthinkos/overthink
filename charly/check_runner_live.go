@@ -17,16 +17,9 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 
 	"gopkg.in/yaml.v3"
 )
-
-// RunScoringOpts carries optional knobs into RunCheckLive.
-type RunScoringOpts struct {
-	ValidateAiArtifacts bool
-	IterStartTime       time.Time
-}
 
 // scoredStep pairs a plan step with its stable declaration-order id so the ids
 // stay consistent across baseline synthesis and live scoring regardless of the
@@ -58,7 +51,7 @@ func isScored(s Step) bool { return s.Check != "" || s.AgentCheck != "" }
 // ParseCharlyTestOutput's so the scorer (Classify, fingerprints, summary)
 // consumes it unchanged. `deployment` is legacy/unused; `scoreName` labels the
 // run.
-func RunCheckLive(ctx context.Context, deployment, scoreName string, plan []Step, opts RunScoringOpts) (*CheckRunResults, error) {
+func RunCheckLive(ctx context.Context, deployment, scoreName string, plan []Step) (*CheckRunResults, error) {
 	_ = deployment
 
 	if len(plan) == 0 {
@@ -87,7 +80,7 @@ func RunCheckLive(ctx context.Context, deployment, scoreName string, plan []Step
 		if len(bucket) == 0 {
 			continue
 		}
-		scoreOnePodBucket(ctx, bucket, deployRoots, opts, out, verdictByID)
+		scoreOnePodBucket(ctx, bucket, deployRoots, out, verdictByID)
 	}
 
 	// Cyclic scored steps get a deterministic fail verdict.
@@ -116,7 +109,7 @@ func RunCheckLive(ctx context.Context, deployment, scoreName string, plan []Step
 // bucket's runner, then runs each step — appending verdicts to out and
 // recording them in verdictByID. Split out of RunCheckLive, which keeps the
 // outer pod-grouping loop.
-func scoreOnePodBucket(ctx context.Context, bucket []scoredStep, deployRoots map[string]BundleNode, opts RunScoringOpts, out *CheckRunResults, verdictByID map[string]string) {
+func scoreOnePodBucket(ctx context.Context, bucket []scoredStep, deployRoots map[string]BundleNode, out *CheckRunResults, verdictByID map[string]string) {
 	pod := bucket[0].step.Venue
 
 	var ephemeralCleanup func(bool)
@@ -168,8 +161,6 @@ func scoreOnePodBucket(ctx context.Context, bucket []scoredStep, deployRoots map
 			}
 			return &CheckVarResolver{}, ex, nil
 		}
-		runner.ValidateAiArtifacts = opts.ValidateAiArtifacts
-		runner.IterStartTime = opts.IterStartTime
 		applyHostVarsSteps(runner, bucketSteps(bucket), "")
 	}
 

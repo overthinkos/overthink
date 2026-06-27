@@ -18,7 +18,7 @@ import (
 // the deploy seam needs: that caller (k8s_plugin.go's invokeKubePlugin) builds a
 // synthetic #Op (kube: merge-kubeconfig + the retrieved kubeconfig path + context)
 // and reads the result's Message. Because the out-of-process path does NOT run the
-// host's runCharlyVerb matcher pipeline, this Invoke OWNS the whole verdict:
+// host-side matcher pipeline, this Invoke OWNS the whole verdict:
 // dispatch the method, then evaluate the stdout/stderr/exit_status matchers itself
 // (via the shared sdk implementation — R3), and return the wire {status,message}
 // the host decodes.
@@ -78,7 +78,7 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	}
 
 	// Cluster-probe verb: skip under `charly check box` — there is no cluster to
-	// reach on a disposable `podman run --rm` (mirrors runCharlyVerb's RunModeBox skip).
+	// reach on a disposable `podman run --rm` (mirrors the host's RunModeBox/box-mode skip).
 	if env.Mode == "box" {
 		return resultJSON("skip", fmt.Sprintf("kube: %s requires a running cluster (skip under charly check box)", method))
 	}

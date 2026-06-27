@@ -10,7 +10,7 @@ import (
 // methods_test.go covers the PLUGIN-side helpers ported out-of-process from charly/dbus.go
 // (the deleted host-side DbusCmd): the typed-arg → GVariant conversion (ported from
 // parseDbusTypedValue) and the required-modifier check that moved here from the host's
-// in-proc LiveVerbProvider contract. The venue-driving methods (list/call/introspect/notify)
+// former in-proc live-verb contract. The venue-driving methods (list/call/introspect/notify)
 // need a live executor reverse channel and are exercised by the R10 bed (the sway-browser-vnc
 // `dbus: list`), not these unit tests.
 

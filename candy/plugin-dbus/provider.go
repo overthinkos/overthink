@@ -16,7 +16,7 @@ import (
 // invokeVerbProvider) with the FULL #Op marshaled as params_json, a CheckEnv snapshot as
 // env, AND — because dbus is EXEC-based — the host's live DeployExecutor attached over the
 // E3b reverse channel (the executorInvoker branch in invokeVerbProvider). Because the
-// out-of-process path does NOT run the host's runCharlyVerb matcher pipeline, this Invoke
+// out-of-process path does NOT run a host-side matcher pipeline, this Invoke
 // OWNS the whole verdict: get the venue executor (sdk.ExecutorFromInvoke), dispatch the
 // method (RunCapture-driven gdbus), then evaluate the stdout/stderr/exit_status matchers
 // itself (via the shared sdk implementation — R3), and return the wire {status,message} the
@@ -70,7 +70,7 @@ func (p provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.Invoke
 	method := string(op.Dbus)
 
 	// Live-deployment verb: skip under `charly check box` (no running deployment with a
-	// session bus in a disposable `podman run --rm`) — mirrors runCharlyVerb's RunModeBox skip.
+	// session bus in a disposable `podman run --rm`) — mirrors the host's RunModeBox/box-mode skip.
 	if env.Mode == "box" {
 		return resultJSON("skip", fmt.Sprintf("dbus: %s requires a running deployment (skip under charly check box)", method))
 	}

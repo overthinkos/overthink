@@ -3,8 +3,6 @@ package main
 import (
 	"fmt"
 	"regexp"
-	"strconv"
-	"strings"
 )
 
 // lowercaseCheckVarPattern matches a ${name} token whose identifier begins with a
@@ -132,93 +130,12 @@ func validateCheck(c *Op, loc string, errs *ValidationError) {
 	}
 
 	// Matcher operator names (equals/contains/matches/…) are enforced by #MatchOpMap.
-
-	// In-proc live-verb validation: method allowlist + required modifiers + scope
-	// enforcement, read from the registered LiveVerbProvider. It is a no-op now — `wl` (the
-	// last in-proc live verb) externalized into candy/plugin-wl, so no resolvable provider
-	// is a LiveVerbProvider; the externalized verbs self-validate at dispatch (the plugin's
-	// checkRequiredModifiers) and their method-name enum is enforced by CUE on core #Op.
-	validateCharlyVerb(c, verb, loc, errs)
-}
-
-// validateCharlyVerb checks method-name allowlists, required modifiers, and deploy-scope
-// enforcement for an IN-PROC live verb. A no-op for every verb now — no compiled-in live
-// verb remains (`wl`, the last, externalized); an external verb resolves but is NOT a
-// LiveVerbProvider, so it falls through. Retained for a future compiled-in live verb.
-func validateCharlyVerb(c *Op, verb, loc string, errs *ValidationError) {
-	// E4: the verb's method contract is owned by its provider (LiveVerbProvider),
-	// reached through the registry — the former central per-verb switch is gone. A
-	// goss verb (file/port/…) resolves but is NOT a LiveVerbProvider (it has no
-	// method contract), so there is nothing to check. Every live verb in the
-	// registry is now covered uniformly — INCLUDING kube, whose required-modifier
-	// specs (apply→Manifest, wait-ready→{Kind,Name}, …) the old 10-case switch
-	// silently omitted.
-	prov, ok := providerRegistry.ResolveVerb(verb)
-	if !ok {
-		return
-	}
-	lv, ok := prov.(LiveVerbProvider)
-	if !ok {
-		return
-	}
-	method := lv.MethodField(c)
-
-	// The method-name allowlist is enforced by the per-verb #*Method CUE enums;
-	// an unknown method is rejected there. Here we only need the spec to drive
-	// the cross-field required-modifier / artifact checks below.
-	spec, ok := lv.Methods()[method]
-	if !ok {
-		return
-	}
-
-	// Live-container verbs need a running target — they are runtime-context
-	// only; reject in build context (charly check correctly skips them there).
-	if opInContext(c, CtxBuild) {
-		errs.Add("%s: %s: verb is runtime-context only (needs a running container); not legal in build context", loc, verb)
-	}
-
-	for _, f := range spec.Required {
-		if isZeroField(c, f) {
-			errs.Add("%s: %s: %s requires modifier %q", loc, verb, method, strings.ToLower(f))
-		}
-	}
-
-	if spec.Artifact && c.Artifact == "" {
-		errs.Add("%s: %s: %s is an artifact-producing method; set artifact: <path>", loc, verb, method)
-	}
-
-	if c.ArtifactMinDimensions != "" {
-		if !spec.Artifact {
-			errs.Add("%s: %s: %s is not an artifact-producing method; artifact_min_dimensions is not applicable", loc, verb, method)
-		} else if !validWxH(c.ArtifactMinDimensions) {
-			errs.Add("%s: %s: %s: artifact_min_dimensions must be %q form with positive ints, got %q", loc, verb, method, "WxH", c.ArtifactMinDimensions)
-		}
-	}
-	if c.ArtifactNotUniform && !spec.Artifact {
-		errs.Add("%s: %s: %s is not an artifact-producing method; artifact_not_uniform is not applicable", loc, verb, method)
-	}
-	if c.ArtifactMinCastEvents > 0 && !spec.Artifact {
-		errs.Add("%s: %s: %s is not an artifact-producing method; artifact_min_cast_events is not applicable", loc, verb, method)
-	}
-
-	// {element} substitution requires a selector to resolve the element id
-	// host-side (appium execute/raw). A literal {element} with no selector would
-	// reach the server unresolved — catch it at config time.
-	if (strings.Contains(c.RequestBody, "{element}") || strings.Contains(c.Path, "{element}")) && c.Selector == "" {
-		errs.Add("%s: %s: %s references the {element} token but no selector is set to resolve it", loc, verb, method)
-	}
-}
-
-// validWxH reports whether s parses as "<int>x<int>" with both ints > 0.
-// Used by validators of artifact_min_dimensions / artifact_dimensions style fields.
-func validWxH(s string) bool {
-	parts := strings.SplitN(s, "x", 2)
-	if len(parts) != 2 {
-		return false
-	}
-	w, err1 := strconv.Atoi(parts[0])
-	h, err2 := strconv.Atoi(parts[1])
-	return err1 == nil && err2 == nil && w > 0 && h > 0
+	//
+	// The per-verb method-name allowlist, required-modifier, artifact-applicability, and
+	// {element} checks now live in each live-container verb's OUT-OF-PROCESS plugin
+	// (candy/plugin-*'s checkRequiredModifiers); the method-name enum is enforced by CUE on
+	// core #Op. The former in-proc per-verb live-verb validation was deleted with the
+	// compiled-in live-verb runtime (the live-verb externalization orphaned it).
 }
 
 // collectCheckRefs returns every ${NAME[:arg]} key referenced across every

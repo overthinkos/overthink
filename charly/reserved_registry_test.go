@@ -56,30 +56,6 @@ func TestReservedWordRegistry_VerbBijection(t *testing.T) {
 	}
 }
 
-// TestReservedWordRegistry_MethodAllowlists proves every live-verb provider's method
-// allowlist (LiveVerbProvider.Methods) equals spec.LiveVerbMethods and that drift is
-// detected. The check reads each allowlist from the registered provider (E4 — no
-// central liveVerbDispatch); drift is simulated by doctoring the passed CUE side.
-func TestReservedWordRegistry_MethodAllowlists(t *testing.T) {
-	// spec.LiveVerbMethods is EMPTY now: `wl` (the LAST in-proc live verb) externalized into
-	// candy/plugin-wl, so there is no compiled-in LiveVerbProvider left to gate. The real
-	// (empty) set must pass — the gate compares two empty sets.
-	if err := checkMethodAllowlists(spec.LiveVerbMethods); err != nil {
-		t.Fatalf("live method allowlists drifted from spec.LiveVerbMethods: %v", err)
-	}
-
-	// The gate still detects a phantom spec.LiveVerbMethods entry naming a verb that is NOT a
-	// registered in-proc LiveVerbProvider: `file` is a compiled-in goss verb (it resolves but
-	// has no in-proc live-verb method contract, or is not registered in this unit-test binary)
-	// — either way the check reports it rather than silently passing. (An external grpcProvider
-	// is not a LiveVerbProvider either, so this would also catch one wrongly placed in the set.)
-	phantom := map[string][]string{"file": {"ghostmethod"}}
-	if err := checkMethodAllowlists(phantom); err == nil ||
-		!strings.Contains(err.Error(), "file") {
-		t.Fatalf("expected method-allowlist check to FAIL on a spec.LiveVerbMethods verb with no in-proc LiveVerbProvider, got: %v", err)
-	}
-}
-
 // TestReservedWordRegistry_KindsDispatchable proves every registered authoring
 // kind is ACTUALLY handled by the loader's normalizeNodeInto dispatch — so the
 // registry can never claim a handler that the dispatch switch lacks (the

@@ -15,8 +15,8 @@ import (
 // charly/record.go (the deleted host-side RecordCmd). The 4-method surface
 // (list/start/stop/cmd) was refactored from CLI Run() methods that PRINTED status to
 // stderr into functions that RETURN the captured output string — so provider.go can feed
-// the output through the shared sdk matcher pipeline + the artifact validators (the host's
-// runCharlyVerb matcher step does not run for an out-of-process verb). Every in-container
+// the output through the shared sdk matcher pipeline + the artifact validators (a host-side
+// matcher step does not run for an out-of-process verb). Every in-container
 // action (the asciinema/wf-recorder tmux session, the .mode metadata, the recording pull)
 // runs over the host executor reverse channel (sdk.Executor.RunCapture / GetFile) instead
 // of the in-proc DeployExecutor the host-side RecordCmd used, so a bed authored against the
@@ -25,8 +25,8 @@ import (
 const recordingDir = "/tmp/charly-recordings"
 
 // requiredModifiers mirrors the in-tree recordMethods required-field specs (the host's
-// validate-time + runtime required-modifier check keyed off the in-proc LiveVerbProvider,
-// which an external verb no longer is — so the check moves HERE, at dispatch). stop needs
+// validate-time + runtime required-modifier check keyed off the former in-proc live-verb seam,
+// which an external verb is not — so the check moves HERE, at dispatch). stop needs
 // an artifact path (where the recording is copied); cmd needs the text line to send.
 var requiredModifiers = map[string][]string{
 	"stop": {"artifact"},

@@ -14,8 +14,8 @@ import (
 // provider.go is the out-of-process mcp verb provider — charly's host dispatches a
 // `mcp:` check step to it through the registry (ResolveVerb("mcp") → this grpcProvider
 // → Provider.Invoke) with the FULL #Op marshaled as params_json and a CheckEnv
-// snapshot as env. Because the out-of-process path does NOT run the host's
-// runCharlyVerb matcher pipeline, this Invoke OWNS the whole verdict: read the
+// snapshot as env. Because the out-of-process path does NOT run a host-side
+// matcher pipeline, this Invoke OWNS the whole verdict: read the
 // host-pre-resolved MCP context (the host owns the podman / OCI-label / port-mapping
 // resolution), dispatch the method (metadata-only for `servers`; dial + MCP protocol
 // for the rest), then evaluate the stdout/stderr/exit_status matchers itself (via the
@@ -85,13 +85,13 @@ func (p provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.Invoke
 	method := string(op.Mcp)
 
 	// Live-deployment verb: skip under `charly check box` (no running MCP server on a
-	// disposable `podman run --rm`) — mirrors runCharlyVerb's RunModeBox skip.
+	// disposable `podman run --rm`) — mirrors the host's RunModeBox/box-mode skip.
 	if env.Mode == "box" {
 		return resultJSON("skip", fmt.Sprintf("mcp: %s requires a running deployment (skip under charly check box)", method))
 	}
 	// No endpoint resolved → skip. The host already FAILs the "no mcp_provides" /
 	// resolution-error cases before dispatch, so a nil endpoint here means no live
-	// deployment context at all (the analogue of runCharlyVerb's empty-box skip).
+	// deployment context at all (the analogue of the host's empty-box skip).
 	if env.Mcp == nil {
 		return resultJSON("skip", fmt.Sprintf("mcp: %s has no resolved MCP endpoint (box=%q)", method, env.Box))
 	}

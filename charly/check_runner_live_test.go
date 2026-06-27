@@ -19,7 +19,7 @@ func TestRunCheckLive_PureCycleEmitsFailVerdictsNoPropagation(t *testing.T) {
 		{Check: "a", Op: Op{ID: "a", Venue: "test-pod", DependsOn: []string{"b"}, Plugin: "file", PluginInput: map[string]any{"file": "/a"}}},
 		{Check: "b", Op: Op{ID: "b", Venue: "test-pod", DependsOn: []string{"a"}, Plugin: "file", PluginInput: map[string]any{"file": "/b"}}},
 	}
-	res, err := RunCheckLive(context.Background(), "", "test-score", plan, RunScoringOpts{})
+	res, err := RunCheckLive(context.Background(), "", "test-score", plan)
 	if err != nil {
 		t.Fatalf("a depends_on cycle must NOT propagate as an error — got: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestRunCheckLive_PureCycleEmitsFailVerdictsNoPropagation(t *testing.T) {
 // TestRunCheckLive_EmptyInputReturnsEarly is a regression on the empty-plan
 // fast path.
 func TestRunCheckLive_EmptyInputReturnsEarly(t *testing.T) {
-	res, err := RunCheckLive(context.Background(), "", "test-score", nil, RunScoringOpts{})
+	res, err := RunCheckLive(context.Background(), "", "test-score", nil)
 	if err != nil {
 		t.Fatalf("nil plan should not error: %v", err)
 	}

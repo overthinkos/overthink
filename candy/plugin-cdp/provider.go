@@ -14,7 +14,7 @@ import (
 // provider.go is the out-of-process cdp verb provider — charly's host dispatches a
 // `cdp:` check step to it through the registry (ResolveVerb("cdp") → this grpcProvider →
 // Provider.Invoke) with the FULL #Op marshaled as params_json and a CheckEnv snapshot as
-// env. Because the out-of-process path does NOT run the host's runCharlyVerb matcher
+// env. Because the out-of-process path does NOT run a host-side matcher
 // pipeline, this Invoke OWNS the whole verdict: read the host-pre-resolved DevTools URL
 // (the host owns the podman / venue / port-mapping resolution), dispatch the method (the
 // /json HTTP surface for status/open/list/close; the per-tab CDP WebSocket for the rest),
@@ -73,13 +73,13 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	method := string(op.Cdp)
 
 	// Live-deployment verb: skip under `charly check box` (no running Chrome DevTools
-	// endpoint on a disposable `podman run --rm`) — mirrors runCharlyVerb's RunModeBox skip.
+	// endpoint on a disposable `podman run --rm`) — mirrors the host's RunModeBox/box-mode skip.
 	if env.Mode == "box" {
 		return resultJSON("skip", fmt.Sprintf("cdp: %s requires a running deployment (skip under charly check box)", method))
 	}
 	// No endpoint resolved → skip. The host already FAILs the resolution-error case before
 	// dispatch, so a nil endpoint here means no live deployment context at all (the
-	// analogue of runCharlyVerb's empty-box skip).
+	// analogue of the host's empty-box skip).
 	if env.Cdp == nil {
 		return resultJSON("skip", fmt.Sprintf("cdp: %s has no resolved DevTools endpoint (box=%q)", method, env.Box))
 	}

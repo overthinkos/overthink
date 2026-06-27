@@ -14,8 +14,8 @@ import (
 // provider.go is the out-of-process spice verb provider — charly's host dispatches a
 // `spice:` check step to it through the registry (ResolveVerb("spice") → this
 // grpcProvider → Provider.Invoke) with the FULL #Op marshaled as params_json and a
-// CheckEnv snapshot as env. Because the out-of-process path does NOT run the host's
-// runCharlyVerb matcher pipeline, this Invoke OWNS the whole verdict: DIAL the
+// CheckEnv snapshot as env. Because the out-of-process path does NOT run a host-side
+// matcher pipeline, this Invoke OWNS the whole verdict: DIAL the
 // host-pre-resolved SPICE endpoint (the host owns the go-libvirt VM resolution +
 // any qemu+ssh:// tunnel), dispatch the method, then evaluate the stdout/stderr/
 // exit_status matchers + the artifact validators itself (via the shared sdk
@@ -75,13 +75,13 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	method := string(op.Spice)
 
 	// Live-VM verb: skip under `charly check box` (no running VM SPICE endpoint on a
-	// disposable `podman run --rm`) — mirrors runCharlyVerb's RunModeBox skip.
+	// disposable `podman run --rm`) — mirrors the host's RunModeBox/box-mode skip.
 	if env.Mode == "box" {
 		return resultJSON("skip", fmt.Sprintf("spice: %s requires a running VM (skip under charly check box)", method))
 	}
 	// No endpoint resolved → skip. The host already decided a SKIP for the "VM
 	// declares no SPICE device" case (returning the N/A result before dispatch), so a
-	// nil endpoint here means no VM context at all (the analogue of runCharlyVerb's
+	// nil endpoint here means no VM context at all (the analogue of the host's
 	// empty-box skip).
 	if env.Spice == nil {
 		return resultJSON("skip", fmt.Sprintf("spice: %s has no VM SPICE endpoint (box=%q)", method, env.Box))

@@ -32,19 +32,6 @@ func (c runnerCheckContext) Mode() kit.RunMode {
 	return kit.ModeLive
 }
 
-// RunCharlyVerb delegates a live-verb candy's dispatch to the host's shared runCharlyVerb
-// (build `charly check <verb> <method>` argv from the allowlist, exec it, run the matcher +
-// artifact pipeline). The candy owns the verb's contract (allowlist + selector); the engine
-// stays here. op *Op is the package-main alias of *spec.Op (the interface's param type).
-func (c runnerCheckContext) RunCharlyVerb(ctx context.Context, op *Op, verb, method string, allowlist map[string]kit.MethodSpec) kit.Result {
-	res := c.r.runCharlyVerb(ctx, op, verb, method, allowlist)
-	return kit.Result{
-		Status:        checkStatusToKit(res.Status),
-		Message:       res.Message,
-		CapturedValue: res.CapturedValue,
-	}
-}
-
 // kitVerbAdapter wraps a COMPILED-IN host-coupled verb candy's kit.CheckVerbProvider
 // as a package-main CheckVerbProvider, so runOne dispatches it through the SAME
 // providerRegistry path as an in-charly-module verb. It passes the live *Runner as a
@@ -157,37 +144,6 @@ func kitStatusToCheck(s kit.Status) CheckStatus {
 	}
 }
 
-// checkStatusToKit is the inverse of kitStatusToCheck — it maps the host's CheckStatus back
-// to a kit.Status, used by runnerCheckContext.RunCharlyVerb to return the dispatch verdict
-// to a live-verb candy.
-func checkStatusToKit(s CheckStatus) kit.Status {
-	switch s {
-	case TestFail:
-		return kit.StatusFail
-	case TestSkip:
-		return kit.StatusSkip
-	default:
-		return kit.StatusPass
-	}
-}
-
-// kitVerbLiveAdapter wraps a COMPILED-IN host-coupled LIVE-VERB candy's kit.LiveVerbProvider
-// as a package-main LiveVerbProvider, so the host's generic verb validation
-// (validateCharlyVerb) + the method-allowlist bijection gate read its contract through the
-// SAME registry path an in-charly-module live verb (the former wlVerb etc.) used. It embeds
-// kitVerbAdapter for Reserved/Class/RunVerb (RunVerb passes the live *Runner as a
-// CheckContext, so the candy's RunVerb reaches the dispatch via cc.RunCharlyVerb) and adds
-// the method-contract accessors. Methods()/MethodField() are pass-throughs — the host's
-// LiveVerbProvider.Methods() already returns kit.MethodSpec (the contract types live in the
-// kit), so no conversion is needed.
-type kitVerbLiveAdapter struct {
-	kitVerbAdapter
-	lv kit.LiveVerbProvider
-}
-
-func (a kitVerbLiveAdapter) Methods() map[string]kit.MethodSpec { return a.lv.Methods() }
-func (a kitVerbLiveAdapter) MethodField(c *Op) string           { return a.lv.MethodField(c) }
-
 // registerCompiledCheckVerb registers a COMPILED-IN host-coupled verb candy: it wraps
 // the candy's kit.CheckVerbProvider in a kitVerbAdapter and registers it (with the
 // candy's CUE schema) through the SAME RegisterBuiltinPluginUnit gate an
@@ -221,24 +177,5 @@ func registerCompiledCheckVerb(kv kit.CheckVerbProvider, schemaFS fs.FS, schemaD
 	RegisterBuiltinPluginUnit(PluginUnit{
 		Providers: []Provider{prov},
 		Schema:    PluginSchema{CueSource: cueSource, InputDefs: inputDefs},
-	})
-}
-
-// registerCompiledDedicatedVerb registers a COMPILED-IN host-coupled LIVE-VERB candy. No
-// compiled-in candy currently uses this shape — `wl` (the last one) externalized into
-// candy/plugin-wl — so this path is retained for a future compiled-in live verb but has no
-// current caller. Unlike registerCompiledCheckVerb, a live verb is
-// SCHEMA-LESS — its method-specific modifiers ride the closed base #Op, so there is NO
-// plugin_input and NO served schema; it self-registers via registerDedicatedBuiltin (the
-// schema-less dedicated-provider path charly's other dedicated builtins — the IR-step,
-// builder, and command providers — register through), staying out
-// of both builtinProviderInstances and the providers: manifest while resolving + dispatching
-// through the SAME providerRegistry (the verb + method-allowlist bijection gates still see
-// it via the kitVerbLiveAdapter's LiveVerbProvider contract). Called from the generated
-// plugins_generated.go for a NewLiveVerb-shape candy named in charly.yml compiled_plugins.
-func registerCompiledDedicatedVerb(lv kit.LiveVerbProvider) {
-	registerDedicatedBuiltin(kitVerbLiveAdapter{
-		kitVerbAdapter: kitVerbAdapter{kv: lv},
-		lv:             lv,
 	})
 }

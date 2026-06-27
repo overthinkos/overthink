@@ -113,8 +113,8 @@ func TestAppiumExternalPluginLoads(t *testing.T) {
 // TestAppiumOpCrossesWireWithMatchers proves the load-bearing assumption that the FULL
 // #Op — including the stdout/stderr MatcherList an `appium:` step authors — survives the
 // params_json marshal the host (invokeVerbProvider) does and the spec.Op unmarshal the
-// external plugin does. Because the external dispatch path does NOT run the host's
-// runCharlyVerb matcher pipeline, the plugin must receive the matchers to self-evaluate
+// external plugin does. Because the external dispatch path does NOT run a host-side
+// matcher pipeline, the plugin must receive the matchers to self-evaluate
 // them; this round-trip is exactly that wire path (the Op type is identical on both ends).
 func TestAppiumOpCrossesWireWithMatchers(t *testing.T) {
 	op := &Op{

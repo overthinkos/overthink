@@ -35,9 +35,8 @@ The task (`taskfiles/Cue.yml`):
    headed `package spec` + `@go(spec)`.
 3. **`cue exp gengotypes`** → `charly/spec/cue_types_gen.go` (the Go param structs).
 4. **`charly/internal/schemagen -mode=vocab`** → `charly/spec/vocab_gen.go`
-   (`KindWords`, `DocDirectives`, `StepKeywords`, `ContextWords`, `OpFields`, and
-   the per-live-verb `LiveVerbMethods` allowlists — all read straight from the
-   compiled schema via the cue API).
+   (`KindWords`, `DocDirectives`, `StepKeywords`, `ContextWords`, `OpFields`, … —
+   all read straight from the compiled schema via the cue API).
 5. **`gofmt`** both committed generated files.
 
 Both runs are **reproducible**: two consecutive `task cue:gen` invocations produce

@@ -1399,8 +1399,6 @@ type Iterate struct {
 	Env StrMap `yaml:"env,omitempty" json:"env,omitempty"`
 
 	MCPEndpoint *string `yaml:"mcp_endpoint,omitempty" json:"mcp_endpoint,omitempty"`
-
-	ValidateAiArtifacts bool `yaml:"validate_ai_artifacts,omitempty" json:"validate_ai_artifacts,omitempty"`
 }
 
 // DeployShellOverlay (deploy.go) — per-deploy shell-rc overlay. CLOSED: the Go

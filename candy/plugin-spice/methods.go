@@ -15,13 +15,13 @@ import (
 // functions that RETURN the captured output string (status) or WRITE a PNG artifact
 // + return a one-line confirmation (screenshot/cursor) — so provider.go can feed the
 // output through the shared sdk matcher pipeline + sdk.RunArtifactValidators (the
-// host's runCharlyVerb matcher step does not run for an out-of-process verb). The
+// host-side matcher step does not run for an out-of-process verb). The
 // SPICE wire behaviour, the PC-AT scancode tables, and the status tokens are
 // unchanged, so a bed authored against the in-tree verb passes unchanged.
 
 // requiredModifiers mirrors the in-tree spiceMethods required-field specs (the host's
-// validate-time + runtime required-modifier check keyed off the in-proc
-// LiveVerbProvider, which an external verb no longer is — so the check moves HERE, at
+// validate-time + runtime required-modifier check keyed off the former in-proc
+// live-verb seam, which an external verb is not — so the check moves HERE, at
 // dispatch). click/mouse need x+y, type needs text, key needs the key name,
 // screenshot/cursor need the artifact output path.
 var requiredModifiers = map[string][]string{

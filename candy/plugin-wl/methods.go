@@ -33,10 +33,10 @@ import (
 const screenshotVenuePath = "/tmp/charly-wl-screenshot.png"
 
 // requiredModifiers mirrors the in-tree wlMethods required-field specs (the host's
-// validate-time + runtime required-modifier check keyed off the in-proc LiveVerbProvider,
-// which an external verb no longer is — so the check moves HERE, at dispatch). The field
-// names match spec.Op (and the in-tree isZeroField semantics — an int coordinate field is
-// "missing" when zero, exactly as the host checked it).
+// validate-time + runtime required-modifier check keyed off the former in-proc live-verb seam,
+// which an external verb is not — so the check moves HERE, at dispatch). The field
+// names match spec.Op (and the zero-value required-field semantics — an int coordinate
+// field is "missing" when zero, exactly as the host checked it).
 var requiredModifiers = map[string][]string{
 	"geometry":       {"target"},
 	"atspi":          {"action"},
@@ -712,7 +712,7 @@ func wlOverlayShow(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, 
 	if err := ensureOverlayDaemon(ctx, ex); err != nil {
 		return "", err
 	}
-	// The declarative overlay-show is the text-overlay form (PosOverlayShow): the text is
+	// The declarative overlay-show is the text-overlay positional form: the text is
 	// required; op.Target, when set, names the overlay.
 	args := "charly-overlay show --type text --text " + shellQuote(op.Text)
 	if op.Target != "" {

@@ -317,8 +317,8 @@ func migrationSteps() []MigrationStep {
 		// eligible-agent selector `ai:` → `agent:`, and the standalone-doc
 		// discriminator value `kind: ai` → `agent`. The Go loader now reads
 		// AgentConfig/`agent:`; a config carrying the old `ai:` key silently
-		// loses the catalog/selector. The independent kind:score
-		// `validate_ai_artifacts` flag is a separate concept and is NOT renamed.
+		// loses the catalog/selector. (The independent iterate `validate_ai_artifacts`
+		// flag this step did NOT rename was later retired by drop-validate-ai-artifacts.)
 		// TouchesHost false → remote-cache auto-migration applies the project-file
 		// rewrites; the per-host agent overlay (the AI-CLI catalog that never ships
 		// with the repo) is processed when ctx.HostDeployPath is set. See CHANGELOG/.
@@ -542,6 +542,20 @@ func migrationSteps() []MigrationStep {
 		// See migrate_state_provision_verbs_to_plugin.go + CHANGELOG/.
 		{mustCalVer("2026.174.0050"), "state-provision-verbs-to-plugin", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateStateProvisionVerbsToPlugin(c.Dir, c.DryRun)
+			return len(w) > 0, err
+		}},
+		// 2026-06 drop-validate-ai-artifacts: strip the retired `validate_ai_artifacts`
+		// iterate-block flag, dead since the in-proc live-verb runtime (its only reader, the
+		// compiled-in live-verb dispatcher) was deleted by the live-verb externalization — artifact validation
+		// is now always-on in the out-of-process verb plugins. An intra-HEAD CLEANUP, not a
+		// format cutover: the loader TOLERATES a residual key (the iterate node is not
+		// closed-validated), so a config carrying it still loads (key ignored) and this step
+		// removes it for cleanliness. Does NOT raise HEAD; slots BELOW the calver-schema
+		// stamp AFTER state-provision-verbs-to-plugin. TouchesHost false → remote-cache
+		// auto-migration applies it; the host overlay self-gates on ctx.HostDeployPath. See
+		// migrate_drop_validate_ai_artifacts.go + CHANGELOG/.
+		{mustCalVer("2026.174.0051"), "drop-validate-ai-artifacts", false, func(c *MigrateContext) (bool, error) {
+			w, err := MigrateDropValidateAiArtifacts(c.Dir, c.HostDeployPath, c.DryRun)
 			return len(w) > 0, err
 		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up

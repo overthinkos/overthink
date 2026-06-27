@@ -695,7 +695,6 @@ func dispatchRunnerAndScore(
 			scoringPlan := opts.ScoringPlan
 			deployment := opts.Deploy
 			scoreName := opts.ScoreName
-			validateArtifacts := opts.Iterate != nil && opts.Iterate.ValidateAiArtifacts
 			phase, phaseTotal, iterK := opts.Phase, opts.PhaseTotal, k
 			stderr := opts.Stderr
 			wd := &ProgressWatchdog{
@@ -703,18 +702,7 @@ func dispatchRunnerAndScore(
 				NoImprovementTimeout: noImpTimeout,
 				BenchmarkStart:       benchmarkStart,
 				Probe: func(probeCtx context.Context) (int, int, error) {
-					// IterStartTime here uses BENCHMARK start, NOT
-					// per-iter start: artifacts produced legitimately
-					// in earlier phases (e.g. record/stop's cast file
-					// in phase 6) must remain valid through phase 7 + 8
-					// scoring even though their mtime predates each
-					// later phase's per-iter start. Anti-deception is
-					// preserved because files older than the benchmark
-					// start are still rejected.
-					live, err := RunCheckLive(probeCtx, deployment, scoreName, scoringPlan, RunScoringOpts{
-						ValidateAiArtifacts: validateArtifacts,
-						IterStartTime:       benchmarkStart,
-					})
+					live, err := RunCheckLive(probeCtx, deployment, scoreName, scoringPlan)
 					if err != nil {
 						return 0, 0, err
 					}
@@ -848,7 +836,6 @@ func dispatchRunnerAndScore(
 	// (with ${EVAL_NONCE_*} placeholders); scoring runs against ScoringPlan
 	// with substituted values.
 	useLivePlan := len(opts.ScoringPlan) > 0
-	validateArtifacts := opts.Iterate != nil && opts.Iterate.ValidateAiArtifacts
 	iterTagSuffix := fmt.Sprintf("charlycheck-%s-iter%d", layout.RunID, k)
 	iterRef := fmt.Sprintf("ghcr.io/overthinkos/%s:%s", opts.TargetImage, iterTagSuffix)
 	var (
@@ -860,14 +847,7 @@ func dispatchRunnerAndScore(
 
 	if useLivePlan {
 		testStart := time.Now()
-		live, scoreErr := RunCheckLive(ctx, opts.Deploy, opts.ScoreName, opts.ScoringPlan, RunScoringOpts{
-			ValidateAiArtifacts: validateArtifacts,
-			// Freshness floor uses benchmarkStart so artifacts
-			// produced in earlier phases survive scoring across
-			// phase boundaries — see the watchdog probe path
-			// for the design rationale.
-			IterStartTime: benchmarkStart,
-		})
+		live, scoreErr := RunCheckLive(ctx, opts.Deploy, opts.ScoreName, opts.ScoringPlan)
 		iter.TestDuration = time.Since(testStart).String()
 		if scoreErr != nil {
 			iter.BuildFailure = true

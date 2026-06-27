@@ -57,8 +57,8 @@ compiled_plugins:
     - plugin-resource
     - plugin-sidecar
     - plugin-target
-    # live-container verbs (schema-less kit.LiveVerbProvider — delegate dispatch via
-    # CheckContext.RunCharlyVerb; the `charly check <verb>` driver command stays host-side)
+    # live-container verbs (the former schema-less in-proc live-verb seam — dispatch was
+    # delegated via the host's live-verb dispatch hook (now removed); the `charly check <verb>` driver command stays host-side)
     - plugin-cdp
     - plugin-wl
     - plugin-vnc

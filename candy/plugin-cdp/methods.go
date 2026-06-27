@@ -18,7 +18,7 @@ import (
 // charly/cdp.go. Every method was refactored from a CLI Run() that PRINTED to stdout/
 // stderr into a function that RETURNS the captured stdout string — so provider.go can
 // feed the output through the shared sdk matcher pipeline + sdk.RunArtifactValidators
-// (the host's runCharlyVerb matcher step does not run for an out-of-process verb). The
+// (a host-side matcher step does not run for an out-of-process verb). The
 // DevTools HTTP surface (/json), the per-tab CDP WebSocket dispatch, and the deep-query
 // shadow-DOM helper are unchanged, so a bed authored against the in-tree verb passes
 // unchanged. The endpoint is host-pre-resolved (charly/cdp_preresolve.go) — the plugin
@@ -60,8 +60,8 @@ type devToolsTab struct {
 }
 
 // requiredModifiers mirrors the in-tree cdpMethods required-field specs (the host's
-// validate-time + runtime required-modifier check keyed off the in-proc LiveVerbProvider,
-// which an external verb no longer is — so the check moves HERE, at dispatch).
+// validate-time + runtime required-modifier check keyed off the former in-proc live-verb seam,
+// which an external verb is not — so the check moves HERE, at dispatch).
 var requiredModifiers = map[string][]string{
 	"url":           {"tab"},
 	"text":          {"tab"},

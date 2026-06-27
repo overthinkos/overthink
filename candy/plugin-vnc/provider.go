@@ -14,7 +14,7 @@ import (
 // provider.go is the out-of-process vnc verb provider — charly's host dispatches a
 // `vnc:` check step to it through the registry (ResolveVerb("vnc") → this grpcProvider →
 // Provider.Invoke) with the FULL #Op marshaled as params_json and a CheckEnv snapshot as
-// env. Because the out-of-process path does NOT run the host's runCharlyVerb matcher
+// env. Because the out-of-process path does NOT run a host-side matcher
 // pipeline, this Invoke OWNS the whole verdict: DIAL the host-pre-resolved RFB endpoint
 // (the host owns the podman / venue / libvirt resolution + any bridge/SSH tunnel),
 // dispatch the method, then evaluate the stdout/stderr/exit_status matchers + the
@@ -75,14 +75,14 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	method := string(op.Vnc)
 
 	// Live-deployment verb: skip under `charly check box` (no running VNC server on a
-	// disposable `podman run --rm`) — mirrors runCharlyVerb's RunModeBox skip.
+	// disposable `podman run --rm`) — mirrors the host's RunModeBox/box-mode skip.
 	if env.Mode == "box" {
 		return resultJSON("skip", fmt.Sprintf("vnc: %s requires a running deployment (skip under charly check box)", method))
 	}
 	// No endpoint resolved → skip. The host already FAILs the resolution-error case (and
 	// SKIPs the "VM declares no VNC display device" case) before dispatch, so a nil
 	// endpoint here means no live deployment context at all (the analogue of
-	// runCharlyVerb's empty-box skip).
+	// the host's empty-box skip).
 	if env.Vnc == nil {
 		return resultJSON("skip", fmt.Sprintf("vnc: %s has no resolved VNC endpoint (box=%q)", method, env.Box))
 	}

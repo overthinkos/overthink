@@ -468,25 +468,12 @@ func (c *CheckLastTagCmd) Run() error {
 // Output is a per-step verdict table (pass / fail / skipped).
 // Exit 0 if every in-scope step passes, non-zero otherwise.
 //
-// Anti-deception properties:
-//
-//   - Reads `check.yml` from the project tree (cwd → LoadUnified),
-//     NOT from the per-iter repo clone the AI works in. Edits the AI
-//     might make to `.harness/<run>/repo/check.yml` do not change
-//     what self-evaluate evaluates — the same load path the harness
-//     scorer uses governs both.
-//
-//   - Always invokes RunCheckLive with RunScoringOpts{}
-//     (zero value: ValidateAiArtifacts=false, IterStartTime=zero) so
-//     EVERY probe physically executes against live systems. This is
-//     what produces the canonical artifacts the harness scorer then
-//     validates in `validate_ai_artifacts: true` mode. If self-check
-//     honored the flag, artifacts would never exist and the freshness
-//     gate would always fail.
-//
-//   - The `score.ValidateAiArtifacts` field is intentionally ignored
-//     here: self-evaluate's job is to PRODUCE artifacts via fresh
-//     execution, not to consume them.
+// Anti-deception property: reads `check.yml` from the project tree
+// (cwd → LoadUnified), NOT from the per-iter repo clone the AI works in.
+// Edits the AI might make to `.harness/<run>/repo/check.yml` do not change
+// what self-evaluate evaluates — the same load path the harness scorer uses
+// governs both. Every probe physically executes against the AI's live
+// deployments (RunCheckLive re-runs each step), exactly like the harness scorer.
 type CheckSelfCheckCmd struct{}
 
 func (c *CheckSelfCheckCmd) Run() error {
@@ -535,11 +522,9 @@ func (c *CheckSelfCheckCmd) Run() error {
 		return nil
 	}
 
-	// Always-execute mode (RunScoringOpts zero value): no
-	// validate-ai-artifacts shortcut, no freshness gate. Every probe
-	// re-runs against live systems, producing fresh artifacts.
+	// Every probe re-runs against live systems, producing fresh artifacts.
 	ctx := context.Background()
-	live, err := RunCheckLive(ctx, score, score, plan, RunScoringOpts{})
+	live, err := RunCheckLive(ctx, score, score, plan)
 	if err != nil {
 		return fmt.Errorf("charly check self-evaluate: live scoring: %w", err)
 	}

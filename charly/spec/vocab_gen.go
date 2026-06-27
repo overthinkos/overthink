@@ -382,8 +382,3 @@ var AuthoringVerbs = []string{
 	"y",
 	"y2",
 }
-
-// LiveVerbMethods maps each live-container verb to its method allowlist
-// (the #<Name>Method enums) — the SAME allowlists checkrun_charly_verbs.go
-// enforces, now from one CUE source.
-var LiveVerbMethods = map[string][]string{}

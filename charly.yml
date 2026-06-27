@@ -705,7 +705,6 @@ default:
             note: true
             env: {}
             mcp_endpoint: "http://localhost:18765/mcp"
-            validate_ai_artifacts: true
     os:
         pod:
             agent_provisioned: true

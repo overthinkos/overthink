@@ -12,9 +12,9 @@ package main
 // files (project charly.yml / eval.yml + the per-host overlay — candy var/env
 // maps live in candy/<name>/charly.yml, which this step does not touch), so an
 // every-depth key rename is unambiguous (mirrors the candy/box rename's
-// every-depth key rewrite). The independent kind:score `validate_ai_artifacts`
-// flag is a DIFFERENT concept (validate the artifact the runner produced) and
-// is deliberately NOT renamed.
+// every-depth key rewrite). (The independent iterate `validate_ai_artifacts`
+// flag this step did NOT rename was later retired by the
+// drop-validate-ai-artifacts step.)
 //
 // Comment-preserving (yaml.v3 node API); idempotent (a config already on
 // `agent:` is a no-op); per-file .bak.<unix-ts>. TouchesHost false so the

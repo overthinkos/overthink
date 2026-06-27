@@ -19,8 +19,8 @@ import (
 // engine / project loader, so the host pre-resolves before marshaling.
 //
 // The connectTab / cdpDevTools / resolveTabWS / cdpEvaluate / cdpGetWindowOffset
-// helpers below ALSO stay host-side because the in-core `charly check wl|vnc … --from-cdp`
-// coordinate-translation path (wl.go / vnc.go) opens a live CDP WebSocket to read
+// helpers below ALSO stay host-side because the in-core `charly check wl … --from-cdp`
+// coordinate-translation path (wl.go) opens a live CDP WebSocket to read
 // window.screenX/screenY — so the host keeps its own minimal CDP client (browser_cdp.go)
 // even after the declarative `cdp:` verb moved out-of-process.
 
@@ -64,8 +64,8 @@ func (r *Runner) preresolveCdpEndpoint(c *Op) (env *CdpEnv, cleanup func(), earl
 }
 
 // ---------------------------------------------------------------------------
-// Host-side CDP helpers retained for the in-core `charly check wl|vnc … --from-cdp`
-// coordinate-translation path (wl.go / vnc.go) AND the cdp endpoint pre-resolution
+// Host-side CDP helpers retained for the in-core `charly check wl … --from-cdp`
+// coordinate-translation path (wl.go) AND the cdp endpoint pre-resolution
 // above. The DECLARATIVE cdp methods (open/list/text/eval/screenshot/click/…) moved to
 // the out-of-process candy/plugin-cdp; only these endpoint-resolution + window-offset
 // helpers stay host-side.
@@ -142,7 +142,7 @@ func resolveTabWS(devtoolsURL, tabID string) (string, error) {
 }
 
 // connectTab resolves container -> devtools URL -> tab WS URL -> CDPClient. Used by the
-// in-core `charly check wl|vnc … --from-cdp` coordinate-translation path.
+// in-core `charly check wl … --from-cdp` coordinate-translation path.
 func connectTab(box, tabID, instance string) (*CDPClient, error) {
 	devtoolsURL, ep, err := cdpDevTools(box, instance)
 	if err != nil {
@@ -216,7 +216,7 @@ type windowOffset struct {
 }
 
 // cdpGetWindowOffset queries the Chrome window's desktop position and chrome UI height
-// via CDP JS. Used by the wl/vnc `--from-cdp` viewport→desktop coordinate translation.
+// via CDP JS. Used by the wl `--from-cdp` viewport→desktop coordinate translation.
 func cdpGetWindowOffset(client *CDPClient) (windowOffset, error) {
 	result, err := cdpEvaluate(client, `JSON.stringify({screenX: window.screenX, screenY: window.screenY, chromeHeight: window.outerHeight - window.innerHeight})`)
 	if err != nil {

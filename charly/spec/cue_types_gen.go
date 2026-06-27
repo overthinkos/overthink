@@ -41,6 +41,18 @@ type Op struct {
 
 	Dbus DbusMethod `yaml:"dbus,omitempty" json:"dbus,omitempty"`
 
+	// `vnc` is an EXTERNAL-CHARLY-VERB: its RFB/VNC client (the stdlib-only RFC 6143 VNC
+	// client — VeNCrypt/TLS + ZRLE decode + the status/screenshot/click/mouse/type/key/rfb
+	// dispatch layer) lives in the out-of-tree candy/plugin-vnc module, served
+	// OUT-OF-PROCESS. Like cdp/mcp/spice (and unlike file/package/service/command, which
+	// left #Op entirely, re-authored as `plugin: <verb>`), vnc KEEPS its `vnc:` discriminator
+	// + every modifier (x/y/text/key/artifact/method/params) on this closed #Op — authoring
+	// is unchanged (`vnc: status`, not `plugin: vnc`). It therefore left
+	// #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc CheckVerbProvider to gate) BUT keeps this
+	// field + #VncMethod here, so `vnc: status` still validates against the method enum and
+	// VerbsSet still classifies the op (then dispatch resolves the registered external
+	// provider, after the host pre-resolves the deployment's VNC endpoint — container port
+	// 5900 or a VM's libvirt display — to a host-reachable RFB address).
 	Vnc VncMethod `yaml:"vnc,omitempty" json:"vnc,omitempty"`
 
 	// `mcp` is an EXTERNAL-CHARLY-VERB: its MCP-protocol client implementation (the

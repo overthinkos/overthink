@@ -167,7 +167,6 @@ var (
 	splitOsReleaseLine          = vmshared.SplitOsReleaseLine
 	SweepStaleTemps             = vmshared.SweepStaleTemps
 	UnregisterTempCleanup       = vmshared.UnregisterTempCleanup
-	writerForPath               = vmshared.WriterForPath
 	WriteSeedISO                = vmshared.WriteSeedISO
 )
 

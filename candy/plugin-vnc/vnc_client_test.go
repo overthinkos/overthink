@@ -4,36 +4,9 @@ import (
 	"testing"
 )
 
-func TestParsePublishedPort(t *testing.T) {
-	tests := []struct {
-		name    string
-		output  string
-		want    string
-		wantErr bool
-	}{
-		{"standard localhost binding", "127.0.0.1:5900\n", "127.0.0.1:5900", false},
-		{"all interfaces binding", "0.0.0.0:5900\n", "127.0.0.1:5900", false},
-		{"random high port", "0.0.0.0:49900\n", "127.0.0.1:49900", false},
-		{"ipv6 binding", "[::]:5900\n", "127.0.0.1:5900", false},
-		{"multiple lines", "0.0.0.0:5900\n[::]:5900\n", "127.0.0.1:5900", false},
-		{"no trailing newline", "127.0.0.1:5900", "127.0.0.1:5900", false},
-		{"empty output", "", "", true},
-		{"only whitespace", "  \n", "", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := parsePublishedPort(tt.output, 5900)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("parsePublishedPort() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("parsePublishedPort() = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
+// These tests cover the RFB/VNC client moved from charly/vnc_client.go into this
+// out-of-process plugin: the X11 keysym map, the button mask, the rune→keysym mapping,
+// the VNC-auth bit reversal, and the VeNCrypt sub-type negotiation.
 
 func TestVncKeyMap(t *testing.T) {
 	tests := []struct {
@@ -166,16 +139,4 @@ func TestChooseVeNCryptSubType(t *testing.T) {
 	if got := chooseVeNCryptSubType(nil, ""); got != 0 {
 		t.Errorf("empty list: got %d, want 0", got)
 	}
-}
-
-func TestVncCmdStructure(_ *testing.T) {
-	cmd := VncCmd{}
-	_ = cmd.Screenshot
-	_ = cmd.Click
-	_ = cmd.Type
-	_ = cmd.Key
-	_ = cmd.Mouse
-	_ = cmd.Status
-	_ = cmd.Passwd
-	_ = cmd.Rfb
 }

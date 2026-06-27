@@ -313,7 +313,14 @@ var VerbCatalog = map[string]VerbSpec{
 	// teardown (never the ledger).
 	"wl":   {ctxRuntimeOnly, DoAssert, false},
 	"dbus": {ctxRuntimeOnly, DoAssert, false},
-	"vnc":  {ctxRuntimeOnly, DoAssert, false},
+	// `vnc` is NOT here — it is an EXTERNAL-CHARLY-VERB served out-of-process by
+	// candy/plugin-vnc. It left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc
+	// CheckVerbProvider) but keeps its `vnc:` discriminator + modifiers + the #VncMethod
+	// enum on core #Op (authoring unchanged); the registered external provider resolves at
+	// dispatch (the host pre-resolves the deployment's VNC endpoint — container port 5900 or
+	// a VM's libvirt <graphics type='vnc'> listener — to a host-reachable RFB address first).
+	// Its runtime-context legality now lives on the authored `context:` + the plugin's own
+	// box-mode skip, not this table.
 	// `cdp` is NOT here — it is an EXTERNAL-CHARLY-VERB served out-of-process by
 	// candy/plugin-cdp. It left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc
 	// CheckVerbProvider) but keeps its `cdp:` discriminator + modifiers + the #CdpMethod

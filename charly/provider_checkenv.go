@@ -43,6 +43,14 @@ type CheckEnv struct {
 	// no resolved endpoint. Set by invokeVerbProvider from preresolveCdpEndpoint
 	// (cdp_preresolve.go).
 	Cdp *CdpEnv `json:"cdp,omitempty"`
+	// Vnc carries the host-resolved, dialable RFB endpoint for a `vnc:` verb (the
+	// out-of-process candy/plugin-vnc provider owns no podman / venue / go-libvirt
+	// machinery): the host-reachable "host:port" the plugin dials over TCP (a container's
+	// published port 5900, or a VM's libvirt-discovered <graphics type='vnc'> listener
+	// bridged/tunneled to a local address) plus the resolved VNC password. nil for every
+	// non-vnc verb and for a vnc op with no resolved endpoint. Set by invokeVerbProvider
+	// from preresolveVncEndpoint (vnc_preresolve.go).
+	Vnc *VncEnv `json:"vnc,omitempty"`
 }
 
 func runModeName(m RunMode) string {
@@ -226,6 +234,17 @@ func (r *Runner) invokeVerbProvider(ctx context.Context, prov Provider, word str
 	if cdpEarly != nil {
 		return *cdpEarly
 	}
+	// Pre-resolve a `vnc:` op's deployment (r.Box) to the host-reachable RFB address — an
+	// out-of-process vnc verb owns no venue/port-mapping/libvirt machinery. A no-op for
+	// every non-vnc verb; for a vnc op it may short-circuit with a SKIP (VM declares no
+	// VNC display device) / FAIL (endpoint resolution error). The cleanup tears down any
+	// opened ssh forward / bridge listener / SSH tunnel AFTER Invoke (it carries the live
+	// RFB connection), so defer it across Invoke.
+	vncEnv, vncCleanup, vncEarly := r.preresolveVncEndpoint(c)
+	defer vncCleanup()
+	if vncEarly != nil {
+		return *vncEarly
+	}
 	params, err := marshalJSON(c)
 	if err != nil {
 		res.Status = TestFail
@@ -236,6 +255,7 @@ func (r *Runner) invokeVerbProvider(ctx context.Context, prov Provider, word str
 	ce.Spice = spiceEnv
 	ce.Mcp = mcpEnv
 	ce.Cdp = cdpEnv
+	ce.Vnc = vncEnv
 	env, err := marshalJSON(ce)
 	if err != nil {
 		res.Status = TestFail

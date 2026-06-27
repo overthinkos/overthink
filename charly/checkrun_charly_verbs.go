@@ -43,11 +43,11 @@ import (
 // <verb> <method>` CLI path — the test framework spawns a subprocess for each check,
 // captures stdout/stderr/exit, and feeds the output through the existing matcher pipeline
 // (Stdout/Stderr/ExitStatus + artifact size via ArtifactMinBytes). The per-verb providers
-// + their <verb>Methods allowlists are compiled-in candies (candy/plugin-wl/vnc/dbus) — each a kit.LiveVerbProvider whose RunVerb delegates back here via
+// + their <verb>Methods allowlists are compiled-in candies (candy/plugin-wl/dbus) — each a kit.LiveVerbProvider whose RunVerb delegates back here via
 // CheckContext.RunCharlyVerb; only this shared dispatcher stays host-side. kube/adb/appium/
-// spice/mcp/record/cdp are extracted as external-charly-verbs (candy/plugin-kube, candy/plugin-adb,
-// candy/plugin-appium, candy/plugin-spice, candy/plugin-mcp, candy/plugin-record, candy/plugin-cdp),
-// dispatching via invokeVerbProvider, never through this subprocess library.
+// spice/mcp/record/cdp/vnc are extracted as external-charly-verbs (candy/plugin-kube, candy/plugin-adb,
+// candy/plugin-appium, candy/plugin-spice, candy/plugin-mcp, candy/plugin-record, candy/plugin-cdp,
+// candy/plugin-vnc), dispatching via invokeVerbProvider, never through this subprocess library.
 //
 // Architectural notes:
 //   - Host-side only: the test runner invokes the host `charly` binary, which
@@ -103,7 +103,7 @@ func (r *Runner) resolveCheckApk(apk, origin string) (string, error) {
 // Verb dispatchers
 // ---------------------------------------------------------------------------
 
-// The wl/dbus/vnc verbs are compiled-in candies (candy/plugin-<verb>)
+// The wl/dbus verbs are compiled-in candies (candy/plugin-<verb>)
 // — each a kit.LiveVerbProvider carrying its provider + method allowlist; their RunVerb
 // delegates to the shared runCharlyVerb below via CheckContext.RunCharlyVerb. NO per-verb
 // dispatcher remains here — only the shared runCharlyVerb.
@@ -119,23 +119,12 @@ func (r *Runner) resolveCheckApk(apk, origin string) (string, error) {
 // noVmDisplayDeviceErr is the substring the VM-target resolver (charly/vm_target.go)
 // emits when a VM declares no graphics device of the requested kind ("VM <name> has
 // no SPICE/VNC graphics device declared in vm.yml") — the signal for a legitimate N/A
-// SKIP, not a check failure. Shared by the in-proc vnc verb (vmDisplayDeviceAbsent
-// below) AND the host-side spice endpoint pre-resolver (preresolveSpiceEndpoint), so
-// the skip wording is anchored to ONE string (R3).
+// SKIP, not a check failure. Both VM-display verbs are EXTERNAL-CHARLY-VERBS now
+// (candy/plugin-spice, candy/plugin-vnc), so the skip is enforced HOST-side by their
+// endpoint pre-resolvers (preresolveSpiceEndpoint / preresolveVncEndpoint) — neither
+// flows through this subprocess path — and the skip wording stays anchored to ONE
+// string (R3).
 const noVmDisplayDeviceErr = "graphics device declared in vm.yml"
-
-// vmDisplayDeviceAbsent reports whether the in-proc `vnc` VM-display verb failed
-// because the target VM declares no VNC display device — a legitimate N/A SKIP, NOT a
-// check failure. The cachyos-gpu operator drops the virtio display head (the
-// passed-through RTX heads ARE the display), so a SHARED desktop check skips on the
-// operator while still asserting on the disposable check bed (which keeps a virtio
-// head) — one shared candy, no operator/bed split (R3). `spice` enforces the SAME rule
-// HOST-side now (it is an EXTERNAL-CHARLY-VERB — candy/plugin-spice): the host's
-// preresolveSpiceEndpoint detects the no-SPICE-device resolver error and returns the
-// skip before dispatch, so spice no longer flows through this subprocess path.
-func vmDisplayDeviceAbsent(verb, stderr string) bool {
-	return verb == "vnc" && strings.Contains(stderr, noVmDisplayDeviceErr)
-}
 
 //nolint:gocyclo // verb dispatch with bifurcated artifact validation (ai-artifact vs exec mode) sharing post-validation; cohesive
 func (r *Runner) runCharlyVerb(ctx context.Context, c *Op, verb, method string, allowlist map[string]kit.MethodSpec) CheckResult {
@@ -254,13 +243,6 @@ func (r *Runner) runCharlyVerb(ctx context.Context, c *Op, verb, method string, 
 	stdout, stderr, exit, execErr := runCaptureCmd(cmd)
 	if execErr != nil {
 		return failf(c, "%s: %s: execution error: %v", verb, method, execErr)
-	}
-	// Precondition-not-met gate: a VM-display verb run against a deployment that
-	// declares no such display device is N/A, not a failure (the SPICE-less
-	// cachyos-gpu operator vs the SPICE-having check bed). See vmDisplayDeviceAbsent.
-	if vmDisplayDeviceAbsent(verb, stderr) {
-		return skipf(c, fmt.Sprintf("%s %s — N/A: deployment has no %s graphics device (SPICE-less GPU desktop)",
-			verb, method, strings.ToUpper(verb)))
 	}
 
 	wantExit := 0
@@ -544,9 +526,9 @@ func isZeroField(c *Op, name string) bool {
 		// in-proc verb's required: list names them. The adb required-field cases
 		// (Args/Apk/Property/AppId, plus the "Adb" discriminator) left the SAME way
 		// (candy/plugin-adb), as did the appium required-field cases (candy/plugin-appium).
-		// The spice "Spice" discriminator case left the SAME way (candy/plugin-spice); its
-		// X/Y/Text/KeyName/Artifact modifier cases STAY — shared with the in-proc
-		// vnc/wl/libvirt verbs.
+		// The spice "Spice" discriminator case left the SAME way (candy/plugin-spice), as
+		// did the vnc "Vnc" discriminator case (candy/plugin-vnc); their
+		// X/Y/Text/KeyName/Artifact modifier cases STAY — shared with the in-proc wl verb.
 	}
 	// Unknown field name is a programming error: treat as "not zero" so
 	// authoring errors surface elsewhere instead of spurious skips.

@@ -23,9 +23,8 @@ type VNCClient struct {
 	height      uint16
 	name        string
 	pixelFormat vncPixelFormat
-	zBuf        *bytes.Buffer  // persistent zlib input buffer for ZRLE
-	zReader     io.ReadCloser  // persistent zlib decompressor for ZRLE
-	endpoint    *CheckEndpoint // ssh -L forward (VM/ssh venues); nil for container/local
+	zBuf        *bytes.Buffer // persistent zlib input buffer for ZRLE
+	zReader     io.ReadCloser // persistent zlib decompressor for ZRLE
 }
 
 // vncPixelFormat represents the RFB pixel format (16 bytes on wire).
@@ -125,7 +124,7 @@ func (c *VNCClient) handshake(password string) error {
 		}
 	case 2: // VNC auth
 		if password == "" {
-			return fmt.Errorf("VNC server requires authentication; run `charly check vnc passwd <box>` to set a password")
+			return fmt.Errorf("VNC server requires authentication but no password is provisioned (provision wayvnc auth at deploy time, or set VNC_PASSWORD)")
 		}
 		if err := c.vncAuth(password); err != nil {
 			return err
@@ -316,7 +315,7 @@ func (c *VNCClient) vencryptHandshake(password string) error {
 	case vencryptTLSVnc, vencryptX509Vnc:
 		// VNC DES challenge-response inside TLS.
 		if password == "" {
-			return fmt.Errorf("VNC server requires authentication; run `charly check vnc passwd <box>` to set a password")
+			return fmt.Errorf("VNC server requires authentication but no password is provisioned (provision wayvnc auth at deploy time, or set VNC_PASSWORD)")
 		}
 		if err := c.vncAuth(password); err != nil {
 			return err
@@ -331,7 +330,7 @@ func (c *VNCClient) vencryptHandshake(password string) error {
 	case vencryptTLSPlain, vencryptX509Plain:
 		// Plain username/password inside TLS.
 		if password == "" {
-			return fmt.Errorf("VNC server requires authentication; run `charly check vnc passwd <box>` to set a password")
+			return fmt.Errorf("VNC server requires authentication but no password is provisioned (provision wayvnc auth at deploy time, or set VNC_PASSWORD)")
 		}
 		username := "user"
 		if err := binary.Write(c.conn, binary.BigEndian, uint32(len(username))); err != nil {
@@ -680,15 +679,14 @@ func (c *VNCClient) Height() uint16 { return c.height }
 // DesktopName returns the VNC desktop name.
 func (c *VNCClient) DesktopName() string { return c.name }
 
-// Close disconnects from the VNC server.
+// Close disconnects from the VNC server. The host owns the venue forward/tunnel (it
+// is torn down by the preresolve cleanup AFTER this Invoke), so the plugin only closes
+// its own TCP connection + zlib reader.
 func (c *VNCClient) Close() error {
 	if c.zReader != nil {
 		c.zReader.Close()
 	}
-	err := c.conn.Close()
-	// Tear down the ssh -L forward (if any) after the TCP connection closes.
-	c.endpoint.Close()
-	return err
+	return c.conn.Close()
 }
 
 // --- ZRLE encoding support (RFC 6143 §7.7.6) ---
@@ -931,61 +929,6 @@ func (c *VNCClient) decodeZRLETile(img *image.RGBA, tx, ty, tw, th, cpLen int) e
 	return nil
 }
 
-// --- Container resolution helpers (mirror browser.go pattern) ---
-
-// resolveVNCEndpoint resolves the venue (container / VM / ssh / local) and a
-// host-reachable endpoint for the in-venue VNC port 5900 (an ssh -L forward for
-// VM/ssh venues). The caller transfers ownership to the VNCClient, which closes
-// the forward on Close.
-func resolveVNCEndpoint(box, instance string) (*CheckEndpoint, error) {
-	venue, err := resolveCheckVenue(box, instance)
-	if err != nil {
-		return nil, err
-	}
-	return resolveCheckEndpoint(venue, 5900)
-}
-
-func resolveVNCPassword(boxName, instance string) string {
-	// Try instance-specific key first, then image-level key
-	if instance != "" {
-		key := boxName + "-" + instance
-		val, _ := ResolveCredential("VNC_PASSWORD", CredServiceVNC, key, "")
-		if val != "" {
-			return val
-		}
-	}
-	val, _ := ResolveCredential("VNC_PASSWORD", CredServiceVNC, boxName, "")
-	return val
-}
-
-func connectVNC(box, instance string) (*VNCClient, error) {
-	ep, err := resolveVNCEndpoint(box, instance)
-	if err != nil {
-		return nil, err
-	}
-	password := resolveVNCPassword(resolveBoxName(box), instance)
-	client, err := NewVNCClient(ep.Addr, password)
-	if err != nil {
-		ep.Close()
-		return nil, err
-	}
-	client.endpoint = ep
-	return client, nil
-}
-
-func connectVNCScreenshot(box, instance string) (image.Image, uint16, uint16, error) {
-	client, err := connectVNC(box, instance)
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	defer client.Close() //nolint:errcheck
-	img, err := client.Screenshot()
-	if err != nil {
-		return nil, 0, 0, err
-	}
-	return img, client.width, client.height, nil
-}
-
 // --- Key name mapping ---
 
 var vncKeyMap = map[string]uint32{
@@ -1034,7 +977,7 @@ func vncKeyNames() string {
 	for k := range vncKeyMap {
 		names = append(names, k)
 	}
-	sortStrings(names)
+	slices.Sort(names)
 	return strings.Join(names, ", ")
 }
 

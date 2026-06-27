@@ -143,8 +143,8 @@ func (e *EngineClient) ExecBatched(ctx context.Context, container, script string
 }
 
 // Snapshot returns a ContainerSnapshot for one named container. Used by
-// interactive single-container commands (CdpStatusCmd, VncStatusCmd,
-// WlStatusCmd) that need probe data without enumerating every charly container.
+// interactive single-container commands (WlStatusCmd and the like) that need
+// probe data without enumerating every charly container.
 // Two engine calls (one filtered ps + one inspect of just this name).
 func (e *EngineClient) Snapshot(name string) (*ContainerSnapshot, error) {
 	out, err := exec.Command(e.bin, "ps", "-a", "--filter", "name="+name, "--format", "json", "--no-trunc").Output()

@@ -35,7 +35,6 @@ import (
 	cp_plugin_target "github.com/overthinkos/overthink/candy/plugin-target"
 	cp_plugin_unix_group "github.com/overthinkos/overthink/candy/plugin-unix-group"
 	cp_plugin_user "github.com/overthinkos/overthink/candy/plugin-user"
-	cp_plugin_vnc "github.com/overthinkos/overthink/candy/plugin-vnc"
 	cp_plugin_wl "github.com/overthinkos/overthink/candy/plugin-wl"
 )
 
@@ -68,6 +67,5 @@ func init() {
 	registerCompiledPlugin(cp_plugin_sidecar.NewProvider(), cp_plugin_sidecar.NewMeta())
 	registerCompiledPlugin(cp_plugin_target.NewProvider(), cp_plugin_target.NewMeta())
 	registerCompiledDedicatedVerb(cp_plugin_wl.NewLiveVerb())
-	registerCompiledDedicatedVerb(cp_plugin_vnc.NewLiveVerb())
 	registerCompiledDedicatedVerb(cp_plugin_dbus.NewLiveVerb())
 }

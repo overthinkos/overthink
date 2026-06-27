@@ -21,6 +21,13 @@ sway-desktop-vnc:
             # via reconcile later — the deliberate cross-repo lag; the R10 bed loads the
             # LOCAL candy via the superproject override.)
             - plugin-cdp
+            # plugin-vnc is the OUT-OF-TREE plugin that serves the `vnc:` check verb (the
+            # RFB/VNC client lives there, not in charly's core check surface). This candy
+            # AUTHORS `vnc:` checks (status/screenshot), so requiring plugin-vnc puts it in
+            # every composing image's scanned candy set; collectReferencedPluginWords
+            # build-connects it before the baked `vnc:` checks dispatch — otherwise they
+            # SKIP with `unknown verb "vnc"`. (Same cross-repo reconcile lag as plugin-cdp.)
+            - plugin-vnc
     sway-desktop-vnc-candy:
         candy:
             - sway-desktop

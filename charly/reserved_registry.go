@@ -123,7 +123,7 @@ func checkVerbBijection(catalog map[string]VerbSpec, verbs, authoring []string) 
 
 // checkMethodAllowlists verifies every live-verb provider's method-allowlist key
 // set equals the CUE-derived spec.LiveVerbMethods enum for that verb — so the hand
-// dispatch tables (wlMethods/vncMethods/…, owned by each provider via Methods() and
+// dispatch tables (wlMethods/dbusMethods/…, owned by each provider via Methods() and
 // carrying the per-method posArgs / required-modifier logic) can never drift from the
 // CUE method vocabulary the schema + validateCharlyVerb enforce. E4: reads each
 // verb's allowlist from its registered LiveVerbProvider — there is no central

@@ -1,9 +1,9 @@
 package vmshared
 
 // Shared "`-` means stdout" convention for file-output args across
-// charly verbs. Used by the screenshot-writing check verbs (vnc screenshot in-core;
-// the cdp/libvirt screenshot plugin verbs out-of-process) and anything else that
-// writes a binary artifact.
+// charly verbs. Used by the screenshot-writing check verbs (the cdp/vnc/libvirt
+// screenshot plugin verbs, all out-of-process) and anything else that writes a
+// binary artifact.
 //
 // Guidelines for callers:
 //   - Human-readable status messages (byte counts, dimensions) go to

@@ -22,14 +22,14 @@ type CheckVerbProvider interface {
 }
 
 // LiveVerbProvider is the self-describing form of an IN-PROC LIVE-CONTAINER verb
-// provider (wl/dbus/vnc): beyond running the probe
+// provider (wl/dbus): beyond running the probe
 // (CheckVerbProvider), it OWNS its method contract — the method allowlist (each
 // method's required-modifier + artifact spec + posArgs dispatch) and the accessor for
 // its method-selector field on *Op. The host's generic verb validation
 // (validateCharlyVerb) and the method-allowlist bijection gate read the contract FROM
 // the provider; the central per-verb validateCharlyVerb switch and the liveVerbDispatch
 // registry are gone (E4). A goss verb (file/port/…) has no method contract and does NOT
-// implement this. The EXTERNAL-CHARLY-VERBS kube/adb/appium/spice/mcp/record/cdp are
+// implement this. The EXTERNAL-CHARLY-VERBS kube/adb/appium/spice/mcp/record/cdp/vnc are
 // live-container verbs too but are served OUT-OF-PROCESS (candy/plugin-*); they do NOT implement this
 // in-proc contract — their method allowlist + required-modifier checks live in the
 // plugin, and their method-name enum is enforced by CUE on core #Op.

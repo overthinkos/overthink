@@ -398,8 +398,8 @@ func IsAutoPort(mapping string) bool {
 //
 // Free-port discovery uses the same net.Listen("tcp","127.0.0.1:0") +
 // immediate-close pattern already used by ssh_tunnel.go:78 and
-// vnc_vm.go:163 — the OS picks an ephemeral port, we close, and the
-// caller binds in the (small) window before the OS reassigns.
+// vnc_preresolve.go's unixToTcpBridge — the OS picks an ephemeral port, we
+// close, and the caller binds in the (small) window before the OS reassigns.
 func AllocateAutoPorts(containerPorts []int, occupied map[int]bool) ([]ParsedPortMapping, error) {
 	if len(containerPorts) == 0 {
 		return nil, nil

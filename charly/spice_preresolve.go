@@ -34,8 +34,8 @@ type SpiceEnv struct {
 //     plugin's own no-endpoint skip then fires);
 //   - cleanup: closes any opened SSH tunnel (ALWAYS non-nil — defer it unconditionally);
 //   - early:   a pre-dispatch CheckResult to return immediately — a SKIP when the VM
-//     declares no SPICE device (the host-side analogue of the former
-//     vmDisplayDeviceAbsent subprocess-stderr skip) or a FAIL when resolution
+//     declares no SPICE device (the host-side analogue of the former in-proc
+//     subprocess-stderr no-display-device skip) or a FAIL when resolution
 //     errored; nil to proceed to dispatch.
 //
 // The cleanup must outlive the plugin's Invoke (the tunnel carries the live SPICE

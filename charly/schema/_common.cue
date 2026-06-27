@@ -16,7 +16,7 @@
 // VerbCatalog entry (the registry bijection gate proves it). Keep in lockstep with
 // the `--- verb discriminators ---` group in #Op.
 #OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" |
-	"wl" | "dbus" | "vnc" |
+	"wl" | "dbus" |
 	"summarize" | "kill" | "plugin") @go(-)
 
 // ---------------------------------------------------------------------------
@@ -68,6 +68,18 @@
 	cdp?:            #CdpMethod
 	wl?:             #WlMethod
 	dbus?:           #DbusMethod
+	// `vnc` is an EXTERNAL-CHARLY-VERB: its RFB/VNC client (the stdlib-only RFC 6143 VNC
+	// client — VeNCrypt/TLS + ZRLE decode + the status/screenshot/click/mouse/type/key/rfb
+	// dispatch layer) lives in the out-of-tree candy/plugin-vnc module, served
+	// OUT-OF-PROCESS. Like cdp/mcp/spice (and unlike file/package/service/command, which
+	// left #Op entirely, re-authored as `plugin: <verb>`), vnc KEEPS its `vnc:` discriminator
+	// + every modifier (x/y/text/key/artifact/method/params) on this closed #Op — authoring
+	// is unchanged (`vnc: status`, not `plugin: vnc`). It therefore left
+	// #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc CheckVerbProvider to gate) BUT keeps this
+	// field + #VncMethod here, so `vnc: status` still validates against the method enum and
+	// VerbsSet still classifies the op (then dispatch resolves the registered external
+	// provider, after the host pre-resolves the deployment's VNC endpoint — container port
+	// 5900 or a VM's libvirt display — to a host-reachable RFB address).
 	vnc?:            #VncMethod
 	// `mcp` is an EXTERNAL-CHARLY-VERB: its MCP-protocol client implementation (the
 	// github.com/modelcontextprotocol/go-sdk client + the dial/dispatch/format layer)
@@ -365,7 +377,7 @@
 #CdpMethod:     ("status" | "list" | "url" | "text" | "html" | "eval" | "axtree" | "coords" | "raw" | "wait" | "screenshot" | "open" | "close" | "click" | "type" | "spa-status" | "spa-click" | "spa-type" | "spa-key" | "spa-key-combo" | "spa-mouse") @go(-)
 #WlMethod:      "status" | "toplevel" | "windows" | "geometry" | "xprop" | "atspi" | "screenshot" | "clipboard" | "click" | "double-click" | "mouse" | "scroll" | "drag" | "type" | "key" | "key-combo" | "focus" | "close" | "fullscreen" | "minimize" | "exec" | "resolution" | "overlay-list" | "overlay-status" | "overlay-show" | "overlay-hide" | "sway-tree" | "sway-workspaces" | "sway-outputs" | "sway-msg" | "sway-focus" | "sway-move" | "sway-resize" | "sway-layout" | "sway-workspace" | "sway-kill" | "sway-floating" | "sway-reload" @go(-)
 #DbusMethod:    "list" | "call" | "introspect" | "notify" @go(-)
-#VncMethod:     "status" | "screenshot" | "click" | "mouse" | "type" | "key" | "rfb" | "passwd" @go(-)
+#VncMethod:     "status" | "screenshot" | "click" | "mouse" | "type" | "key" | "rfb" @go(-)
 #McpMethod:     "ping" | "servers" | "list-tools" | "list-resources" | "list-prompts" | "call" | "read" @go(-)
 #RecordMethod:  "list" | "start" | "stop" | "cmd" @go(-)
 #SpiceMethod:   "status" | "screenshot" | "cursor" | "click" | "mouse" | "type" | "key" @go(-)

@@ -191,8 +191,8 @@ func filterHostVars(missing []string) []string {
 // / local, the same classifier the interactive verbs use) plus a best-effort
 // runtime var resolver (the driver's own ${HOST_PORT}/${CONTAINER_IP}). The
 // per-step swap in checkrun.go also sets r.Image = <driver> so the host-side
-// cdp/wl/vnc/mcp verb dispatch connects to the driver's endpoint (cdp/mcp via their
-// out-of-process plugins, wl/vnc in-core). ${HOST:<member>} addressing of the
+// cdp/wl/vnc/mcp verb dispatch connects to the driver's endpoint (cdp/vnc/mcp via their
+// out-of-process plugins, wl in-core). ${HOST:<member>} addressing of the
 // SUBJECT rides in via
 // Runner.HostVars (effectiveEnv overlay), independent of which resolver is active.
 func liveTargetResolver(instance string) func(string) (*CheckVarResolver, DeployExecutor, error) {

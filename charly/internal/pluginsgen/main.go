@@ -112,7 +112,7 @@ func generate(root, cfg string) (genGo, genWork []byte, err error) {
 			switch e.shape {
 			case "live":
 				// live-verb shape: host-coupled SCHEMA-LESS live-container verb
-				// (wl/vnc/dbus) — register through the dedicated
+				// (wl/dbus) — register through the dedicated
 				// (schema-less) path, the registerDedicatedBuiltin analogue.
 				fmt.Fprintf(&g, "\tregisterCompiledDedicatedVerb(%s.NewLiveVerb())\n", e.alias)
 			case "kit":
@@ -224,7 +224,7 @@ func requirePluginBlock(path string) error {
 // detectShape reports a candy's plugin shape from a textual scan of its Go at codegen
 // time (never runtime; avoids importing the candy module, keeping pluginsgen stdlib+yaml
 // only): "live" if it exports `func NewLiveVerb(` (a host-coupled SCHEMA-LESS live-container
-// verb — wl/vnc/dbus), "kit" if it exports `func NewCheckVerb(` (a
+// verb — wl/dbus), "kit" if it exports `func NewCheckVerb(` (a
 // host-coupled check verb WITH a schema), else "pb" (a dual-placement NewProvider/NewMeta
 // plugin). NewLiveVerb takes precedence — a candy carrying both is a live verb.
 func detectShape(candyDir string) (string, error) {

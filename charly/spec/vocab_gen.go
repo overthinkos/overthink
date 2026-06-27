@@ -253,7 +253,6 @@ var OpVerbs = []string{
 	"build",
 	"wl",
 	"dbus",
-	"vnc",
 	"summarize",
 	"kill",
 	"plugin",
@@ -392,5 +391,4 @@ var AuthoringVerbs = []string{
 var LiveVerbMethods = map[string][]string{
 	"wl":   {"status", "toplevel", "windows", "geometry", "xprop", "atspi", "screenshot", "clipboard", "click", "double-click", "mouse", "scroll", "drag", "type", "key", "key-combo", "focus", "close", "fullscreen", "minimize", "exec", "resolution", "overlay-list", "overlay-status", "overlay-show", "overlay-hide", "sway-tree", "sway-workspaces", "sway-outputs", "sway-msg", "sway-focus", "sway-move", "sway-resize", "sway-layout", "sway-workspace", "sway-kill", "sway-floating", "sway-reload"},
 	"dbus": {"list", "call", "introspect", "notify"},
-	"vnc":  {"status", "screenshot", "click", "mouse", "type", "key", "rfb", "passwd"},
 }

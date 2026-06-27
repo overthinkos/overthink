@@ -597,8 +597,9 @@ getprop`, `appium: click`, …):
 - `charly check wl` — Wayland / sway / labwc automation; `wl overlay`
   for fullscreen recording overlays.
 - `charly check dbus` — D-Bus method calls and signal subscriptions.
-- `charly check vnc` — RFB handshake, pointer/keyboard, clipboard,
-  screenshot.
+- `vnc:` — RFB/VNC declarative check verb (status, screenshot,
+  pointer/keyboard) — out-of-process plugin (`candy/plugin-vnc`), no host CLI
+  subcommand; covers pod (port 5900) AND vm (libvirt VNC) targets.
 - `mcp:` — Model Context Protocol declarative check verb (list-tools,
   list-resources, read-resource, call-tool) — out-of-process plugin
   (`candy/plugin-mcp`), no host CLI subcommand.

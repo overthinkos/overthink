@@ -53,6 +53,12 @@ type CLI struct {
 	Candy    CandyCmd          `cmd:"" name:"candy" help:"Edit candy.yml files in the project's candy/ directory"`
 	Plugin   PluginInternalCmd `cmd:"" name:"__plugin" hidden:"" help:"internal: plugin server/relay plumbing"`
 	CliModel CliModelCmd       `cmd:"" name:"__cli-model" hidden:"" help:"internal: emit the CLI command tree as JSON (sdk.CLIModel) for the out-of-process MCP bridge"`
+
+	// __plugin-providers prints a candy's plugin.providers (one <class>:<word> per line) —
+	// the single source the PKGBUILD uses to bake the host /usr/lib/charly/plugins/.providers
+	// manifest from the candy declaration (so the CLI-served command:secrets word, absent from
+	// the gRPC Describe, is not missed). Reuses collectPluginProviders (R3).
+	PluginProviders PluginProvidersCmd `cmd:"" name:"__plugin-providers" hidden:"" help:"internal: print a candy's plugin.providers (one <class>:<word> per line)"`
 	Migrate  MigrateCmd        `cmd:"" help:"Migrate any opencharly config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
 	Settings SettingsCmd       `cmd:"" help:"Manage runtime configuration (get/set/list)"`
 	// Every non-machinery command — the deploy-lifecycle + leaf-domain set (alias, tmux,
@@ -614,12 +620,11 @@ func (c *NewCandyCmd) Run() error {
 
 // SettingsCmd groups settings subcommands (renamed from ConfigCmd to free `charly config` for image configuration).
 type SettingsCmd struct {
-	Get            SettingsGetCmd          `cmd:"" help:"Print resolved value for a config key"`
-	List           SettingsListCmd         `cmd:"" help:"Show all settings with source"`
-	MigrateSecrets ConfigMigrateSecretsCmd `cmd:"migrate-secrets" help:"Migrate plaintext credentials from config.yml to system keyring"`
-	Path           SettingsPathCmd         `cmd:"" help:"Print config file path"`
-	Reset          SettingsResetCmd        `cmd:"" help:"Remove a key from config (revert to default)"`
-	Set            SettingsSetCmd          `cmd:"" help:"Set a config value"`
+	Get   SettingsGetCmd   `cmd:"" help:"Print resolved value for a config key"`
+	List  SettingsListCmd  `cmd:"" help:"Show all settings with source"`
+	Path  SettingsPathCmd  `cmd:"" help:"Print config file path"`
+	Reset SettingsResetCmd `cmd:"" help:"Remove a key from config (revert to default)"`
+	Set   SettingsSetCmd   `cmd:"" help:"Set a config value"`
 }
 
 // SettingsGetCmd prints the resolved value for a key

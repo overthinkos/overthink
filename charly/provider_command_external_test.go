@@ -20,8 +20,8 @@ func TestExternalCommandExecPlan_PassthroughArgs(t *testing.T) {
 	const word = "zzexeccmd"
 	// Make the strip non-trivial: set the cookie, then assert it is absent from the exec env.
 	t.Setenv(sdk.Handshake.MagicCookieKey, sdk.Handshake.MagicCookieValue)
-	bakedCommandBinaries[word] = "/fake/plugins/" + word
-	defer delete(bakedCommandBinaries, word)
+	bakedPluginBinaries[provKey(ClassCommand, word)] = "/fake/plugins/" + word
+	defer delete(bakedPluginBinaries, provKey(ClassCommand, word))
 
 	field := exportedCommandField(word)
 	holder := externalCommandHolder(word, field)
@@ -62,8 +62,8 @@ func TestExternalCommandExecPlan_PassthroughArgs(t *testing.T) {
 // args.
 func TestExternalCommandExecPlan_NestedCheckCommand(t *testing.T) {
 	const word = "zzexecnested"
-	bakedCommandBinaries[word] = "/fake/plugins/" + word
-	defer delete(bakedCommandBinaries, word)
+	bakedPluginBinaries[provKey(ClassCommand, word)] = "/fake/plugins/" + word
+	defer delete(bakedPluginBinaries, provKey(ClassCommand, word))
 
 	field := exportedCommandField(word)
 	holder := externalCommandHolder(word, field)

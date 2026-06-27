@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -727,57 +726,54 @@ func managerShort(manager string) string {
 	return manager
 }
 
-// secretStorageChecks returns checks for the credential/secret storage subsystem.
+// secretStorageChecks returns checks for the credential/secret storage subsystem. The
+// keyring + Secret Service probing lives OUT-OF-PROCESS in candy/plugin-secrets now (the
+// go-keyring dep-shed); this renders DoctorCheckResults from the verb:credential `health`
+// reply (credentialHealth). The config-file PERMISSIONS check stays in core (core owns
+// ~/.config/charly/config.yml).
 func secretStorageChecks() []DoctorCheckResult {
 	var checks []DoctorCheckResult
 
-	// Check 1: Secret backend availability
-	kr := &KeyringStore{}
-	if err := kr.Probe(); err == nil {
-		checks = append(checks, DoctorCheckResult{
-			Name:    "Secret backend",
-			Status:  CheckOK,
-			Version: "system keyring",
+	h, err := credentialHealth()
+	if err != nil || h == nil {
+		return append(checks, DoctorCheckResult{
+			Name:        "Secret backend",
+			Status:      CheckWarning,
+			Detail:      fmt.Sprintf("credential plugin unavailable: %v", err),
+			InstallHint: "Install candy/plugin-secrets alongside charly (/usr/lib/charly/plugins), or run from a project composing it",
 		})
-	} else {
-		state := GetKeyringState()
-		backend := resolveSecretBackend()
-		switch {
-		case state == KeyringLocked:
-			checks = append(checks, DoctorCheckResult{
-				Name:        "Secret backend",
-				Status:      CheckWarning,
-				Version:     "system keyring (LOCKED)",
-				Detail:      "keyring is locked — credentials unavailable until unlocked",
-				InstallHint: "Unlock your keyring, or run: charly config set secret_backend config",
-			})
-		case backend == "config":
-			checks = append(checks, DoctorCheckResult{
-				Name:    "Secret backend",
-				Status:  CheckOK,
-				Version: "config file (explicit)",
-			})
-		default:
-			checks = append(checks, DoctorCheckResult{
-				Name:        "Secret backend",
-				Status:      CheckWarning,
-				Detail:      "config file (no keyring available)",
-				InstallHint: "Install gnome-keyring or keepassxc for secure credential storage, or run: charly config set secret_backend config",
-			})
-		}
 	}
 
-	// Check 2: Config file permissions
-	configPath, err := RuntimeConfigPath()
-	if err == nil {
+	// Check 1: Secret backend availability
+	switch {
+	case h.KeyringAvailable && !h.KeyringLocked:
+		checks = append(checks, DoctorCheckResult{Name: "Secret backend", Status: CheckOK, Version: "system keyring"})
+	case h.KeyringLocked:
+		checks = append(checks, DoctorCheckResult{
+			Name:        "Secret backend",
+			Status:      CheckWarning,
+			Version:     "system keyring (LOCKED)",
+			Detail:      "keyring is locked — credentials unavailable until unlocked",
+			InstallHint: "Unlock your keyring, or run: charly settings set secret_backend config",
+		})
+	case h.ConfiguredBackend == "config":
+		checks = append(checks, DoctorCheckResult{Name: "Secret backend", Status: CheckOK, Version: "config file (explicit)"})
+	default:
+		checks = append(checks, DoctorCheckResult{
+			Name:        "Secret backend",
+			Status:      CheckWarning,
+			Detail:      "config file (no keyring available)",
+			InstallHint: "Install gnome-keyring or keepassxc for secure credential storage, or run: charly settings set secret_backend config",
+		})
+	}
+
+	// Check 2: Config file permissions (core owns config.yml).
+	configPath, perr := RuntimeConfigPath()
+	if perr == nil {
 		if info, statErr := os.Stat(configPath); statErr == nil {
 			perm := info.Mode().Perm()
 			if perm&0077 == 0 {
-				checks = append(checks, DoctorCheckResult{
-					Name:    "Config permissions",
-					Status:  CheckOK,
-					Version: fmt.Sprintf("%04o", perm),
-				})
+				checks = append(checks, DoctorCheckResult{Name: "Config permissions", Status: CheckOK, Version: fmt.Sprintf("%04o", perm)})
 			} else {
 				checks = append(checks, DoctorCheckResult{
 					Name:        "Config permissions",
@@ -790,148 +786,77 @@ func secretStorageChecks() []DoctorCheckResult {
 	}
 
 	// Check 3: Plaintext credentials count
-	cfg, err := LoadRuntimeConfig()
-	if err == nil {
-		count := HasPlaintextCredentials(cfg)
-		if count == 0 {
-			checks = append(checks, DoctorCheckResult{
-				Name:    "Plaintext credentials",
-				Status:  CheckOK,
-				Version: "0",
-			})
-		} else {
-			checks = append(checks, DoctorCheckResult{
-				Name:        "Plaintext credentials",
-				Status:      CheckWarning,
-				Detail:      fmt.Sprintf("%d in config.yml", count),
-				InstallHint: "Run: charly config migrate-secrets --dry-run",
-			})
-		}
+	if h.PlaintextCount == 0 {
+		checks = append(checks, DoctorCheckResult{Name: "Plaintext credentials", Status: CheckOK, Version: "0"})
+	} else {
+		checks = append(checks, DoctorCheckResult{
+			Name:        "Plaintext credentials",
+			Status:      CheckWarning,
+			Detail:      fmt.Sprintf("%d in config.yml", h.PlaintextCount),
+			InstallHint: "Run: charly secrets migrate-secrets --dry-run",
+		})
 	}
 
-	// Check 4: Secret Service collection health (defect G).
-	// Iterates the secret service provider's collections and flags any that
-	// fail on property reads. This catches the class of bug where
-	// KeePassXC's FdoSecrets plugin advertises a stub collection that routes
-	// I/O errors for every method call — the real credentials are in a
-	// sibling collection but the default alias points at the stub.
-	checks = append(checks, checkKeyringHealth()...)
-
-	// Check 5: Keyring shadow index consistency (defect G + H).
-	// Cross-checks the config.yml KeyringKeys shadow index against reality:
-	// every indexed key should actually be retrievable via the secret service.
-	// If not, the index is out of sync and should be pruned.
-	checks = append(checks, checkKeyringIndexConsistency()...)
-
+	// Check 4: Secret Service collection health + Check 5: shadow index consistency.
+	checks = append(checks, keyringCollectionChecks(h)...)
+	checks = append(checks, keyringIndexChecks(h)...)
 	return checks
 }
 
-// checkKeyringHealth probes each Secret Service collection and reports
-// healthy/broken counts. Returns one DoctorCheckResult per distinguishable state.
-// Skips silently (returns nil) if there's no session bus or no collections
-// — those cases are already handled by "Secret backend" above.
-func checkKeyringHealth() []DoctorCheckResult {
-	c, err := newSSClient()
-	if err != nil {
-		// No session bus — already covered by "Secret backend" check. Skip.
-		return nil
-	}
-	defer c.close()
-
-	paths, err := c.collections()
-	if err != nil {
+// keyringCollectionChecks renders the Secret Service collection-health DoctorCheckResult
+// from the plugin's health reply. Skips silently when there's no session bus / no
+// collections (already covered by "Secret backend" above).
+func keyringCollectionChecks(h *CredentialHealth) []DoctorCheckResult {
+	if h.CollErr != "" {
 		return []DoctorCheckResult{{
 			Name:        "Secret Service collections",
 			Status:      CheckWarning,
-			Detail:      fmt.Sprintf("cannot list collections: %v", err),
+			Detail:      fmt.Sprintf("cannot list collections: %s", h.CollErr),
 			InstallHint: "Check that your Secret Service provider (gnome-keyring, keepassxc) is running correctly",
 		}}
 	}
-	if len(paths) == 0 {
-		// Also already covered upstream. Skip.
+	if h.NoSession {
 		return nil
 	}
-
-	var healthy, broken []string
-	for _, p := range paths {
-		if err := c.isCollectionHealthy(p); err != nil {
-			broken = append(broken, string(p))
-		} else {
-			label := c.collectionLabel(p)
-			if label != "" {
-				healthy = append(healthy, fmt.Sprintf("%q", label))
-			} else {
-				healthy = append(healthy, string(p))
-			}
-		}
-	}
-
-	if len(broken) == 0 {
+	if len(h.BrokenColls) == 0 {
 		return []DoctorCheckResult{{
 			Name:    "Secret Service collections",
 			Status:  CheckOK,
-			Version: fmt.Sprintf("%d healthy", len(healthy)),
-			Detail:  strings.Join(healthy, ", "),
+			Version: fmt.Sprintf("%d healthy", len(h.HealthyColls)),
+			Detail:  strings.Join(h.HealthyColls, ", "),
 		}}
 	}
 	return []DoctorCheckResult{{
-		Name:   "Secret Service collections",
-		Status: CheckWarning,
-		Version: fmt.Sprintf("%d healthy + %d broken",
-			len(healthy), len(broken)),
+		Name:    "Secret Service collections",
+		Status:  CheckWarning,
+		Version: fmt.Sprintf("%d healthy + %d broken", len(h.HealthyColls), len(h.BrokenColls)),
 		Detail: fmt.Sprintf(
 			"charly will iterate and skip broken. Broken: %s. Healthy: %s",
-			strings.Join(broken, ", "),
-			strings.Join(healthy, ", ")),
+			strings.Join(h.BrokenColls, ", "), strings.Join(h.HealthyColls, ", ")),
 		InstallHint: "Consider cleaning stale entries in your Secret Service provider (e.g. KeePassXC → Tools → Settings → Secret Service Integration → Exposed Databases)",
 	}}
 }
 
-// checkKeyringIndexConsistency cross-checks the config.yml KeyringKeys
-// shadow index against what the secret service can actually return. Entries
-// in the index that are NOT present in any collection indicate that the
-// keyring has drifted — the user may need to re-store those credentials or
-// prune the stale index entries.
-func checkKeyringIndexConsistency() []DoctorCheckResult {
-	cfg, err := LoadRuntimeConfig()
-	if err != nil || len(cfg.KeyringKeys) == 0 {
+// keyringIndexChecks renders the config.yml KeyringKeys shadow-index consistency
+// DoctorCheckResult from the plugin's health reply (indexed entries not retrievable from
+// any collection indicate drift).
+func keyringIndexChecks(h *CredentialHealth) []DoctorCheckResult {
+	if h.IndexTotal == 0 {
 		return nil
 	}
-	c, err := newSSClient()
-	if err != nil {
-		// No session bus — can't check. Not a failure, just skip.
-		return nil
-	}
-	defer c.close()
-
-	var missing []string
-	for _, entry := range cfg.KeyringKeys {
-		// Index entries are stored as "<service>/<key>" where <service> may
-		// contain slashes (e.g. "charly/enc/immich-ml" = service:"charly/enc",
-		// key:"immich-ml"). Reuse the canonical split from credential_config.
-		service, key := parseCompositeKey(entry)
-		if service == "" || key == "" {
-			continue
-		}
-		_, _, ferr := c.findItemAnyCollection(service, key, cfg.KeyringCollectionLabel)
-		if ferr != nil && errors.Is(ferr, ErrSSNotFound) {
-			missing = append(missing, entry)
-		}
-	}
-	if len(missing) == 0 {
+	if len(h.IndexMissing) == 0 {
 		return []DoctorCheckResult{{
 			Name:    "Keyring index consistency",
 			Status:  CheckOK,
-			Version: fmt.Sprintf("%d/%d", len(cfg.KeyringKeys), len(cfg.KeyringKeys)),
+			Version: fmt.Sprintf("%d/%d", h.IndexTotal, h.IndexTotal),
 		}}
 	}
 	return []DoctorCheckResult{{
 		Name:    "Keyring index consistency",
 		Status:  CheckWarning,
-		Version: fmt.Sprintf("%d indexed, %d missing", len(cfg.KeyringKeys), len(missing)),
+		Version: fmt.Sprintf("%d indexed, %d missing", h.IndexTotal, len(h.IndexMissing)),
 		Detail: fmt.Sprintf(
-			"indexed but not found in any collection: %s",
-			strings.Join(missing, ", ")),
+			"indexed but not found in any collection: %s", strings.Join(h.IndexMissing, ", ")),
 		InstallHint: "Re-store with `charly secrets set <service> <key>` or prune stale index entries",
 	}}
 }

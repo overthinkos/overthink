@@ -179,7 +179,7 @@ func externalCommandArgs(d externalCommandDispatch) []string {
 // command:<word> and its binary is resolved the SAME way the loader does (resolvePluginBinary:
 // baked-by-leaf if present, else host-built from source).
 func resolveCommandPluginBinary(ctx context.Context, word string) (string, error) {
-	if bin, ok := bakedCommandBinaries[word]; ok {
+	if bin, ok := bakedPluginBinaries[provKey(ClassCommand, word)]; ok {
 		return bin, nil
 	}
 	dir, err := os.Getwd()

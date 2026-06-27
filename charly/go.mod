@@ -9,7 +9,6 @@ require (
 	github.com/google/go-containerregistry v0.20.7
 	github.com/hashicorp/go-plugin v1.8.0
 	github.com/overthinkos/overthink/candy/plugin-example-external v0.0.0-20260625134322-595471add643
-	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.49.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.42.0
@@ -22,7 +21,6 @@ require (
 require (
 	github.com/cockroachdb/apd/v3 v3.2.1 // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.18.1 // indirect
-	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/docker/cli v29.0.3+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect

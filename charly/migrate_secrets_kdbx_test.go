@@ -116,37 +116,6 @@ func TestLoadRuntimeConfig_CleanConfigOK(t *testing.T) {
 	}
 }
 
-// TestSecretsCLI_ConfigBackendRoundTrip exercises the retargeted (non-kdbx)
-// `charly secrets set` path against the config-file backend and confirms the value
-// is retrievable through the active store and enumerable via the list helper.
-func TestSecretsCLI_ConfigBackendRoundTrip(t *testing.T) {
-	cleanup := setupIsolatedConfigStore(t)
-	defer cleanup()
-
-	set := &SecretsSetCmd{Service: "charly/secret", Key: "R10_PROBE", Value: "hello"}
-	if err := set.Run(); err != nil {
-		t.Fatalf("set: %v", err)
-	}
-
-	val, err := DefaultCredentialStore().Get("charly/secret", "R10_PROBE")
-	if err != nil {
-		t.Fatalf("get: %v", err)
-	}
-	if val != "hello" {
-		t.Errorf("round-trip value = %q, want %q", val, "hello")
-	}
-
-	names, err := collectCredentialNames()
-	if err != nil {
-		t.Fatalf("collectCredentialNames: %v", err)
-	}
-	found := false
-	for _, n := range names {
-		if n.Service == "charly/secret" && n.Key == "R10_PROBE" {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("collectCredentialNames did not include the stored credential: %+v", names)
-	}
-}
+// The `charly secrets set` config-backend round-trip test moved to candy/plugin-secrets
+// (command_test.go) along with the SecretsSetCmd + collectCredentialNames it exercises —
+// the secrets CLI is externalized now (the go-keyring dep-shed).

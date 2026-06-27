@@ -40,8 +40,8 @@ func TestCommandPrescan_RegisterAndCollect(t *testing.T) {
 // path `charly mcp serve` takes inside the charly-mcp service container.
 func TestResolveCommandPluginBinary_Baked(t *testing.T) {
 	const word = "zzbakedcmd"
-	bakedCommandBinaries[word] = "/usr/lib/charly/plugins/" + word
-	defer delete(bakedCommandBinaries, word)
+	bakedPluginBinaries[provKey(ClassCommand, word)] = "/usr/lib/charly/plugins/" + word
+	defer delete(bakedPluginBinaries, provKey(ClassCommand, word))
 
 	bin, err := resolveCommandPluginBinary(context.Background(), word)
 	if err != nil {

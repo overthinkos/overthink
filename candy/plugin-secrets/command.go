@@ -8,9 +8,56 @@ import (
 	"os"
 	"strings"
 
+	"github.com/alecthomas/kong"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
+
+	"github.com/overthinkos/overthink/charly/vmshared"
 )
+
+// command.go is the command:secrets leg of this plugin — the externalized `charly
+// secrets …` CLI, ported OUT of charly's core (the deleted charly/secrets_cmd.go +
+// plugin_command_secrets.go) so the go-keyring credential store + the Secret Service
+// client no longer link into the core binary (the C2 dep-shed). It is the COMMAND-class
+// companion of this same module's verb:credential store-backend verb.
+//
+// Dispatch contract (charly/provider_command_external.go dispatchExternalCommand): on
+// `charly secrets <args…>`, charly RESOLVES this plugin's binary and syscall.Exec's it
+// with the pass-through tokens after the `secrets` word, in CLI mode (the go-plugin
+// handshake cookie is stripped, so sdk.Main runs cliMain instead of serving gRPC). The
+// plugin therefore owns real terminal stdio/TTY — secure password prompts
+// (term.ReadPassword), $EDITOR for `secrets gpg edit`, and live `gpg` shell-outs all
+// reach the real terminal.
+
+// cliMain is the CLI-mode entry point (sdk.Main calls it when charly syscall.Exec'd this
+// plugin as a command passthrough). It parses the pass-through tokens against
+// SecretsCmdGroup and dispatches the selected command via kctx.Run(). Returns the process
+// exit code.
+func cliMain(args []string) int {
+	// Arm the temp-file kill-survivability signal handler so a Ctrl-C during `secrets gpg
+	// edit` / `decrypt` (which stage a plaintext temp) still reaps the RegisterTempCleanup'd
+	// file (the graceful-exit defer covers normal exit; this covers SIGINT/SIGTERM/SIGHUP).
+	vmshared.InstallSignalHandler()
+	var grp SecretsCmdGroup
+	parser, err := kong.New(&grp,
+		kong.Name("secrets"),
+		kong.Description("charly secrets — credential store (Secret Service / config) + GPG-encrypted .secrets files"),
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "plugin-secrets: build kong parser: %v\n", err)
+		return 1
+	}
+	kctx, err := parser.Parse(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "plugin-secrets: parse `charly secrets %v`: %v\n", args, err)
+		return 1
+	}
+	if err := kctx.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "charly secrets: %v\n", err)
+		return 1
+	}
+	return 0
+}
 
 // SecretsCmdGroup groups `charly secrets` subcommands. The plain (non-gpg)
 // subcommands operate on the active credential store resolved by
@@ -19,13 +66,14 @@ import (
 // headless hosts. The `gpg` subgroup manages GPG-encrypted .secrets files
 // and is independent of the credential store.
 type SecretsCmdGroup struct {
-	Delete SecretsDeleteCmd `cmd:"" help:"Delete a credential from the active store"`
-	Export SecretsExportCmd `cmd:"" help:"Export all charly credentials to stdout (plaintext!)"`
-	Get    SecretsGetCmd    `cmd:"" help:"Get a credential value"`
-	Gpg    SecretsGpgCmd    `cmd:"" help:"Manage GPG-encrypted .secrets environment files"`
-	Import SecretsImportCmd `cmd:"" help:"Import plaintext config + keyring credentials into the active store"`
-	List   SecretsListCmd   `cmd:"" help:"List all charly credentials in the active store"`
-	Set    SecretsSetCmd    `cmd:"" help:"Set a credential"`
+	Delete         SecretsDeleteCmd        `cmd:"" help:"Delete a credential from the active store"`
+	Export         SecretsExportCmd        `cmd:"" help:"Export all charly credentials to stdout (plaintext!)"`
+	Get            SecretsGetCmd           `cmd:"" help:"Get a credential value"`
+	Gpg            SecretsGpgCmd           `cmd:"" help:"Manage GPG-encrypted .secrets environment files"`
+	Import         SecretsImportCmd        `cmd:"" help:"Import plaintext config + keyring credentials into the active store"`
+	List           SecretsListCmd          `cmd:"" help:"List all charly credentials in the active store"`
+	MigrateSecrets ConfigMigrateSecretsCmd `cmd:"migrate-secrets" help:"Migrate plaintext credentials from config.yml to system keyring"`
+	Set            SecretsSetCmd           `cmd:"" help:"Set a credential"`
 }
 
 // --- List ---

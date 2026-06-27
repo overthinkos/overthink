@@ -1,26 +1,15 @@
 package main
 
 import (
-	"path/filepath"
 	"testing"
 )
 
-// setupIsolatedConfigStore wires a test-isolated ConfigFileStore-backed
-// credential store. Returns a teardown func; defer it. Mirrors the
-// pattern in credential_store_test.go but specialised for the new
-// candy-secrets tests so each one starts with an empty store.
+// setupIsolatedConfigStore wires a test-isolated in-memory credential store (the real
+// store is out-of-process in candy/plugin-secrets now). Returns a teardown func; defer it.
 func setupIsolatedConfigStore(t *testing.T) (cleanup func()) {
 	t.Helper()
-	dir := t.TempDir()
-	RuntimeConfigPath = func() (string, error) {
-		return filepath.Join(dir, "config.yml"), nil
-	}
-	t.Setenv("CHARLY_SECRET_BACKEND", "config")
-	resetDefaultStore()
-	return func() {
-		RuntimeConfigPath = defaultRuntimeConfigPath
-		resetDefaultStore()
-	}
+	setDefaultCredentialStoreForTest(newFakeCredentialStore())
+	return resetDefaultCredentialStoreForTest
 }
 
 // TestEnsureCandySecret_PresentInStore verifies that a value already

@@ -46,12 +46,12 @@ func TestCommandSeam_PluginCommandInjected(t *testing.T) {
 }
 
 // TestCommandProviders_ExtractedLeafCommands proves every leaf-domain command extracted
-// into a dedicated COMMAND-class provider (alias/tmux/ssh/secrets/preempt/mcp — the udev
-// batch siblings) is (1) registered in providerRegistry as a CommandProvider with the
-// matching Reserved() word, and (2) collected by collectCommandPlugins() and injected
-// into the REAL charly CLI grammar via kong.Plugins, so its subcommand path parses and
-// selects exactly as before the extraction. The test FAILS if any dedicated registration
-// regresses or the command seam stops wiring one of them into the root.
+// into a dedicated COMMAND-class provider (alias/tmux/ssh/preempt — the udev batch
+// siblings) is (1) registered in providerRegistry as a CommandProvider with the matching
+// Reserved() word, and (2) collected by collectCommandPlugins() and injected into the REAL
+// charly CLI grammar via kong.Plugins, so its subcommand path parses and selects exactly as
+// before the extraction. The test FAILS if any dedicated registration regresses or the
+// command seam stops wiring one of them into the root.
 func TestCommandProviders_ExtractedLeafCommands(t *testing.T) {
 	cases := []struct {
 		word     string   // Reserved() + top-level command name
@@ -61,10 +61,10 @@ func TestCommandProviders_ExtractedLeafCommands(t *testing.T) {
 		{"alias", []string{"alias", "list"}, "alias list"},
 		{"tmux", []string{"tmux", "list", "mybox"}, "tmux list <box>"},
 		{"ssh", []string{"ssh", "tunnel", "spice", "myvm"}, "ssh tunnel spice <vm>"},
-		{"secrets", []string{"secrets", "list"}, "secrets list"},
 		{"preempt", []string{"preempt", "status"}, "preempt status"},
-		// `mcp` is intentionally absent: `charly mcp serve` is now an EXTERNAL command
-		// served out-of-process by candy/plugin-mcp (C1), not a builtin CommandProvider.
+		// `mcp` and `secrets` are intentionally absent: `charly mcp serve` (C1) and
+		// `charly secrets …` (C2) are now EXTERNAL commands served out-of-process by
+		// candy/plugin-mcp / candy/plugin-secrets, not builtin CommandProviders.
 	}
 	for _, tc := range cases {
 		t.Run(tc.word, func(t *testing.T) {
@@ -269,12 +269,15 @@ func TestCommandProviders_CheckNestedPluginsInjected(t *testing.T) {
 // does not expose "start an MCP server" as one of its own tools).
 func TestCommandProviders_ExtractedReachMCP(t *testing.T) {
 	paths := cliModelLeafPaths(t)
-	for _, name := range []string{"alias.list", "tmux.list", "secrets.list", "preempt.status"} {
+	for _, name := range []string{"alias.list", "tmux.list", "preempt.status"} {
 		if !paths[name] {
 			t.Errorf("%s missing from the CLI model after extracting its command into a CommandProvider", name)
 		}
 	}
 	if paths["mcp.serve"] {
 		t.Error("mcp.serve unexpectedly present in the builtin CLI model — `mcp` is now an external command (candy/plugin-mcp), not a builtin CommandProvider")
+	}
+	if paths["secrets.list"] {
+		t.Error("secrets.list unexpectedly present in the builtin CLI model — `secrets` is now an external command (candy/plugin-secrets), not a builtin CommandProvider")
 	}
 }

@@ -280,21 +280,26 @@ func bakedPluginBinary(name string) string {
 	return ""
 }
 
-// bakedCommandBinaries maps a baked plugin's COMMAND word → its binary path, populated by
-// discoverBakedPluginWords from the `.providers` manifests baked beside each binary. It lets
-// dispatchExternalCommand (resolveCommandPluginBinary) fork/exec a baked command plugin in a
-// deployed container that has NO candy source to scan (the charly-mcp service's `charly mcp
-// serve` is the motivating case).
-var bakedCommandBinaries = map[string]string{}
+// bakedPluginBinaries maps a baked plugin's provider KEY (class:word, e.g. "command:mcp" or
+// "verb:credential") → its binary path, populated by discoverBakedPluginWords from the
+// `.providers` manifests baked beside each binary. It lets connectBakedPlugin connect a baked
+// COMMAND plugin (the charly-mcp service's `charly mcp serve`) OR a baked VERB plugin (the
+// credential store's verb:credential, served by candy/plugin-secrets) in a deployed container
+// — or on a host where the plugin is installed alongside the charly binary
+// (/usr/lib/charly/plugins) — that has NO candy source to scan. Keyed by class:word (not by
+// bare word) because a word may exist in two classes; the lazy-connect resolves on (class, word).
+var bakedPluginBinaries = map[string]string{}
 
 // discoverBakedPluginWords reads the `.providers` word manifests baked beside each plugin
-// binary (bake_plugin:) and registers their declared external COMMAND words into the kong
-// grammar (registerDeclaredExternalCommand) — CHEAPLY, WITHOUT connecting any plugin. It also
-// records word → baked-binary in bakedCommandBinaries, so dispatchExternalCommand can
-// syscall.Exec the baked binary directly (a deployed container has no project to scan). So the
-// in-container charly recognizes `charly <word>` for a baked command. A NO-OP when no plugins
-// are baked (the dev-host / from-source case): the dirs are absent or hold no `.providers`
-// files, and every existing charly invocation is byte-for-byte unchanged.
+// binary (bake_plugin:, or a host install into /usr/lib/charly/plugins) and registers their
+// declared external COMMAND words into the kong grammar (registerDeclaredExternalCommand) AND
+// their external VERB words (registerDeclaredExternalVerb) — CHEAPLY, WITHOUT connecting any
+// plugin (the connect is lazy, on the first dispatch / ResolveVerb miss, via connectBakedPlugin).
+// It records class:word → baked-binary in bakedPluginBinaries, so a deployed container (or a
+// project-less host where the plugin is installed beside charly) recognizes `charly <word>` for
+// a baked command AND resolves verb:<word> for a baked verb (the credential store). A NO-OP when
+// no plugins are baked (the dev-host / from-source case): the dirs are absent or hold no
+// `.providers` files, and every existing charly invocation is byte-for-byte unchanged.
 func discoverBakedPluginWords() {
 	for _, dir := range bakedPluginDirs() {
 		entries, err := os.ReadDir(dir)
@@ -312,14 +317,99 @@ func discoverBakedPluginWords() {
 			binPath := filepath.Join(dir, strings.TrimSuffix(e.Name(), ".providers"))
 			for _, line := range strings.Split(string(data), "\n") {
 				class, word, ok := splitCapability(strings.TrimSpace(line))
-				if !ok || class != ClassCommand {
+				if !ok {
 					continue
 				}
-				registerDeclaredExternalCommand(word)
-				bakedCommandBinaries[word] = binPath
+				switch class {
+				case ClassCommand:
+					registerDeclaredExternalCommand(word)
+				case ClassVerb:
+					registerDeclaredExternalVerb(word)
+				default:
+					continue // only command + verb words are dispatched lazily by word today
+				}
+				// FIRST dir wins (CHARLY_PLUGIN_DIR ahead of the FHS path) — consistent with
+				// bakedPluginBinary's override-wins lookup, so $CHARLY_PLUGIN_DIR is a true override.
+				if _, seen := bakedPluginBinaries[provKey(class, word)]; !seen {
+					bakedPluginBinaries[provKey(class, word)] = binPath
+				}
 			}
 		}
 	}
+}
+
+// loadBakedPluginBinary connects a baked plugin binary DIRECTLY (no source build) over
+// LocalTransport, gates its served schema, and registers its providers — the lazy connect
+// connectBakedPlugin pays when a baked command/verb is actually invoked. Returns true on success.
+func loadBakedPluginBinary(ctx context.Context, bin string) bool {
+	unit, closer, err := (&LocalTransport{BinPath: bin}).Connect(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: baked plugin %s: connect: %v\n", bin, err)
+		return false
+	}
+	if err := registerPluginUnitSchema(bin, unit.Schema); err != nil {
+		_ = closer.Close()
+		fmt.Fprintf(os.Stderr, "warning: baked plugin %s: schema gate: %v\n", bin, err)
+		return false
+	}
+	if err := providerRegistry.RegisterPluginProviders(unit.Providers, "local:"+bin, closer); err != nil {
+		_ = closer.Close()
+		fmt.Fprintf(os.Stderr, "warning: baked plugin %s: register: %v\n", bin, err)
+		return false
+	}
+	return true
+}
+
+// connectBakedPlugin resolves the Provider for (class, word), lazily connecting a BAKED binary
+// on a registry MISS — the verb/command-class generalization of the baked path the command
+// dispatch formerly inlined. (1) already-registered (the eager path) → returned directly;
+// (2) a baked binary (discoverBakedPluginWords mapped class:word → bin) → connect it DIRECTLY
+// (no source build) and re-resolve. Returns (nil,false) when neither holds — the caller decides
+// whether to fall through to a project-source build (connectPluginByWord) or fail. Shared by the
+// `plugin:` verb runtime (runPluginVerb) AND the credential store's verb:credential resolve, so a
+// baked plugin resolves with NO project scan (R3).
+func connectBakedPlugin(class ProviderClass, word string) (Provider, bool) {
+	if p, ok := providerRegistry.resolve(class, word); ok {
+		return p, true
+	}
+	if bin, ok := bakedPluginBinaries[provKey(class, word)]; ok {
+		if loadBakedPluginBinary(context.Background(), bin) {
+			if p, ok := providerRegistry.resolve(class, word); ok {
+				return p, true
+			}
+		}
+	}
+	return nil, false
+}
+
+// connectPluginByWord resolves the Provider for (class, word), lazily connecting it by any
+// available means: (1) already-registered or a BAKED binary (connectBakedPlugin), then
+// (2) BUILT from the project's candy source on a dev host with the repo checked out (the
+// LoadConfig → ScanAllCandyWithConfigOpts → loadProjectPlugins scan, scoped to this one word so
+// only the referenced plugin is built). The project dir is the post-chdir cwd (main resolved
+// -C/--dir/--repo before dispatch). Returns (nil,false) on any failure — surfaced loudly by the
+// caller (the credential store adapter). The ONE on-demand plugin-connect entry point for a word
+// that appears in NO plan step (the credential VERB the core adapter drives directly).
+func connectPluginByWord(class ProviderClass, word string) (Provider, bool) {
+	if p, ok := connectBakedPlugin(class, word); ok {
+		return p, true
+	}
+	dir, err := os.Getwd()
+	if err != nil {
+		return nil, false
+	}
+	cfg, cerr := LoadConfig(dir)
+	if cerr != nil {
+		return nil, false
+	}
+	candyMap, scanErr := ScanAllCandyWithConfigOpts(dir, cfg, ResolveOpts{})
+	if scanErr != nil || candyMap == nil {
+		return nil, false
+	}
+	if perr := loadProjectPlugins(context.Background(), candyMap, map[string]struct{}{word: {}}); perr != nil {
+		fmt.Fprintf(os.Stderr, "warning: plugin load (%s:%s): %v\n", class, word, perr)
+	}
+	return providerRegistry.resolve(class, word)
 }
 
 // resolvePluginBinary returns a plugin's provider binary: a BAKED binary (pre-built,

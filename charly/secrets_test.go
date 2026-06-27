@@ -1,7 +1,6 @@
 package main
 
 import (
-	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -209,15 +208,8 @@ func TestCredKeyForSecret(t *testing.T) {
 // that happens to be set in the outer shell. All Step 4 tests below use
 // synthetic env var names (TEST_OV_*) that can never match a real credential,
 // but these defensive unsets are belt-and-braces for future test additions.
-func withIsolatedCredentialStore(t *testing.T) *ConfigFileStore {
+func withIsolatedCredentialStore(t *testing.T) *fakeCredentialStore {
 	t.Helper()
-	dir := t.TempDir()
-	origPath := RuntimeConfigPath
-	t.Cleanup(func() { RuntimeConfigPath = origPath; resetDefaultCredentialStore() })
-	RuntimeConfigPath = func() (string, error) {
-		return filepath.Join(dir, "config.yml"), nil
-	}
-	t.Setenv("CHARLY_SECRET_BACKEND", "config")
 	// Defensive unsets: prevent any real credential in the outer shell from
 	// leaking into test assertions (which may print the resolved value).
 	for _, name := range []string{
@@ -227,8 +219,7 @@ func withIsolatedCredentialStore(t *testing.T) *ConfigFileStore {
 	} {
 		t.Setenv(name, "")
 	}
-	resetDefaultCredentialStore()
-	return &ConfigFileStore{}
+	return installFakeCredentialStore(t)
 }
 
 // TestResolveSecretValueServiceKeyOverride — the new Service/Key override

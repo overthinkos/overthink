@@ -131,7 +131,11 @@ func pluginInputStr(op *Op, verb string) string {
 func (r *Runner) runPluginVerb(ctx context.Context, c *Op) CheckResult {
 	word := c.Plugin
 	res := CheckResult{Verb: "plugin"}
-	prov, ok := providerRegistry.ResolveVerb(word)
+	// connectBakedPlugin (not a bare ResolveVerb) so a BAKED verb plugin resolves
+	// project-lessly inside a deployed container / on a host where it is installed alongside
+	// charly — additive: a registry hit returns immediately, and with no baked binary it is a
+	// plain ResolveVerb miss.
+	prov, ok := connectBakedPlugin(ClassVerb, word)
 	if !ok {
 		// An unresolved plugin verb is a FAILURE, not a skip — a bed asserting a
 		// plugin verb that never registered must go red, not fake-green (mirrors

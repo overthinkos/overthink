@@ -45,6 +45,20 @@ func generateRandomSecretToken(byteCount int) string {
 	return base64.URLEncoding.EncodeToString(b)
 }
 
+// promptPassword reads a password from the terminal without echo — the interactive
+// secret-entry path in ProvisionPodmanSecrets (a `charly config`-time operator prompt).
+// The `charly secrets` CLI moved to candy/plugin-secrets, but this in-deploy prompt stays
+// in core (it runs inside the deploy provisioning path, not the secrets CLI).
+func promptPassword(prompt string) (string, error) {
+	fmt.Fprint(os.Stderr, prompt)
+	pw, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Fprintln(os.Stderr)
+	if err != nil {
+		return "", fmt.Errorf("reading password: %w", err)
+	}
+	return string(pw), nil
+}
+
 // generateAndStoreSecret generates a 32-byte url-safe base64 token (44
 // chars; Fernet-key-compatible — see generateRandomSecretToken), persists
 // it to the active credential store at (service, key), and returns the

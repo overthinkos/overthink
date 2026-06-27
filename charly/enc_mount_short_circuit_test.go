@@ -135,11 +135,12 @@ testimg:
 
 	// Pin secret_backend to config AND set INVOCATION_ID so
 	// resolveEncPassphraseForMount takes the explicit-non-keyring-backend
-	// branch, which fails fast without prompting (no TTY access).
+	// branch, which fails fast without prompting (no TTY access). The empty
+	// in-memory store resolves nothing (the real store is out-of-process now),
+	// so passphrase resolution returns the expected error without a plugin build.
 	t.Setenv("CHARLY_SECRET_BACKEND", "config")
 	t.Setenv("INVOCATION_ID", "test")
-	resetDefaultCredentialStore()
-	defer resetDefaultCredentialStore()
+	installFakeCredentialStore(t)
 	_ = os.Unsetenv("GOCRYPTFS_PASSWORD")
 
 	err := encMount("testimg", "", "")

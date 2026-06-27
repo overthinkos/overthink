@@ -460,15 +460,11 @@ func GetConfigValue(key string) (string, error) {
 			if source == "locked" {
 				return "<LOCKED>", nil
 			}
-			// In auto mode, config file fallback may return empty while the
-			// keyring holds the actual value but is locked. Check shadow index.
-			if val == "" && GetKeyringState() == KeyringLocked {
-				kr := &KeyringStore{}
-				if keys, err := kr.List(CredServiceVNC); err == nil {
-					if slices.Contains(keys, name) {
-						return "<LOCKED>", nil
-					}
-				}
+			// The keyring backend can be unavailable (e.g. locked) while the value lives
+			// in the keyring; the config.yml shadow index (KeyringKeys, core-owned) still
+			// lists it. Report <LOCKED> rather than empty so the operator knows it exists.
+			if val == "" && source == "unavailable" && slices.Contains(cfg.KeyringKeys, CredServiceVNC+"/"+name) {
+				return "<LOCKED>", nil
 			}
 			return val, nil
 		}

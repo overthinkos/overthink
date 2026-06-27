@@ -89,8 +89,9 @@ type CheckCmd struct {
 	// venue's session bus with gdbus over the executor reverse channel — no godbus). The
 	// `dbus:` DECLARATIVE check verb dispatches to that external plugin via the provider
 	// registry (invokeVerbProvider); there is no host `charly check dbus`. STRUCTURAL
-	// externalization, not a dep-shed: godbus stays in charly's core for the Secret Service /
-	// GPG secrets (+ the in-core gdbus best-effort notify in notify.go).
+	// externalization, not a dep-shed: dbus drives the venue bus with gdbus, never godbus (the
+	// in-core best-effort notify in notify.go does the same). charly's core links no godbus at
+	// all — the Secret Service keyring (godbus) lives out-of-process in candy/plugin-secrets.
 	// `libvirt` is NOT a CLI subcommand here — the VM/libvirt-API probe verb (`charly check
 	// libvirt`) is served by the out-of-process candy/plugin-vm verb plugin, nested under
 	// `charly check` at runtime via attachNestedCheckPlugins exactly like `kube`/`adb`/`appium`.

@@ -5,7 +5,6 @@ go 1.26.0
 require (
 	cuelang.org/go v0.16.1
 	github.com/alecthomas/kong v1.14.0
-	github.com/godbus/dbus/v5 v5.2.2
 	github.com/google/go-containerregistry v0.20.7
 	github.com/hashicorp/go-plugin v1.8.0
 	github.com/overthinkos/overthink/candy/plugin-example-external v0.0.0-20260625134322-595471add643

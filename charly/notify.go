@@ -12,8 +12,9 @@ import (
 // (deploy / cmd / tmux) it deliberately stays a single lightweight gdbus call
 // rather than transferring the 27 MB charly binary into a container just for a
 // best-effort popup. (The interactive `dbus:` check verb was externalized to
-// candy/plugin-dbus, which also drives the bus via gdbus — never godbus; godbus
-// stays in charly's core for the Secret Service / GPG secrets only.)
+// candy/plugin-dbus, which also drives the bus via gdbus — never godbus. charly's core
+// links no godbus at all; the Secret Service keyring lives out-of-process in
+// candy/plugin-secrets.)
 func sendVenueNotification(ex DeployExecutor, title, body string) {
 	if venueHasTool(ex, "gdbus") {
 		gdbusCmd := fmt.Sprintf(

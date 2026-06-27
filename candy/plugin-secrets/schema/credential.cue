@@ -23,7 +23,7 @@
 // (resolve → {value, source}), the doctor health probe (health), and the keyring
 // re-probe (reset) over this verb's Invoke envelope.
 #CredentialInput: {
-	// method — the store operation: get | set | delete | list | name | resolve | health | reset.
+	// method — the store operation: get | set | delete | list | name | resolve | health | reset | await-unlock.
 	method: string & !="" @go(Method)
 	// service — the credential service namespace (e.g. "charly/secret", "charly/vnc").
 	service?: string @go(Service)

@@ -12,8 +12,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	dbus "github.com/godbus/dbus/v5"
 )
 
 // ResolvedBindMount is ready for -v flags.
@@ -151,22 +149,12 @@ func resolveEncPassphrase(boxName string, autoGenerate bool) (string, error) {
 // encMountDeadline bounds how long resolveEncPassphraseForMount will retry
 // transient failures (source="unavailable") before giving up.
 // source="locked" does NOT use this — it uses event-driven DBus signal
-// waiting with no deadline (see waitForKeyringUnlock).
+// waiting with no deadline (see awaitKeyringUnlockViaPlugin).
 var encMountDeadline = 2 * time.Minute
 
 // encMountPollPeriod is the interval between retry attempts for
 // source="unavailable" only.
 var encMountPollPeriod = 5 * time.Second
-
-// encMountSignalBackstop is the safety-net poll interval for the
-// event-driven keyring wait (source="locked"). Between DBus signals, the
-// loop re-probes at this cadence to handle missed signals, subscribe races,
-// or Secret Service providers that don't reliably emit PropertiesChanged.
-var encMountSignalBackstop = 30 * time.Second
-
-// encMountProgressLogInterval throttles the periodic "still waiting" log
-// during the event-driven keyring wait.
-var encMountProgressLogInterval = 1 * time.Hour
 
 // resolveEncPassphraseForMount resolves the gocryptfs passphrase with
 // backend-aware and failure-aware retry behavior.
@@ -189,7 +177,9 @@ var encMountProgressLogInterval = 1 * time.Hour
 // was unrecoverable without manual intervention. source="unavailable" is now
 // bounded at encMountDeadline; source="locked" waits indefinitely via DBus
 // signal subscription (zero CPU between events) until the user unlocks the
-// keyring; source="default" fails immediately.
+// keyring; source="default" fails immediately. The DBus subscription itself
+// runs OUT-OF-PROCESS in candy/plugin-secrets (the Secret Service owner) —
+// charly's core no longer links godbus; see awaitKeyringUnlockViaPlugin.
 func resolveEncPassphraseForMount(boxName string) (string, error) {
 	if os.Getenv("INVOCATION_ID") == "" {
 		return resolveEncPassphrase(boxName, false)
@@ -198,7 +188,7 @@ func resolveEncPassphraseForMount(boxName string) (string, error) {
 	resolver := func() (string, string) {
 		return ResolveCredential("", "charly/enc", boxName, "")
 	}
-	return resolveEncPassphraseForMountWithResolver(boxName, backend, resolver, resetDefaultCredentialStore, waitForKeyringUnlock)
+	return resolveEncPassphraseForMountWithResolver(boxName, backend, resolver, resetDefaultCredentialStore, awaitKeyringUnlockViaPlugin)
 }
 
 // resolveEncPassphraseForMountWithResolver is the testable core of
@@ -207,8 +197,9 @@ func resolveEncPassphraseForMount(boxName string) (string, error) {
 // without touching global state, environment variables, or DBus.
 //
 // The waiter is called when source="locked" under a keyring-capable backend.
-// In production it is waitForKeyringUnlock (event-driven via DBus signals);
-// in tests it is a fake that returns immediately.
+// In production it is awaitKeyringUnlockViaPlugin (event-driven via DBus signals
+// running out-of-process in candy/plugin-secrets); in tests it is a fake that
+// returns immediately.
 func resolveEncPassphraseForMountWithResolver(
 	boxName, backend string,
 	resolver func() (value, source string),
@@ -306,112 +297,30 @@ func retryUnavailable(
 	}
 }
 
-// waitForKeyringUnlock blocks until the credential resolver returns a source
-// other than "locked", or until ctx is cancelled. Uses DBus
-// PropertiesChanged signals for event-driven wakeup (zero CPU between events)
-// with a periodic backstop re-probe as a safety net.
-func waitForKeyringUnlock(
+// awaitKeyringUnlockViaPlugin is the production keyring-unlock waiter wired into
+// resolveEncPassphraseForMount (source="locked"). The Secret Service (godbus) lives
+// OUT-OF-PROCESS in candy/plugin-secrets, so the event-driven DBus PropertiesChanged
+// subscription + the backstop re-probe run THERE: this delegates to the active store's
+// awaitUnlock, which RPCs verb:credential `await-unlock` and BLOCKS until the keyring
+// unlocks or ctx is cancelled. ctx carries the core's SIGINT/SIGTERM cancellation, which
+// gRPC propagates to the plugin's Invoke so `systemctl stop` ends the wait cleanly.
+//
+// The resolver/reset closures are unused here — the plugin re-probes its OWN store across
+// the process boundary; they remain on the waiter seam for the in-core retry paths and the
+// test fakes. A store that cannot await (only a non-keyring test fake reaches this, since
+// the production store is always the keyring-capable pluginCredentialStore) is a loud error.
+func awaitKeyringUnlockViaPlugin(
 	ctx context.Context,
 	boxName string,
-	resolver func() (string, string),
-	reset func(),
+	_ func() (string, string),
+	_ func(),
 ) (string, string, error) {
-	conn, err := dbus.SessionBusPrivate()
-	if err != nil {
-		return waitForKeyringUnlockBackstopOnly(ctx, boxName, resolver, reset)
+	store := DefaultCredentialStore()
+	aw, ok := store.(credentialAwaiter)
+	if !ok {
+		return "", "", fmt.Errorf("active credential store %q cannot wait for keyring unlock", store.Name())
 	}
-	if err := conn.Auth(nil); err != nil {
-		_ = conn.Close()
-		return waitForKeyringUnlockBackstopOnly(ctx, boxName, resolver, reset)
-	}
-	if err := conn.Hello(); err != nil {
-		_ = conn.Close()
-		return waitForKeyringUnlockBackstopOnly(ctx, boxName, resolver, reset)
-	}
-	defer conn.Close() //nolint:errcheck
-
-	matchRule := "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path_namespace='/org/freedesktop/secrets/collection'"
-	call := conn.BusObject().Call("org.freedesktop.DBus.AddMatch", 0, matchRule)
-	if call.Err != nil {
-		return waitForKeyringUnlockBackstopOnly(ctx, boxName, resolver, reset)
-	}
-
-	sigCh := make(chan *dbus.Signal, 16)
-	conn.Signal(sigCh)
-	defer conn.RemoveSignal(sigCh)
-
-	// Re-probe after subscribing to close the subscribe-unlock race.
-	if reset != nil {
-		reset()
-	}
-	if v, src := resolver(); src != "locked" {
-		return v, src, nil
-	}
-
-	fmt.Fprintf(os.Stderr,
-		"charly: waiting for keyring unlock (charly-enc/%s, event-driven via DBus PropertiesChanged)\n",
-		boxName)
-	return waitForKeyringUnlockLoop(ctx, boxName, sigCh, resolver, reset)
-}
-
-// waitForKeyringUnlockBackstopOnly is the fallback when DBus signal
-// subscription fails. Polls at encMountSignalBackstop interval.
-func waitForKeyringUnlockBackstopOnly(
-	ctx context.Context,
-	boxName string,
-	resolver func() (string, string),
-	reset func(),
-) (string, string, error) {
-	fmt.Fprintf(os.Stderr,
-		"charly: waiting for keyring unlock (charly-enc/%s, DBus signals unavailable — %v backstop only)\n",
-		boxName, encMountSignalBackstop)
-	return waitForKeyringUnlockLoop(ctx, boxName, nil, resolver, reset)
-}
-
-// waitForKeyringUnlockLoop is the core select loop shared by both signal
-// and backstop-only modes. When sigCh is nil, only the backstop fires.
-func waitForKeyringUnlockLoop(
-	ctx context.Context,
-	boxName string,
-	sigCh <-chan *dbus.Signal,
-	resolver func() (string, string),
-	reset func(),
-) (string, string, error) {
-	backstop := time.NewTicker(encMountSignalBackstop)
-	defer backstop.Stop()
-	nextLog := time.Now().Add(encMountProgressLogInterval)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return "", "", ctx.Err()
-		case sig, ok := <-sigCh:
-			if !ok {
-				return waitForKeyringUnlockBackstopOnly(ctx, boxName, resolver, reset)
-			}
-			if !isCollectionUnlockedSignal(sig) {
-				continue
-			}
-			if reset != nil {
-				reset()
-			}
-			if v, src := resolver(); src != "locked" {
-				return v, src, nil
-			}
-		case <-backstop.C:
-			if reset != nil {
-				reset()
-			}
-			if v, src := resolver(); src != "locked" {
-				return v, src, nil
-			}
-			if time.Now().After(nextLog) {
-				fmt.Fprintf(os.Stderr,
-					"charly: still waiting for keyring unlock (charly-enc/%s)\n", boxName)
-				nextLog = time.Now().Add(encMountProgressLogInterval)
-			}
-		}
-	}
+	return aw.awaitUnlock(ctx, "charly/enc", boxName)
 }
 
 // encMount mounts encrypted volumes for an image.

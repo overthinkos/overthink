@@ -89,8 +89,8 @@
 	// field + #DbusMethod here, so `dbus: list` still validates against the method enum and
 	// VerbsSet still classifies the op (then dispatch resolves the registered external provider,
 	// which drives the venue's session bus with gdbus over the executor reverse channel — dbus
-	// is EXEC-based, like record). STRUCTURAL externalization, not a dep-shed: godbus stays in
-	// charly's core for the Secret Service / GPG secrets.
+	// is EXEC-based, like record). STRUCTURAL externalization, not a dep-shed: dbus drives the
+	// venue bus with gdbus, never godbus.
 	dbus?:           #DbusMethod
 	// `vnc` is an EXTERNAL-CHARLY-VERB: its RFB/VNC client (the stdlib-only RFC 6143 VNC
 	// client — VeNCrypt/TLS + ZRLE decode + the status/screenshot/click/mouse/type/key/rfb

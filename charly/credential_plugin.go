@@ -55,6 +55,15 @@ type credentialResetter interface {
 	reset()
 }
 
+// credentialAwaiter is the event-driven keyring-unlock seam: a store that can BLOCK until its
+// keyring unlocks implements it (enc.go's encrypted-volume mount path drives it when a resolve
+// returns source="locked"). The out-of-process pluginCredentialStore satisfies it by RPCing
+// verb:credential `await-unlock` — the godbus PropertiesChanged subscription runs IN the plugin
+// (the Secret Service owner), which is what sheds godbus from charly's core.
+type credentialAwaiter interface {
+	awaitUnlock(ctx context.Context, service, key string) (value, source string, err error)
+}
+
 // credentialInput / credentialReply / CredentialHealth are the verb:credential wire forms,
 // byte-compatible with candy/plugin-secrets (verb_credential.go).
 type credentialInput struct {
@@ -92,10 +101,18 @@ type CredentialHealth struct {
 // pluginCredentialStore dispatches every credential operation to verb:credential.
 type pluginCredentialStore struct{}
 
-// call resolves the verb:credential provider (lazy-connecting a baked binary or building
+// call invokes one credential operation with a background context (the non-blocking store
+// methods — get/set/delete/list/name/resolve/health/reset all complete promptly).
+func (s pluginCredentialStore) call(in credentialInput) (credentialReply, error) {
+	return s.callCtx(context.Background(), in)
+}
+
+// callCtx resolves the verb:credential provider (lazy-connecting a baked binary or building
 // from the project's candy source on first use — both cached by the registry) and invokes
-// one credential operation through the standard Invoke envelope.
-func (pluginCredentialStore) call(in credentialInput) (credentialReply, error) {
+// one credential operation through the standard Invoke envelope, propagating ctx to the
+// gRPC call. The blocking `await-unlock` method passes a SIGINT/SIGTERM-cancellable ctx so
+// `systemctl stop` ends an unbounded keyring wait cleanly (gRPC cancels the plugin's Invoke).
+func (pluginCredentialStore) callCtx(ctx context.Context, in credentialInput) (credentialReply, error) {
 	prov, ok := connectPluginByWord(ClassVerb, "credential")
 	if !ok {
 		return credentialReply{}, fmt.Errorf(
@@ -106,7 +123,7 @@ func (pluginCredentialStore) call(in credentialInput) (credentialReply, error) {
 	if err != nil {
 		return credentialReply{}, err
 	}
-	out, err := prov.Invoke(context.Background(), &Operation{Reserved: "credential", Op: OpRun, Params: params})
+	out, err := prov.Invoke(ctx, &Operation{Reserved: "credential", Op: OpRun, Params: params})
 	if err != nil {
 		return credentialReply{}, err
 	}
@@ -175,6 +192,24 @@ func (s pluginCredentialStore) resolve(service, key string) (value, source strin
 		return "", "unavailable"
 	}
 	return r.Value, r.Source
+}
+
+// awaitUnlock BLOCKS until the credential at service/key is resolvable (the plugin's
+// resolveStoreChain no longer returns source="locked") or ctx is cancelled. It RPCs
+// verb:credential `await-unlock`, which runs the godbus PropertiesChanged subscription IN
+// the plugin process (the Secret Service owner). The blocking gRPC call survives an unbounded
+// wait (go-plugin sets no keepalive/idle timeout on the local Unix-socket connection) and is
+// cancelled by ctx — the host cancels on SIGINT/SIGTERM, gRPC propagates the cancellation to
+// the plugin's Invoke ctx, and the wait loop returns.
+func (s pluginCredentialStore) awaitUnlock(ctx context.Context, service, key string) (string, string, error) {
+	r, err := s.callCtx(ctx, credentialInput{Method: "await-unlock", Service: service, Key: key})
+	if err != nil {
+		return "", "", err
+	}
+	if r.Error != "" {
+		return "", "", errors.New(r.Error)
+	}
+	return r.Value, r.Source, nil
 }
 
 func (s pluginCredentialStore) health() (*CredentialHealth, error) {

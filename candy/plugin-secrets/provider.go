@@ -24,14 +24,14 @@ type provider struct{ pb.UnimplementedProviderServer }
 // advertises: verb:credential. command:secrets (`charly secrets …`) is NOT served over
 // gRPC — it is dispatched by charly syscall.Exec'ing this binary in CLI mode (sdk.Main →
 // cliMain), so it never reaches Invoke and is absent from Describe.
-func (p provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeReply, error) {
+func (p provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeReply, error) {
 	var in params.CredentialInput
 	if len(req.GetParamsJson()) > 0 {
 		if err := json.Unmarshal(req.GetParamsJson(), &in); err != nil {
 			return replyJSON(credentialReply{Error: fmt.Sprintf("plugin-secrets: decode credential input: %v", err)})
 		}
 	}
-	return replyJSON(dispatchCredential(in))
+	return replyJSON(dispatchCredential(ctx, in))
 }
 
 // replyJSON marshals the credentialReply into the InvokeReply envelope the host decodes.

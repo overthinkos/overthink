@@ -27,7 +27,7 @@ package params
 // (resolve → {value, source}), the doctor health probe (health), and the keyring
 // re-probe (reset) over this verb's Invoke envelope.
 type CredentialInput struct {
-	// method — the store operation: get | set | delete | list | name | resolve | health | reset.
+	// method — the store operation: get | set | delete | list | name | resolve | health | reset | await-unlock.
 	Method string `yaml:"method,omitempty" json:"method"`
 
 	// service — the credential service namespace (e.g. "charly/secret", "charly/vnc").

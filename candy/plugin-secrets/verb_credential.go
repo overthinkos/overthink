@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -39,8 +40,9 @@ type credentialHealth struct {
 }
 
 // dispatchCredential routes one credential-store operation. Any backend error is captured on
-// reply.Error (never panics) so the host always decodes a reply.
-func dispatchCredential(in params.CredentialInput) credentialReply {
+// reply.Error (never panics) so the host always decodes a reply. ctx is the host's Invoke ctx;
+// only the blocking `await-unlock` method consults it (the core cancels on SIGINT/SIGTERM).
+func dispatchCredential(ctx context.Context, in params.CredentialInput) credentialReply {
 	var reply credentialReply
 	errStr := func(err error) string {
 		if err != nil {
@@ -54,6 +56,14 @@ func dispatchCredential(in params.CredentialInput) credentialReply {
 	// resetDefaultCredentialStore propagates here as a `reset` RPC).
 	if in.Method == "reset" {
 		resetDefaultCredentialStore()
+		return reply
+	}
+	// `await-unlock` BLOCKS until the keyring unlocks (the externalized enc.go mount
+	// waiter — godbus PropertiesChanged subscription on the Secret Service collections),
+	// or until the host cancels ctx (SIGINT/SIGTERM). It owns its own store re-probing
+	// (keyring_unlock_wait.go), so it bypasses the cached-store fetch below.
+	if in.Method == "await-unlock" {
+		reply.Value, reply.Source = awaitUnlock(ctx, in.Service, in.Key)
 		return reply
 	}
 	store := DefaultCredentialStore()

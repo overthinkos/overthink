@@ -219,7 +219,7 @@
 	skip?:        bool
 	timeout?:     #Duration
 	// command — a SHARED exec-string modifier (NOT a verb): the live-container verbs
-	// `wl: exec` / `wl: sway-msg` / `libvirt: guest-exec` read it as their argv, and
+	// `wl: exec` / `wl: sway-msg` / `libvirt: guest/exec` read it as their argv, and
 	// the `command` plugin verb's INSTALL-EMIT rehydrates it onto an OpStep for emitCmd
 	// (build) / renderOpCommand (deploy). It LEFT #OpVerb in the command→plugin
 	// extraction (the command CHECK verb is now `plugin: command` + #CommandInput), so

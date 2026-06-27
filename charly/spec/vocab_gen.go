@@ -255,7 +255,6 @@ var OpVerbs = []string{
 	"wl",
 	"dbus",
 	"vnc",
-	"record",
 	"summarize",
 	"kill",
 	"plugin",
@@ -392,9 +391,8 @@ var AuthoringVerbs = []string{
 // (the #<Name>Method enums) — the SAME allowlists checkrun_charly_verbs.go
 // enforces, now from one CUE source.
 var LiveVerbMethods = map[string][]string{
-	"cdp":    {"status", "list", "url", "text", "html", "eval", "axtree", "coords", "raw", "wait", "screenshot", "open", "close", "click", "type", "spa-status", "spa-click", "spa-type", "spa-key", "spa-key-combo", "spa-mouse"},
-	"wl":     {"status", "toplevel", "windows", "geometry", "xprop", "atspi", "screenshot", "clipboard", "click", "double-click", "mouse", "scroll", "drag", "type", "key", "key-combo", "focus", "close", "fullscreen", "minimize", "exec", "resolution", "overlay-list", "overlay-status", "overlay-show", "overlay-hide", "sway-tree", "sway-workspaces", "sway-outputs", "sway-msg", "sway-focus", "sway-move", "sway-resize", "sway-layout", "sway-workspace", "sway-kill", "sway-floating", "sway-reload"},
-	"dbus":   {"list", "call", "introspect", "notify"},
-	"vnc":    {"status", "screenshot", "click", "mouse", "type", "key", "rfb", "passwd"},
-	"record": {"list", "start", "stop", "cmd"},
+	"cdp":  {"status", "list", "url", "text", "html", "eval", "axtree", "coords", "raw", "wait", "screenshot", "open", "close", "click", "type", "spa-status", "spa-click", "spa-type", "spa-key", "spa-key-combo", "spa-mouse"},
+	"wl":   {"status", "toplevel", "windows", "geometry", "xprop", "atspi", "screenshot", "clipboard", "click", "double-click", "mouse", "scroll", "drag", "type", "key", "key-combo", "focus", "close", "fullscreen", "minimize", "exec", "resolution", "overlay-list", "overlay-status", "overlay-show", "overlay-hide", "sway-tree", "sway-workspaces", "sway-outputs", "sway-msg", "sway-focus", "sway-move", "sway-resize", "sway-layout", "sway-workspace", "sway-kill", "sway-floating", "sway-reload"},
+	"dbus": {"list", "call", "introspect", "notify"},
+	"vnc":  {"status", "screenshot", "click", "mouse", "type", "key", "rfb", "passwd"},
 }

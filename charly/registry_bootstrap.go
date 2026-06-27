@@ -40,7 +40,7 @@ var builtinProviderInstances = []Provider{
 	// are ALL relocated to compiled-in candies (candy/plugin-*), each registering the same way.
 	// `command` is the install-task-act member and `package`/`service` are the TWO typed-step
 	// members of that set (their step materialization stays in package main via materializeStep).
-	// cdp/vnc/wl/dbus/record are NOT here either — each is a live-container
+	// cdp/vnc/wl/dbus are NOT here either — each is a live-container
 	// verb relocated to a compiled-in candy (candy/plugin-<verb>), self-registering
 	// via registerCompiledDedicatedVerb (the schema-less dedicated-provider path, since their
 	// modifiers stay on the closed base #Op — no plugin_input, no served schema), absent

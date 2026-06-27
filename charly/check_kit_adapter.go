@@ -225,7 +225,7 @@ func registerCompiledCheckVerb(kv kit.CheckVerbProvider, schemaFS fs.FS, schemaD
 }
 
 // registerCompiledDedicatedVerb registers a COMPILED-IN host-coupled LIVE-VERB candy
-// (cdp/wl/vnc/dbus/record). Unlike registerCompiledCheckVerb, a live verb is
+// (cdp/wl/vnc/dbus). Unlike registerCompiledCheckVerb, a live verb is
 // SCHEMA-LESS — its method-specific modifiers ride the closed base #Op, so there is NO
 // plugin_input and NO served schema; it self-registers via registerDedicatedBuiltin (the
 // schema-less dedicated-provider path charly's other dedicated builtins — the IR-step,

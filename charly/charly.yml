@@ -63,7 +63,6 @@ compiled_plugins:
     - plugin-wl
     - plugin-vnc
     - plugin-dbus
-    - plugin-record
 
 # context_ignore_baseline — the built-in build-context ignore patterns (VCS/binary
 # excludes + cache-hygiene globs), formerly the Go var baselineContextIgnore. Read by

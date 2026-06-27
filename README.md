@@ -604,7 +604,9 @@ getprop`, `appium: click`, …):
 - `libvirt:` — libvirt-RPC declarative check verb (VM info, screenshot,
   send-key, QMP, snapshots, event stream) — out-of-process plugin
   (`candy/plugin-vm`), no host CLI subcommand. VM-only.
-- `charly check record` — terminal asciinema or desktop ffmpeg.
+- `record:` — recording-session declarative check verb (start/stop/list/cmd;
+  terminal asciinema or desktop wf-recorder/pixelflux) — out-of-process plugin
+  (`candy/plugin-record`), no host CLI subcommand. Container-only.
 - `spice:` — SPICE wire-level display-protocol declarative check verb
   (status, screenshot, cursor, click, mouse, type, key) — out-of-process
   plugin (`candy/plugin-spice`), no host CLI subcommand. VM-only.

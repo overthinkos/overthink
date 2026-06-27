@@ -515,6 +515,186 @@ func (x *RunReply) GetError() string {
 	return ""
 }
 
+type CaptureReply struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Stdout        string                 `protobuf:"bytes,1,opt,name=stdout,proto3" json:"stdout,omitempty"`
+	Stderr        string                 `protobuf:"bytes,2,opt,name=stderr,proto3" json:"stderr,omitempty"`
+	ExitCode      int32                  `protobuf:"varint,3,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	Error         string                 `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CaptureReply) Reset() {
+	*x = CaptureReply{}
+	mi := &file_plugin_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CaptureReply) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CaptureReply) ProtoMessage() {}
+
+func (x *CaptureReply) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CaptureReply.ProtoReflect.Descriptor instead.
+func (*CaptureReply) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *CaptureReply) GetStdout() string {
+	if x != nil {
+		return x.Stdout
+	}
+	return ""
+}
+
+func (x *CaptureReply) GetStderr() string {
+	if x != nil {
+		return x.Stderr
+	}
+	return ""
+}
+
+func (x *CaptureReply) GetExitCode() int32 {
+	if x != nil {
+		return x.ExitCode
+	}
+	return 0
+}
+
+func (x *CaptureReply) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type GetFileRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	AsRoot        bool                   `protobuf:"varint,2,opt,name=as_root,json=asRoot,proto3" json:"as_root,omitempty"`
+	OptsJson      []byte                 `protobuf:"bytes,3,opt,name=opts_json,json=optsJson,proto3" json:"opts_json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetFileRequest) Reset() {
+	*x = GetFileRequest{}
+	mi := &file_plugin_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetFileRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetFileRequest) ProtoMessage() {}
+
+func (x *GetFileRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetFileRequest.ProtoReflect.Descriptor instead.
+func (*GetFileRequest) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *GetFileRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *GetFileRequest) GetAsRoot() bool {
+	if x != nil {
+		return x.AsRoot
+	}
+	return false
+}
+
+func (x *GetFileRequest) GetOptsJson() []byte {
+	if x != nil {
+		return x.OptsJson
+	}
+	return nil
+}
+
+type GetFileReply struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Content       []byte                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetFileReply) Reset() {
+	*x = GetFileReply{}
+	mi := &file_plugin_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetFileReply) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetFileReply) ProtoMessage() {}
+
+func (x *GetFileReply) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetFileReply.ProtoReflect.Descriptor instead.
+func (*GetFileReply) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *GetFileReply) GetContent() []byte {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *GetFileReply) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 var File_plugin_proto protoreflect.FileDescriptor
 
 const file_plugin_proto_rawDesc = "" +
@@ -553,17 +733,32 @@ const file_plugin_proto_rawDesc = "" +
 	"\x06script\x18\x01 \x01(\tR\x06script\x12\x1b\n" +
 	"\topts_json\x18\x02 \x01(\fR\boptsJson\" \n" +
 	"\bRunReply\x12\x14\n" +
-	"\x05error\x18\x01 \x01(\tR\x05error2I\n" +
+	"\x05error\x18\x01 \x01(\tR\x05error\"q\n" +
+	"\fCaptureReply\x12\x16\n" +
+	"\x06stdout\x18\x01 \x01(\tR\x06stdout\x12\x16\n" +
+	"\x06stderr\x18\x02 \x01(\tR\x06stderr\x12\x1b\n" +
+	"\texit_code\x18\x03 \x01(\x05R\bexitCode\x12\x14\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\"Z\n" +
+	"\x0eGetFileRequest\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x17\n" +
+	"\aas_root\x18\x02 \x01(\bR\x06asRoot\x12\x1b\n" +
+	"\topts_json\x18\x03 \x01(\fR\boptsJson\">\n" +
+	"\fGetFileReply\x12\x18\n" +
+	"\acontent\x18\x01 \x01(\fR\acontent\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error2I\n" +
 	"\n" +
 	"PluginMeta\x12;\n" +
 	"\bDescribe\x12\x13.charlyplugin.Empty\x1a\x1a.charlyplugin.Capabilities2\x90\x01\n" +
 	"\bProvider\x12@\n" +
 	"\x06Invoke\x12\x1b.charlyplugin.InvokeRequest\x1a\x19.charlyplugin.InvokeReply\x12B\n" +
-	"\fInvokeStream\x12\x1b.charlyplugin.InvokeRequest\x1a\x13.charlyplugin.Frame0\x012\xc5\x01\n" +
+	"\fInvokeStream\x12\x1b.charlyplugin.InvokeRequest\x1a\x13.charlyplugin.Frame0\x012\xce\x02\n" +
 	"\x0fExecutorService\x126\n" +
 	"\x05Venue\x12\x13.charlyplugin.Empty\x1a\x18.charlyplugin.VenueReply\x12=\n" +
 	"\tRunSystem\x12\x18.charlyplugin.RunRequest\x1a\x16.charlyplugin.RunReply\x12;\n" +
-	"\aRunUser\x12\x18.charlyplugin.RunRequest\x1a\x16.charlyplugin.RunReplyB6Z4github.com/overthinkos/overthink/charly/plugin/protob\x06proto3"
+	"\aRunUser\x12\x18.charlyplugin.RunRequest\x1a\x16.charlyplugin.RunReply\x12B\n" +
+	"\n" +
+	"RunCapture\x12\x18.charlyplugin.RunRequest\x1a\x1a.charlyplugin.CaptureReply\x12C\n" +
+	"\aGetFile\x12\x1c.charlyplugin.GetFileRequest\x1a\x1a.charlyplugin.GetFileReplyB6Z4github.com/overthinkos/overthink/charly/plugin/protob\x06proto3"
 
 var (
 	file_plugin_proto_rawDescOnce sync.Once
@@ -577,7 +772,7 @@ func file_plugin_proto_rawDescGZIP() []byte {
 	return file_plugin_proto_rawDescData
 }
 
-var file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_plugin_proto_goTypes = []any{
 	(*Empty)(nil),              // 0: charlyplugin.Empty
 	(*Capabilities)(nil),       // 1: charlyplugin.Capabilities
@@ -588,26 +783,33 @@ var file_plugin_proto_goTypes = []any{
 	(*VenueReply)(nil),         // 6: charlyplugin.VenueReply
 	(*RunRequest)(nil),         // 7: charlyplugin.RunRequest
 	(*RunReply)(nil),           // 8: charlyplugin.RunReply
+	(*CaptureReply)(nil),       // 9: charlyplugin.CaptureReply
+	(*GetFileRequest)(nil),     // 10: charlyplugin.GetFileRequest
+	(*GetFileReply)(nil),       // 11: charlyplugin.GetFileReply
 }
 var file_plugin_proto_depIdxs = []int32{
-	2, // 0: charlyplugin.Capabilities.provided:type_name -> charlyplugin.ProvidedCapability
-	0, // 1: charlyplugin.PluginMeta.Describe:input_type -> charlyplugin.Empty
-	3, // 2: charlyplugin.Provider.Invoke:input_type -> charlyplugin.InvokeRequest
-	3, // 3: charlyplugin.Provider.InvokeStream:input_type -> charlyplugin.InvokeRequest
-	0, // 4: charlyplugin.ExecutorService.Venue:input_type -> charlyplugin.Empty
-	7, // 5: charlyplugin.ExecutorService.RunSystem:input_type -> charlyplugin.RunRequest
-	7, // 6: charlyplugin.ExecutorService.RunUser:input_type -> charlyplugin.RunRequest
-	1, // 7: charlyplugin.PluginMeta.Describe:output_type -> charlyplugin.Capabilities
-	4, // 8: charlyplugin.Provider.Invoke:output_type -> charlyplugin.InvokeReply
-	5, // 9: charlyplugin.Provider.InvokeStream:output_type -> charlyplugin.Frame
-	6, // 10: charlyplugin.ExecutorService.Venue:output_type -> charlyplugin.VenueReply
-	8, // 11: charlyplugin.ExecutorService.RunSystem:output_type -> charlyplugin.RunReply
-	8, // 12: charlyplugin.ExecutorService.RunUser:output_type -> charlyplugin.RunReply
-	7, // [7:13] is the sub-list for method output_type
-	1, // [1:7] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	2,  // 0: charlyplugin.Capabilities.provided:type_name -> charlyplugin.ProvidedCapability
+	0,  // 1: charlyplugin.PluginMeta.Describe:input_type -> charlyplugin.Empty
+	3,  // 2: charlyplugin.Provider.Invoke:input_type -> charlyplugin.InvokeRequest
+	3,  // 3: charlyplugin.Provider.InvokeStream:input_type -> charlyplugin.InvokeRequest
+	0,  // 4: charlyplugin.ExecutorService.Venue:input_type -> charlyplugin.Empty
+	7,  // 5: charlyplugin.ExecutorService.RunSystem:input_type -> charlyplugin.RunRequest
+	7,  // 6: charlyplugin.ExecutorService.RunUser:input_type -> charlyplugin.RunRequest
+	7,  // 7: charlyplugin.ExecutorService.RunCapture:input_type -> charlyplugin.RunRequest
+	10, // 8: charlyplugin.ExecutorService.GetFile:input_type -> charlyplugin.GetFileRequest
+	1,  // 9: charlyplugin.PluginMeta.Describe:output_type -> charlyplugin.Capabilities
+	4,  // 10: charlyplugin.Provider.Invoke:output_type -> charlyplugin.InvokeReply
+	5,  // 11: charlyplugin.Provider.InvokeStream:output_type -> charlyplugin.Frame
+	6,  // 12: charlyplugin.ExecutorService.Venue:output_type -> charlyplugin.VenueReply
+	8,  // 13: charlyplugin.ExecutorService.RunSystem:output_type -> charlyplugin.RunReply
+	8,  // 14: charlyplugin.ExecutorService.RunUser:output_type -> charlyplugin.RunReply
+	9,  // 15: charlyplugin.ExecutorService.RunCapture:output_type -> charlyplugin.CaptureReply
+	11, // 16: charlyplugin.ExecutorService.GetFile:output_type -> charlyplugin.GetFileReply
+	9,  // [9:17] is the sub-list for method output_type
+	1,  // [1:9] is the sub-list for method input_type
+	1,  // [1:1] is the sub-list for extension type_name
+	1,  // [1:1] is the sub-list for extension extendee
+	0,  // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_plugin_proto_init() }
@@ -621,7 +823,7 @@ func file_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_plugin_proto_rawDesc), len(file_plugin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

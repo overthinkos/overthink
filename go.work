@@ -36,4 +36,3 @@ use ./candy/plugin-cdp
 use ./candy/plugin-wl
 use ./candy/plugin-vnc
 use ./candy/plugin-dbus
-use ./candy/plugin-record

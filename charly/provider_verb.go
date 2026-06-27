@@ -22,7 +22,7 @@ type CheckVerbProvider interface {
 }
 
 // LiveVerbProvider is the self-describing form of an IN-PROC LIVE-CONTAINER verb
-// provider (cdp/wl/dbus/vnc/record): beyond running the probe
+// provider (cdp/wl/dbus/vnc): beyond running the probe
 // (CheckVerbProvider), it OWNS its method contract — the method allowlist (each
 // method's required-modifier + artifact spec + posArgs dispatch) and the accessor for
 // its method-selector field on *Op. The host's generic verb validation

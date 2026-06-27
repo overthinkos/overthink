@@ -32,6 +32,32 @@ func (s *executorReverseServer) RunUser(ctx context.Context, req *pb.RunRequest)
 	return runReply(s.exec.RunUser(ctx, req.GetScript(), decodeReverseEmitOpts(req.GetOptsJson())))
 }
 
+// RunCapture is the CHECK-VERB capture leg: an out-of-process exec-based check verb
+// (record — and dbus/wl when they externalize) probes the live venue by capturing
+// stdout/stderr/exit. No root
+// escalation — the verb's script adds sudo if it needs it. The gRPC call itself
+// succeeds; an execution failure (not a non-zero exit) travels in CaptureReply.Error.
+func (s *executorReverseServer) RunCapture(ctx context.Context, req *pb.RunRequest) (*pb.CaptureReply, error) {
+	stdout, stderr, exit, err := s.exec.RunCapture(ctx, req.GetScript())
+	return &pb.CaptureReply{Stdout: stdout, Stderr: stderr, ExitCode: int32(exit), Error: errString(err)}, nil
+}
+
+// GetFile is the CHECK-VERB artifact-pull leg: a verb that produces a file on the venue
+// (a record .cast / a screenshot) reads it back to the host. asRoot reads via sudo.
+func (s *executorReverseServer) GetFile(ctx context.Context, req *pb.GetFileRequest) (*pb.GetFileReply, error) {
+	content, err := s.exec.GetFile(ctx, req.GetPath(), req.GetAsRoot(), decodeReverseEmitOpts(req.GetOptsJson()))
+	return &pb.GetFileReply{Content: content, Error: errString(err)}, nil
+}
+
+// errString is err.Error() or "" — the reverse-channel convention (the RPC succeeds; the
+// venue-op failure rides the reply's error field, like runReply).
+func errString(err error) string {
+	if err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
 // decodeReverseEmitOpts decodes the JSON EmitOpts carried in a RunRequest; an empty
 // payload yields the zero EmitOpts (the common "no options" call).
 func decodeReverseEmitOpts(b []byte) EmitOpts {

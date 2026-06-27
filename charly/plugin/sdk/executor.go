@@ -71,3 +71,31 @@ func runErr(r *pb.RunReply, err error) error {
 	}
 	return nil
 }
+
+// RunCapture runs a command on the venue and returns stdout/stderr/exit separately —
+// the check-verb capture leg (an out-of-process exec-based check verb probing the live
+// container). A non-empty reply error is an EXECUTION failure, NOT a non-zero exit
+// (which rides the returned exit code). Mirrors kit.Executor.RunCapture over the wire.
+func (e *Executor) RunCapture(ctx context.Context, script string) (stdout, stderr string, exit int, err error) {
+	r, callErr := e.client.RunCapture(ctx, &pb.RunRequest{Script: script})
+	if callErr != nil {
+		return "", "", 0, callErr
+	}
+	if r.GetError() != "" {
+		return r.GetStdout(), r.GetStderr(), int(r.GetExitCode()), errors.New(r.GetError())
+	}
+	return r.GetStdout(), r.GetStderr(), int(r.GetExitCode()), nil
+}
+
+// GetFile reads a venue file back to the host (asRoot reads via sudo) — the check-verb
+// artifact-pull leg (a screenshot / recording produced on the venue).
+func (e *Executor) GetFile(ctx context.Context, path string, asRoot bool) ([]byte, error) {
+	r, callErr := e.client.GetFile(ctx, &pb.GetFileRequest{Path: path, AsRoot: asRoot})
+	if callErr != nil {
+		return nil, callErr
+	}
+	if r.GetError() != "" {
+		return nil, errors.New(r.GetError())
+	}
+	return r.GetContent(), nil
+}

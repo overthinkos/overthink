@@ -277,9 +277,11 @@ var Provider_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	ExecutorService_Venue_FullMethodName     = "/charlyplugin.ExecutorService/Venue"
-	ExecutorService_RunSystem_FullMethodName = "/charlyplugin.ExecutorService/RunSystem"
-	ExecutorService_RunUser_FullMethodName   = "/charlyplugin.ExecutorService/RunUser"
+	ExecutorService_Venue_FullMethodName      = "/charlyplugin.ExecutorService/Venue"
+	ExecutorService_RunSystem_FullMethodName  = "/charlyplugin.ExecutorService/RunSystem"
+	ExecutorService_RunUser_FullMethodName    = "/charlyplugin.ExecutorService/RunUser"
+	ExecutorService_RunCapture_FullMethodName = "/charlyplugin.ExecutorService/RunCapture"
+	ExecutorService_GetFile_FullMethodName    = "/charlyplugin.ExecutorService/GetFile"
 )
 
 // ExecutorServiceClient is the client API for ExecutorService service.
@@ -289,6 +291,8 @@ type ExecutorServiceClient interface {
 	Venue(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*VenueReply, error)
 	RunSystem(ctx context.Context, in *RunRequest, opts ...grpc.CallOption) (*RunReply, error)
 	RunUser(ctx context.Context, in *RunRequest, opts ...grpc.CallOption) (*RunReply, error)
+	RunCapture(ctx context.Context, in *RunRequest, opts ...grpc.CallOption) (*CaptureReply, error)
+	GetFile(ctx context.Context, in *GetFileRequest, opts ...grpc.CallOption) (*GetFileReply, error)
 }
 
 type executorServiceClient struct {
@@ -326,6 +330,24 @@ func (c *executorServiceClient) RunUser(ctx context.Context, in *RunRequest, opt
 	return out, nil
 }
 
+func (c *executorServiceClient) RunCapture(ctx context.Context, in *RunRequest, opts ...grpc.CallOption) (*CaptureReply, error) {
+	out := new(CaptureReply)
+	err := c.cc.Invoke(ctx, ExecutorService_RunCapture_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *executorServiceClient) GetFile(ctx context.Context, in *GetFileRequest, opts ...grpc.CallOption) (*GetFileReply, error) {
+	out := new(GetFileReply)
+	err := c.cc.Invoke(ctx, ExecutorService_GetFile_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ExecutorServiceServer is the server API for ExecutorService service.
 // All implementations must embed UnimplementedExecutorServiceServer
 // for forward compatibility
@@ -333,6 +355,8 @@ type ExecutorServiceServer interface {
 	Venue(context.Context, *Empty) (*VenueReply, error)
 	RunSystem(context.Context, *RunRequest) (*RunReply, error)
 	RunUser(context.Context, *RunRequest) (*RunReply, error)
+	RunCapture(context.Context, *RunRequest) (*CaptureReply, error)
+	GetFile(context.Context, *GetFileRequest) (*GetFileReply, error)
 	mustEmbedUnimplementedExecutorServiceServer()
 }
 
@@ -348,6 +372,12 @@ func (UnimplementedExecutorServiceServer) RunSystem(context.Context, *RunRequest
 }
 func (UnimplementedExecutorServiceServer) RunUser(context.Context, *RunRequest) (*RunReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RunUser not implemented")
+}
+func (UnimplementedExecutorServiceServer) RunCapture(context.Context, *RunRequest) (*CaptureReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RunCapture not implemented")
+}
+func (UnimplementedExecutorServiceServer) GetFile(context.Context, *GetFileRequest) (*GetFileReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetFile not implemented")
 }
 func (UnimplementedExecutorServiceServer) mustEmbedUnimplementedExecutorServiceServer() {}
 
@@ -416,6 +446,42 @@ func _ExecutorService_RunUser_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ExecutorService_RunCapture_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RunRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServiceServer).RunCapture(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ExecutorService_RunCapture_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServiceServer).RunCapture(ctx, req.(*RunRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ExecutorService_GetFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServiceServer).GetFile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ExecutorService_GetFile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServiceServer).GetFile(ctx, req.(*GetFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ExecutorService_ServiceDesc is the grpc.ServiceDesc for ExecutorService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -434,6 +500,14 @@ var ExecutorService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RunUser",
 			Handler:    _ExecutorService_RunUser_Handler,
+		},
+		{
+			MethodName: "RunCapture",
+			Handler:    _ExecutorService_RunCapture_Handler,
+		},
+		{
+			MethodName: "GetFile",
+			Handler:    _ExecutorService_GetFile_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

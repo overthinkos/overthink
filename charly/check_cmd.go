@@ -57,8 +57,8 @@ func (e *CheckFailedError) Error() string {
 //
 // The mode is explicit; there is no autodetect or implicit fallback.
 //
-// Live-container probe verbs (cdp/wl/dbus/vnc/record) share the
-// same "live" semantic: each requires a running target. (kube/adb/appium/spice/mcp
+// Live-container probe verbs (cdp/wl/dbus/vnc) share the
+// same "live" semantic: each requires a running target. (kube/adb/appium/spice/mcp/record
 // are declarative check verbs dep-shed to out-of-process plugins — they have NO
 // in-core sub-Cmd here; they dispatch via the provider registry.)
 //
@@ -79,9 +79,8 @@ type CheckCmd struct {
 	// libvirt`) is served by the out-of-process candy/plugin-vm verb plugin, nested under
 	// `charly check` at runtime via attachNestedCheckPlugins exactly like `kube`/`adb`/`appium`.
 	// This shed go-libvirt + kata-containers/govmm + libvirt.org/go/libvirtxml from charly's core.
-	Record RecordCmd `cmd:"" help:"Record terminal sessions or desktop video inside running containers"`
-	Vnc    VncCmd    `cmd:"" help:"Control VNC desktop in running containers"`
-	Wl     WlCmd     `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
+	Vnc VncCmd `cmd:"" help:"Control VNC desktop in running containers"`
+	Wl  WlCmd  `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
 	// `kube` is NOT a CLI subcommand here — the Kubernetes cluster-probe implementation (+ the
 	// client-go + apimachinery dependency) was dep-shed into the out-of-tree
 	// candy/plugin-kube module. `kube` is now a DECLARATIVE check VERB that dispatches to that
@@ -108,6 +107,12 @@ type CheckCmd struct {
 	// dispatches to that external plugin via the provider registry (invokeVerbProvider, after
 	// the host pre-resolves the deployment's declared mcp_provides + the picked, host-routable
 	// dial endpoint — preresolveMcpEndpoint); there is no host `charly check mcp`.
+	// `record` is NOT a CLI subcommand here — the recording driver (asciinema/wf-recorder/
+	// pixelflux session management) was dep-shed into the out-of-tree candy/plugin-record
+	// module. The `record:` DECLARATIVE check verb dispatches to that external plugin via the
+	// provider registry (invokeVerbProvider) — the FIRST EXEC-based external verb: the host
+	// attaches its live DeployExecutor over the E3b reverse channel and the plugin drives the
+	// venue with RunCapture/GetFile. There is no host `charly check record`.
 
 	// Check-run management (was `charly check *`)
 	ListAgent CheckListAgentCmd `cmd:"" name:"list-agent" help:"List configured agents from check.yml"`

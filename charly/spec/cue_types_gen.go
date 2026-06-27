@@ -45,6 +45,17 @@ type Op struct {
 	// pre-resolves the deployment's declared mcp_provides + the picked dial endpoint).
 	Mcp McpMethod `yaml:"mcp,omitempty" json:"mcp,omitempty"`
 
+	// `record` is an EXTERNAL-CHARLY-VERB: its recording driver (the asciinema/wf-recorder/
+	// pixelflux session management) lives in the out-of-tree candy/plugin-record module,
+	// served OUT-OF-PROCESS. Like cdp/vnc/mcp/spice (and unlike file/package/service/command,
+	// which left #Op entirely, re-authored as `plugin: <verb>`), record KEEPS its `record:`
+	// discriminator + every modifier (record_name/record_mode/record_fps/record_audio) on
+	// this closed #Op — authoring is unchanged (`record: start`, not `plugin: record`). It
+	// therefore left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc CheckVerbProvider to gate)
+	// BUT keeps this field + #RecordMethod here, so `record: start` still validates against
+	// the method enum and VerbsSet still classifies the op (then dispatch resolves the
+	// registered external provider, which drives the venue over the executor reverse channel —
+	// record is the FIRST EXEC-based external verb).
 	Record RecordMethod `yaml:"record,omitempty" json:"record,omitempty"`
 
 	// `spice` is an EXTERNAL-CHARLY-VERB: its SPICE-wire implementation (+ the upstream

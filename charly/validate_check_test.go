@@ -95,39 +95,14 @@ func TestValidateOps_McpClean(t *testing.T) {
 	}
 }
 
-// record (still in-core): runtime-context only, method allowlist, required
-// modifiers mirror the cdp/wl/dbus/vnc rules. (spice/libvirt/mcp left these host
-// checks when they became EXTERNAL-CHARLY-VERBs — see the *Clean tests above.)
-
-func TestValidateOps_RecordRejectedInBuildContext(t *testing.T) {
-	layers := map[string]*Candy{
-		"asciinema": opsCandy("asciinema", Op{Record: "list", Context: []string{"build"}}),
-	}
-	got := runValidateOps(t, &Config{Box: map[string]BoxConfig{}}, layers)
-	if !strings.Contains(got, "record:") || !strings.Contains(got, "runtime-context only") {
-		t.Errorf("expected runtime-context-only error for record: %s", got)
-	}
-}
-
-func TestValidateOps_RecordStopRequiresArtifact(t *testing.T) {
-	layers := map[string]*Candy{
-		"asciinema": opsCandy("asciinema", Op{Record: "stop"}), // missing artifact
-	}
-	got := runValidateOps(t, &Config{Box: map[string]BoxConfig{}}, layers)
-	if !strings.Contains(got, "record") || !strings.Contains(got, "artifact") {
-		t.Errorf("expected record: stop artifact-required error: %s", got)
-	}
-}
-
-func TestValidateOps_RecordCmdRequiresText(t *testing.T) {
-	layers := map[string]*Candy{
-		"asciinema": opsCandy("asciinema", Op{Record: "cmd"}), // missing text
-	}
-	got := runValidateOps(t, &Config{Box: map[string]BoxConfig{}}, layers)
-	if !strings.Contains(got, "record") || !strings.Contains(got, "text") {
-		t.Errorf("expected record: cmd text-required error: %s", got)
-	}
-}
+// The former TestValidateOps_RecordRejectedInBuildContext,
+// TestValidateOps_RecordStopRequiresArtifact, and TestValidateOps_RecordCmdRequiresText were
+// DELETED when record became an EXTERNAL-CHARLY-VERB (candy/plugin-record): record left
+// VerbCatalog, so the host validateOps no longer enforces its runtime-only context (legality
+// now rides the authored `context:` + the plugin's own box-mode skip) and its
+// required-modifier checks (`record: stop` needs artifact, `record: cmd` needs text) moved
+// into the plugin at dispatch (methods.go's checkRequiredModifiers). The method-name enum is
+// still enforced declaratively by CUE (#RecordMethod).
 
 func TestValidateOps_RecordClean(t *testing.T) {
 	layers := map[string]*Candy{

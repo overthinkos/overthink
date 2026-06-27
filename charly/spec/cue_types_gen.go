@@ -32,6 +32,17 @@ type Op struct {
 
 	Vnc VncMethod `yaml:"vnc,omitempty" json:"vnc,omitempty"`
 
+	// `mcp` is an EXTERNAL-CHARLY-VERB: its MCP-protocol client implementation (the
+	// github.com/modelcontextprotocol/go-sdk client + the dial/dispatch/format layer)
+	// lives in the out-of-tree candy/plugin-mcp module, served OUT-OF-PROCESS. Like
+	// cdp/vnc/spice (and unlike file/package/service/command, which left #Op entirely,
+	// re-authored as `plugin: <verb>`), mcp KEEPS its `mcp:` discriminator + every
+	// modifier (mcp_name/tool/uri/input) on this closed #Op — authoring is unchanged
+	// (`mcp: ping`, not `plugin: mcp`). It therefore left #OpVerb/spec.OpVerbs/VerbCatalog
+	// (no in-proc CheckVerbProvider to gate) BUT keeps this field + #McpMethod here, so
+	// `mcp: ping` still validates against the method enum and VerbsSet still classifies the
+	// op (then dispatch resolves the registered external provider, after the host
+	// pre-resolves the deployment's declared mcp_provides + the picked dial endpoint).
 	Mcp McpMethod `yaml:"mcp,omitempty" json:"mcp,omitempty"`
 
 	Record RecordMethod `yaml:"record,omitempty" json:"record,omitempty"`

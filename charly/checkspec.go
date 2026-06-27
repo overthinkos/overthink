@@ -315,8 +315,14 @@ var VerbCatalog = map[string]VerbSpec{
 	"wl":     {ctxRuntimeOnly, DoAssert, false},
 	"dbus":   {ctxRuntimeOnly, DoAssert, false},
 	"vnc":    {ctxRuntimeOnly, DoAssert, false},
-	"mcp":    {ctxRuntimeOnly, DoAssert, false},
 	"record": {ctxRuntimeOnly, DoAssert, false},
+	// `mcp` is NOT here — it is an EXTERNAL-CHARLY-VERB served out-of-process by
+	// candy/plugin-mcp. It left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc
+	// CheckVerbProvider) but keeps its `mcp:` discriminator + modifiers + the #McpMethod
+	// enum on core #Op (authoring unchanged); the registered external provider resolves at
+	// dispatch (the host pre-resolves the deployment's declared mcp_provides + the picked
+	// dial endpoint first). Its runtime-context legality now lives on the authored
+	// `context:` + the plugin's own box-mode skip, not this table.
 	// `libvirt` is NOT here — it is an EXTERNAL-CHARLY-VERB served out-of-process by
 	// candy/plugin-vm. It left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc CheckVerbProvider)
 	// but keeps its `libvirt:` discriminator + modifiers + the #LibvirtMethod enum on core #Op

@@ -69,44 +69,14 @@ func TestValidateOps_RuntimeVarInDeployContext(t *testing.T) {
 	}
 }
 
-// A live-container verb (mcp/cdp/wl/vnc/record/spice/libvirt) pinned to build
-// context is rejected — these need a running target (runtime context).
-func TestValidateOps_McpRejectedInBuildContext(t *testing.T) {
-	layers := map[string]*Candy{
-		"jupyter": opsCandy("jupyter", Op{Mcp: "ping", Context: []string{"build"}}),
-	}
-	cfg := &Config{Box: map[string]BoxConfig{}}
-	got := runValidateOps(t, cfg, layers)
-	if !strings.Contains(got, "mcp:") || !strings.Contains(got, "runtime-context only") {
-		t.Errorf("expected runtime-context-only error for mcp: %s", got)
-	}
-}
-
-// mcp: call requires tool modifier.
-func TestValidateOps_McpCallRequiresTool(t *testing.T) {
-	layers := map[string]*Candy{
-		"jupyter": opsCandy("jupyter", Op{Mcp: "call"}), // missing tool
-	}
-	cfg := &Config{Box: map[string]BoxConfig{}}
-	got := runValidateOps(t, cfg, layers)
-	if !strings.Contains(got, "mcp") || !strings.Contains(got, "tool") {
-		t.Errorf("expected mcp call tool-required error: %s", got)
-	}
-}
-
-// mcp: read requires uri modifier.
-func TestValidateOps_McpReadRequiresURI(t *testing.T) {
-	layers := map[string]*Candy{
-		"jupyter": opsCandy("jupyter", Op{Mcp: "read"}), // missing uri
-	}
-	cfg := &Config{Box: map[string]BoxConfig{}}
-	got := runValidateOps(t, cfg, layers)
-	if !strings.Contains(got, "mcp") || !strings.Contains(got, "uri") {
-		t.Errorf("expected mcp read uri-required error: %s", got)
-	}
-}
-
-// Unknown mcp method rejected with a listing of allowed methods.
+// The former TestValidateOps_McpRejectedInBuildContext,
+// TestValidateOps_McpCallRequiresTool, and TestValidateOps_McpReadRequiresURI were
+// DELETED when mcp became an EXTERNAL-CHARLY-VERB (candy/plugin-mcp): mcp left
+// VerbCatalog, so the host validateOps no longer enforces its runtime-only context
+// (legality now rides the authored `context:` + the plugin's own box-mode skip) and its
+// required-modifier checks (`mcp: call` needs tool, `mcp: read` needs uri) moved into the
+// plugin at dispatch (methods.go's checkRequiredModifiers). The method-name enum is still
+// enforced declaratively by CUE (#McpMethod).
 
 // Valid mcp checks (default runtime context) produce no errors.
 func TestValidateOps_McpClean(t *testing.T) {
@@ -125,8 +95,9 @@ func TestValidateOps_McpClean(t *testing.T) {
 	}
 }
 
-// record/spice/libvirt verbs: runtime-context only, method allowlist, required
-// modifiers mirror the cdp/wl/dbus/vnc/mcp rules.
+// record (still in-core): runtime-context only, method allowlist, required
+// modifiers mirror the cdp/wl/dbus/vnc rules. (spice/libvirt/mcp left these host
+// checks when they became EXTERNAL-CHARLY-VERBs — see the *Clean tests above.)
 
 func TestValidateOps_RecordRejectedInBuildContext(t *testing.T) {
 	layers := map[string]*Candy{

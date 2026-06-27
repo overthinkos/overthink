@@ -135,7 +135,6 @@ func buildGraderPrompt(req GraderRequest, target, instance string) string {
 	}
 	b.WriteString(". You MAY gather evidence by running probes against it, e.g.:\n")
 	b.WriteString("  charly cmd " + target + " '<shell>'            # run a shell command inside the deployment\n")
-	b.WriteString("  charly check mcp list-tools " + target + "      # probe an MCP server it advertises\n")
 	b.WriteString("  charly check cdp status " + target + "          # Chrome DevTools (if it runs a browser)\n")
 	b.WriteString("  charly check wl screenshot " + target + " --artifact /tmp/s.png   # desktop screenshot\n")
 	b.WriteString("  charly status " + target + "                   # deployment status\n")

@@ -64,7 +64,7 @@ func TestMcpServerSchema_CoreToolsPresent(t *testing.T) {
 		"box.list.candies",
 		"settings.list",
 		"check.live",
-		"check.mcp.ping",
+		"check.box",
 	}
 	for _, name := range must {
 		if _, ok := tools[name]; !ok {

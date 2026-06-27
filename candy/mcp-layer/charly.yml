@@ -4,7 +4,9 @@ mcp-layer:
         description: |
             harness-mcp-fixture — minimal Streamable-HTTP MCP server stub for harness phase 4
             Implements the MCP Streamable HTTP protocol surface that
-            `charly check mcp` probes: initialize, ping, tools/list, tools/call.
+            the `mcp:` check verb (exercised via `charly check live <pod> --filter mcp`,
+            dispatched out-of-process by candy/plugin-mcp) probes: initialize, ping,
+            tools/list, tools/call.
             Advertises three jupyter-named tools (list_notebooks, insert_cell,
             execute_cell) so the mcp-protocol-probe recipe's matchers all
             satisfy. Stdlib-only Python (no fastmcp install) keeps the image
@@ -12,6 +14,15 @@ mcp-layer:
     mcp-layer-require:
         require:
             - supervisord
+            # plugin-mcp is the OUT-OF-TREE plugin that serves the `mcp:` check verb
+            # (the github.com/modelcontextprotocol/go-sdk MCP CLIENT lives there, not in
+            # charly's core check surface). This candy AUTHORS `mcp:` checks, so requiring
+            # plugin-mcp puts it in every composing image's scanned candy set; the host's
+            # collectReferencedPluginWords then build-connects it before the baked `mcp:`
+            # checks dispatch — otherwise they SKIP with `unknown verb "mcp"`. (box/<distro>
+            # adopts the matching @github pin via reconcile later — the deliberate cross-repo
+            # lag; the R10 bed loads the LOCAL candy via the superproject override.)
+            - plugin-mcp
     mcp-layer-distro:
         distro:
             fedora:
@@ -50,7 +61,8 @@ mcp-layer:
             """Minimal MCP Streamable HTTP server stub.
 
             Implements just enough of the MCP 2025-11-25 protocol to satisfy
-            `charly check mcp ping|list-tools|call <pod>`:
+            the `mcp:` check verb (ping / list-tools / call, via
+            `charly check live <pod> --filter mcp`):
               - POST /mcp with JSON-RPC: initialize, notifications/initialized,
                 ping, tools/list, tools/call
               - GET /mcp -> 405 (client tolerates this)
@@ -253,6 +265,9 @@ mcp-layer:
     mcp-layer-step-5:
         check: the running fixture answers an MCP ping over its Streamable HTTP endpoint
         mcp: ping
+        timeout: 30s
+        eventually: 90s
+        retry_interval: 3s
         context:
             - runtime
     mcp-layer-step-6:

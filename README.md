@@ -598,10 +598,12 @@ getprop`, `appium: click`, …):
 - `charly check dbus` — D-Bus method calls and signal subscriptions.
 - `charly check vnc` — RFB handshake, pointer/keyboard, clipboard,
   screenshot.
-- `charly check mcp` — Model Context Protocol clients (list-tools,
-  list-resources, read-resource, call-tool).
-- `charly check libvirt` — libvirt API (VM info, screenshot, send-key,
-  QMP, snapshots, event stream).
+- `mcp:` — Model Context Protocol declarative check verb (list-tools,
+  list-resources, read-resource, call-tool) — out-of-process plugin
+  (`candy/plugin-mcp`), no host CLI subcommand.
+- `libvirt:` — libvirt-RPC declarative check verb (VM info, screenshot,
+  send-key, QMP, snapshots, event stream) — out-of-process plugin
+  (`candy/plugin-vm`), no host CLI subcommand. VM-only.
 - `charly check record` — terminal asciinema or desktop ffmpeg.
 - `spice:` — SPICE wire-level display-protocol declarative check verb
   (status, screenshot, cursor, click, mouse, type, key) — out-of-process

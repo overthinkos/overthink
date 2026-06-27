@@ -30,6 +30,12 @@ type CheckEnv struct {
 	// every non-spice verb and for a spice op with no resolved VM endpoint. Set by
 	// invokeVerbProvider from preresolveSpiceEndpoint (spice_preresolve.go).
 	Spice *SpiceEnv `json:"spice,omitempty"`
+	// Mcp carries the host-resolved MCP context for a `mcp:` verb (the out-of-process
+	// candy/plugin-mcp provider owns no podman / OCI-label machinery): the declared-server
+	// list (for `servers`) plus the single picked, host-routable dial endpoint (for every
+	// other method). nil for every non-mcp verb. Set by invokeVerbProvider from
+	// preresolveMcpEndpoint (mcp_preresolve.go).
+	Mcp *McpEnv `json:"mcp,omitempty"`
 }
 
 func runModeName(m RunMode) string {
@@ -195,6 +201,14 @@ func (r *Runner) invokeVerbProvider(ctx context.Context, prov Provider, word str
 	if spiceEarly != nil {
 		return *spiceEarly
 	}
+	// Pre-resolve a `mcp:` op's deployment (r.Box) to the declared-server list + the
+	// picked, host-routable dial endpoint — an out-of-process mcp verb owns no podman /
+	// OCI-label machinery. A no-op for every non-mcp verb; for a mcp op it may
+	// short-circuit with a FAIL (no mcp_provides / resolution error).
+	mcpEnv, mcpEarly := r.preresolveMcpEndpoint(c)
+	if mcpEarly != nil {
+		return *mcpEarly
+	}
 	params, err := marshalJSON(c)
 	if err != nil {
 		res.Status = TestFail
@@ -203,6 +217,7 @@ func (r *Runner) invokeVerbProvider(ctx context.Context, prov Provider, word str
 	}
 	ce := snapshotCheckEnv(r, c)
 	ce.Spice = spiceEnv
+	ce.Mcp = mcpEnv
 	env, err := marshalJSON(ce)
 	if err != nil {
 		res.Status = TestFail

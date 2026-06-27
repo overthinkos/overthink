@@ -57,8 +57,8 @@ func (e *CheckFailedError) Error() string {
 //
 // The mode is explicit; there is no autodetect or implicit fallback.
 //
-// Live-container probe verbs (cdp/wl/dbus/vnc/mcp/record/libvirt) share the
-// same "live" semantic: each requires a running target. (kube/adb/appium/spice
+// Live-container probe verbs (cdp/wl/dbus/vnc/record) share the
+// same "live" semantic: each requires a running target. (kube/adb/appium/spice/mcp
 // are declarative check verbs dep-shed to out-of-process plugins — they have NO
 // in-core sub-Cmd here; they dispatch via the provider registry.)
 //
@@ -79,7 +79,6 @@ type CheckCmd struct {
 	// libvirt`) is served by the out-of-process candy/plugin-vm verb plugin, nested under
 	// `charly check` at runtime via attachNestedCheckPlugins exactly like `kube`/`adb`/`appium`.
 	// This shed go-libvirt + kata-containers/govmm + libvirt.org/go/libvirtxml from charly's core.
-	Mcp    McpCmd    `cmd:"" help:"Probe MCP servers declared via mcp_provides"`
 	Record RecordCmd `cmd:"" help:"Record terminal sessions or desktop video inside running containers"`
 	Vnc    VncCmd    `cmd:"" help:"Control VNC desktop in running containers"`
 	Wl     WlCmd     `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
@@ -103,6 +102,12 @@ type CheckCmd struct {
 	// dispatches to that external plugin via the provider registry (invokeVerbProvider,
 	// after the host pre-resolves the VM's live SPICE endpoint to a dialable address);
 	// there is no host `charly check spice`.
+	// `mcp` is NOT a CLI subcommand here — the MCP-protocol client implementation (the
+	// github.com/modelcontextprotocol/go-sdk client + the dial/dispatch/format layer) was
+	// dep-shed into the out-of-tree candy/plugin-mcp module. The `mcp:` DECLARATIVE check verb
+	// dispatches to that external plugin via the provider registry (invokeVerbProvider, after
+	// the host pre-resolves the deployment's declared mcp_provides + the picked, host-routable
+	// dial endpoint — preresolveMcpEndpoint); there is no host `charly check mcp`.
 
 	// Check-run management (was `charly check *`)
 	ListAgent CheckListAgentCmd `cmd:"" name:"list-agent" help:"List configured agents from check.yml"`

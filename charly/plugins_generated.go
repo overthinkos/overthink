@@ -24,7 +24,6 @@ import (
 	cp_plugin_interface "github.com/overthinkos/overthink/candy/plugin-interface"
 	cp_plugin_kernel_param "github.com/overthinkos/overthink/candy/plugin-kernel-param"
 	cp_plugin_matching "github.com/overthinkos/overthink/candy/plugin-matching"
-	cp_plugin_mcp "github.com/overthinkos/overthink/candy/plugin-mcp"
 	cp_plugin_module "github.com/overthinkos/overthink/candy/plugin-module"
 	cp_plugin_mount "github.com/overthinkos/overthink/candy/plugin-mount"
 	cp_plugin_package "github.com/overthinkos/overthink/candy/plugin-package"
@@ -75,5 +74,4 @@ func init() {
 	registerCompiledDedicatedVerb(cp_plugin_vnc.NewLiveVerb())
 	registerCompiledDedicatedVerb(cp_plugin_dbus.NewLiveVerb())
 	registerCompiledDedicatedVerb(cp_plugin_record.NewLiveVerb())
-	registerCompiledDedicatedVerb(cp_plugin_mcp.NewLiveVerb())
 }

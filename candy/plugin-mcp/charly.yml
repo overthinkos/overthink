@@ -1,19 +1,39 @@
 plugin-mcp:
     candy:
-        version: 2026.176.2300
+        version: 2026.177.2300
         description: |-
-            The `mcp` live-container check verb relocated into a candy: probe MCP servers
-            declared via mcp_provides on a live deployment (ping, servers, list-tools/
-            resources/prompts, call, read). A SCHEMA-LESS host-coupled LIVE verb — its
-            modifiers ride the closed base #Op; RunVerb delegates dispatch to the host via
-            kit.CheckContext.RunCharlyVerb, so it is COMPILED-IN-ONLY.
+            OUT-OF-TREE charly plugin serving the `mcp` MCP-protocol check verb — a
+            standalone Go module (go.mod + main.go) that speaks the Model Context
+            Protocol over go-plugin gRPC via the charly plugin SDK (charly/plugin/sdk).
+            charly's loader fetches this candy's repo, go-builds the provider binary on
+            the HOST, and serves it OUT-OF-PROCESS via LocalTransport — so the
+            github.com/modelcontextprotocol/go-sdk MCP CLIENT lives HERE, out of
+            charly's core check surface (the fifth external dep-shed after
+            candy/plugin-appium, candy/plugin-adb, candy/plugin-kube,
+            candy/plugin-spice; charly's core still imports go-sdk only for the
+            `charly mcp serve` SERVER, mcp_server.go). `mcp:` authoring stays unchanged:
+            the verb keeps its `mcp:` discriminator + every modifier
+            (mcp_name/tool/uri/input/timeout) + the #McpMethod enum on charly's core
+            #Op, and dispatches through the provider registry exactly like a built-in
+            (ResolveVerb → grpcProvider → invokeVerbProvider hands it the full #Op). The
+            host owns the podman / OCI-label / port-mapping resolution
+            (preresolveMcpEndpoint), pre-resolving the deployment's declared
+            mcp_provides + the single picked, host-routable dial endpoint into the check
+            env — so this plugin needs no container inspection at all. Provides the full
+            7-method surface (ping/servers/list-tools/list-resources/list-prompts/call/
+            read). The R10 consumer is an MCP-providing pod bed whose check composes this
+            plugin (e.g. jupyter / chrome-devtools-mcp).
     plugin-mcp-decl:
         plugin:
             source: github.com/overthinkos/overthink/candy/plugin-mcp
             providers:
                 - verb:mcp
     mcp-verb-dispatches:
-        check: the mcp verb dispatches through the provider registry and pings the declared MCP servers on a live deployment
+        check: the mcp verb dispatches through the provider registry and pings the declared MCP servers on a live deployment (the out-of-process plugin verb dials the host-resolved MCP endpoint)
         id: mcp-verb-dispatches
         mcp: ping
-        context: [runtime]
+        timeout: 30s
+        eventually: 90s
+        retry_interval: 3s
+        context:
+            - runtime

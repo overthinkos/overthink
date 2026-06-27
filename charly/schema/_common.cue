@@ -16,7 +16,7 @@
 // VerbCatalog entry (the registry bijection gate proves it). Keep in lockstep with
 // the `--- verb discriminators ---` group in #Op.
 #OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" |
-	"cdp" | "wl" | "dbus" | "vnc" | "mcp" | "record" |
+	"cdp" | "wl" | "dbus" | "vnc" | "record" |
 	"summarize" | "kill" | "plugin") @go(-)
 
 // ---------------------------------------------------------------------------
@@ -58,6 +58,17 @@
 	wl?:             #WlMethod
 	dbus?:           #DbusMethod
 	vnc?:            #VncMethod
+	// `mcp` is an EXTERNAL-CHARLY-VERB: its MCP-protocol client implementation (the
+	// github.com/modelcontextprotocol/go-sdk client + the dial/dispatch/format layer)
+	// lives in the out-of-tree candy/plugin-mcp module, served OUT-OF-PROCESS. Like
+	// cdp/vnc/spice (and unlike file/package/service/command, which left #Op entirely,
+	// re-authored as `plugin: <verb>`), mcp KEEPS its `mcp:` discriminator + every
+	// modifier (mcp_name/tool/uri/input) on this closed #Op — authoring is unchanged
+	// (`mcp: ping`, not `plugin: mcp`). It therefore left #OpVerb/spec.OpVerbs/VerbCatalog
+	// (no in-proc CheckVerbProvider to gate) BUT keeps this field + #McpMethod here, so
+	// `mcp: ping` still validates against the method enum and VerbsSet still classifies the
+	// op (then dispatch resolves the registered external provider, after the host
+	// pre-resolves the deployment's declared mcp_provides + the picked dial endpoint).
 	mcp?:            #McpMethod
 	record?:         #RecordMethod
 	// `spice` is an EXTERNAL-CHARLY-VERB: its SPICE-wire implementation (+ the upstream

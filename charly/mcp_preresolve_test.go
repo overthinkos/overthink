@@ -3,9 +3,13 @@ package main
 import (
 	"strings"
 	"testing"
-
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// mcp_preresolve_test.go covers the HOST-side MCP resolution helpers that stay in
+// charly's core (the dial/dispatch/format layer moved out-of-process to
+// candy/plugin-mcp, where its own tests live). These three helpers need charly's
+// image metadata / container inspection / port-mapping data an out-of-process plugin
+// cannot reach, so they remain host-side in mcp_preresolve.go.
 
 // ---------------------------------------------------------------------------
 // pickMCPEntry — discriminator semantics
@@ -170,143 +174,5 @@ func TestRewriteMCPURL_LocalhostIsAccepted(t *testing.T) {
 	want := "http://127.0.0.1:18888/mcp"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
-// ---------------------------------------------------------------------------
-// buildMCPTransport — transport dispatch
-// ---------------------------------------------------------------------------
-
-func TestBuildMCPTransport(t *testing.T) {
-	cases := []struct {
-		transport string
-		wantType  string // %T substring
-		wantErr   bool
-	}{
-		{"", "StreamableClientTransport", false},
-		{"http", "StreamableClientTransport", false},
-		{"HTTP", "StreamableClientTransport", false},
-		{"streamable-http", "StreamableClientTransport", false},
-		{"sse", "SSEClientTransport", false},
-		{"SSE", "SSEClientTransport", false},
-		{"stdio", "", true},
-		{"websocket", "", true},
-	}
-	for _, tc := range cases {
-		tr, err := buildMCPTransport(MCPProvideEntry{URL: "http://x", Transport: tc.transport})
-		if tc.wantErr {
-			if err == nil {
-				t.Errorf("transport=%q: expected error, got %T", tc.transport, tr)
-			}
-			continue
-		}
-		if err != nil {
-			t.Errorf("transport=%q: unexpected error: %v", tc.transport, err)
-			continue
-		}
-		typeName := typeOf(tr)
-		if !strings.Contains(typeName, tc.wantType) {
-			t.Errorf("transport=%q: got %s, want contains %s", tc.transport, typeName, tc.wantType)
-		}
-	}
-}
-
-// typeOf gets a short type name string via fmt %T.
-func typeOf(v any) string {
-	return strings.TrimPrefix(stringOfType(v), "*")
-}
-
-func stringOfType(v any) string {
-	if v == nil {
-		return "<nil>"
-	}
-	type stringer interface{ String() string }
-	if s, ok := v.(stringer); ok {
-		return s.String()
-	}
-	// Fall back to simple reflect-free formatting.
-	// Go's fmt.Sprintf("%T", v) would do, but avoid the fmt import here.
-	// Since transports are concrete types, a hand-rolled switch works:
-	switch v.(type) {
-	case *mcp.StreamableClientTransport:
-		return "*mcp.StreamableClientTransport"
-	case *mcp.SSEClientTransport:
-		return "*mcp.SSEClientTransport"
-	}
-	return "unknown"
-}
-
-// ---------------------------------------------------------------------------
-// Formatters — stable one-line-per-record output
-// ---------------------------------------------------------------------------
-
-func TestFormatTool(t *testing.T) {
-	got := formatTool(&mcp.Tool{Name: "insert_cell", Description: "Insert a cell.\nSecond line."})
-	want := "insert_cell\tInsert a cell."
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
-func TestFormatTool_Nil(t *testing.T) {
-	if got := formatTool(nil); got != "" {
-		t.Errorf("expected empty for nil, got %q", got)
-	}
-}
-
-func TestFormatResource(t *testing.T) {
-	got := formatResource(&mcp.Resource{URI: "file:///foo", Name: "foo", MIMEType: "text/plain"})
-	want := "file:///foo\tfoo\ttext/plain"
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
-func TestFormatPrompt(t *testing.T) {
-	got := formatPrompt(&mcp.Prompt{Name: "greet", Description: "Greet someone"})
-	want := "greet\tGreet someone"
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
-func TestFirstLine(t *testing.T) {
-	cases := []struct{ in, want string }{
-		{"single", "single"},
-		{"first\nsecond", "first"},
-		{"\n  \n  useful  \nmore", "useful"},
-		{"", ""},
-	}
-	for _, tc := range cases {
-		if got := firstLine(tc.in); got != tc.want {
-			t.Errorf("firstLine(%q) = %q, want %q", tc.in, got, tc.want)
-		}
-	}
-}
-
-// ---------------------------------------------------------------------------
-// extractToolText
-// ---------------------------------------------------------------------------
-
-func TestExtractToolText(t *testing.T) {
-	res := &mcp.CallToolResult{Content: []mcp.Content{
-		&mcp.TextContent{Text: "line one"},
-		&mcp.TextContent{Text: "line two"},
-	}}
-	want := "line one\nline two"
-	if got := extractToolText(res); got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
-func TestExtractToolText_Nil(t *testing.T) {
-	if got := extractToolText(nil); got != "" {
-		t.Errorf("expected empty for nil, got %q", got)
-	}
-}
-
-func TestExtractToolText_NoContent(t *testing.T) {
-	if got := extractToolText(&mcp.CallToolResult{}); got != "" {
-		t.Errorf("expected empty for no content, got %q", got)
 	}
 }

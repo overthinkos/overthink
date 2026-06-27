@@ -43,8 +43,7 @@ import (
 // <verb> <method>` CLI path — the test framework spawns a subprocess for each check,
 // captures stdout/stderr/exit, and feeds the output through the existing matcher pipeline
 // (Stdout/Stderr/ExitStatus + artifact size via ArtifactMinBytes). The per-verb providers
-// + their <verb>Methods allowlists are compiled-in candies (candy/plugin-cdp/wl/vnc/dbus/
-// mcp/record/libvirt) — each a kit.LiveVerbProvider whose RunVerb delegates back here via
+// + their <verb>Methods allowlists are compiled-in candies (candy/plugin-cdp/wl/vnc/dbus/record) — each a kit.LiveVerbProvider whose RunVerb delegates back here via
 // CheckContext.RunCharlyVerb; only this shared dispatcher stays host-side. kube/adb/appium/
 // spice are extracted as external-charly-verbs (candy/plugin-kube, candy/plugin-adb,
 // candy/plugin-appium, candy/plugin-spice), dispatching via invokeVerbProvider, never
@@ -104,7 +103,7 @@ func (r *Runner) resolveCheckApk(apk, origin string) (string, error) {
 // Verb dispatchers
 // ---------------------------------------------------------------------------
 
-// The cdp/vnc/wl/dbus/mcp/record/libvirt verbs are compiled-in candies (candy/plugin-<verb>)
+// The cdp/vnc/wl/dbus/record verbs are compiled-in candies (candy/plugin-<verb>)
 // — each a kit.LiveVerbProvider carrying its provider + method allowlist; their RunVerb
 // delegates to the shared runCharlyVerb below via CheckContext.RunCharlyVerb. NO per-verb
 // dispatcher remains here — only the shared runCharlyVerb.

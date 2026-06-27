@@ -2,33 +2,14 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
-
-	"github.com/alecthomas/kong"
 )
-
-// fakeLazyCmd is a registered ClassCommand provider used to prove the LAZY-connect dispatch
-// path: dispatchExternalCommand with a nil prov resolves it from the registry by word (the
-// in-process analogue of connectCommandPlugin's out-of-process build+connect).
-type fakeLazyCmd struct{ gotArgs []string }
-
-func (*fakeLazyCmd) Reserved() string     { return "zzlazycmd" }
-func (*fakeLazyCmd) Class() ProviderClass { return ClassCommand }
-func (f *fakeLazyCmd) Invoke(_ context.Context, op *Operation) (*Result, error) {
-	var p struct {
-		Args []string `json:"args"`
-	}
-	_ = json.Unmarshal(op.Params, &p)
-	f.gotArgs = p.Args
-	return &Result{}, nil
-}
 
 // TestCommandPrescan_RegisterAndCollect proves the prescan→grammar path: a declared external
 // command word (registerDeclaredExternalCommand, as the byte-gated prescanPluginManifest does)
 // surfaces in declaredExternalCommandWords AND collectExternalCommandPlugins builds a TOP-LEVEL
-// grammar holder + a LAZY dispatch entry (prov nil, word set) for it — so `charly <word>` parses
-// before the provider connects.
+// grammar holder + a dispatch entry (word + holder set) for it — so `charly <word>` parses
+// before the binary is resolved (the resolve + syscall.Exec are deferred to dispatch).
 func TestCommandPrescan_RegisterAndCollect(t *testing.T) {
 	registerDeclaredExternalCommand("zzprescancmd")
 	found := false
@@ -45,39 +26,29 @@ func TestCommandPrescan_RegisterAndCollect(t *testing.T) {
 	if !ok {
 		t.Fatal("collectExternalCommandPlugins built no dispatch entry for the prescanned word")
 	}
-	if d.prov != nil {
-		t.Fatalf("prescanned dispatch entry should be lazy (prov nil), got %T", d.prov)
-	}
 	if d.word != "zzprescancmd" {
 		t.Fatalf("dispatch entry word = %q, want zzprescancmd", d.word)
 	}
+	if d.holder == nil {
+		t.Fatal("dispatch entry has no grammar holder")
+	}
 }
 
-// TestDispatchExternalCommand_LazyConnect proves the lazy dispatch resolves a not-eagerly-passed
-// provider from the registry by word and forwards the pass-through args — the path a prescanned
-// `charly <word> …` takes (connectCommandPlugin's first line returns the already-registered
-// provider instead of doing the out-of-process build+connect).
-func TestDispatchExternalCommand_LazyConnect(t *testing.T) {
-	fake := &fakeLazyCmd{}
-	RegisterBuiltinProvider(fake)
-	field := exportedCommandField("zzlazycmd")
-	holder := externalCommandHolder("zzlazycmd", field)
-	var cli struct{ kong.Plugins }
-	cli.Plugins = kong.Plugins{holder}
-	parser, err := kong.New(&cli, kong.Name("charly"))
+// TestResolveCommandPluginBinary_Baked proves dispatch resolves a command word to its BAKED
+// provider binary directly (the deployed-container path: discoverBakedPluginWords mapped the
+// word → binary from the `.providers` manifest, so no project scan is needed). This is the
+// path `charly mcp serve` takes inside the charly-mcp service container.
+func TestResolveCommandPluginBinary_Baked(t *testing.T) {
+	const word = "zzbakedcmd"
+	bakedCommandBinaries[word] = "/usr/lib/charly/plugins/" + word
+	defer delete(bakedCommandBinaries, word)
+
+	bin, err := resolveCommandPluginBinary(context.Background(), word)
 	if err != nil {
-		t.Fatalf("kong.New: %v", err)
+		t.Fatalf("resolveCommandPluginBinary (baked): %v", err)
 	}
-	if _, err := parser.Parse([]string{"zzlazycmd", "alpha", "--beta"}); err != nil {
-		t.Fatalf("kong.Parse: %v", err)
-	}
-	// prov nil ⇒ lazy: dispatchExternalCommand must resolve fake from the registry by word.
-	d := externalCommandDispatch{prov: nil, word: "zzlazycmd", holder: holder, field: field}
-	if err := dispatchExternalCommand(d); err != nil {
-		t.Fatalf("dispatchExternalCommand (lazy): %v", err)
-	}
-	if len(fake.gotArgs) != 2 || fake.gotArgs[0] != "alpha" || fake.gotArgs[1] != "--beta" {
-		t.Fatalf("lazy plugin got args %v, want [alpha --beta]", fake.gotArgs)
+	if want := "/usr/lib/charly/plugins/" + word; bin != want {
+		t.Fatalf("resolveCommandPluginBinary = %q, want the baked binary %q", bin, want)
 	}
 }
 

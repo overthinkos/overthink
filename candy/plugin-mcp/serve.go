@@ -149,10 +149,12 @@ var mcpDestructivePaths = map[string]bool{
 // plugin can't import from package main — a literal here).
 const projectFileName = "charly.yml"
 
-// serve builds the MCP server from the host CLI model and runs the requested transport.
-// The ctx is the Invoke context — when the host disconnects, it cancels and the stdio
-// server returns; the HTTP server is bound to the process lifetime.
-func (p provider) serve(ctx context.Context, c *McpServeCmd) error {
+// runServe builds the MCP server from the host CLI model and runs the requested transport.
+// Invoked from cliMain (CLI mode), where the plugin IS the process (charly syscall.Exec'd it),
+// so its stdio/sockets are charly's inherited terminal streams. The ctx drives the stdio
+// transport (it returns on stdin EOF / cancel); the HTTP server is bound to the process
+// lifetime.
+func runServe(ctx context.Context, c *McpServeCmd) error {
 	bin, err := resolveCharlyBin()
 	if err != nil {
 		return fmt.Errorf("locate charly binary: %w", err)
@@ -163,15 +165,10 @@ func (p provider) serve(ctx context.Context, c *McpServeCmd) error {
 	}
 
 	if c.Stdio {
-		// A command plugin's stdin/stdout are owned by go-plugin (stdin /dev/null; stdout =
-		// the handshake/log stream), and the host charly process the editor connects its
-		// stdio to blocks on the gRPC command Invoke without forwarding stdio — so an
-		// editor's stdio cannot reach this externalized server. Fail HONESTLY rather than
-		// silently serving on the wrong pipes. Restoring stdio needs a host-side
-		// fork/exec-with-inherited-stdio command path (the C1.1 follow-up); the only
-		// deployed mode (candy/charly-mcp) is HTTP.
-		return fmt.Errorf("charly mcp serve --stdio is unsupported by the out-of-process MCP server " +
-			"(its stdio is owned by the plugin transport); use --listen <addr> for the HTTP transport instead")
+		// The plugin runs in CLI mode (fork/exec'd by charly's command dispatch), so it owns
+		// charly's inherited stdin/stdout/TTY natively — the go-sdk stdio transport reads
+		// os.Stdin and writes os.Stdout directly, the editor/LLM integration path.
+		return server.Run(ctx, &mcp.StdioTransport{})
 	}
 
 	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {

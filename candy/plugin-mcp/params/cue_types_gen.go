@@ -2,15 +2,6 @@
 
 package params
 
-// #McpInput — the input shape for the `mcp` command. The optional `args` list carries
-// every CLI token after the command word (e.g. `serve`, `--listen=:18765`, `--stdio`).
-type McpInput struct {
-	// args is the pass-through CLI token list charly forwards from
-	// `charly mcp <args…>`. Optional — an empty/absent list means the command was
-	// invoked with no positional arguments.
-	Args []string `yaml:"args,omitempty" json:"args,omitempty"`
-}
-
 // #McpPlugin documents the verb the plugin serves. mcp keeps its entire authoring
 // contract (the #McpMethod enum + modifiers) on charly's core #Op, so there is no
 // plugin_input to validate here.

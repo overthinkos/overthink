@@ -1,36 +1,29 @@
 // Command plugin-example-command is the reference OUT-OF-TREE charly COMMAND-class
-// plugin: a standalone binary (its own Go module) that serves the `examplecommand`
-// command over go-plugin gRPC via the charly plugin SDK. It is the COMMAND-class
-// companion of the verb-class candy/plugin-example-external.
+// plugin: a standalone binary (its own Go module) contributing the `examplecommand`
+// command. It is the COMMAND-class companion of the verb-class candy/plugin-example-external.
 //
 // CLI dispatch contract (charly/provider_command_external.go dispatchExternalCommand):
-// charly forwards the user's pass-through CLI tokens from `charly examplecommand
-// <args…>` by Invoking this provider with op.Op == OpRun and
-// op.Params == {"args": [...]} (the tokens, marshalled directly — NOT wrapped in the
-// `plugin_input` envelope a verb CHECK step uses). This provider decodes that args
-// list, then does ONE observable, deterministic thing: it writes a marker FILE (path =
-// the first arg, else a fixed /tmp/charly-examplecommand/ran) whose body is the joined
-// args — so a test can assert the command ran AND received its args.
+// on `charly examplecommand <args…>`, charly RESOLVES this plugin's binary and
+// syscall.Exec's it with the pass-through tokens after the command word, in CLI mode
+// (the go-plugin handshake cookie is stripped, so sdk.Main runs cliMain rather than
+// serving gRPC). The plugin therefore owns real terminal stdio/TTY — the whole point of
+// the command-passthrough seam — and does ONE observable, deterministic thing: it prints
+// the joined args to STDOUT, so a test can assert both that the command ran and which
+// args it received, AND that a command plugin reaches a real stdout.
 //
-// The command class is external-capable: charly's prescan (plugin_command_prescan.go)
-// registers `examplecommand` into the CLI grammar before kong.Parse, and the first
-// `charly examplecommand` invocation lazy-connects + Invokes this provider out-of-process.
-// (builtinCommandBase.Invoke's "in-process only" stub is only the BUILTIN-command path; an
-// external command runs here, over gRPC.) The full end-to-end (`charly examplecommand
-// <args>` → marker file) is exercised by the Go e2e + the live R10, not by this candy's
-// build-context ADE check (see charly.yml).
+// A command is NOT a gRPC-registry capability (charly fork/execs the binary; it never
+// connects over gRPC for a command), so this plugin advertises NO Describe capability —
+// its serve half (sdk.Serve, never reached for a command-only plugin) exists only to
+// satisfy the dual-mode sdk.Main signature. The candy's plugin.providers declaration still
+// lists command:examplecommand (that drives the CLI-grammar prescan + the baked manifest).
 package main
 
 import (
 	"context"
 	"embed"
-	"encoding/json"
 	"fmt"
-	"os"
-	"path"
 	"strings"
 
-	"github.com/overthinkos/overthink/candy/plugin-example-command/params"
 	pb "github.com/overthinkos/overthink/charly/plugin/proto"
 	"github.com/overthinkos/overthink/charly/plugin/sdk"
 )
@@ -38,68 +31,37 @@ import (
 //go:embed schema/*.cue
 var schemaFS embed.FS
 
-func main() { sdk.Serve(&provider{}, &meta{}) }
+// main is dual-mode (sdk.Main). For a command-only plugin, charly only ever fork/execs the
+// binary (CLI mode) — it never launches it in go-plugin serve mode — so cliMain is the live
+// path; the serve half is inert (no gRPC capability).
+func main() { sdk.Main(&provider{}, &meta{}, cliMain) }
 
-// opRun mirrors charly's command-run op selector (package main's OpRun = "run"). An
-// external plugin can't import that constant, so it is named here; the host's
-// dispatchExternalCommand sends opRun on the command Invoke. Any other op returns a
-// benign empty result.
-const opRun = "run"
-
-// defaultMarker is the marker path used when `charly examplecommand` is invoked with
-// no positional args — a fixed, disposable /tmp path with zero operator side-effect.
-const defaultMarker = "/tmp/charly-examplecommand/ran"
+// cliMain is the CLI-mode entry point: charly fork/exec'd this plugin with the pass-through
+// tokens after `charly examplecommand`. It prints them (joined) to real stdout and exits 0.
+func cliMain(args []string) int {
+	fmt.Println(strings.Join(args, " "))
+	return 0
+}
 
 type provider struct{ pb.UnimplementedProviderServer }
 
-// Invoke handles the command-run Op (opRun): it decodes the pass-through CLI args from
-// op.Params (the {"args": [...]} the host forwards DIRECTLY — no plugin_input wrapper),
-// then writes a marker FILE at the first arg (or the fixed defaultMarker) containing the
-// joined args, so a test can assert both that the command ran and which args it received.
-// The result echoes the joined args as the message (the same deterministic-pass shape
-// candy/plugin-example-external returns for its verb).
-func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeReply, error) {
-	if req.GetOp() != opRun {
-		return &pb.InvokeReply{ResultJson: []byte("{}")}, nil
-	}
-	// Decode the args list into the CUE-GENERATED typed struct (params.ExamplecommandInput,
-	// generated by `cue exp gengotypes` from schema/examplecommand.cue) — never a
-	// hand-parsed map. Command dispatch marshals op.Params as {"args": [...]} directly,
-	// so the struct decodes the top-level payload (no plugin_input envelope).
-	var in params.ExamplecommandInput
-	if raw := req.GetParamsJson(); len(raw) > 0 {
-		if err := json.Unmarshal(raw, &in); err != nil {
-			return nil, fmt.Errorf("plugin-example-command: decode args: %w", err)
-		}
-	}
-	target := defaultMarker
-	if len(in.Args) > 0 {
-		target = in.Args[0]
-	}
-	body := strings.Join(in.Args, " ")
-	if err := os.MkdirAll(path.Dir(target), 0o755); err != nil {
-		return nil, fmt.Errorf("plugin-example-command: mkdir %q: %w", path.Dir(target), err)
-	}
-	if err := os.WriteFile(target, []byte(body), 0o644); err != nil {
-		return nil, fmt.Errorf("plugin-example-command: write marker %q: %w", target, err)
-	}
-	j, err := json.Marshal(map[string]string{"status": "pass", "message": body})
-	if err != nil {
-		return nil, err
-	}
-	return &pb.InvokeReply{ResultJson: j}, nil
+// Invoke is unreachable for this command-only plugin: charly dispatches command:examplecommand
+// by fork/exec (CLI mode), never gRPC. It returns a clear error so a stray gRPC Invoke is loud,
+// never a silent surprise.
+func (provider) Invoke(context.Context, *pb.InvokeRequest) (*pb.InvokeReply, error) {
+	return nil, fmt.Errorf("plugin-example-command: command:examplecommand is dispatched via the CLI (charly fork/execs this binary), not gRPC Invoke")
 }
 
 type meta struct {
 	pb.UnimplementedPluginMetaServer
 }
 
-// Describe ships the plugin's capability AND its self-contained CUE schema over the
-// wire via sdk.BuildCapabilities — the schema travels with the plugin, identically to a
-// built-in. The SDK compiles the schema STANDALONE here, failing loudly before serving
-// if it is broken or empty.
+// Describe advertises NO gRPC capability — command:examplecommand is CLI-dispatched, not
+// resolved through the gRPC provider registry. It ships only the self-contained doc schema to
+// satisfy the host's non-empty-schema load gate and the params codegen loop. The SDK compiles
+// the embedded schema STANDALONE here, failing loudly before serving if it is broken.
 func (meta) Describe(context.Context, *pb.Empty) (*pb.Capabilities, error) {
 	return sdk.BuildCapabilities("2026.175.0900",
-		[]sdk.ProvidedCapability{{Class: "command", Word: "examplecommand", InputDef: "#ExamplecommandInput"}},
+		[]sdk.ProvidedCapability{},
 		schemaFS, "schema")
 }

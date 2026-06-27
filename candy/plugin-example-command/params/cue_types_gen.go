@@ -2,11 +2,11 @@
 
 package params
 
-// #ExamplecommandInput — the input shape for the `examplecommand` command. The
-// optional `args` list carries every CLI token after the command word.
-type ExamplecommandInput struct {
-	// args is the pass-through CLI token list charly forwards from
-	// `charly examplecommand <args…>`. Optional — an empty/absent list means the
-	// command was invoked with no positional arguments.
-	Args []string `yaml:"args,omitempty" json:"args,omitempty"`
+// #ExamplecommandPlugin documents the command the plugin serves. The command keeps its entire
+// contract in its own CLI grammar (parsed from os.Args in CLI mode), so there is no
+// plugin_input to validate here.
+type ExamplecommandPlugin struct {
+	Command string `yaml:"command,omitempty" json:"command"`
+
+	Contract string `yaml:"contract,omitempty" json:"contract"`
 }

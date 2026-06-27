@@ -817,8 +817,9 @@ func (g *Generator) emitBakedPlugins(b *strings.Builder, boxName string, candyOr
 			fmt.Fprintf(b, "RUN chmod 0755 %s\n", dest)
 			// Bake a `.providers` words manifest beside the binary so the in-container prescan
 			// (discoverBakedPluginWords) registers the plugin's command word into the grammar
-			// WITHOUT connecting it — the connect stays lazy (connectCommandPlugin's baked path),
-			// so an unrelated `charly <cmd>` in the container pays nothing.
+			// WITHOUT building/connecting it — the binary is resolved + fork/exec'd lazily on
+			// dispatch (dispatchExternalCommand's baked path), so an unrelated `charly <cmd>` in
+			// the container pays nothing.
 			if plugin.Plugin != nil && len(plugin.Plugin.Providers) > 0 {
 				lines := make([]string, len(plugin.Plugin.Providers))
 				for i, c := range plugin.Plugin.Providers {

@@ -113,8 +113,8 @@ var vmPluginLoadOnce sync.Once
 // ensureVmPluginConnected lazily build-connects the external candy/plugin-vm so verb:libvirt is
 // registered before the VM-subsystem consumers RPC it. verb:libvirt is served OUT-OF-PROCESS, so
 // its grpcProvider registers only at loadProjectPlugins time — but the `charly vm` lifecycle +
-// status/preempt/ssh/vnc/spice paths (unlike check/deploy/build/command) never call the loader.
-// Mirrors connectCommandPlugin (the command-class on-demand connect), scoped to the IMPLICIT
+// status/preempt/ssh/vnc/spice paths (unlike check/deploy/build) never call the loader. An
+// on-demand scoped loadProjectPlugins connect (like loadDeployPlugins), scoped to the IMPLICIT
 // "libvirt" word: core RPCs the verb directly, so it appears in no plan step and plan-derived
 // scoping (collectReferencedPluginWords) would miss it. Idempotent: a no-op once the provider
 // resolves (the in-check-runner process + every later RPC this process), and the scan + build is

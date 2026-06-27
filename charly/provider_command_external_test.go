@@ -2,82 +2,71 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/alecthomas/kong"
+
+	"github.com/overthinkos/overthink/charly/plugin/sdk"
 )
 
-// fakeExternalCmd is an OUT-OF-PROCESS-style command Provider: ClassCommand but NOT a
-// builtin CommandProvider (no static KongCommand), so it takes the dynamic external path.
-type fakeExternalCmd struct{ gotArgs []string }
-
-func (*fakeExternalCmd) Reserved() string     { return "examplecmd" }
-func (*fakeExternalCmd) Class() ProviderClass { return ClassCommand }
-func (f *fakeExternalCmd) Invoke(_ context.Context, op *Operation) (*Result, error) {
-	var p struct {
-		Args []string `json:"args"`
-	}
-	_ = json.Unmarshal(op.Params, &p)
-	f.gotArgs = p.Args
-	return &Result{}, nil
-}
-
-// TestExternalCommandSeam_DynamicCommandDispatch proves the external-command-plugin path: a
+// TestExternalCommandExecPlan_PassthroughArgs proves the external-command FORK/EXEC path: a
 // dynamic Kong subcommand built by externalCommandHolder parses a command line, and
-// dispatchExternalCommand forwards the parsed pass-through args (flags included, via
-// passthrough) to the out-of-process command provider's Invoke — the path a
-// `charly <plugin-cmd> …` invocation takes once a real external command plugin registers.
-func TestExternalCommandSeam_DynamicCommandDispatch(t *testing.T) {
-	fake := &fakeExternalCmd{}
-	field := exportedCommandField("examplecmd")
-	holder := externalCommandHolder("examplecmd", field)
+// externalCommandExecPlan reads the parsed pass-through args (flags included, via passthrough),
+// resolves the plugin binary by word (a baked binary here), and builds the exec argv + env —
+// the plan dispatchExternalCommand then hands to syscall.Exec. The env must STRIP the go-plugin
+// handshake cookie (so the plugin runs in CLI mode, not serve mode) and stamp CHARLY_BIN.
+func TestExternalCommandExecPlan_PassthroughArgs(t *testing.T) {
+	const word = "zzexeccmd"
+	// Make the strip non-trivial: set the cookie, then assert it is absent from the exec env.
+	t.Setenv(sdk.Handshake.MagicCookieKey, sdk.Handshake.MagicCookieValue)
+	bakedCommandBinaries[word] = "/fake/plugins/" + word
+	defer delete(bakedCommandBinaries, word)
 
+	field := exportedCommandField(word)
+	holder := externalCommandHolder(word, field)
 	var cli struct{ kong.Plugins }
 	cli.Plugins = kong.Plugins{holder}
 	parser, err := kong.New(&cli, kong.Name("charly"))
 	if err != nil {
 		t.Fatalf("kong.New with dynamic command holder: %v", err)
 	}
-	kctx, err := parser.Parse([]string{"examplecmd", "nodes", "--wide"})
-	if err != nil {
+	if _, err := parser.Parse([]string{word, "nodes", "--wide"}); err != nil {
 		t.Fatalf("kong.Parse external command: %v", err)
 	}
-	t.Logf("kctx.Command() = %q", kctx.Command())
 
-	d := externalCommandDispatch{prov: fake, word: "examplecmd", holder: holder, field: field}
-	if err := dispatchExternalCommand(d); err != nil {
-		t.Fatalf("dispatchExternalCommand: %v", err)
+	d := externalCommandDispatch{word: word, holder: holder, field: field}
+	bin, argv, env, err := externalCommandExecPlan(d)
+	if err != nil {
+		t.Fatalf("externalCommandExecPlan: %v", err)
 	}
-	if len(fake.gotArgs) != 2 || fake.gotArgs[0] != "nodes" || fake.gotArgs[1] != "--wide" {
-		t.Fatalf("plugin received args %v, want [nodes --wide] (passthrough incl. the flag)", fake.gotArgs)
+	if want := "/fake/plugins/" + word; bin != want {
+		t.Fatalf("bin = %q, want the baked binary %q", bin, want)
 	}
+	want := []string{bin, "nodes", "--wide"}
+	if len(argv) != len(want) {
+		t.Fatalf("argv = %v, want %v", argv, want)
+	}
+	for i := range want {
+		if argv[i] != want[i] {
+			t.Fatalf("argv[%d] = %q, want %q (full %v)", i, argv[i], want[i], argv)
+		}
+	}
+	assertCommandEnv(t, env)
 }
 
-// fakeNestedCheckCmd is a NestedCommandProvider that nests its command under `check` —
-// the shape the dep-shed extractions (charly check kube/adb/appium) take.
-type fakeNestedCheckCmd struct{ gotArgs []string }
+// TestExternalCommandExecPlan_NestedCheckCommand proves a NestedCommandProvider's dynamic
+// command nests UNDER `check` (kong.Plugins embedded in a CheckCmd-like parent), parses
+// `check examplekube …`, keys the dispatch table by the full path "check examplekube"
+// (commandPathKey), and builds the exec plan from the resolved (baked) binary + pass-through
+// args.
+func TestExternalCommandExecPlan_NestedCheckCommand(t *testing.T) {
+	const word = "zzexecnested"
+	bakedCommandBinaries[word] = "/fake/plugins/" + word
+	defer delete(bakedCommandBinaries, word)
 
-func (*fakeNestedCheckCmd) Reserved() string      { return "examplekube" }
-func (*fakeNestedCheckCmd) Class() ProviderClass  { return ClassCommand }
-func (*fakeNestedCheckCmd) CommandParent() string { return "check" }
-func (f *fakeNestedCheckCmd) Invoke(_ context.Context, op *Operation) (*Result, error) {
-	var p struct {
-		Args []string `json:"args"`
-	}
-	_ = json.Unmarshal(op.Params, &p)
-	f.gotArgs = p.Args
-	return &Result{}, nil
-}
-
-// TestExternalCommandSeam_NestedCheckCommand proves a NestedCommandProvider's dynamic
-// command nests UNDER `check` (kong.Plugins embedded in a CheckCmd-like parent, exactly
-// like the real CheckCmd embed), parses `check examplekube …`, keys the dispatch table by
-// the full path "check examplekube" (commandPathKey), and forwards the pass-through args.
-func TestExternalCommandSeam_NestedCheckCommand(t *testing.T) {
-	fake := &fakeNestedCheckCmd{}
-	field := exportedCommandField("examplekube")
-	holder := externalCommandHolder("examplekube", field)
+	field := exportedCommandField(word)
+	holder := externalCommandHolder(word, field)
 
 	type checkLike struct {
 		Box struct {
@@ -94,18 +83,51 @@ func TestExternalCommandSeam_NestedCheckCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("kong.New nested: %v", err)
 	}
-	kctx, err := parser.Parse([]string{"check", "examplekube", "nodes", "--wide"})
+	kctx, err := parser.Parse([]string{"check", word, "nodes", "--wide"})
 	if err != nil {
 		t.Fatalf("kong.Parse nested: %v", err)
 	}
-	if key := commandPathKey(kctx.Command()); key != "check examplekube" {
-		t.Fatalf("commandPathKey(%q) = %q, want %q", kctx.Command(), key, "check examplekube")
+	if key := commandPathKey(kctx.Command()); key != "check "+word {
+		t.Fatalf("commandPathKey(%q) = %q, want %q", kctx.Command(), key, "check "+word)
 	}
-	d := externalCommandDispatch{prov: fake, word: "examplekube", holder: holder, field: field}
-	if err := dispatchExternalCommand(d); err != nil {
-		t.Fatalf("dispatch: %v", err)
+	d := externalCommandDispatch{word: word, holder: holder, field: field}
+	_, argv, _, err := externalCommandExecPlan(d)
+	if err != nil {
+		t.Fatalf("externalCommandExecPlan: %v", err)
 	}
-	if len(fake.gotArgs) != 2 || fake.gotArgs[0] != "nodes" || fake.gotArgs[1] != "--wide" {
-		t.Fatalf("nested plugin got args %v, want [nodes --wide]", fake.gotArgs)
+	if len(argv) != 3 || argv[0] != "/fake/plugins/"+word || argv[1] != "nodes" || argv[2] != "--wide" {
+		t.Fatalf("argv = %v, want [/fake/plugins/%s nodes --wide]", argv, word)
 	}
+}
+
+// assertCommandEnv checks commandExecEnv stripped the go-plugin handshake cookie (so the
+// fork/exec'd plugin runs in CLI mode, not serve mode — sdk.IsServeMode) and stamped CHARLY_BIN.
+func assertCommandEnv(t *testing.T, env []string) {
+	t.Helper()
+	cookie := sdk.Handshake.MagicCookieKey + "="
+	hasBin := false
+	for _, e := range env {
+		if strings.HasPrefix(e, cookie) {
+			t.Fatalf("env must NOT carry the go-plugin handshake cookie %q (the plugin would enter serve mode): %q", cookie, e)
+		}
+		if strings.HasPrefix(e, "CHARLY_BIN=") {
+			hasBin = true
+		}
+	}
+	if !hasBin {
+		t.Fatal("env must stamp CHARLY_BIN so the plugin shells back to the dispatching charly")
+	}
+}
+
+// fakeNestedCheckCmd is a NestedCommandProvider that nests its command under `check` — the
+// shape the dep-shed extractions (charly check kube/adb/appium) take. Used by
+// TestCommandProviders_CheckNestedPluginsInjected (provider_command_test.go) to prove the
+// nested-under-check grammar seam survives the check-command extraction.
+type fakeNestedCheckCmd struct{}
+
+func (*fakeNestedCheckCmd) Reserved() string      { return "examplekube" }
+func (*fakeNestedCheckCmd) Class() ProviderClass  { return ClassCommand }
+func (*fakeNestedCheckCmd) CommandParent() string { return "check" }
+func (*fakeNestedCheckCmd) Invoke(context.Context, *Operation) (*Result, error) {
+	return &Result{}, nil
 }

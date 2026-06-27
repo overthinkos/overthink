@@ -8,6 +8,7 @@ package sdk
 
 import (
 	"context"
+	"os"
 
 	plugin "github.com/hashicorp/go-plugin"
 	"google.golang.org/grpc"
@@ -33,9 +34,36 @@ var Handshake = plugin.HandshakeConfig{
 	MagicCookieValue: "charly-plugin-v1",
 }
 
+// IsServeMode reports whether this process was launched by charly as a go-plugin gRPC
+// SERVER (the handshake magic-cookie env is present) rather than invoked directly as a
+// CLI. charly sets the cookie ONLY when it execs a plugin to connect over gRPC
+// (LocalTransport, for a verb/kind/deploy/step/builder capability); a COMMAND plugin
+// fork/exec'd as a CLI passthrough (charly's syscall.Exec command dispatch strips the
+// cookie) sees it absent and runs in CLI mode. The single switch a dual-mode plugin's
+// main() pivots on.
+func IsServeMode() bool {
+	return os.Getenv(Handshake.MagicCookieKey) == Handshake.MagicCookieValue
+}
+
+// Main is the dual-mode entry point a plugin's main() delegates to. In SERVE mode
+// (charly launched it over go-plugin gRPC) it serves the plugin's Provider + PluginMeta
+// (its verb/kind/deploy/step/builder capabilities). Otherwise the plugin was fork/exec'd
+// by charly's COMMAND dispatch (or run by hand) and owns real terminal stdio/TTY: cli
+// runs the command's work with os.Args[1:], its int return becoming the process exit code.
+//
+//	func main() { sdk.Main(&provider{}, &meta{}, cliMain) }
+func Main(providerSrv pb.ProviderServer, metaSrv pb.PluginMetaServer, cli func(args []string) int) {
+	if IsServeMode() {
+		Serve(providerSrv, metaSrv)
+		return
+	}
+	os.Exit(cli(os.Args[1:]))
+}
+
 // Serve exposes a plugin's Provider + PluginMeta services over go-plugin gRPC and
 // blocks until the host disconnects (then auto-exits — clean teardown, no orphan).
-// The single entry point an external plugin's main calls:
+// The serve half of Main (a verb/kind/deploy/step/builder plugin with no CLI mode may
+// call it directly):
 //
 //	func main() { sdk.Serve(&myProvider{}, &myMeta{}) }
 func Serve(providerSrv pb.ProviderServer, metaSrv pb.PluginMetaServer) {

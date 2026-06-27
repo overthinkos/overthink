@@ -282,17 +282,19 @@ func bakedPluginBinary(name string) string {
 
 // bakedCommandBinaries maps a baked plugin's COMMAND word → its binary path, populated by
 // discoverBakedPluginWords from the `.providers` manifests baked beside each binary. It lets
-// connectCommandPlugin connect a baked command plugin in a deployed container that has NO
-// candy source to scan (the charly-mcp service's `charly mcp serve` is the motivating case).
+// dispatchExternalCommand (resolveCommandPluginBinary) fork/exec a baked command plugin in a
+// deployed container that has NO candy source to scan (the charly-mcp service's `charly mcp
+// serve` is the motivating case).
 var bakedCommandBinaries = map[string]string{}
 
 // discoverBakedPluginWords reads the `.providers` word manifests baked beside each plugin
 // binary (bake_plugin:) and registers their declared external COMMAND words into the kong
-// grammar (registerDeclaredExternalCommand) — CHEAPLY, WITHOUT connecting any plugin (the
-// connect is lazy, on dispatch, via connectCommandPlugin's baked path). So the in-container
-// charly recognizes `charly <word>` for a baked command with no project to scan. A NO-OP when
-// no plugins are baked (the dev-host / from-source case): the dirs are absent or hold no
-// `.providers` files, and every existing charly invocation is byte-for-byte unchanged.
+// grammar (registerDeclaredExternalCommand) — CHEAPLY, WITHOUT connecting any plugin. It also
+// records word → baked-binary in bakedCommandBinaries, so dispatchExternalCommand can
+// syscall.Exec the baked binary directly (a deployed container has no project to scan). So the
+// in-container charly recognizes `charly <word>` for a baked command. A NO-OP when no plugins
+// are baked (the dev-host / from-source case): the dirs are absent or hold no `.providers`
+// files, and every existing charly invocation is byte-for-byte unchanged.
 func discoverBakedPluginWords() {
 	for _, dir := range bakedPluginDirs() {
 		entries, err := os.ReadDir(dir)
@@ -318,28 +320,6 @@ func discoverBakedPluginWords() {
 			}
 		}
 	}
-}
-
-// loadBakedPluginBinary connects a baked plugin binary DIRECTLY (no source build) and
-// registers its providers — the lazy connect connectCommandPlugin pays when a baked command
-// is actually invoked. Returns true on success.
-func loadBakedPluginBinary(ctx context.Context, bin string) bool {
-	unit, closer, err := (&LocalTransport{BinPath: bin}).Connect(ctx)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: baked plugin %s: connect: %v\n", bin, err)
-		return false
-	}
-	name := filepath.Base(bin)
-	if err := registerPluginUnitSchema(name, unit.Schema); err != nil {
-		_ = closer.Close()
-		return false
-	}
-	if err := providerRegistry.RegisterPluginProviders(unit.Providers, "baked:"+bin, closer); err != nil {
-		_ = closer.Close()
-		fmt.Fprintf(os.Stderr, "warning: baked plugin %s: register: %v\n", bin, err)
-		return false
-	}
-	return true
 }
 
 // resolvePluginBinary returns a plugin's provider binary: a BAKED binary (pre-built,

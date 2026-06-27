@@ -3,19 +3,17 @@ package main
 // plugin_command_prescan.go — the EARLY (pre-kong.Parse) external-command-word prescan.
 //
 // An external (out-of-tree) COMMAND plugin contributes a `charly <word>` CLI subcommand.
-// Kong must know that word to PARSE `charly <word> …`, but the provider is only connected
-// by loadProjectPlugins AFTER the project dir is resolved from a Kong flag — chicken-and-egg
-// (the same shape plugin_prescan.go solves for deploy substrates). The fix: before kong.Parse,
-// cheaply read the project's declared command words (the byte-gated plugin prescan), so
-// collectExternalCommandPlugins can put a grammar holder in place for each. The provider is
-// NOT connected here — the connect is LAZY, paid only when the user actually runs the command
-// (dispatchExternalCommand). Best-effort and ADDITIVE: a project with no command plugins (or
-// no readable charly.yml) registers nothing, so the grammar is byte-for-byte unchanged and
-// every existing charly invocation is unaffected.
+// Kong must know that word to PARSE `charly <word> …`, but the plugin binary is only resolved
+// AFTER the project dir is resolved from a Kong flag — chicken-and-egg (the same shape
+// plugin_prescan.go solves for deploy substrates). The fix: before kong.Parse, cheaply read the
+// project's declared command words (the byte-gated plugin prescan), so
+// collectExternalCommandPlugins can put a grammar holder in place for each. The binary is NOT
+// resolved here — that is paid only when the user actually runs the command
+// (dispatchExternalCommand resolves the binary by word and syscall.Exec's it). Best-effort and
+// ADDITIVE: a project with no command plugins (or no readable charly.yml) registers nothing, so
+// the grammar is byte-for-byte unchanged and every existing charly invocation is unaffected.
 
 import (
-	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,42 +72,4 @@ func scanDirFlag(args []string) string {
 		}
 	}
 	return ""
-}
-
-// connectCommandPlugin builds + connects the out-of-process plugin that provides command:word
-// and returns its Provider — the LAZY connect, paid only when the user actually invokes the
-// command. It mirrors loadDeployPlugins' scan (LoadConfig → ScanAllCandyWithConfigOpts →
-// loadProjectPlugins) but SCOPES the load to this one command word (the word IS the reference,
-// so collectReferencedPluginWords is bypassed), so only the invoked command's plugin is built.
-// The project dir is the post-chdir cwd (main resolved -C/--dir/--repo before dispatch). Returns
-// (nil,false) on any load/connect failure — surfaced loudly by dispatchExternalCommand.
-func connectCommandPlugin(word string) (Provider, bool) {
-	if p, ok := providerRegistry.resolve(ClassCommand, word); ok {
-		return p, true // already connected (the eager path)
-	}
-	// Baked path: a DEPLOYED container has no candy source to scan, so a baked command plugin
-	// connects DIRECTLY from its baked binary (discoverBakedPluginWords mapped word → binary).
-	if bin, ok := bakedCommandBinaries[word]; ok {
-		if loadBakedPluginBinary(context.Background(), bin) {
-			if p, ok := providerRegistry.resolve(ClassCommand, word); ok {
-				return p, true
-			}
-		}
-	}
-	dir, err := os.Getwd()
-	if err != nil {
-		return nil, false
-	}
-	cfg, cerr := LoadConfig(dir)
-	if cerr != nil {
-		return nil, false
-	}
-	candyMap, scanErr := ScanAllCandyWithConfigOpts(dir, cfg, ResolveOpts{})
-	if scanErr != nil || candyMap == nil {
-		return nil, false
-	}
-	if perr := loadProjectPlugins(context.Background(), candyMap, map[string]struct{}{word: {}}); perr != nil {
-		fmt.Fprintf(os.Stderr, "warning: command plugin load: %v\n", perr)
-	}
-	return providerRegistry.resolve(ClassCommand, word)
 }

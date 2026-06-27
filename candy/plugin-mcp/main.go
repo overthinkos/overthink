@@ -1,20 +1,28 @@
-// Command plugin-mcp is the OUT-OF-TREE charly plugin serving the `mcp`
-// MCP-protocol check verb (a standalone Go module, its own go.mod). It probes MCP
-// servers declared via mcp_provides on a live deployment — ping, servers,
-// list-tools/resources/prompts, call, read — speaking the Model Context Protocol on
-// the wire via github.com/modelcontextprotocol/go-sdk. The host go-builds this binary
-// and serves it OUT-OF-PROCESS over go-plugin gRPC via the charly plugin SDK, so the
-// `mcp:` verb dispatches through the provider registry exactly like a built-in — with
-// the verb keeping its `mcp:` discriminator + every modifier (mcp_name/tool/uri/input)
-// on charly's core #Op (authoring unchanged). The fifth external dep-shed (after
-// candy/plugin-appium, candy/plugin-adb, candy/plugin-kube, candy/plugin-spice); the
-// go-sdk MCP CLIENT lives HERE now, out of charly's core check surface (charly's core
-// still imports go-sdk only for the `charly mcp serve` SERVER, mcp_server.go).
+// Command plugin-mcp is the OUT-OF-TREE charly plugin serving TWO MCP capabilities (a
+// standalone Go module, its own go.mod): the `mcp` MCP-protocol check VERB and the
+// `charly mcp` COMMAND. Both speak the Model Context Protocol via
+// github.com/modelcontextprotocol/go-sdk, which lives HERE — out of charly's core (the C1
+// dep-shed removed the go-sdk family from the core binary entirely; charly's core imports
+// no go-sdk).
 //
-// The plugin owns NO podman / OCI-label / port-mapping machinery — the host
-// pre-resolves the deployment's declared mcp_provides + the single picked,
-// host-routable dial endpoint (preresolveMcpEndpoint, charly/mcp_preresolve.go) and
-// hands them over via the check env, so this module needs no container inspection at all.
+//   - verb:mcp — the MCP check verb: probes MCP servers declared via mcp_provides on a live
+//     deployment (ping, servers, list-tools/resources/prompts, call, read). The host
+//     go-builds this binary and serves it OUT-OF-PROCESS over go-plugin gRPC via the charly
+//     plugin SDK, so the `mcp:` verb dispatches through the provider registry exactly like a
+//     built-in — keeping its `mcp:` discriminator + every modifier (mcp_name/tool/uri/input)
+//     on charly's core #Op (authoring unchanged). The fifth external dep-shed (after
+//     candy/plugin-appium, candy/plugin-adb, candy/plugin-kube, candy/plugin-spice).
+//
+//   - command:mcp — `charly mcp serve`, the externalized MCP SERVER (the go-sdk bridge that
+//     exposes the whole charly CLI as MCP tools). Dispatched by charly fork/exec'ing this
+//     binary in CLI mode (sdk.Main → cliMain, command.go), so it owns real terminal stdio:
+//     `--stdio` serves the editor/LLM integration over stdin/stdout, `--listen` serves
+//     Streamable HTTP (the in-container supervised deployment).
+//
+// The plugin owns NO podman / OCI-label / port-mapping machinery — the host pre-resolves the
+// deployment's declared mcp_provides + the single picked, host-routable dial endpoint
+// (preresolveMcpEndpoint, charly/mcp_preresolve.go) and hands them over via the check env, so
+// this module needs no container inspection at all.
 package main
 
 import (
@@ -28,31 +36,34 @@ import (
 //go:embed schema/*.cue
 var schemaFS embed.FS
 
-func main() { sdk.Serve(&provider{}, &meta{}) }
+// main is dual-mode (sdk.Main): when charly launches this binary over go-plugin gRPC (the
+// handshake cookie is set) it SERVES verb:mcp; otherwise charly fork/exec'd it as a command
+// passthrough and it runs the `charly mcp …` CLI (cliMain, command.go) with real terminal
+// stdio — the seam that restores `charly mcp serve --stdio`.
+func main() { sdk.Main(&provider{}, &meta{}, cliMain) }
 
 type meta struct {
 	pb.UnimplementedPluginMetaServer
 }
 
-// Describe ships the plugin's TWO capabilities — verb:mcp (the MCP check verb) AND
-// command:mcp (`charly mcp …`, the externalized MCP-server CLI, C1 dep-shed of the
-// go-sdk SERVER out of charly's core) — plus the self-contained CUE schema, over the
-// wire via sdk.BuildCapabilities. The host builds one grpcProvider per capability over
-// the SAME connection (plugin_grpc.go buildUnit), each stamped with its class, so a
-// single provider struct routes by wire Class (provider.go).
+// Describe ships the plugin's ONE gRPC-served capability — verb:mcp (the MCP check verb) —
+// plus the self-contained CUE schema, over the wire via sdk.BuildCapabilities. verb:mcp keeps
+// its entire authoring contract (the #McpMethod enum + every modifier) on charly's core #Op —
+// like cdp/vnc/spice it has NO plugin_input — so it advertises an EMPTY InputDef, and the
+// served schema (schema/mcp.cue) exists only to satisfy the host's non-empty-schema load gate.
 //
-//   - verb:mcp keeps its entire authoring contract (the #McpMethod enum + every
-//     modifier) on charly's core #Op — like cdp/vnc/spice it has NO plugin_input — so
-//     it advertises an EMPTY InputDef.
-//   - command:mcp's pass-through args are the typed #McpInput (schema/mcp-command.cue).
+// command:mcp (`charly mcp …`, the externalized MCP-server CLI) is NOT advertised here: it is
+// dispatched by charly fork/exec'ing this binary in CLI mode (cliMain), not resolved through
+// the gRPC provider registry — so it carries no Describe capability and no plugin_input (its
+// args are plain CLI tokens parsed by kong). The candy's plugin.providers declaration still
+// lists command:mcp (that drives the CLI-grammar prescan + the baked `.providers` manifest).
 //
-// The SDK concatenates + compiles the embedded schema/*.cue standalone here, failing
-// loudly before serving if it is broken or a declared InputDef is undefined.
+// The SDK concatenates + compiles the embedded schema/*.cue standalone here, failing loudly
+// before serving if it is broken.
 func (meta) Describe(context.Context, *pb.Empty) (*pb.Capabilities, error) {
 	return sdk.BuildCapabilities("2026.178.1200",
 		[]sdk.ProvidedCapability{
 			{Class: "verb", Word: "mcp", InputDef: ""},
-			{Class: "command", Word: "mcp", InputDef: "#McpInput"},
 		},
 		schemaFS, "schema")
 }

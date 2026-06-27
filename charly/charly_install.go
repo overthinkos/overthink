@@ -42,9 +42,9 @@ func ResolveCharlyInstallStrategy(spec *VmSpec) CharlyInstallStrategy {
 // caller should use to invoke it. It is venue-agnostic because it works only
 // through the DeployExecutor abstraction (RunCapture to probe, PutFile to
 // deliver — cp / scp / podman cp per executor), so one code path serves every
-// substrate (R3). Used by every in-venue `charly` caller (dbus delegation, desktop
-// notifications, the VM-deploy strategy wrapper, nested from-box delegation)
-// so an image need NOT bake the `charly` candy for those transient needs.
+// substrate (R3). Used by the VM-deploy strategy wrapper (EnsureCharlyInGuest) to
+// deliver a guest `charly` for in-guest deploy + nested-pod checks, so a VM image
+// need NOT bake the `charly` candy for that transient need.
 //
 // Resolution (quiet — the caller decides what, if anything, to print):
 //
@@ -105,8 +105,8 @@ func EnsureCharlyInVenue(ctx context.Context, exec DeployExecutor, opts EmitOpts
 //	skip       — verify `command -v charly` exists; error if missing
 //
 // Returns an informational message on success suitable for printing at info
-// level (the deploy context wants the detail; transient callers like dbus stay
-// quiet by calling EnsureCharlyInVenue directly).
+// level (the deploy context wants the detail; a caller that wants it quiet can
+// call the generic EnsureCharlyInVenue directly).
 func EnsureCharlyInGuest(
 	ctx context.Context,
 	spec *VmSpec,

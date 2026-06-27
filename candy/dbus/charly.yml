@@ -7,7 +7,7 @@ dbus:
             session bus under supervisord as `dbus-daemon --session --nofork
             --address=unix:path=/tmp/dbus-session`, exporting
             DBUS_SESSION_BUS_ADDRESS so notification senders, introspection tools,
-            and `charly check dbus` clients in the container can reach the bus.
+            and the `dbus:` check verb's gdbus clients in the container can reach the bus.
             Every claim is verifiable: the dbus-daemon binary on disk and the
             providing package installed at build scope, and at deploy scope the
             session-bus address env var exported plus the dbus service running.

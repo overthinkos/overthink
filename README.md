@@ -596,7 +596,8 @@ getprop`, `appium: click`, …):
   CLI subcommand.
 - `charly check wl` — Wayland / sway / labwc automation; `wl overlay`
   for fullscreen recording overlays.
-- `charly check dbus` — D-Bus method calls and signal subscriptions.
+- `dbus:` — D-Bus declarative check verb (list, call, introspect, notify) —
+  out-of-process plugin (`candy/plugin-dbus`), no host CLI subcommand.
 - `vnc:` — RFB/VNC declarative check verb (status, screenshot,
   pointer/keyboard) — out-of-process plugin (`candy/plugin-vnc`), no host CLI
   subcommand; covers pod (port 5900) AND vm (libvirt VNC) targets.

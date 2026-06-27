@@ -28,6 +28,14 @@ sway-desktop-vnc:
             # build-connects it before the baked `vnc:` checks dispatch — otherwise they
             # SKIP with `unknown verb "vnc"`. (Same cross-repo reconcile lag as plugin-cdp.)
             - plugin-vnc
+            # plugin-dbus is the OUT-OF-TREE plugin that serves the `dbus:` check verb (the
+            # D-Bus driver lives there, not in charly's core check surface — EXEC-based, driving
+            # the venue's session bus via gdbus over the executor reverse channel). This candy
+            # AUTHORS a `dbus:` check (list), so requiring plugin-dbus puts it in every composing
+            # image's scanned candy set; collectReferencedPluginWords build-connects it before the
+            # baked `dbus:` check dispatches — otherwise it SKIPs with `unknown verb "dbus"`.
+            # (Same cross-repo reconcile lag as plugin-cdp.)
+            - plugin-dbus
     sway-desktop-vnc-candy:
         candy:
             - sway-desktop

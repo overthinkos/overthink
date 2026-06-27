@@ -7,22 +7,14 @@ import (
 
 // sendVenueNotification sends a desktop notification on the venue (container /
 // VM / host). Best-effort: silently ignores all errors (no daemon, no dbus,
-// headless target). It delegates to a PRESENT `charly check dbus notify .` when the
-// image bakes one, else falls back to gdbus (glib2). Being an automatic
-// side-effect (deploy / record / tmux), it deliberately does NOT trigger the
-// generic charly copy-in that the EXPLICIT `charly check dbus notify`/`call` paths use —
-// transferring the 27 MB binary into a container just for a best-effort popup is
-// not worth it, and desktops carry gdbus anyway.
+// headless target). It drives the venue's session bus directly with gdbus
+// (glib2) — desktops carry gdbus, and being an automatic side-effect
+// (deploy / cmd / tmux) it deliberately stays a single lightweight gdbus call
+// rather than transferring the 27 MB charly binary into a container just for a
+// best-effort popup. (The interactive `dbus:` check verb was externalized to
+// candy/plugin-dbus, which also drives the bus via gdbus — never godbus; godbus
+// stays in charly's core for the Secret Service / GPG secrets only.)
 func sendVenueNotification(ex DeployExecutor, title, body string) {
-	if venueHasTool(ex, "charly") {
-		script := fmt.Sprintf("charly check dbus notify . %s %s",
-			deployShellQuote(title), deployShellQuote(body))
-		if venueRunSilent(ex, script) == nil {
-			return
-		}
-	}
-
-	// Fallback: gdbus call on the venue.
 	if venueHasTool(ex, "gdbus") {
 		gdbusCmd := fmt.Sprintf(
 			`export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/tmp/dbus-session}" && `+
@@ -36,5 +28,5 @@ func sendVenueNotification(ex DeployExecutor, title, body string) {
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "Warning: cannot send notification — neither 'charly' nor 'gdbus' found on target\n")
+	fmt.Fprintf(os.Stderr, "Warning: cannot send notification — 'gdbus' not found on target\n")
 }

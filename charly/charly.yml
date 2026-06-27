@@ -60,7 +60,6 @@ compiled_plugins:
     # live-container verbs (schema-less kit.LiveVerbProvider — delegate dispatch via
     # CheckContext.RunCharlyVerb; the `charly check <verb>` driver command stays host-side)
     - plugin-wl
-    - plugin-dbus
 
 # context_ignore_baseline — the built-in build-context ignore patterns (VCS/binary
 # excludes + cache-hygiene globs), formerly the Go var baselineContextIgnore. Read by

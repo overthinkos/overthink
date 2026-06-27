@@ -57,8 +57,8 @@ func (e *CheckFailedError) Error() string {
 //
 // The mode is explicit; there is no autodetect or implicit fallback.
 //
-// Live-container probe verbs (wl/dbus) share the
-// same "live" semantic: each requires a running target. (kube/adb/appium/spice/mcp/record/cdp/vnc
+// Live-container probe verbs (wl) share the
+// same "live" semantic: each requires a running target. (kube/adb/appium/spice/mcp/record/cdp/vnc/dbus
 // are declarative check verbs dep-shed to out-of-process plugins — they have NO
 // in-core sub-Cmd here; they dispatch via the provider registry.)
 //
@@ -73,7 +73,13 @@ type CheckCmd struct {
 	Feature CheckFeatureCmd `cmd:"" help:"Run a running deployment's baked plan as acceptance tests; agent steps are agent-graded (Agent Driven Evaluation)"`
 
 	// Live-container probe verbs (each requires a running target)
-	Dbus DbusCmd `cmd:"" help:"Interact with D-Bus services inside containers"`
+	// `dbus` is NOT a CLI subcommand here — the D-Bus driver (list/call/introspect/notify)
+	// was relocated to the out-of-tree candy/plugin-dbus module (EXEC-based, driving the
+	// venue's session bus with gdbus over the executor reverse channel — no godbus). The
+	// `dbus:` DECLARATIVE check verb dispatches to that external plugin via the provider
+	// registry (invokeVerbProvider); there is no host `charly check dbus`. STRUCTURAL
+	// externalization, not a dep-shed: godbus stays in charly's core for the Secret Service /
+	// GPG secrets (+ the in-core gdbus best-effort notify in notify.go).
 	// `libvirt` is NOT a CLI subcommand here — the VM/libvirt-API probe verb (`charly check
 	// libvirt`) is served by the out-of-process candy/plugin-vm verb plugin, nested under
 	// `charly check` at runtime via attachNestedCheckPlugins exactly like `kube`/`adb`/`appium`.

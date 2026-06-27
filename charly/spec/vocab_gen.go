@@ -252,7 +252,6 @@ var OpVerbs = []string{
 	"setcap",
 	"build",
 	"wl",
-	"dbus",
 	"summarize",
 	"kill",
 	"plugin",
@@ -389,6 +388,5 @@ var AuthoringVerbs = []string{
 // (the #<Name>Method enums) — the SAME allowlists checkrun_charly_verbs.go
 // enforces, now from one CUE source.
 var LiveVerbMethods = map[string][]string{
-	"wl":   {"status", "toplevel", "windows", "geometry", "xprop", "atspi", "screenshot", "clipboard", "click", "double-click", "mouse", "scroll", "drag", "type", "key", "key-combo", "focus", "close", "fullscreen", "minimize", "exec", "resolution", "overlay-list", "overlay-status", "overlay-show", "overlay-hide", "sway-tree", "sway-workspaces", "sway-outputs", "sway-msg", "sway-focus", "sway-move", "sway-resize", "sway-layout", "sway-workspace", "sway-kill", "sway-floating", "sway-reload"},
-	"dbus": {"list", "call", "introspect", "notify"},
+	"wl": {"status", "toplevel", "windows", "geometry", "xprop", "atspi", "screenshot", "clipboard", "click", "double-click", "mouse", "scroll", "drag", "type", "key", "key-combo", "focus", "close", "fullscreen", "minimize", "exec", "resolution", "overlay-list", "overlay-status", "overlay-show", "overlay-hide", "sway-tree", "sway-workspaces", "sway-outputs", "sway-msg", "sway-focus", "sway-move", "sway-resize", "sway-layout", "sway-workspace", "sway-kill", "sway-floating", "sway-reload"},
 }

@@ -311,8 +311,15 @@ var VerbCatalog = map[string]VerbSpec{
 
 	// live-container — runtime only; act drives UI/config, reversed via plan
 	// teardown (never the ledger).
-	"wl":   {ctxRuntimeOnly, DoAssert, false},
-	"dbus": {ctxRuntimeOnly, DoAssert, false},
+	"wl": {ctxRuntimeOnly, DoAssert, false},
+	// `dbus` is NOT here — it is an EXTERNAL-CHARLY-VERB served out-of-process by
+	// candy/plugin-dbus. It left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc
+	// CheckVerbProvider) but keeps its `dbus:` discriminator + modifiers + the #DbusMethod
+	// enum on core #Op (authoring unchanged); the registered external provider resolves at
+	// dispatch — EXEC-based (like record), driving the venue's session bus with gdbus over
+	// the executor reverse channel. STRUCTURAL externalization, not a dep-shed: godbus stays
+	// in charly's core for the Secret Service / GPG secrets. Its runtime-context legality now
+	// lives on the authored `context:` + the plugin's own box-mode skip, not this table.
 	// `vnc` is NOT here — it is an EXTERNAL-CHARLY-VERB served out-of-process by
 	// candy/plugin-vnc. It left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc
 	// CheckVerbProvider) but keeps its `vnc:` discriminator + modifiers + the #VncMethod

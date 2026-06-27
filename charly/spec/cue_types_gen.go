@@ -39,6 +39,18 @@ type Op struct {
 
 	Wl WlMethod `yaml:"wl,omitempty" json:"wl,omitempty"`
 
+	// `dbus` is an EXTERNAL-CHARLY-VERB: its D-Bus driver (list/call/introspect/notify against
+	// the venue's session bus) lives in the out-of-tree candy/plugin-dbus module, served
+	// OUT-OF-PROCESS. Like cdp/vnc/mcp/record (and unlike file/package/service/command, which
+	// left #Op entirely, re-authored as `plugin: <verb>`), dbus KEEPS its `dbus:` discriminator
+	// + every modifier (dest/path/method/args/text/description) on this closed #Op — authoring
+	// is unchanged (`dbus: list`, not `plugin: dbus`). It therefore left
+	// #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc CheckVerbProvider to gate) BUT keeps this
+	// field + #DbusMethod here, so `dbus: list` still validates against the method enum and
+	// VerbsSet still classifies the op (then dispatch resolves the registered external provider,
+	// which drives the venue's session bus with gdbus over the executor reverse channel — dbus
+	// is EXEC-based, like record). STRUCTURAL externalization, not a dep-shed: godbus stays in
+	// charly's core for the Secret Service / GPG secrets.
 	Dbus DbusMethod `yaml:"dbus,omitempty" json:"dbus,omitempty"`
 
 	// `vnc` is an EXTERNAL-CHARLY-VERB: its RFB/VNC client (the stdlib-only RFC 6143 VNC

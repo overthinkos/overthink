@@ -16,7 +16,7 @@
 // VerbCatalog entry (the registry bijection gate proves it). Keep in lockstep with
 // the `--- verb discriminators ---` group in #Op.
 #OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" |
-	"wl" | "dbus" |
+	"wl" |
 	"summarize" | "kill" | "plugin") @go(-)
 
 // ---------------------------------------------------------------------------
@@ -67,6 +67,18 @@
 	// provider, after the host pre-resolves the deployment's CDP port to a DevTools URL).
 	cdp?:            #CdpMethod
 	wl?:             #WlMethod
+	// `dbus` is an EXTERNAL-CHARLY-VERB: its D-Bus driver (list/call/introspect/notify against
+	// the venue's session bus) lives in the out-of-tree candy/plugin-dbus module, served
+	// OUT-OF-PROCESS. Like cdp/vnc/mcp/record (and unlike file/package/service/command, which
+	// left #Op entirely, re-authored as `plugin: <verb>`), dbus KEEPS its `dbus:` discriminator
+	// + every modifier (dest/path/method/args/text/description) on this closed #Op — authoring
+	// is unchanged (`dbus: list`, not `plugin: dbus`). It therefore left
+	// #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc CheckVerbProvider to gate) BUT keeps this
+	// field + #DbusMethod here, so `dbus: list` still validates against the method enum and
+	// VerbsSet still classifies the op (then dispatch resolves the registered external provider,
+	// which drives the venue's session bus with gdbus over the executor reverse channel — dbus
+	// is EXEC-based, like record). STRUCTURAL externalization, not a dep-shed: godbus stays in
+	// charly's core for the Secret Service / GPG secrets.
 	dbus?:           #DbusMethod
 	// `vnc` is an EXTERNAL-CHARLY-VERB: its RFB/VNC client (the stdlib-only RFC 6143 VNC
 	// client — VeNCrypt/TLS + ZRLE decode + the status/screenshot/click/mouse/type/key/rfb

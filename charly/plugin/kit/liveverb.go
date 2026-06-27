@@ -133,23 +133,6 @@ func PosOverlayShow(c *spec.Op) []string {
 	return args
 }
 
-func PosDbusCall(c *spec.Op) []string {
-	args := make([]string, 0, 3+len(c.Args))
-	args = append(args, c.Dest, c.Path, c.Method)
-	args = append(args, c.Args...)
-	return args
-}
-
-func PosDbusIntrospect(c *spec.Op) []string { return []string{c.Dest, c.Path} }
-
-func PosDbusNotify(c *spec.Op) []string {
-	args := []string{c.Text} // text = title
-	if c.Description != "" {
-		args = append(args, c.Description)
-	}
-	return args
-}
-
 func PosMcpCommon(c *spec.Op) []string {
 	if c.McpName == "" {
 		return nil

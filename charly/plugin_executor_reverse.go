@@ -33,7 +33,7 @@ func (s *executorReverseServer) RunUser(ctx context.Context, req *pb.RunRequest)
 }
 
 // RunCapture is the CHECK-VERB capture leg: an out-of-process exec-based check verb
-// (record — and dbus/wl when they externalize) probes the live venue by capturing
+// (record/dbus — and wl when it externalizes) probes the live venue by capturing
 // stdout/stderr/exit. No root
 // escalation — the verb's script adds sudo if it needs it. The gRPC call itself
 // succeeds; an execution failure (not a non-zero exit) travels in CaptureReply.Error.

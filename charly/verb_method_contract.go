@@ -8,8 +8,8 @@ package main
 // method contract here anymore — the dep-shedders kube/adb/appium have all been extracted.
 // The cross-field required-modifier/artifact rules now live on each verb's plugin.
 //
-// wl/dbus have been relocated to compiled-in candies
-// (candy/plugin-<verb>): each owns its Methods()/MethodField() contract + its <verb>Methods
+// wl has been relocated to a compiled-in candy
+// (candy/plugin-wl): it owns its Methods()/MethodField() contract + its wlMethods
 // map in its candy, registered via registerCompiledDedicatedVerb (the kitVerbLiveAdapter
 // exposes the contract through the same registry the host reads).
 

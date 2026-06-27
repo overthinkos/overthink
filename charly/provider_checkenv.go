@@ -264,7 +264,7 @@ func (r *Runner) invokeVerbProvider(ctx context.Context, prov Provider, word str
 	}
 	// Attach the host's live executor over the E3b reverse channel when the provider is
 	// out-of-process (executorInvoker — the grpcProvider) and a live venue executor exists,
-	// so an EXEC-based external check verb (record — and dbus/wl when they externalize) can
+	// so an EXEC-based external check verb (record/dbus — and wl when it externalizes) can
 	// call BACK RunCapture/GetFile
 	// against the running container. A port-based external verb (cdp/vnc/mcp/spice/kube)
 	// never dials the broker; a builtin verb never reaches here (a CheckVerbProvider

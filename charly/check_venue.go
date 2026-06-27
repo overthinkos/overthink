@@ -212,8 +212,8 @@ func venueHasTool(ex DeployExecutor, tool string) bool {
 
 // check_venue.go — the single venue resolver shared by every `charly check` verb.
 //
-// The declarative runner (`charly check live`) and the interactive verbs
-// (`charly check wl/cdp/vnc/dbus`) historically diverged: the runner
+// The declarative runner (`charly check live`) and the interactive verb
+// (`charly check wl`) historically diverged: the runner
 // classified the target (container / VM / local / nested) and built a
 // DeployExecutor chain, while the interactive verbs hardcoded
 // `resolveContainer()` + `podman exec`, so they only ever worked against a

@@ -14,8 +14,8 @@ import "context"
 //     SystemPackagesStep / ServicePackagedStep with load-bearing reversals via the host's
 //     materializeStep — the one piece that stays in package main); file/user/unix_group/
 //     kernel-param/mount are ProvisionActors; `command` is the install-task emitCmd branch.
-//   - The live-container verbs (wl/dbus) — kit.LiveVerbProvider
-//     candies registered via registerCompiledDedicatedVerb (schema-less; their modifiers stay
+//   - The live-container verb (wl) — a kit.LiveVerbProvider
+//     candy registered via registerCompiledDedicatedVerb (schema-less; its modifiers stay
 //     on the closed base #Op), delegating dispatch to the host's runCharlyVerb via
 //     cc.RunCharlyVerb.
 // All relocated verbs are absent from builtinProviderInstances + the `providers:` manifest;

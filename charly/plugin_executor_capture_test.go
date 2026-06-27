@@ -14,7 +14,7 @@ import (
 // executorReverseServer.RunCapture returns stdout/stderr/exit separately (a non-zero exit
 // rides ExitCode, NOT Error) and GetFile reads a venue file — the wire-backed
 // kit.Executor.RunCapture/GetFile surface an out-of-process exec-based check verb
-// (record — and dbus/wl when they externalize) drives over the E3b broker. Backed by a real
+// (record/dbus — and wl when it externalizes) drives over the E3b broker. Backed by a real
 // ShellExecutor (host venue).
 func TestExecutorReverse_CaptureAndGetFile(t *testing.T) {
 	srv := &executorReverseServer{exec: ShellExecutor{}}

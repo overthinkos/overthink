@@ -133,8 +133,8 @@ func validateCheck(c *Op, loc string, errs *ValidationError) {
 
 	// Matcher operator names (equals/contains/matches/…) are enforced by #MatchOpMap.
 
-	// wl/dbus verbs: validate method allowlist + required modifiers
-	// + scope enforcement (both are deploy-scope-only since they need a
+	// wl verb: validate method allowlist + required modifiers
+	// + scope enforcement (deploy-scope-only since it needs a
 	// running container with port mappings). The allowlists live in
 	// checkrun_charly_verbs.go next to the dispatch logic so adding a new method
 	// means touching one file.
@@ -142,7 +142,7 @@ func validateCheck(c *Op, loc string, errs *ValidationError) {
 }
 
 // validateCharlyVerb checks method-name allowlists, required modifiers, and
-// deploy-scope enforcement for the wl/dbus verbs. No-op for
+// deploy-scope enforcement for the wl verb. No-op for
 // other verbs.
 func validateCharlyVerb(c *Op, verb, loc string, errs *ValidationError) {
 	// E4: the verb's method contract is owned by its provider (LiveVerbProvider),

@@ -321,6 +321,7 @@ type Candy struct {
 	// split version off the ref and enabled the silent version-collision bug).
 	Require       []CandyRef // require: deps (ordering + resolution)
 	IncludedCandy []CandyRef // candy: composition refs (splicing)
+	BakePlugin    []CandyRef // bake_plugin: out-of-tree plugin candies whose pre-built provider binary is baked into composing images (generate.go emitBakedPlugins)
 
 	// Remote candy metadata
 	Remote        bool   // true if from a remote repo
@@ -1187,6 +1188,18 @@ func qualifyRemoteSiblingDeps(layer *Candy) {
 	for i := range layer.IncludedCandy {
 		if !layer.IncludedCandy[i].IsRemote() {
 			layer.IncludedCandy[i].resolved = layer.RepoPath + "/" + layer.SubPathPrefix + layer.IncludedCandy[i].Raw
+		}
+	}
+	// bake_plugin: refs name a sibling PLUGIN candy whose binary is baked into the
+	// image (generate.go emitBakedPlugins). Qualify them like require:/candy: so a
+	// plain-name ref on a REMOTE candy (e.g. charly-mcp's `bake_plugin: [plugin-mcp]`)
+	// resolves via .Bare() to the same fetched-sibling map key the scanned set holds —
+	// the plugin candy itself reaches that set through the candy's require: (the
+	// established pattern that also build-connects it), so qualification is what makes
+	// the baked-binary lookup find it.
+	for i := range layer.BakePlugin {
+		if !layer.BakePlugin[i].IsRemote() {
+			layer.BakePlugin[i].resolved = layer.RepoPath + "/" + layer.SubPathPrefix + layer.BakePlugin[i].Raw
 		}
 	}
 }

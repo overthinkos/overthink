@@ -67,11 +67,31 @@ type mcpEnv struct {
 
 type provider struct{ pb.UnimplementedProviderServer }
 
-// Invoke runs one `mcp:` operation. It decodes the full #Op + the env, skips in box
-// mode (no live MCP server on a disposable `charly check box`), dispatches the method
+// classCommand is the ProviderClass the host stamps on an InvokeRequest for the
+// `command:mcp` capability (charly's ProviderClass string). The single provider struct
+// serves TWO capabilities over ONE gRPC connection — verb:mcp (the MCP check verb) and
+// command:mcp (`charly mcp …`, the externalized MCP-server CLI) — so Invoke routes on
+// the wire Class rather than the Op: BOTH classes arrive with op == OpRun ("run"), so
+// Op alone cannot discriminate them; the host sets Class per the resolved capability's
+// grpcProvider (plugin_grpc.go buildUnit), making it the reliable discriminator.
+const classCommand = "command"
+
+// Invoke is the single entry point for both capabilities the plugin serves. It routes on
+// the wire Class: command:mcp (`charly mcp …`) → invokeCommand (parse the pass-through
+// CLI tokens with kong + run the MCP server); everything else → invokeVerb (the mcp
+// check verb).
+func (p provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeReply, error) {
+	if req.GetClass() == classCommand {
+		return p.invokeCommand(ctx, req)
+	}
+	return p.invokeVerb(ctx, req)
+}
+
+// invokeVerb runs one `mcp:` check operation. It decodes the full #Op + the env, skips in
+// box mode (no live MCP server on a disposable `charly check box`), dispatches the method
 // (metadata for `servers`, dial + MCP protocol otherwise), and self-evaluates the
 // matchers.
-func (p provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeReply, error) {
+func (p provider) invokeVerb(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeReply, error) {
 	var op spec.Op
 	if len(req.GetParamsJson()) > 0 {
 		if err := json.Unmarshal(req.GetParamsJson(), &op); err != nil {

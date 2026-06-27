@@ -1,6 +1,6 @@
 charly-mcp:
     candy:
-        version: 2026.156.1959
+        version: 2026.178.1430
         description: |
             An MCP server exposing the full charly CLI as Streamable-HTTP tools on port 18765
             charly-mcp is a meta-composition (candy: [charly, supervisord]) with no
@@ -21,6 +21,14 @@ charly-mcp:
             # checks dispatch — otherwise they SKIP with `unknown verb "mcp"`. (box/<distro>
             # adopts the matching @github pin via reconcile later — the deliberate cross-repo
             # lag; the R10 bed loads the LOCAL candy via the superproject override.)
+            - plugin-mcp
+    charly-mcp-bake-plugin:
+        bake_plugin:
+            # Bake plugin-mcp's pre-built provider binary into every composing image at
+            # /usr/lib/charly/plugins/, so the in-container `charly mcp serve` resolves the
+            # external `mcp` command at runtime — the deployed container has neither the
+            # candy source nor a go toolchain to build it. (generate.go emitBakedPlugins →
+            # plugin_loader.go bakedPluginBinary.)
             - plugin-mcp
     charly-mcp-candy:
         candy:

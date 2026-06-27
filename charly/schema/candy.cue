@@ -26,6 +26,14 @@
 	// --- composition ---
 	candy?: [...#CandyRef]
 	require?: [...#CandyRef]
+	// bake_plugin — the OUT-OF-TREE plugin candies whose pre-built provider binary
+	// this candy BAKES into every composing image at /usr/lib/charly/plugins/, so a
+	// DEPLOYED container (no candy source, no go toolchain) can run an external plugin
+	// its in-container charly needs at runtime — e.g. charly-mcp bakes plugin-mcp so
+	// `charly mcp serve` resolves the external `mcp` command in-container. The S0
+	// baked-plugin BUILD-side seam, the deploy-time counterpart of resolvePluginBinary's
+	// bakedPluginBinary fallback (plugin_loader.go). See generate.go emitBakedPlugins.
+	bake_plugin?: [...#CandyRef] @go(BakePlugin)
 	requires_capability?: [...(string & !="")] @go(RequiresCapability)
 	capability?: #CandyCapability @go(Capability,optional=nillable)
 

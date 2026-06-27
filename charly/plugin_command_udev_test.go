@@ -45,10 +45,10 @@ func TestCommandProvider_Udev(t *testing.T) {
 		t.Fatalf("expected `udev status` selected, got %q", got)
 	}
 
-	// 3. The MCP tool surface still exposes the udev leaves — the extraction must
-	//    not drop them from the reflected grammar (buildTestKong mirrors buildMcpServer).
-	tools := toolIndex(t, false)
-	if _, ok := tools["udev.status"]; !ok {
-		t.Error("udev.status missing from the MCP tool surface after extracting udev into a CommandProvider")
+	// 3. The CLI model (the seam the out-of-process MCP bridge reflects into tools) still
+	//    exposes the udev leaves — the extraction must not drop them from the reflected grammar.
+	paths := cliModelLeafPaths(t)
+	if !paths["udev.status"] {
+		t.Error("udev.status missing from the CLI model after extracting udev into a CommandProvider")
 	}
 }

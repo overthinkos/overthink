@@ -34,15 +34,25 @@ type meta struct {
 	pb.UnimplementedPluginMetaServer
 }
 
-// Describe ships the plugin's capability (verb:mcp) AND its self-contained CUE
-// schema over the wire via sdk.BuildCapabilities. mcp keeps its entire authoring
-// contract (the #McpMethod enum + every modifier) on charly's core #Op — like
-// cdp/vnc/spice, it has NO plugin_input — so the advertised capability carries an
-// EMPTY InputDef and the served schema (mcp.cue) exists only to satisfy the host's
-// non-empty-schema load gate. The SDK compiles the schema standalone here, failing
-// loudly before serving if it is broken.
+// Describe ships the plugin's TWO capabilities — verb:mcp (the MCP check verb) AND
+// command:mcp (`charly mcp …`, the externalized MCP-server CLI, C1 dep-shed of the
+// go-sdk SERVER out of charly's core) — plus the self-contained CUE schema, over the
+// wire via sdk.BuildCapabilities. The host builds one grpcProvider per capability over
+// the SAME connection (plugin_grpc.go buildUnit), each stamped with its class, so a
+// single provider struct routes by wire Class (provider.go).
+//
+//   - verb:mcp keeps its entire authoring contract (the #McpMethod enum + every
+//     modifier) on charly's core #Op — like cdp/vnc/spice it has NO plugin_input — so
+//     it advertises an EMPTY InputDef.
+//   - command:mcp's pass-through args are the typed #McpInput (schema/mcp-command.cue).
+//
+// The SDK concatenates + compiles the embedded schema/*.cue standalone here, failing
+// loudly before serving if it is broken or a declared InputDef is undefined.
 func (meta) Describe(context.Context, *pb.Empty) (*pb.Capabilities, error) {
-	return sdk.BuildCapabilities("2026.177.2300",
-		[]sdk.ProvidedCapability{{Class: "verb", Word: "mcp", InputDef: ""}},
+	return sdk.BuildCapabilities("2026.178.1200",
+		[]sdk.ProvidedCapability{
+			{Class: "verb", Word: "mcp", InputDef: ""},
+			{Class: "command", Word: "mcp", InputDef: "#McpInput"},
+		},
 		schemaFS, "schema")
 }

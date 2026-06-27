@@ -534,6 +534,14 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	// directives (the post-main-FROM half of the build-time BUILDER leg).
 	g.emitExternalBuilderArtifacts(&b, candyOrder)
 
+	// Bake out-of-tree `bake_plugin:` provider binaries into the FINAL image at
+	// /usr/lib/charly/plugins/ — the BUILD-side half of the S0 baked-plugin seam, so a
+	// deployed source/toolchain-less container can run an external plugin its
+	// in-container charly needs (e.g. charly-mcp → plugin-mcp for `charly mcp serve`).
+	if err := g.emitBakedPlugins(&b, boxName, candyOrder); err != nil {
+		return err
+	}
+
 	// Copy extracted files from multi-stage builds
 	g.emitExtractedFiles(&b, img, candyOrder)
 
@@ -745,6 +753,87 @@ func resolveExternalBuilder(prov Provider, word, candyName string, img *Resolved
 		return zero, fmt.Errorf("external builder %q returned an empty OpResolve stage — it has no build-context builder", word)
 	}
 	return reply, nil
+}
+
+// emitBakedPlugins bakes each composing candy's `bake_plugin:` out-of-tree plugin
+// binaries into the FINAL image at bakedPluginDir (/usr/lib/charly/plugins/), so a
+// DEPLOYED container — which has neither the candy source nor a go toolchain — can run
+// an external plugin its in-container charly needs at runtime. It is the BUILD-side half
+// of the S0 baked-plugin seam, the deploy-time counterpart of resolvePluginBinary's
+// bakedPluginBinary fallback (plugin_loader.go): the loader looks for the binary at
+// $CHARLY_PLUGIN_DIR/<bakedPluginFileName(name)> then bakedPluginDir/<bakedPluginFileName(name)>,
+// so the COPY destination here uses the SAME bakedPluginFileName helper (plugin_loader.go,
+// R3). It keys by the plugin candy's LEAF name, NOT the full scanned-set key: the BUILD may
+// resolve the candy under an @github ref while the in-container project sees it bare, so the
+// only identity both halves agree on is the leaf.
+//
+// Called post-main-FROM (right after emitExternalBuilderArtifacts) so the COPY lands in
+// the final stage. For each referenced plugin it resolves the candy's SOURCE DIR the SAME
+// way loadProjectPlugins does — g.Candies[key].SourceDir on the scanned set
+// (ScanAllCandyWithConfig) — host-builds the provider binary (buildPluginBinary; the SAME
+// host build the loader runs), stages it into the per-image build context under
+// .build/<boxName>/.plugins/, and emits the COPY + chmod. The binary is CGO-free Go, so it
+// is portable to a SAME-ARCH container; cross-arch baking is a future concern. Dedup is by
+// plugin map-key so a plugin baked by two composing candies is built + copied once.
+func (g *Generator) emitBakedPlugins(b *strings.Builder, boxName string, candyOrder []string) error {
+	baked := map[string]struct{}{}
+	for _, candyName := range candyOrder {
+		layer := g.Candies[candyName]
+		if layer == nil || len(layer.BakePlugin) == 0 {
+			continue
+		}
+		for _, ref := range layer.BakePlugin {
+			// key is the g.Candies map key (used for SourceDir resolution); the baked
+			// FILENAME derives from its leaf via bakedPluginFileName — the stable identity
+			// the build-side and the in-container loader agree on across local/@github refs.
+			key := ref.Bare()
+			if _, done := baked[key]; done {
+				continue
+			}
+			baked[key] = struct{}{}
+			plugin := g.Candies[key]
+			if plugin == nil {
+				return fmt.Errorf("candy %q: bake_plugin %q is not a known plugin candy (not in the scanned candy set)", candyName, key)
+			}
+			if plugin.SourceDir == "" {
+				return fmt.Errorf("candy %q: bake_plugin %q has no source dir to build from", candyName, key)
+			}
+			binPath, err := buildPluginBinary(context.Background(), plugin.SourceDir, key)
+			if err != nil {
+				return fmt.Errorf("candy %q: bake_plugin %q: %w", candyName, key, err)
+			}
+			binName := bakedPluginFileName(key)
+			stageDir := filepath.Join(g.BuildDir, boxName, ".plugins")
+			if err := os.MkdirAll(stageDir, 0o755); err != nil {
+				return fmt.Errorf("candy %q: bake_plugin %q: stage dir: %w", candyName, key, err)
+			}
+			if err := copyFileBytes(binPath, filepath.Join(stageDir, binName)); err != nil {
+				return fmt.Errorf("candy %q: bake_plugin %q: stage binary: %w", candyName, key, err)
+			}
+			ctxRel := fmt.Sprintf(".build/%s/.plugins/%s", boxName, binName)
+			dest := bakedPluginDir + "/" + binName
+			fmt.Fprintf(b, "# Bake plugin %q (required by %q) for in-container charly\n", key, candyName)
+			fmt.Fprintf(b, "COPY %s %s\n", ctxRel, dest)
+			fmt.Fprintf(b, "RUN chmod 0755 %s\n", dest)
+			// Bake a `.providers` words manifest beside the binary so the in-container prescan
+			// (discoverBakedPluginWords) registers the plugin's command word into the grammar
+			// WITHOUT connecting it — the connect stays lazy (connectCommandPlugin's baked path),
+			// so an unrelated `charly <cmd>` in the container pays nothing.
+			if plugin.Plugin != nil && len(plugin.Plugin.Providers) > 0 {
+				lines := make([]string, len(plugin.Plugin.Providers))
+				for i, c := range plugin.Plugin.Providers {
+					lines[i] = string(c) // PluginCapability is a "<class>:<word>" string
+				}
+				manifest := strings.Join(lines, "\n") + "\n"
+				if err := os.WriteFile(filepath.Join(stageDir, binName+".providers"), []byte(manifest), 0o644); err != nil {
+					return fmt.Errorf("candy %q: bake_plugin %q: stage manifest: %w", candyName, key, err)
+				}
+				fmt.Fprintf(b, "COPY %s.providers %s.providers\n", ctxRel, dest)
+			}
+			b.WriteString("\n")
+		}
+	}
+	return nil
 }
 
 // emitExtractStages emits a `FROM <source> AS <candy>-extract-<i>` stage for

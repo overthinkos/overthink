@@ -63,7 +63,8 @@ func TestCommandProviders_ExtractedLeafCommands(t *testing.T) {
 		{"ssh", []string{"ssh", "tunnel", "spice", "myvm"}, "ssh tunnel spice <vm>"},
 		{"secrets", []string{"secrets", "list"}, "secrets list"},
 		{"preempt", []string{"preempt", "status"}, "preempt status"},
-		{"mcp", []string{"mcp", "serve"}, "mcp serve"},
+		// `mcp` is intentionally absent: `charly mcp serve` is now an EXTERNAL command
+		// served out-of-process by candy/plugin-mcp (C1), not a builtin CommandProvider.
 	}
 	for _, tc := range cases {
 		t.Run(tc.word, func(t *testing.T) {
@@ -259,21 +260,21 @@ func TestCommandProviders_CheckNestedPluginsInjected(t *testing.T) {
 	}
 }
 
-// TestCommandProviders_ExtractedReachMCP proves the extraction did not change the
-// reflected MCP tool surface for the extracted commands — collectCommandPlugins() feeds
-// buildMcpServer's modelCLI exactly as it feeds the real CLI, so each command's leaves
-// stay auto-generated tools (toolIndex mirrors buildMcpServer via buildTestKong). `mcp`
-// is the deliberate exception: `mcp.serve` is path-skipped (mcpSkipToolPaths) — you do
-// not expose "start an MCP server" as a tool inside the MCP server — and the extraction
-// must preserve that skip (the skip is path-keyed, not origin-keyed), so it stays ABSENT.
+// TestCommandProviders_ExtractedReachMCP proves the command extraction did not change the
+// reflected CLI surface for the extracted commands — collectCommandPlugins() feeds
+// buildCLIModel's modelCLI exactly as it feeds the real CLI, so each extracted command's
+// leaves stay in the CLI model the out-of-process MCP bridge (candy/plugin-mcp) reflects into
+// tools. `mcp` itself is now an EXTERNAL command served by candy/plugin-mcp — not a builtin
+// CommandProvider — so it is correctly ABSENT from this builtin-only model (the MCP server
+// does not expose "start an MCP server" as one of its own tools).
 func TestCommandProviders_ExtractedReachMCP(t *testing.T) {
-	tools := toolIndex(t, false)
+	paths := cliModelLeafPaths(t)
 	for _, name := range []string{"alias.list", "tmux.list", "secrets.list", "preempt.status"} {
-		if _, ok := tools[name]; !ok {
-			t.Errorf("%s missing from the MCP tool surface after extracting its command into a CommandProvider", name)
+		if !paths[name] {
+			t.Errorf("%s missing from the CLI model after extracting its command into a CommandProvider", name)
 		}
 	}
-	if _, ok := tools["mcp.serve"]; ok {
-		t.Error("mcp.serve unexpectedly present in the MCP tool surface — its mcpSkipToolPaths skip must survive the command extraction")
+	if paths["mcp.serve"] {
+		t.Error("mcp.serve unexpectedly present in the builtin CLI model — `mcp` is now an external command (candy/plugin-mcp), not a builtin CommandProvider")
 	}
 }

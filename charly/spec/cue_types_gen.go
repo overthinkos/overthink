@@ -219,7 +219,7 @@ type Op struct {
 	Timeout Duration `yaml:"timeout,omitempty" json:"timeout,omitempty"`
 
 	// command — a SHARED exec-string modifier (NOT a verb): the live-container verbs
-	// `wl: exec` / `wl: sway-msg` / `libvirt: guest-exec` read it as their argv, and
+	// `wl: exec` / `wl: sway-msg` / `libvirt: guest/exec` read it as their argv, and
 	// the `command` plugin verb's INSTALL-EMIT rehydrates it onto an OpStep for emitCmd
 	// (build) / renderOpCommand (deploy). It LEFT #OpVerb in the command→plugin
 	// extraction (the command CHECK verb is now `plugin: command` + #CommandInput), so
@@ -881,6 +881,15 @@ type Candy struct {
 	Candy []CandyRef `yaml:"candy,omitempty" json:"candy,omitempty"`
 
 	Require []CandyRef `yaml:"require,omitempty" json:"require,omitempty"`
+
+	// bake_plugin — the OUT-OF-TREE plugin candies whose pre-built provider binary
+	// this candy BAKES into every composing image at /usr/lib/charly/plugins/, so a
+	// DEPLOYED container (no candy source, no go toolchain) can run an external plugin
+	// its in-container charly needs at runtime — e.g. charly-mcp bakes plugin-mcp so
+	// `charly mcp serve` resolves the external `mcp` command in-container. The S0
+	// baked-plugin BUILD-side seam, the deploy-time counterpart of resolvePluginBinary's
+	// bakedPluginBinary fallback (plugin_loader.go). See generate.go emitBakedPlugins.
+	BakePlugin []CandyRef `yaml:"bake_plugin,omitempty" json:"bake_plugin,omitempty"`
 
 	RequiresCapability []string `yaml:"requires_capability,omitempty" json:"requires_capability,omitempty"`
 

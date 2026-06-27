@@ -60,6 +60,12 @@ func (t *LocalTransport) Connect(ctx context.Context) (*PluginUnit, io.Closer, e
 	// readinessResolve picks these up instead of only the built-in fallbacks. Other plugins
 	// ignore the unknown env; the vm plugin's poll-gates honor it.
 	cmd.Env = append(os.Environ(), readinessPluginEnv()...)
+	// Thread the host's own executable path so a command plugin that must shell BACK to
+	// charly (the MCP bridge fork/execs `charly __cli-model` + `charly <cmd>`) calls the
+	// SAME binary that spawned it, not whatever `charly` happens to be on PATH.
+	if exe, err := os.Executable(); err == nil {
+		cmd.Env = append(cmd.Env, "CHARLY_BIN="+exe)
+	}
 	client := plugin.NewClient(&plugin.ClientConfig{
 		HandshakeConfig:  sdk.Handshake,
 		Plugins:          sdk.PluginMap(nil, nil),

@@ -3,6 +3,7 @@ module github.com/overthinkos/overthink/candy/plugin-mcp
 go 1.26.0
 
 require (
+	github.com/alecthomas/kong v1.14.0
 	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/overthinkos/overthink/charly v0.0.0
 )

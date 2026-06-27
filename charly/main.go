@@ -52,6 +52,7 @@ type CLI struct {
 	Box      BoxCmd            `cmd:"" name:"box" help:"Build, generate, inspect, and pull container boxes (reads charly.yml)"`
 	Candy    CandyCmd          `cmd:"" name:"candy" help:"Edit candy.yml files in the project's candy/ directory"`
 	Plugin   PluginInternalCmd `cmd:"" name:"__plugin" hidden:"" help:"internal: plugin server/relay plumbing"`
+	CliModel CliModelCmd       `cmd:"" name:"__cli-model" hidden:"" help:"internal: emit the CLI command tree as JSON (sdk.CLIModel) for the out-of-process MCP bridge"`
 	Migrate  MigrateCmd        `cmd:"" help:"Migrate any opencharly config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
 	Settings SettingsCmd       `cmd:"" help:"Manage runtime configuration (get/set/list)"`
 	// Every non-machinery command — the deploy-lifecycle + leaf-domain set (alias, tmux,
@@ -767,6 +768,11 @@ func main() {
 	// provider needs the project dir (itself a Kong flag). The provider stays UNconnected here;
 	// the build+connect is lazy (dispatchExternalCommand). A project with no command plugins
 	// registers nothing, so the grammar below is byte-for-byte the builtin set.
+	//
+	// FIRST discover plugins BAKED into the image (bake_plugin:) — their command words enter the
+	// grammar with NO project to scan, so the in-container charly-mcp service's `charly mcp serve`
+	// resolves the external `mcp` command (a no-op on a dev host with no baked plugins).
+	discoverBakedPluginWords()
 	prescanProjectCommandWords()
 	// 6th seam: subcommands contributed by command providers — builtin (static KongCommand)
 	// PLUS out-of-process command plugins (dynamic reflect.StructOf commands dispatched

@@ -8,7 +8,6 @@ require (
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/google/go-containerregistry v0.20.7
 	github.com/hashicorp/go-plugin v1.8.0
-	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/overthinkos/overthink/candy/plugin-example-external v0.0.0-20260625134322-595471add643
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.49.0
@@ -31,7 +30,6 @@ require (
 	github.com/emicklei/proto v1.14.3 // indirect
 	github.com/fatih/color v1.15.0 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
-	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/go-hclog v1.6.3 // indirect
 	github.com/hashicorp/yamux v0.1.2 // indirect
@@ -46,14 +44,10 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/protocolbuffers/txtpbfmt v0.0.0-20260217160748-a481f6a22f94 // indirect
-	github.com/segmentio/asm v1.1.3 // indirect
-	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/vbatts/tar-split v0.12.2 // indirect
-	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/net v0.52.0 // indirect
-	golang.org/x/oauth2 v0.36.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231106174013-bbf56f31fb17 // indirect
 )

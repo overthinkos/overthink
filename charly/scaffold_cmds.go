@@ -11,9 +11,10 @@ import (
 )
 
 // scaffold_cmds.go — Kong command structs for the authoring + remote-repo
-// surface. Each command auto-becomes an MCP tool via mcp_server.go's Kong
-// reflection, so adding one here adds it to both the CLI and the MCP
-// server in lockstep.
+// surface. Each command auto-becomes an MCP tool via the `__cli-model` seam's
+// kong reflection (buildCLIModel), which the out-of-process MCP bridge
+// (candy/plugin-mcp) reads, so adding one here adds it to both the CLI and the
+// MCP server in lockstep.
 
 // ---------------------------------------------------------------------------
 // `charly box new project <dir>`

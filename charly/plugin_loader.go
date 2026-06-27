@@ -240,17 +240,130 @@ func buildPluginBinary(ctx context.Context, srcDir, name string) (string, error)
 	return bin, nil
 }
 
-// loadPluginUnit loads ONE out-of-tree plugin: build its provider binary on the
-// host, connect over LocalTransport, run the SAME schema gate a builtin runs, then
+// bakedPluginDir is the FHS system path a candy's `bake_plugin:` step copies a
+// pre-built provider binary to at image-build time, so a DEPLOYED container (which has
+// neither the candy source nor a go toolchain) can run an external plugin its
+// in-container charly needs at runtime — e.g. the charly-mcp service's `charly mcp
+// serve`. `CHARLY_PLUGIN_DIR` overrides it (tests, non-FHS layouts).
+const bakedPluginDir = "/usr/lib/charly/plugins"
+
+// bakedPluginFileName is the filename a baked plugin binary takes under bakedPluginDir.
+// It keys by the plugin candy's LEAF name (the last path segment) — STABLE across how the
+// candy is referenced: bare `plugin-mcp` in a local composition vs the qualified
+// `github.com/org/repo/candy/plugin-mcp` scanned-set key under an @github composition. The
+// build-side bake and the in-container loader resolve the candy under different keys
+// (the build may see the @github ref while the in-container project sees it bare), so they
+// agree ONLY on the leaf. Shared by emitBakedPlugins (bake) + bakedPluginBinary (load), R3.
+func bakedPluginFileName(name string) string {
+	return safePluginBinName(filepath.Base(name))
+}
+
+// bakedPluginDirs returns the directories baked plugin binaries (+ their .providers word
+// manifests) live in: $CHARLY_PLUGIN_DIR (override) then the FHS bakedPluginDir.
+func bakedPluginDirs() []string {
+	dirs := []string{}
+	if d := os.Getenv("CHARLY_PLUGIN_DIR"); d != "" {
+		dirs = append(dirs, d)
+	}
+	return append(dirs, bakedPluginDir)
+}
+
+// bakedPluginBinary returns a pre-built provider binary for `name` if one was baked into
+// the image (bake_plugin:), else "".
+func bakedPluginBinary(name string) string {
+	for _, d := range bakedPluginDirs() {
+		p := filepath.Join(d, bakedPluginFileName(name))
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p
+		}
+	}
+	return ""
+}
+
+// bakedCommandBinaries maps a baked plugin's COMMAND word → its binary path, populated by
+// discoverBakedPluginWords from the `.providers` manifests baked beside each binary. It lets
+// connectCommandPlugin connect a baked command plugin in a deployed container that has NO
+// candy source to scan (the charly-mcp service's `charly mcp serve` is the motivating case).
+var bakedCommandBinaries = map[string]string{}
+
+// discoverBakedPluginWords reads the `.providers` word manifests baked beside each plugin
+// binary (bake_plugin:) and registers their declared external COMMAND words into the kong
+// grammar (registerDeclaredExternalCommand) — CHEAPLY, WITHOUT connecting any plugin (the
+// connect is lazy, on dispatch, via connectCommandPlugin's baked path). So the in-container
+// charly recognizes `charly <word>` for a baked command with no project to scan. A NO-OP when
+// no plugins are baked (the dev-host / from-source case): the dirs are absent or hold no
+// `.providers` files, and every existing charly invocation is byte-for-byte unchanged.
+func discoverBakedPluginWords() {
+	for _, dir := range bakedPluginDirs() {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".providers") {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+			if err != nil {
+				continue
+			}
+			binPath := filepath.Join(dir, strings.TrimSuffix(e.Name(), ".providers"))
+			for _, line := range strings.Split(string(data), "\n") {
+				class, word, ok := splitCapability(strings.TrimSpace(line))
+				if !ok || class != ClassCommand {
+					continue
+				}
+				registerDeclaredExternalCommand(word)
+				bakedCommandBinaries[word] = binPath
+			}
+		}
+	}
+}
+
+// loadBakedPluginBinary connects a baked plugin binary DIRECTLY (no source build) and
+// registers its providers — the lazy connect connectCommandPlugin pays when a baked command
+// is actually invoked. Returns true on success.
+func loadBakedPluginBinary(ctx context.Context, bin string) bool {
+	unit, closer, err := (&LocalTransport{BinPath: bin}).Connect(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: baked plugin %s: connect: %v\n", bin, err)
+		return false
+	}
+	name := filepath.Base(bin)
+	if err := registerPluginUnitSchema(name, unit.Schema); err != nil {
+		_ = closer.Close()
+		return false
+	}
+	if err := providerRegistry.RegisterPluginProviders(unit.Providers, "baked:"+bin, closer); err != nil {
+		_ = closer.Close()
+		fmt.Fprintf(os.Stderr, "warning: baked plugin %s: register: %v\n", bin, err)
+		return false
+	}
+	return true
+}
+
+// resolvePluginBinary returns a plugin's provider binary: a BAKED binary (pre-built,
+// baked into the image for a source/toolchain-less deployed container) if present, else
+// built from the candy source on the host. The baked path is the enabler for running an
+// external plugin INSIDE a deployed container.
+func resolvePluginBinary(ctx context.Context, srcDir, name string) (string, error) {
+	if baked := bakedPluginBinary(name); baked != "" {
+		return baked, nil
+	}
+	if srcDir == "" {
+		return "", fmt.Errorf("no baked binary (%s) and no source dir to build from", filepath.Join(bakedPluginDir, safePluginBinName(name)))
+	}
+	return buildPluginBinary(ctx, srcDir, name)
+}
+
+// loadPluginUnit loads ONE out-of-tree plugin: resolve its provider binary (baked-in or
+// host-built), connect over LocalTransport, run the SAME schema gate a builtin runs, then
 // register its providers. The schema travels over the Describe channel (gRPC
 // schema_cue) — the host never reads the candy's schema/ dir.
 func loadPluginUnit(ctx context.Context, name string, p *CandyPluginDecl, srcDir string) error {
-	if srcDir == "" {
-		return fmt.Errorf("plugin %q (source %s): no resolved source dir to build from", name, p.Source)
-	}
-	bin, err := buildPluginBinary(ctx, srcDir, name)
+	bin, err := resolvePluginBinary(ctx, srcDir, name)
 	if err != nil {
-		return err
+		return fmt.Errorf("plugin %q (source %s): %w", name, p.Source, err)
 	}
 	unit, closer, err := (&LocalTransport{BinPath: bin}).Connect(ctx)
 	if err != nil {

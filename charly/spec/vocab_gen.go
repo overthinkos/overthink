@@ -71,6 +71,7 @@ var DataKeys = []string{
 	"alias",
 	"apk",
 	"artifact",
+	"bake_plugin",
 	"candy",
 	"capability",
 	"data",

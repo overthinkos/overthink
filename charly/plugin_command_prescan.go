@@ -87,6 +87,15 @@ func connectCommandPlugin(word string) (Provider, bool) {
 	if p, ok := providerRegistry.resolve(ClassCommand, word); ok {
 		return p, true // already connected (the eager path)
 	}
+	// Baked path: a DEPLOYED container has no candy source to scan, so a baked command plugin
+	// connects DIRECTLY from its baked binary (discoverBakedPluginWords mapped word → binary).
+	if bin, ok := bakedCommandBinaries[word]; ok {
+		if loadBakedPluginBinary(context.Background(), bin) {
+			if p, ok := providerRegistry.resolve(ClassCommand, word); ok {
+				return p, true
+			}
+		}
+	}
 	dir, err := os.Getwd()
 	if err != nil {
 		return nil, false

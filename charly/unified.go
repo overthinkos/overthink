@@ -2203,6 +2203,7 @@ func populateCandyFromYAML(layer *Candy, ly *CandyYAML) {
 
 	layer.Require = toCandyRefs(ly.Require)
 	layer.IncludedCandy = toCandyRefs(ly.Candy)
+	layer.BakePlugin = toCandyRefs(ly.BakePlugin)
 
 	layer.service = ly.Service
 	// derivePackageSectionsFromCalamares is the SOLE populator of the package

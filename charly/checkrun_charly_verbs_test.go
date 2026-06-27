@@ -140,60 +140,16 @@ func TestRunCharlyVerb_SkipsUnderImageTest(t *testing.T) {
 	}
 }
 
-func TestRunCharlyVerb_UnknownMethodFails(t *testing.T) {
-	r, _ := newFakeRunner(t, RunModeLive)
-	r.Box = "jupyter"
-	res := r.Run(context.Background(), []Op{{Wl: "not-a-real-method"}})
-	if res[0].Status != TestFail || !strings.Contains(res[0].Message, "unknown method") {
-		t.Errorf("expected unknown-method failure, got %+v", res[0])
-	}
-}
-
 // --- §D validation tests ---
 
-// Unknown live-verb method rejection is now a CUE concern (the per-verb #*Method
-// enums) — see TestCueTightening_RejectsAndAccepts "candy cdp bogus method rejected"
-// and the mcp/spice/libvirt bogus-method cases.
-
-func TestValidateCharlyVerb_MissingRequiredModifier(t *testing.T) {
-	errs := &ValidationError{}
-	// wl: click requires X + Y — neither set.
-	c := &Op{Wl: "click"}
-	validateCharlyVerb(c, "wl", "loc", errs)
-	joined := strings.Join(errs.Errors, "\n")
-	if !strings.Contains(joined, `modifier "x"`) || !strings.Contains(joined, `modifier "y"`) {
-		t.Errorf("expected missing x+y modifier errors, got: %v", errs.Errors)
-	}
-}
-
-func TestValidateCharlyVerb_BuildContextRejected(t *testing.T) {
-	errs := &ValidationError{}
-	// A live-container verb pinned to build context must be rejected.
-	c := &Op{Wl: "status", Context: []string{"build"}}
-	validateCharlyVerb(c, "wl", "loc", errs)
-	if !errs.HasErrors() || !strings.Contains(strings.Join(errs.Errors, "\n"), "runtime-context only") {
-		t.Errorf("expected runtime-context-only error, got: %+v", errs.Errors)
-	}
-}
-
-func TestValidateCharlyVerb_ArtifactMethodMissingPath(t *testing.T) {
-	errs := &ValidationError{}
-	// wl: screenshot requires Artifact.
-	c := &Op{Wl: "screenshot"}
-	validateCharlyVerb(c, "wl", "loc", errs)
-	if !errs.HasErrors() || !strings.Contains(strings.Join(errs.Errors, "\n"), "artifact") {
-		t.Errorf("expected artifact-required error, got: %+v", errs.Errors)
-	}
-}
-
-func TestValidateCharlyVerb_ValidCheckNoErrors(t *testing.T) {
-	errs := &ValidationError{}
-	c := &Op{Wl: "click", X: 10, Y: 20}
-	validateCharlyVerb(c, "wl", "loc", errs)
-	if errs.HasErrors() {
-		t.Errorf("expected no errors for valid check, got: %+v", errs.Errors)
-	}
-}
+// TestRunCharlyVerb_UnknownMethodFails + the TestValidateCharlyVerb_* cases were removed when
+// `wl` (the LAST in-proc live verb) externalized into candy/plugin-wl. validateCharlyVerb is
+// now a no-op (no in-proc LiveVerbProvider remains), and the former in-proc wl checks moved:
+// unknown-method + build-context rejection are CUE concerns (the per-verb #*Method enums + the
+// #Op context rules — see TestCueTightening_RejectsAndAccepts "candy cdp bogus method rejected"
+// and the mcp/spice/libvirt bogus-method cases), and the required-modifier check lives in the
+// plugin (candy/plugin-wl/methods_test.go's TestCheckRequiredModifiers). The box-mode skip
+// stays covered by TestRunCharlyVerb_SkipsUnderImageTest above.
 
 // --- Check.Kind() recognizes the new verbs ---
 

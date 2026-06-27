@@ -121,11 +121,13 @@ func checkVerbBijection(catalog map[string]VerbSpec, verbs, authoring []string) 
 	return nil
 }
 
-// checkMethodAllowlists verifies every live-verb provider's method-allowlist key
-// set equals the CUE-derived spec.LiveVerbMethods enum for that verb — so the hand
-// dispatch tables (wlMethods/…, owned by each provider via Methods() and
-// carrying the per-method posArgs / required-modifier logic) can never drift from the
-// CUE method vocabulary the schema + validateCharlyVerb enforce. E4: reads each
+// checkMethodAllowlists verifies every IN-PROC live-verb provider's method-allowlist key
+// set equals the CUE-derived spec.LiveVerbMethods enum for that verb — so a compiled-in
+// live verb's hand dispatch table (owned by the provider via Methods() and carrying the
+// per-method posArgs / required-modifier logic) can never drift from the CUE method
+// vocabulary the schema + validateCharlyVerb enforce. It now compares two EMPTY sets: `wl`
+// (the last compiled-in live verb) externalized into candy/plugin-wl, so there is no
+// registered in-proc LiveVerbProvider and spec.LiveVerbMethods is empty. E4: reads each
 // verb's allowlist from its registered LiveVerbProvider — there is no central
 // liveVerbDispatch — so it MUST run AFTER the verb providers register (called from
 // their init(), after registration, to avoid the alphabetical init-order race).

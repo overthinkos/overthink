@@ -212,15 +212,17 @@ func venueHasTool(ex DeployExecutor, tool string) bool {
 
 // check_venue.go — the single venue resolver shared by every `charly check` verb.
 //
-// The declarative runner (`charly check live`) and the interactive verb
-// (`charly check wl`) historically diverged: the runner
-// classified the target (container / VM / local / nested) and built a
-// DeployExecutor chain, while the interactive verbs hardcoded
-// `resolveContainer()` + `podman exec`, so they only ever worked against a
-// running container. That made `charly check wl <vm>` impossible.
+// The declarative runner (`charly check live`) and the former in-core interactive verbs
+// (the live-container probes, all now externalized to out-of-process plugins) historically
+// diverged: the runner classified the target (container / VM / local / nested) and built a
+// DeployExecutor chain, while the interactive verbs hardcoded `resolveContainer()` +
+// `podman exec`, so they only ever worked against a running container — a VM target was
+// impossible.
 //
-// resolveCheckVenue is the ONE classifier + executor builder both paths use, so
-// an interactive verb works identically against a container, a VM (over the
+// resolveCheckVenue is the ONE classifier + executor builder both paths use, so the host's
+// executor (attached to an EXEC-based external verb over the reverse channel) and the
+// host-side endpoint pre-resolution (a port-based external verb) work identically against a
+// container, a VM (over the
 // managed ssh-config alias), an ssh/local host, or a dotted nested path — the
 // "same underlying mechanism" guarantee. The verbs then run their tool
 // invocations through venue.Exec.RunCapture / GetFile / PutFile, exactly like
@@ -261,9 +263,9 @@ func (v *CheckVenue) IsContainer() bool { return v != nil && v.Kind == "containe
 // to the container path (matching CheckLiveCmd.isVmTarget returning false on a
 // load error).
 func resolveCheckVenue(name, instance string) (*CheckVenue, error) {
-	// "." is the local host — lets `charly check wl . screenshot` run in-place,
+	// "." is the local host — lets a check verb run in-place against the host venue,
 	// which is also the in-guest delegation target (host SSHes into the VM
-	// and runs `charly check wl . …` there with the live session env).
+	// and runs `charly check live . …` there with the live session env).
 	if name == "." {
 		return &CheckVenue{Exec: ShellExecutor{}, Kind: "host"}, nil
 	}

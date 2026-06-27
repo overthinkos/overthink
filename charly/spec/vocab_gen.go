@@ -251,7 +251,6 @@ var OpVerbs = []string{
 	"download",
 	"setcap",
 	"build",
-	"wl",
 	"summarize",
 	"kill",
 	"plugin",
@@ -387,6 +386,4 @@ var AuthoringVerbs = []string{
 // LiveVerbMethods maps each live-container verb to its method allowlist
 // (the #<Name>Method enums) — the SAME allowlists checkrun_charly_verbs.go
 // enforces, now from one CUE source.
-var LiveVerbMethods = map[string][]string{
-	"wl": {"status", "toplevel", "windows", "geometry", "xprop", "atspi", "screenshot", "clipboard", "click", "double-click", "mouse", "scroll", "drag", "type", "key", "key-combo", "focus", "close", "fullscreen", "minimize", "exec", "resolution", "overlay-list", "overlay-status", "overlay-show", "overlay-hide", "sway-tree", "sway-workspaces", "sway-outputs", "sway-msg", "sway-focus", "sway-move", "sway-resize", "sway-layout", "sway-workspace", "sway-kill", "sway-floating", "sway-reload"},
-}
+var LiveVerbMethods = map[string][]string{}

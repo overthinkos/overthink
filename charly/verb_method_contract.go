@@ -8,10 +8,12 @@ package main
 // method contract here anymore — the dep-shedders kube/adb/appium have all been extracted.
 // The cross-field required-modifier/artifact rules now live on each verb's plugin.
 //
-// wl has been relocated to a compiled-in candy
-// (candy/plugin-wl): it owns its Methods()/MethodField() contract + its wlMethods
-// map in its candy, registered via registerCompiledDedicatedVerb (the kitVerbLiveAdapter
-// exposes the contract through the same registry the host reads).
+// NO compiled-in candy defines an in-proc live-verb method contract anymore either: `wl`
+// (the last one) externalized into candy/plugin-wl, an EXTERNAL-CHARLY-VERB served
+// OUT-OF-PROCESS. Its #WlMethod method-name allowlist is enforced by the CUE enum on core
+// #Op; its cross-field required-modifier checks run inside the plugin at dispatch
+// (methods.go's checkRequiredModifiers). The kitVerbLiveAdapter / registerCompiledDedicatedVerb
+// machinery is retained for a future compiled-in live verb, but currently has no user.
 
 // kube has NO in-proc method contract here — it is an EXTERNAL-CHARLY-VERB
 // (candy/plugin-kube). Its #KubeMethod method-name allowlist is enforced by the CUE enum on

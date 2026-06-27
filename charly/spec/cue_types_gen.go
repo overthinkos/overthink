@@ -37,6 +37,19 @@ type Op struct {
 	// provider, after the host pre-resolves the deployment's CDP port to a DevTools URL).
 	Cdp CdpMethod `yaml:"cdp,omitempty" json:"cdp,omitempty"`
 
+	// `wl` is an EXTERNAL-CHARLY-VERB: its Wayland/sway desktop driver (input, windows,
+	// screenshots, sway IPC, overlay, atspi, clipboard — ~40 methods) lives in the out-of-tree
+	// candy/plugin-wl module, served OUT-OF-PROCESS. Like cdp/vnc/mcp/record/dbus (and unlike
+	// file/package/service/command, which left #Op entirely, re-authored as `plugin: <verb>`),
+	// wl KEEPS its `wl:` discriminator + every modifier
+	// (x/y/x2/y2/direction/amount/target/text/key/combo/command/action/query/artifact) on this
+	// closed #Op — authoring is unchanged (`wl: screenshot`, not `plugin: wl`). It therefore left
+	// #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc CheckVerbProvider to gate) BUT keeps this field
+	// + #WlMethod here, so `wl: screenshot` still validates against the method enum and VerbsSet
+	// still classifies the op (then dispatch resolves the registered external provider, which
+	// drives the venue's compositor over the executor reverse channel — wl is EXEC-based, like
+	// record/dbus; the screenshot PNG pulls via GetFile). wl is the LAST live-container verb to
+	// leave charly's core: after it, ZERO check verbs are compiled-in.
 	Wl WlMethod `yaml:"wl,omitempty" json:"wl,omitempty"`
 
 	// `dbus` is an EXTERNAL-CHARLY-VERB: its D-Bus driver (list/call/introspect/notify against

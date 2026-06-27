@@ -46,7 +46,7 @@ kde-shell:
                     - spectacle
                 aur:
                     # kdotool — the KWin window-management automation tool driving
-                    # `charly check wl` on KWin (the KWin analogue of wlroots' wlrctl). It
+                    # the `wl` check verb on KWin (the KWin analogue of wlroots' wlrctl). It
                     # talks to KWin via the scripting D-Bus API: search /
                     # windowactivate / windowminimize / windowclose / windowstate
                     # (fullscreen) / getwindowgeometry. Pointer + keyboard injection
@@ -91,7 +91,7 @@ kde-shell:
             file: /usr/bin/konsole
             exists: true
     kde-shell-step-6:
-        check: kdotool, the KWin window-management automation tool that drives charly check wl on KWin, is installed at /usr/bin/kdotool
+        check: kdotool, the KWin window-management automation tool that drives the wl check verb on KWin, is installed at /usr/bin/kdotool
         plugin: file
         plugin_input:
             file: /usr/bin/kdotool

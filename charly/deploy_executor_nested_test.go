@@ -249,7 +249,7 @@ func TestNestedExecutor_EnvVarsPropagated_DisplayWayland(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "wayland-2")
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1000/bus")
 
-	wrapped, err := wrapWithJump(NestedJump{Kind: JumpPodmanExec, Target: "charly-fixture-desktop"}, `charly check wl status fixture-desktop`, false)
+	wrapped, err := wrapWithJump(NestedJump{Kind: JumpPodmanExec, Target: "charly-fixture-desktop"}, `charly check live fixture-desktop --filter wl`, false)
 	if err != nil {
 		t.Fatalf("wrapWithJump: %v", err)
 	}

@@ -133,17 +133,18 @@ func validateCheck(c *Op, loc string, errs *ValidationError) {
 
 	// Matcher operator names (equals/contains/matches/…) are enforced by #MatchOpMap.
 
-	// wl verb: validate method allowlist + required modifiers
-	// + scope enforcement (deploy-scope-only since it needs a
-	// running container with port mappings). The allowlists live in
-	// checkrun_charly_verbs.go next to the dispatch logic so adding a new method
-	// means touching one file.
+	// In-proc live-verb validation: method allowlist + required modifiers + scope
+	// enforcement, read from the registered LiveVerbProvider. It is a no-op now — `wl` (the
+	// last in-proc live verb) externalized into candy/plugin-wl, so no resolvable provider
+	// is a LiveVerbProvider; the externalized verbs self-validate at dispatch (the plugin's
+	// checkRequiredModifiers) and their method-name enum is enforced by CUE on core #Op.
 	validateCharlyVerb(c, verb, loc, errs)
 }
 
-// validateCharlyVerb checks method-name allowlists, required modifiers, and
-// deploy-scope enforcement for the wl verb. No-op for
-// other verbs.
+// validateCharlyVerb checks method-name allowlists, required modifiers, and deploy-scope
+// enforcement for an IN-PROC live verb. A no-op for every verb now — no compiled-in live
+// verb remains (`wl`, the last, externalized); an external verb resolves but is NOT a
+// LiveVerbProvider, so it falls through. Retained for a future compiled-in live verb.
 func validateCharlyVerb(c *Op, verb, loc string, errs *ValidationError) {
 	// E4: the verb's method contract is owned by its provider (LiveVerbProvider),
 	// reached through the registry — the former central per-verb switch is gone. A

@@ -36,6 +36,15 @@ sway-desktop-vnc:
             # baked `dbus:` check dispatches — otherwise it SKIPs with `unknown verb "dbus"`.
             # (Same cross-repo reconcile lag as plugin-cdp.)
             - plugin-dbus
+            # plugin-wl is the OUT-OF-TREE plugin that serves the `wl:` check verb (the
+            # Wayland/sway desktop driver lives there, not in charly's core check surface —
+            # EXEC-based, driving the venue's compositor via wlrctl/grim/wtype/swaymsg over the
+            # executor reverse channel). This candy AUTHORS a `wl:` check (toplevel), so requiring
+            # plugin-wl puts it in every composing image's scanned candy set;
+            # collectReferencedPluginWords build-connects it before the baked `wl:` check
+            # dispatches — otherwise it SKIPs with `unknown verb "wl"`. (Same cross-repo reconcile
+            # lag as plugin-cdp.)
+            - plugin-wl
     sway-desktop-vnc-candy:
         candy:
             - sway-desktop

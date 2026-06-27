@@ -10,8 +10,8 @@ plugin-cdp:
             provider binary on the HOST, and serves it via LocalTransport — so the CDP
             WebSocket client lives HERE, out of charly's core check surface (the latest
             external dep-shed after candy/plugin-appium, -adb, -kube, -spice, -mcp, -record;
-            charly's core keeps a minimal CDP client only for the in-core
-            `charly check wl|vnc … --from-cdp` coordinate translation). `cdp:` authoring
+            charly's core no longer keeps a CDP client of its own — the former in-core copy
+            was deleted when wl externalized). `cdp:` authoring
             stays unchanged: the verb keeps its `cdp:` discriminator + every modifier
             (tab/url/expression/selector/x/y/…) + the #CdpMethod enum on charly's core #Op,
             and dispatches through the provider registry exactly like a built-in (ResolveVerb

@@ -169,24 +169,16 @@ func writeConcat(dir, out, pkg string) error {
 // ----------------------------------------------------------------------------
 
 // liveVerbs maps each IN-PROC live-container verb to the #<Name>Method enum def that is
-// its method allowlist (an exact mirror of the Go maps in the compiled-in candy/plugin-<verb>
-// candies — now derived from the SAME CUE source),
-// projected as spec.LiveVerbMethods + gated against each verb's in-proc LiveVerbProvider
-// by checkMethodAllowlists. `kube`, `adb`, `appium`, `spice`, `mcp`, `record`, `cdp`, `vnc`, and `dbus` are
-// NOT here: each is an EXTERNAL-CHARLY-VERB served out-of-process (candy/plugin-kube, candy/plugin-adb,
-// candy/plugin-appium, candy/plugin-spice, candy/plugin-mcp, candy/plugin-record, candy/plugin-cdp,
-// candy/plugin-vnc, candy/plugin-dbus — no in-proc LiveVerbProvider to gate), so each left this list with
-// #OpVerb/VerbCatalog. Their #KubeMethod / #AdbMethod / #AppiumMethod / #SpiceMethod / #McpMethod /
-// #RecordMethod / #CdpMethod / #VncMethod / #DbusMethod enums stay in the schema (they still validate
-// `kube: <method>` / `adb: <method>` / `appium: <method>` / `spice: <method>` / `mcp: <method>` /
-// `record: <method>` / `cdp: <method>` / `vnc: <method>` / `dbus: <method>` on core #Op) but are no longer
-// LiveVerbMethods entries.
-var liveVerbs = []struct{ verb, def string }{
-	{"wl", "#WlMethod"},
-	// libvirt is NOT here: it is an EXTERNAL-CHARLY-VERB (candy/plugin-vm, served OUT-OF-PROCESS),
-	// so it has no in-proc LiveVerbProvider to gate — like candy/plugin-spice / candy/plugin-appium.
-	// Its #LibvirtMethod enum still lives on the closed #Op (authoring `libvirt: list` is unchanged).
-}
+// its method allowlist, projected as spec.LiveVerbMethods + gated against each verb's
+// in-proc LiveVerbProvider by checkMethodAllowlists. It is now EMPTY: `wl` was the LAST
+// IN-PROC live-container verb, and it externalized into candy/plugin-wl — so every
+// live-container verb (cdp/wl/vnc/dbus/mcp/record/kube/adb/appium/spice/libvirt) is now an
+// EXTERNAL-CHARLY-VERB served OUT-OF-PROCESS, with no in-proc LiveVerbProvider to gate.
+// Each left this list with #OpVerb/VerbCatalog; their #*Method enums stay in the schema
+// (they still validate `<verb>: <method>` on core #Op) but are no longer LiveVerbMethods
+// entries. spec.LiveVerbMethods is therefore an empty map, matching an empty
+// liveVerbDispatch registry (checkMethodAllowlists compares two empty sets).
+var liveVerbs = []struct{ verb, def string }{}
 
 func writeVocab(dir, out string) error {
 	// FULL schema (nil exclude): the vocab generator needs #Node's arms

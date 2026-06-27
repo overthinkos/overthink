@@ -61,38 +61,22 @@ func TestReservedWordRegistry_VerbBijection(t *testing.T) {
 // detected. The check reads each allowlist from the registered provider (E4 — no
 // central liveVerbDispatch); drift is simulated by doctoring the passed CUE side.
 func TestReservedWordRegistry_MethodAllowlists(t *testing.T) {
+	// spec.LiveVerbMethods is EMPTY now: `wl` (the LAST in-proc live verb) externalized into
+	// candy/plugin-wl, so there is no compiled-in LiveVerbProvider left to gate. The real
+	// (empty) set must pass — the gate compares two empty sets.
 	if err := checkMethodAllowlists(spec.LiveVerbMethods); err != nil {
 		t.Fatalf("live method allowlists drifted from spec.LiveVerbMethods: %v", err)
 	}
 
-	// A CUE method the provider's allowlist lacks → reported as a CUE method with no
-	// dispatch entry.
-	withGhost := map[string][]string{}
-	for k, v := range spec.LiveVerbMethods {
-		withGhost[k] = v
-	}
-	withGhost["wl"] = append(append([]string{}, spec.LiveVerbMethods["wl"]...), "ghostmethod")
-	if err := checkMethodAllowlists(withGhost); err == nil ||
-		!strings.Contains(err.Error(), "ghostmethod") {
-		t.Fatalf("expected method-allowlist check to FAIL on a CUE method with no dispatch entry, got: %v", err)
-	}
-
-	// A provider method dropped from the CUE side → reported as not-in-spec.
-	minusStatus := map[string][]string{}
-	for k, v := range spec.LiveVerbMethods {
-		minusStatus[k] = v
-	}
-	wlNoStatus := []string{}
-	for _, m := range spec.LiveVerbMethods["wl"] {
-		if m == "status" {
-			continue
-		}
-		wlNoStatus = append(wlNoStatus, m)
-	}
-	minusStatus["wl"] = wlNoStatus
-	if err := checkMethodAllowlists(minusStatus); err == nil ||
-		!strings.Contains(err.Error(), "status") {
-		t.Fatalf("expected method-allowlist check to FAIL on a provider method dropped from the CUE side, got: %v", err)
+	// The gate still detects a phantom spec.LiveVerbMethods entry naming a verb that is NOT a
+	// registered in-proc LiveVerbProvider: `file` is a compiled-in goss verb (it resolves but
+	// has no in-proc live-verb method contract, or is not registered in this unit-test binary)
+	// — either way the check reports it rather than silently passing. (An external grpcProvider
+	// is not a LiveVerbProvider either, so this would also catch one wrongly placed in the set.)
+	phantom := map[string][]string{"file": {"ghostmethod"}}
+	if err := checkMethodAllowlists(phantom); err == nil ||
+		!strings.Contains(err.Error(), "file") {
+		t.Fatalf("expected method-allowlist check to FAIL on a spec.LiveVerbMethods verb with no in-proc LiveVerbProvider, got: %v", err)
 	}
 }
 

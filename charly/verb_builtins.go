@@ -14,10 +14,11 @@ import "context"
 //     SystemPackagesStep / ServicePackagedStep with load-bearing reversals via the host's
 //     materializeStep — the one piece that stays in package main); file/user/unix_group/
 //     kernel-param/mount are ProvisionActors; `command` is the install-task emitCmd branch.
-//   - The live-container verb (wl) — a kit.LiveVerbProvider
-//     candy registered via registerCompiledDedicatedVerb (schema-less; its modifiers stay
-//     on the closed base #Op), delegating dispatch to the host's runCharlyVerb via
-//     cc.RunCharlyVerb.
+//   - NO compiled-in live-container verb remains: `wl` (the last one) externalized into
+//     candy/plugin-wl, an out-of-process plugin (below). The registerCompiledDedicatedVerb /
+//     kitVerbLiveAdapter machinery (schema-less; modifiers on the closed base #Op, dispatch
+//     delegated to the host's runCharlyVerb) is retained for a future compiled-in live verb
+//     but currently has no user.
 // All relocated verbs are absent from builtinProviderInstances + the `providers:` manifest;
 // they dispatch identically through providerRegistry. kube/adb/appium/spice are the four
 // out-of-process external-charly-verbs (below).

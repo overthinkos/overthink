@@ -39,15 +39,15 @@ import (
 // CONTRACT types (kit.MethodSpec, the kit.PosX positional-arg builder library, and the
 // kit.LiveVerbProvider interface) live in charly/plugin/kit/liveverb.go so a live-verb
 // CANDY can author its allowlist without importing package main; runCharlyVerb consumes
-// that kit.MethodSpec map directly. Each live verb is a thin wrapper around the corresponding `charly check
-// <verb> <method>` CLI path — the test framework spawns a subprocess for each check,
-// captures stdout/stderr/exit, and feeds the output through the existing matcher pipeline
-// (Stdout/Stderr/ExitStatus + artifact size via ArtifactMinBytes). The per-verb providers
-// + their <verb>Methods allowlists are compiled-in candies (candy/plugin-wl) — each a kit.LiveVerbProvider whose RunVerb delegates back here via
-// CheckContext.RunCharlyVerb; only this shared dispatcher stays host-side. kube/adb/appium/
-// spice/mcp/record/cdp/vnc/dbus are extracted as external-charly-verbs (candy/plugin-kube, candy/plugin-adb,
-// candy/plugin-appium, candy/plugin-spice, candy/plugin-mcp, candy/plugin-record, candy/plugin-cdp,
-// candy/plugin-vnc, candy/plugin-dbus), dispatching via invokeVerbProvider, never through this subprocess library.
+// that kit.MethodSpec map directly. A compiled-in live verb would be a thin wrapper around the
+// corresponding `charly check <verb> <method>` CLI path — the test framework spawns a
+// subprocess for each check, captures stdout/stderr/exit, and feeds the output through the
+// existing matcher pipeline (Stdout/Stderr/ExitStatus + artifact size via ArtifactMinBytes) —
+// delegating back here via CheckContext.RunCharlyVerb. NO compiled-in candy currently uses
+// this path: `wl` (the last one) externalized into candy/plugin-wl, so EVERY live-container
+// verb (cdp/wl/vnc/dbus/mcp/record/kube/adb/appium/spice) is now an external-charly-verb
+// dispatching via invokeVerbProvider, never through this subprocess library. runCharlyVerb +
+// the kit allowlist machinery are retained for a future compiled-in live verb.
 //
 // Architectural notes:
 //   - Host-side only: the test runner invokes the host `charly` binary, which
@@ -103,10 +103,10 @@ func (r *Runner) resolveCheckApk(apk, origin string) (string, error) {
 // Verb dispatchers
 // ---------------------------------------------------------------------------
 
-// The wl verb is a compiled-in candy (candy/plugin-wl)
-// — a kit.LiveVerbProvider carrying its provider + method allowlist; its RunVerb
-// delegates to the shared runCharlyVerb below via CheckContext.RunCharlyVerb. NO per-verb
-// dispatcher remains here — only the shared runCharlyVerb.
+// NO compiled-in live verb remains: `wl` (the last one) externalized into candy/plugin-wl
+// (an EXTERNAL-CHARLY-VERB dispatching via invokeVerbProvider, never this subprocess path).
+// NO per-verb dispatcher remains here — only the shared runCharlyVerb, retained for a future
+// compiled-in live verb but currently with no caller.
 
 // The kube + adb + appium + spice runCharlyVerb dispatchers were removed in their
 // external-plugin dep-sheds — none dispatches through a `charly check <verb>` subprocess
@@ -528,7 +528,9 @@ func isZeroField(c *Op, name string) bool {
 		// (candy/plugin-adb), as did the appium required-field cases (candy/plugin-appium).
 		// The spice "Spice" discriminator case left the SAME way (candy/plugin-spice), as
 		// did the vnc "Vnc" discriminator case (candy/plugin-vnc); their
-		// X/Y/Text/KeyName/Artifact modifier cases STAY — shared with the in-proc wl verb.
+		// X/Y/Text/KeyName/Artifact modifier cases STAY in this (retained-but-currently-unused)
+		// isZeroField — formerly shared with the in-proc wl verb, which externalized into
+		// candy/plugin-wl (the required-modifier check now runs in the plugin at dispatch).
 	}
 	// Unknown field name is a programming error: treat as "not zero" so
 	// authoring errors surface elsewhere instead of spurious skips.

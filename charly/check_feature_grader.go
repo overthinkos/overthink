@@ -136,7 +136,7 @@ func buildGraderPrompt(req GraderRequest, target, instance string) string {
 	b.WriteString(". You MAY gather evidence by running probes against it, e.g.:\n")
 	b.WriteString("  charly cmd " + target + " '<shell>'            # run a shell command inside the deployment\n")
 	b.WriteString("  charly check live " + target + " --filter cdp   # Chrome DevTools probes (if it runs a browser)\n")
-	b.WriteString("  charly check wl screenshot " + target + " --artifact /tmp/s.png   # desktop screenshot\n")
+	b.WriteString("  charly check live " + target + " --filter wl   # desktop screenshot / window probes (wl)\n")
 	b.WriteString("  charly status " + target + "                   # deployment status\n")
 	if req.ReadOnly {
 		b.WriteString("Use only what is relevant. Do NOT modify the deployment (read-only assessment).\n\n")

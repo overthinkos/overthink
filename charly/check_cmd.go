@@ -57,10 +57,11 @@ func (e *CheckFailedError) Error() string {
 //
 // The mode is explicit; there is no autodetect or implicit fallback.
 //
-// Live-container probe verbs (wl) share the
-// same "live" semantic: each requires a running target. (kube/adb/appium/spice/mcp/record/cdp/vnc/dbus
-// are declarative check verbs dep-shed to out-of-process plugins — they have NO
-// in-core sub-Cmd here; they dispatch via the provider registry.)
+// EVERY live-container probe verb (cdp/wl/vnc/dbus/mcp/record + kube/adb/appium/spice/
+// libvirt) is now a DECLARATIVE check verb served by an out-of-process plugin — none has an
+// in-core sub-Cmd here; they all dispatch via the provider registry (invokeVerbProvider).
+// `wl` was the LAST live-container verb compiled into charly; after it, ZERO check verbs are
+// in-core.
 //
 // Check-run management subcommands (list-ai, list, sync-credential,
 // report, scope, last-tag, note, run-local, self-evaluate) are the
@@ -72,7 +73,17 @@ type CheckCmd struct {
 	Run     CheckRunCmd     `cmd:"" help:"Run a kind:check R10 bed (full sequence) or drive an AI through an iterate: entity's iteration cycles"`
 	Feature CheckFeatureCmd `cmd:"" help:"Run a running deployment's baked plan as acceptance tests; agent steps are agent-graded (Agent Driven Evaluation)"`
 
-	// Live-container probe verbs (each requires a running target)
+	// Live-container probe verbs — ALL out-of-process now (no in-core sub-Cmd here)
+	// `wl` is NOT a CLI subcommand here — the Wayland/sway desktop driver (input, windows,
+	// screenshots, sway IPC, overlay, atspi, clipboard — ~40 methods) was relocated to the
+	// out-of-tree candy/plugin-wl module (EXEC-based, driving the venue's compositor via
+	// wlrctl/grim/wtype/swaymsg over the executor reverse channel; the screenshot PNG pulls
+	// via GetFile). The `wl:` DECLARATIVE check verb dispatches to that external plugin via
+	// the provider registry (invokeVerbProvider); there is no host `charly check wl`. wl was
+	// the LAST live-container verb compiled into charly — after it, ZERO check verbs are
+	// in-core. The CLI-only `--from-cdp`/`--from-sway`/`--from-x11` coordinate translation was
+	// DROPPED with the move (the declarative `wl: click` uses X/Y directly), shedding the core's
+	// minimal CDP WebSocket client + golang.org/x/net/websocket from charly's core.
 	// `dbus` is NOT a CLI subcommand here — the D-Bus driver (list/call/introspect/notify)
 	// was relocated to the out-of-tree candy/plugin-dbus module (EXEC-based, driving the
 	// venue's session bus with gdbus over the executor reverse channel — no godbus). The
@@ -84,7 +95,6 @@ type CheckCmd struct {
 	// libvirt`) is served by the out-of-process candy/plugin-vm verb plugin, nested under
 	// `charly check` at runtime via attachNestedCheckPlugins exactly like `kube`/`adb`/`appium`.
 	// This shed go-libvirt + kata-containers/govmm + libvirt.org/go/libvirtxml from charly's core.
-	Wl WlCmd `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
 	// `kube` is NOT a CLI subcommand here — the Kubernetes cluster-probe implementation (+ the
 	// client-go + apimachinery dependency) was dep-shed into the out-of-tree
 	// candy/plugin-kube module. `kube` is now a DECLARATIVE check VERB that dispatches to that
@@ -117,8 +127,10 @@ type CheckCmd struct {
 	// The `cdp:` DECLARATIVE check verb dispatches to that external plugin via the provider
 	// registry (invokeVerbProvider, after the host pre-resolves the deployment's CDP port 9222
 	// to a host-reachable DevTools base URL — preresolveCdpEndpoint); there is no host
-	// `charly check cdp`. (charly's core keeps a minimal CDP client (browser_cdp.go) for the
-	// in-core `charly check wl … --from-cdp` viewport→desktop coordinate translation.)
+	// `charly check cdp`. (charly's core no longer keeps any CDP WebSocket client: the last
+	// in-core consumer — the `wl … --from-cdp` coordinate translation — externalized into
+	// candy/plugin-wl, so the core's minimal CDP WebSocket client was deleted and
+	// golang.org/x/net/websocket left the core.)
 	// `record` is NOT a CLI subcommand here — the recording driver (asciinema/wf-recorder/
 	// pixelflux session management) was dep-shed into the out-of-tree candy/plugin-record
 	// module. The `record:` DECLARATIVE check verb dispatches to that external plugin via the
@@ -313,8 +325,8 @@ func (c *CheckLiveCmd) isVmTarget() bool {
 		return false
 	}
 	// Shared classifier (check_venue.go) — also drives resolveCheckVenue for
-	// the interactive verbs, so `charly check live <vm>` and `charly check wl <vm>`
-	// agree on what is a VM target (R3).
+	// the out-of-process verb pre-resolvers, so `charly check live <vm>` and the
+	// VM-targeting verbs (vnc:/spice:/libvirt:) agree on what is a VM target (R3).
 	_, isVM := checkVmTarget(uf, c.Box)
 	return isVM
 }

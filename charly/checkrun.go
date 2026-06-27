@@ -87,10 +87,12 @@ const (
 
 // Runner wires together the execution context for one pass of checks.
 //
-// Image and Instance are the user-supplied names under RunModeLive, used to
-// build CLI invocations for the wl verb (checkrun_charly_verbs.go).
-// They are empty under RunModeBox, which causes that verb to skip
-// with a clear message — it needs a running container with port mappings.
+// Image and Instance are the user-supplied names under RunModeLive. They are
+// snapshotted into the CheckEnv handed to each out-of-process check verb (provider_checkenv.go)
+// so an EXEC-based external verb (record/dbus/wl) can reach the live venue over the reverse
+// channel; they are empty under RunModeBox, which causes those verbs to skip with a clear
+// message — they need a running container with port mappings. (No in-proc verb builds
+// `charly check <verb>` CLI invocations anymore — every live-container verb is external.)
 type Runner struct {
 	Exec        DeployExecutor
 	Resolver    *CheckVarResolver
@@ -381,10 +383,10 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 	// venue differs from the bed's default target. When r.TargetResolver is nil
 	// (classical no-tree path), Resolver+Exec stay as-is.
 	//
-	// The swap also retargets r.Box so wl dispatch (runCharlyVerb reads
-	// r.Box to build `charly check <verb> <method> <venue> ...` argv) — and the
-	// out-of-process cdp/vnc/mcp/spice/kube pre-resolvers (which read r.Box for the
-	// venue's endpoint) — route against the venue's pod, not the plan run's default pod.
+	// The swap also retargets r.Box so the out-of-process EXEC-based verbs (record/dbus/wl,
+	// whose CheckEnv snapshot carries the venue) AND the port-based pre-resolvers
+	// (cdp/vnc/mcp/spice/kube, which read r.Box for the venue's endpoint) route against the
+	// venue's pod, not the plan run's default pod.
 	origExec, origResolver, origImage := r.Exec, r.Resolver, r.Box
 	if c.Venue != "" && c.Venue != r.Box && r.TargetResolver != nil {
 		newResolver, newExec, terr := r.TargetResolver(c.Venue)

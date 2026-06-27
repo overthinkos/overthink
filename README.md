@@ -594,8 +594,9 @@ getprop`, `appium: click`, …):
 - `cdp:` — Chrome DevTools Protocol declarative check verb (open, click,
   check JS, screenshot) — out-of-process plugin (`candy/plugin-cdp`), no host
   CLI subcommand.
-- `charly check wl` — Wayland / sway / labwc automation; `wl overlay`
-  for fullscreen recording overlays.
+- `wl:` — Wayland / sway / labwc declarative check verb (input, windows,
+  screenshots, sway IPC, overlays, atspi, clipboard) — out-of-process plugin
+  (`candy/plugin-wl`), no host CLI subcommand.
 - `dbus:` — D-Bus declarative check verb (list, call, introspect, notify) —
   out-of-process plugin (`candy/plugin-dbus`), no host CLI subcommand.
 - `vnc:` — RFB/VNC declarative check verb (status, screenshot,

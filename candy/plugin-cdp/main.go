@@ -9,8 +9,8 @@
 // keeping its `cdp:` discriminator + every modifier (tab/url/expression/selector/…) on
 // charly's core #Op (authoring unchanged). The latest external dep-shed after
 // candy/plugin-appium, -adb, -kube, -spice, -mcp, -record; the CDP WebSocket client
-// lives HERE now, out of charly's core check surface (charly's core keeps a minimal CDP
-// client only for the in-core `charly check wl|vnc … --from-cdp` coordinate translation).
+// lives HERE now, fully out of charly's core check surface (charly's core no longer keeps
+// a CDP client of its own — the former in-core copy was deleted when wl externalized).
 //
 // The plugin owns NO podman / venue / port-mapping machinery — the host pre-resolves the
 // deployment's CDP port 9222 to a host-reachable DevTools base URL (preresolveCdpEndpoint,

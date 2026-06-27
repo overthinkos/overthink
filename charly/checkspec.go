@@ -309,9 +309,17 @@ var VerbCatalog = map[string]VerbSpec{
 	// interface / addr are observe-only goss verbs likewise extracted
 	// (charly/plugin/builtins/{http,interface,addr}).
 
-	// live-container — runtime only; act drives UI/config, reversed via plan
-	// teardown (never the ledger).
-	"wl": {ctxRuntimeOnly, DoAssert, false},
+	// live-container — runtime only. EVERY live-container verb is now an
+	// EXTERNAL-CHARLY-VERB served out-of-process; none has a VerbCatalog entry.
+	// `wl` is NOT here — it is an EXTERNAL-CHARLY-VERB served out-of-process by
+	// candy/plugin-wl. It left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc
+	// CheckVerbProvider) but keeps its `wl:` discriminator + modifiers + the #WlMethod
+	// enum on core #Op (authoring unchanged); the registered external provider resolves at
+	// dispatch — EXEC-based (like record/dbus), driving the venue's compositor (wlrctl/grim/
+	// wtype/swaymsg) over the executor reverse channel (the screenshot PNG pulls via GetFile).
+	// wl was the LAST in-core live verb — after it, ZERO check verbs are compiled-in. Its
+	// runtime-context legality now lives on the authored `context:` + the plugin's own
+	// box-mode skip, not this table.
 	// `dbus` is NOT here — it is an EXTERNAL-CHARLY-VERB served out-of-process by
 	// candy/plugin-dbus. It left #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc
 	// CheckVerbProvider) but keeps its `dbus:` discriminator + modifiers + the #DbusMethod

@@ -30,6 +30,14 @@ kde-selkies:
             - kde-shell
             - pipewire
             - dbus
+            # plugin-wl is the OUT-OF-TREE plugin that serves the `wl:` check verb (the
+            # Wayland desktop driver lives there, not in charly's core check surface — EXEC-based,
+            # driving the venue's compositor over the executor reverse channel; KWin routes
+            # window mgmt via kdotool). This candy AUTHORS `wl:` checks (status/type/toplevel/
+            # clipboard), so requiring plugin-wl puts it in every composing image's scanned candy
+            # set; collectReferencedPluginWords build-connects it before the baked `wl:` checks
+            # dispatch — otherwise they SKIP with `unknown verb "wl"`.
+            - plugin-wl
     kde-selkies-env:
         env:
             SELKIES_FRAMERATE: "60"
@@ -86,7 +94,7 @@ kde-selkies:
             file: /usr/bin/kwin_wayland
             exists: true
     kde-selkies-step-6:
-        check: kdotool — the KWin window-automation tool that drives `charly check wl` on this session — is present
+        check: kdotool — the KWin window-automation tool that drives the `wl` check verb on this session — is present
         plugin: file
         plugin_input:
             file: /usr/bin/kdotool

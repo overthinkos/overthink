@@ -71,7 +71,7 @@ def block(msg):
 DOC_PATH = re.compile(r'(?:^|/)(?:CHANGELOG|README|LICENSE|VISION)[^/]*$|\.(?:md|txt)$',
                       re.IGNORECASE)
 LINE_COMMENT = {
-    '.go': '//', '.js': '//', '.ts': '//', '.c': '//', '.h': '//', '.cc': '//',
+    '.go': '//', '.cue': '//', '.js': '//', '.ts': '//', '.c': '//', '.h': '//', '.cc': '//',
     '.cpp': '//', '.hpp': '//', '.rs': '//', '.java': '//', '.kt': '//', '.swift': '//',
     '.sh': '#', '.bash': '#', '.zsh': '#', '.py': '#', '.rb': '#', '.pl': '#',
     '.yml': '#', '.yaml': '#', '.toml': '#', '.cfg': '#', '.ini': '#', '.mk': '#',

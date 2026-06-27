@@ -174,7 +174,7 @@ func checkStatusToKit(s CheckStatus) kit.Status {
 // kitVerbLiveAdapter wraps a COMPILED-IN host-coupled LIVE-VERB candy's kit.LiveVerbProvider
 // as a package-main LiveVerbProvider, so the host's generic verb validation
 // (validateCharlyVerb) + the method-allowlist bijection gate read its contract through the
-// SAME registry path an in-charly-module live verb (the former cdpVerb etc.) used. It embeds
+// SAME registry path an in-charly-module live verb (the former wlVerb etc.) used. It embeds
 // kitVerbAdapter for Reserved/Class/RunVerb (RunVerb passes the live *Runner as a
 // CheckContext, so the candy's RunVerb reaches the dispatch via cc.RunCharlyVerb) and adds
 // the method-contract accessors. Methods()/MethodField() are pass-throughs — the host's
@@ -225,7 +225,7 @@ func registerCompiledCheckVerb(kv kit.CheckVerbProvider, schemaFS fs.FS, schemaD
 }
 
 // registerCompiledDedicatedVerb registers a COMPILED-IN host-coupled LIVE-VERB candy
-// (cdp/wl/vnc/dbus). Unlike registerCompiledCheckVerb, a live verb is
+// (wl/vnc/dbus). Unlike registerCompiledCheckVerb, a live verb is
 // SCHEMA-LESS — its method-specific modifiers ride the closed base #Op, so there is NO
 // plugin_input and NO served schema; it self-registers via registerDedicatedBuiltin (the
 // schema-less dedicated-provider path charly's other dedicated builtins — the IR-step,

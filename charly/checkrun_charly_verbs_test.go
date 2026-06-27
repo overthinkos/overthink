@@ -128,11 +128,11 @@ func TestResolveLocalImageRef_ShortNameNoMatch(t *testing.T) {
 func TestRunCharlyVerb_SkipsUnderImageTest(t *testing.T) {
 	r, _ := newFakeRunner(t, RunModeBox)
 	r.Box = "jupyter"
-	res := r.Run(context.Background(), []Op{{Cdp: "status"}})
+	res := r.Run(context.Background(), []Op{{Wl: "status"}})
 	if len(res) != 1 || res[0].Status != TestSkip {
 		t.Fatalf("expected skip under RunModeBox, got %+v", res[0])
 	}
-	// A runtime-context verb (cdp) is skipped in box mode by the context-vs-mode
+	// A runtime-context verb (wl) is skipped in box mode by the context-vs-mode
 	// gate (the unified-Op replacement for the per-verb "needs a running
 	// container" skip).
 	if !strings.Contains(res[0].Message, "not active in box mode") {
@@ -143,7 +143,7 @@ func TestRunCharlyVerb_SkipsUnderImageTest(t *testing.T) {
 func TestRunCharlyVerb_UnknownMethodFails(t *testing.T) {
 	r, _ := newFakeRunner(t, RunModeLive)
 	r.Box = "jupyter"
-	res := r.Run(context.Background(), []Op{{Cdp: "not-a-real-method"}})
+	res := r.Run(context.Background(), []Op{{Wl: "not-a-real-method"}})
 	if res[0].Status != TestFail || !strings.Contains(res[0].Message, "unknown method") {
 		t.Errorf("expected unknown-method failure, got %+v", res[0])
 	}
@@ -157,20 +157,20 @@ func TestRunCharlyVerb_UnknownMethodFails(t *testing.T) {
 
 func TestValidateCharlyVerb_MissingRequiredModifier(t *testing.T) {
 	errs := &ValidationError{}
-	// cdp: eval requires Tab + Expression — neither set.
-	c := &Op{Cdp: "eval"}
-	validateCharlyVerb(c, "cdp", "loc", errs)
+	// wl: click requires X + Y — neither set.
+	c := &Op{Wl: "click"}
+	validateCharlyVerb(c, "wl", "loc", errs)
 	joined := strings.Join(errs.Errors, "\n")
-	if !strings.Contains(joined, "tab") || !strings.Contains(joined, "expression") {
-		t.Errorf("expected missing tab+expression errors, got: %v", errs.Errors)
+	if !strings.Contains(joined, `modifier "x"`) || !strings.Contains(joined, `modifier "y"`) {
+		t.Errorf("expected missing x+y modifier errors, got: %v", errs.Errors)
 	}
 }
 
 func TestValidateCharlyVerb_BuildContextRejected(t *testing.T) {
 	errs := &ValidationError{}
 	// A live-container verb pinned to build context must be rejected.
-	c := &Op{Cdp: "status", Context: []string{"build"}}
-	validateCharlyVerb(c, "cdp", "loc", errs)
+	c := &Op{Wl: "status", Context: []string{"build"}}
+	validateCharlyVerb(c, "wl", "loc", errs)
 	if !errs.HasErrors() || !strings.Contains(strings.Join(errs.Errors, "\n"), "runtime-context only") {
 		t.Errorf("expected runtime-context-only error, got: %+v", errs.Errors)
 	}
@@ -188,8 +188,8 @@ func TestValidateCharlyVerb_ArtifactMethodMissingPath(t *testing.T) {
 
 func TestValidateCharlyVerb_ValidCheckNoErrors(t *testing.T) {
 	errs := &ValidationError{}
-	c := &Op{Cdp: "eval", Tab: "1", Expression: "document.title"}
-	validateCharlyVerb(c, "cdp", "loc", errs)
+	c := &Op{Wl: "click", X: 10, Y: 20}
+	validateCharlyVerb(c, "wl", "loc", errs)
 	if errs.HasErrors() {
 		t.Errorf("expected no errors for valid check, got: %+v", errs.Errors)
 	}

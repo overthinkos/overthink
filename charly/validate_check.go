@@ -85,7 +85,7 @@ func validateCheck(c *Op, loc string, errs *ValidationError) {
 
 	// A do:act op must have a real install path in each build/deploy context
 	// it claims — otherwise the compiler would silently drop it. Runtime-only
-	// act verbs (file/dbus/cdp/…) act via the check Runner's executor; in
+	// act verbs (file/dbus/…) act via the check Runner's executor; in
 	// build/deploy the install verbs + command + package/service are the act
 	// surface (file creation = write/copy). A plugin verb (plugin: <word>) acts
 	// in build/deploy when its provider is a ProvisionActor — the act-emit enabler
@@ -133,8 +133,8 @@ func validateCheck(c *Op, loc string, errs *ValidationError) {
 
 	// Matcher operator names (equals/contains/matches/…) are enforced by #MatchOpMap.
 
-	// cdp/wl/dbus/vnc verbs: validate method allowlist + required modifiers
-	// + scope enforcement (all four are deploy-scope-only since they need a
+	// wl/dbus/vnc verbs: validate method allowlist + required modifiers
+	// + scope enforcement (all three are deploy-scope-only since they need a
 	// running container with port mappings). The allowlists live in
 	// checkrun_charly_verbs.go next to the dispatch logic so adding a new method
 	// means touching one file.
@@ -142,7 +142,7 @@ func validateCheck(c *Op, loc string, errs *ValidationError) {
 }
 
 // validateCharlyVerb checks method-name allowlists, required modifiers, and
-// deploy-scope enforcement for the cdp/wl/dbus/vnc/mcp verbs. No-op for
+// deploy-scope enforcement for the wl/dbus/vnc verbs. No-op for
 // other verbs.
 func validateCharlyVerb(c *Op, verb, loc string, errs *ValidationError) {
 	// E4: the verb's method contract is owned by its provider (LiveVerbProvider),

@@ -57,8 +57,8 @@ func (e *CheckFailedError) Error() string {
 //
 // The mode is explicit; there is no autodetect or implicit fallback.
 //
-// Live-container probe verbs (cdp/wl/dbus/vnc) share the
-// same "live" semantic: each requires a running target. (kube/adb/appium/spice/mcp/record
+// Live-container probe verbs (wl/dbus/vnc) share the
+// same "live" semantic: each requires a running target. (kube/adb/appium/spice/mcp/record/cdp
 // are declarative check verbs dep-shed to out-of-process plugins — they have NO
 // in-core sub-Cmd here; they dispatch via the provider registry.)
 //
@@ -73,7 +73,6 @@ type CheckCmd struct {
 	Feature CheckFeatureCmd `cmd:"" help:"Run a running deployment's baked plan as acceptance tests; agent steps are agent-graded (Agent Driven Evaluation)"`
 
 	// Live-container probe verbs (each requires a running target)
-	Cdp  CdpCmd  `cmd:"" help:"Chrome DevTools Protocol (open, list, click, check)"`
 	Dbus DbusCmd `cmd:"" help:"Interact with D-Bus services inside containers"`
 	// `libvirt` is NOT a CLI subcommand here — the VM/libvirt-API probe verb (`charly check
 	// libvirt`) is served by the out-of-process candy/plugin-vm verb plugin, nested under
@@ -107,6 +106,14 @@ type CheckCmd struct {
 	// dispatches to that external plugin via the provider registry (invokeVerbProvider, after
 	// the host pre-resolves the deployment's declared mcp_provides + the picked, host-routable
 	// dial endpoint — preresolveMcpEndpoint); there is no host `charly check mcp`.
+	// `cdp` is NOT a CLI subcommand here — the Chrome DevTools Protocol client (the
+	// golang.org/x/net/websocket CDP WebSocket client + the open/list/text/eval/screenshot/
+	// click/SPA dial+dispatch layer) was dep-shed into the out-of-tree candy/plugin-cdp module.
+	// The `cdp:` DECLARATIVE check verb dispatches to that external plugin via the provider
+	// registry (invokeVerbProvider, after the host pre-resolves the deployment's CDP port 9222
+	// to a host-reachable DevTools base URL — preresolveCdpEndpoint); there is no host
+	// `charly check cdp`. (charly's core keeps a minimal CDP client (browser_cdp.go) for the
+	// in-core `charly check wl|vnc … --from-cdp` viewport→desktop coordinate translation.)
 	// `record` is NOT a CLI subcommand here — the recording driver (asciinema/wf-recorder/
 	// pixelflux session management) was dep-shed into the out-of-tree candy/plugin-record
 	// module. The `record:` DECLARATIVE check verb dispatches to that external plugin via the
@@ -995,8 +1002,14 @@ func (c *CheckLiveCmd) runGroupCheck() error {
 		"INSTANCE": c.Instance,
 	}, HasRuntime: true}
 	runner := NewRunner(ShellExecutor{}, resolver, RunModeLive)
-	runner.Box = c.Box
-	runner.Instance = c.Instance
+	// Set the runner identity AND load the OUT-OF-PROCESS plugin candies the bed's
+	// flattened plan REFERENCES — a cdp:/spice:/… verb authored under a member. A group
+	// bed has no single image, so the load keys on the BED NAME (its flattened,
+	// venue-stamped plan names every referenced verb) plus the project candy scan, the
+	// SAME plugin-load path the container/vm/local venues use (R3). Without it an external
+	// check verb under a member fails live as "unknown verb" — the cross-pod-cdp regression
+	// once cdp left the compiled-in set (the group venue was the one path missing this).
+	attachCheckRunnerContext(runner, c.Box, c.Instance, nil, dir, uf.ProjectConfig())
 	// Every step venue-dispatches to its member (its venue != the group root
 	// name), so the placeholder base executor above is never used.
 	// liveTargetResolver performs the per-step swap; ${HOST:<member>} addresses

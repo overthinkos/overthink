@@ -172,15 +172,15 @@ func writeConcat(dir, out, pkg string) error {
 // its method allowlist (an exact mirror of the Go maps in the compiled-in candy/plugin-<verb>
 // candies — now derived from the SAME CUE source),
 // projected as spec.LiveVerbMethods + gated against each verb's in-proc LiveVerbProvider
-// by checkMethodAllowlists. `kube`, `adb`, `appium`, `spice`, `mcp`, and `record` are NOT here:
-// each is an EXTERNAL-CHARLY-VERB served out-of-process (candy/plugin-kube, candy/plugin-adb,
-// candy/plugin-appium, candy/plugin-spice, candy/plugin-mcp, candy/plugin-record — no in-proc
-// LiveVerbProvider to gate), so each left this list with #OpVerb/VerbCatalog. Their #KubeMethod /
-// #AdbMethod / #AppiumMethod / #SpiceMethod / #McpMethod / #RecordMethod enums stay in the schema
-// (they still validate `kube: <method>` / `adb: <method>` / `appium: <method>` / `spice: <method>` /
-// `mcp: <method>` / `record: <method>` on core #Op) but are no longer LiveVerbMethods entries.
+// by checkMethodAllowlists. `kube`, `adb`, `appium`, `spice`, `mcp`, `record`, and `cdp` are NOT
+// here: each is an EXTERNAL-CHARLY-VERB served out-of-process (candy/plugin-kube, candy/plugin-adb,
+// candy/plugin-appium, candy/plugin-spice, candy/plugin-mcp, candy/plugin-record, candy/plugin-cdp
+// — no in-proc LiveVerbProvider to gate), so each left this list with #OpVerb/VerbCatalog. Their
+// #KubeMethod / #AdbMethod / #AppiumMethod / #SpiceMethod / #McpMethod / #RecordMethod / #CdpMethod
+// enums stay in the schema (they still validate `kube: <method>` / `adb: <method>` / `appium: <method>` /
+// `spice: <method>` / `mcp: <method>` / `record: <method>` / `cdp: <method>` on core #Op) but are no
+// longer LiveVerbMethods entries.
 var liveVerbs = []struct{ verb, def string }{
-	{"cdp", "#CdpMethod"},
 	{"wl", "#WlMethod"},
 	{"dbus", "#DbusMethod"},
 	{"vnc", "#VncMethod"},

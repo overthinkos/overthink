@@ -71,7 +71,7 @@ func TestReservedWordRegistry_MethodAllowlists(t *testing.T) {
 	for k, v := range spec.LiveVerbMethods {
 		withGhost[k] = v
 	}
-	withGhost["cdp"] = append(append([]string{}, spec.LiveVerbMethods["cdp"]...), "ghostmethod")
+	withGhost["wl"] = append(append([]string{}, spec.LiveVerbMethods["wl"]...), "ghostmethod")
 	if err := checkMethodAllowlists(withGhost); err == nil ||
 		!strings.Contains(err.Error(), "ghostmethod") {
 		t.Fatalf("expected method-allowlist check to FAIL on a CUE method with no dispatch entry, got: %v", err)
@@ -82,14 +82,14 @@ func TestReservedWordRegistry_MethodAllowlists(t *testing.T) {
 	for k, v := range spec.LiveVerbMethods {
 		minusStatus[k] = v
 	}
-	cdpNoStatus := []string{}
-	for _, m := range spec.LiveVerbMethods["cdp"] {
+	wlNoStatus := []string{}
+	for _, m := range spec.LiveVerbMethods["wl"] {
 		if m == "status" {
 			continue
 		}
-		cdpNoStatus = append(cdpNoStatus, m)
+		wlNoStatus = append(wlNoStatus, m)
 	}
-	minusStatus["cdp"] = cdpNoStatus
+	minusStatus["wl"] = wlNoStatus
 	if err := checkMethodAllowlists(minusStatus); err == nil ||
 		!strings.Contains(err.Error(), "status") {
 		t.Fatalf("expected method-allowlist check to FAIL on a provider method dropped from the CUE side, got: %v", err)

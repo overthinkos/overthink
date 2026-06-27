@@ -20,6 +20,10 @@ chrome-cdp:
         require:
             - chrome
             - supervisord
+            # plugin-cdp serves the cdp: check verb (out-of-process); chrome-cdp authors cdp:
+            # checks AND is the chrome-headless CDP driver, so requiring it puts plugin-cdp in
+            # every composing image's closure for collectReferencedPluginWords to load.
+            - plugin-cdp
     chrome-cdp-candy:
         candy:
             - chrome-devtools-mcp

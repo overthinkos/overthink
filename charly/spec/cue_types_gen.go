@@ -24,6 +24,17 @@ type Op struct {
 
 	Build string `yaml:"build,omitempty" json:"build,omitempty"`
 
+	// `cdp` is an EXTERNAL-CHARLY-VERB: its Chrome DevTools Protocol client (the
+	// golang.org/x/net/websocket CDP WebSocket client + the open/list/text/eval/screenshot/
+	// click/SPA dial+dispatch layer) lives in the out-of-tree candy/plugin-cdp module,
+	// served OUT-OF-PROCESS. Like mcp/vnc/spice (and unlike file/package/service/command,
+	// which left #Op entirely, re-authored as `plugin: <verb>`), cdp KEEPS its `cdp:`
+	// discriminator + every modifier (tab/url/expression/selector/…) on this closed #Op —
+	// authoring is unchanged (`cdp: status`, not `plugin: cdp`). It therefore left
+	// #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc CheckVerbProvider to gate) BUT keeps this
+	// field + #CdpMethod here, so `cdp: status` still validates against the method enum and
+	// VerbsSet still classifies the op (then dispatch resolves the registered external
+	// provider, after the host pre-resolves the deployment's CDP port to a DevTools URL).
 	Cdp CdpMethod `yaml:"cdp,omitempty" json:"cdp,omitempty"`
 
 	Wl WlMethod `yaml:"wl,omitempty" json:"wl,omitempty"`

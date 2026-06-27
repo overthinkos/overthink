@@ -16,7 +16,7 @@
 // VerbCatalog entry (the registry bijection gate proves it). Keep in lockstep with
 // the `--- verb discriminators ---` group in #Op.
 #OpVerb: ("mkdir" | "copy" | "write" | "link" | "download" | "setcap" | "build" |
-	"cdp" | "wl" | "dbus" | "vnc" |
+	"wl" | "dbus" | "vnc" |
 	"summarize" | "kill" | "plugin") @go(-)
 
 // ---------------------------------------------------------------------------
@@ -54,6 +54,17 @@
 	download?:       string
 	setcap?:         string
 	build?:          string
+	// `cdp` is an EXTERNAL-CHARLY-VERB: its Chrome DevTools Protocol client (the
+	// golang.org/x/net/websocket CDP WebSocket client + the open/list/text/eval/screenshot/
+	// click/SPA dial+dispatch layer) lives in the out-of-tree candy/plugin-cdp module,
+	// served OUT-OF-PROCESS. Like mcp/vnc/spice (and unlike file/package/service/command,
+	// which left #Op entirely, re-authored as `plugin: <verb>`), cdp KEEPS its `cdp:`
+	// discriminator + every modifier (tab/url/expression/selector/…) on this closed #Op —
+	// authoring is unchanged (`cdp: status`, not `plugin: cdp`). It therefore left
+	// #OpVerb/spec.OpVerbs/VerbCatalog (no in-proc CheckVerbProvider to gate) BUT keeps this
+	// field + #CdpMethod here, so `cdp: status` still validates against the method enum and
+	// VerbsSet still classifies the op (then dispatch resolves the registered external
+	// provider, after the host pre-resolves the deployment's CDP port to a DevTools URL).
 	cdp?:            #CdpMethod
 	wl?:             #WlMethod
 	dbus?:           #DbusMethod

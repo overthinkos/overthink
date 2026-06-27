@@ -10,7 +10,6 @@ import (
 	cp_plugin_addr "github.com/overthinkos/overthink/candy/plugin-addr"
 	cp_plugin_agent "github.com/overthinkos/overthink/candy/plugin-agent"
 	cp_plugin_builder "github.com/overthinkos/overthink/candy/plugin-builder"
-	cp_plugin_cdp "github.com/overthinkos/overthink/candy/plugin-cdp"
 	cp_plugin_command "github.com/overthinkos/overthink/candy/plugin-command"
 	cp_plugin_dbus "github.com/overthinkos/overthink/candy/plugin-dbus"
 	cp_plugin_distro "github.com/overthinkos/overthink/candy/plugin-distro"
@@ -68,7 +67,6 @@ func init() {
 	registerCompiledPlugin(cp_plugin_resource.NewProvider(), cp_plugin_resource.NewMeta())
 	registerCompiledPlugin(cp_plugin_sidecar.NewProvider(), cp_plugin_sidecar.NewMeta())
 	registerCompiledPlugin(cp_plugin_target.NewProvider(), cp_plugin_target.NewMeta())
-	registerCompiledDedicatedVerb(cp_plugin_cdp.NewLiveVerb())
 	registerCompiledDedicatedVerb(cp_plugin_wl.NewLiveVerb())
 	registerCompiledDedicatedVerb(cp_plugin_vnc.NewLiveVerb())
 	registerCompiledDedicatedVerb(cp_plugin_dbus.NewLiveVerb())

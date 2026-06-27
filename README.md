@@ -591,8 +591,9 @@ Eleven live-container probe verbs — authorable inline as `plan:`
 screenshot`, `dbus: call`, `vnc: status`, `mcp: list-tools`, `adb:
 getprop`, `appium: click`, …):
 
-- `charly check cdp` — Chrome DevTools Protocol (open, click, check JS,
-  screenshot).
+- `cdp:` — Chrome DevTools Protocol declarative check verb (open, click,
+  check JS, screenshot) — out-of-process plugin (`candy/plugin-cdp`), no host
+  CLI subcommand.
 - `charly check wl` — Wayland / sway / labwc automation; `wl overlay`
   for fullscreen recording overlays.
 - `charly check dbus` — D-Bus method calls and signal subscriptions.

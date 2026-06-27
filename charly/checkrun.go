@@ -88,7 +88,7 @@ const (
 // Runner wires together the execution context for one pass of checks.
 //
 // Image and Instance are the user-supplied names under RunModeLive, used to
-// build CLI invocations for the cdp/wl/dbus/vnc verbs (testrun_ov_verbs.go).
+// build CLI invocations for the wl/dbus/vnc verbs (testrun_ov_verbs.go).
 // They are empty under RunModeBox, which causes those verbs to skip
 // with a clear message — they need a running container with port mappings.
 type Runner struct {
@@ -381,9 +381,10 @@ func (r *Runner) runOne(ctx context.Context, c *Op) CheckResult {
 	// venue differs from the bed's default target. When r.TargetResolver is nil
 	// (classical no-tree path), Resolver+Exec stay as-is.
 	//
-	// The swap also retargets r.Box so cdp/wl/vnc/mcp/etc dispatch (runCharlyVerb
-	// reads r.Box to build `charly check <verb> <method> <venue> ...` argv) routes
-	// against the venue's pod, not the plan run's default pod.
+	// The swap also retargets r.Box so wl/vnc/dbus dispatch (runCharlyVerb reads
+	// r.Box to build `charly check <verb> <method> <venue> ...` argv) — and the
+	// out-of-process cdp/mcp/spice/kube pre-resolvers (which read r.Box for the
+	// venue's endpoint) — route against the venue's pod, not the plan run's default pod.
 	origExec, origResolver, origImage := r.Exec, r.Resolver, r.Box
 	if c.Venue != "" && c.Venue != r.Box && r.TargetResolver != nil {
 		newResolver, newExec, terr := r.TargetResolver(c.Venue)

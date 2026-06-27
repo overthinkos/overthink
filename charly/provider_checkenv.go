@@ -36,6 +36,13 @@ type CheckEnv struct {
 	// other method). nil for every non-mcp verb. Set by invokeVerbProvider from
 	// preresolveMcpEndpoint (mcp_preresolve.go).
 	Mcp *McpEnv `json:"mcp,omitempty"`
+	// Cdp carries the host-resolved, dialable Chrome DevTools endpoint for a `cdp:` verb
+	// (the out-of-process candy/plugin-cdp provider owns no podman / venue-resolution
+	// machinery): the host-reachable DevTools base URL the plugin dials for the HTTP
+	// (/json) + WebSocket (CDP) surface. nil for every non-cdp verb and for a cdp op with
+	// no resolved endpoint. Set by invokeVerbProvider from preresolveCdpEndpoint
+	// (cdp_preresolve.go).
+	Cdp *CdpEnv `json:"cdp,omitempty"`
 }
 
 func runModeName(m RunMode) string {
@@ -209,6 +216,16 @@ func (r *Runner) invokeVerbProvider(ctx context.Context, prov Provider, word str
 	if mcpEarly != nil {
 		return *mcpEarly
 	}
+	// Pre-resolve a `cdp:` op's deployment (r.Box) to the host-reachable Chrome DevTools
+	// base URL — an out-of-process cdp verb owns no venue/port-mapping machinery. A no-op
+	// for every non-cdp verb; for a cdp op it may short-circuit with a FAIL (endpoint
+	// resolution error). The cleanup tears down any opened SSH forward AFTER Invoke (the
+	// forward carries the live CDP HTTP/WebSocket connection), so defer it across Invoke.
+	cdpEnv, cdpCleanup, cdpEarly := r.preresolveCdpEndpoint(c)
+	defer cdpCleanup()
+	if cdpEarly != nil {
+		return *cdpEarly
+	}
 	params, err := marshalJSON(c)
 	if err != nil {
 		res.Status = TestFail
@@ -218,6 +235,7 @@ func (r *Runner) invokeVerbProvider(ctx context.Context, prov Provider, word str
 	ce := snapshotCheckEnv(r, c)
 	ce.Spice = spiceEnv
 	ce.Mcp = mcpEnv
+	ce.Cdp = cdpEnv
 	env, err := marshalJSON(ce)
 	if err != nil {
 		res.Status = TestFail

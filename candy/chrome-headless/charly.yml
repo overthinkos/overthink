@@ -9,7 +9,7 @@ chrome-headless:
             ~/.local/bin/chrome-headless-launch. Composes /charly-selkies:chrome
             (the browser binary) and /charly-selkies:chrome-cdp (the cdp-proxy
             that republishes CDP on the published port 9222 with Host-header
-            rewriting, so `charly check cdp <this>` is reachable host-side). Use it
+            rewriting, so the `cdp:` check verb is reachable host-side). Use it
             as a sibling-member DRIVER deployment that CDP-probes a SEPARATE web-server
             SUBJECT over the shared `charly` network without baking Chrome into the
             subject image. Every fact below is observable: the installed launcher
@@ -47,7 +47,7 @@ chrome-headless:
             #!/usr/bin/env bash
             # Headless Chrome for cross-deployment CDP driving. CDP serves on
             # 127.0.0.1:9223; the cdp-proxy (chrome-cdp) republishes it on
-            # 0.0.0.0:9222 with Host rewriting for host-side `charly check cdp`.
+            # 0.0.0.0:9222 with Host rewriting for the host-side `cdp:` check verb.
             # --remote-allow-origins='*' is REQUIRED: Chrome 146+ rejects the CDP
             # WebSocket upgrade (text/check/screenshot/click) when the Origin
             # doesn't match, even though the HTTP /json endpoints (open/list) work

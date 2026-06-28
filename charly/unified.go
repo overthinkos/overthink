@@ -2205,6 +2205,32 @@ func populateCandyFromYAML(layer *Candy, ly *CandyYAML) {
 	layer.IncludedCandy = toCandyRefs(ly.Candy)
 	layer.BakePlugin = toCandyRefs(ly.BakePlugin)
 
+	// `bake_plugin: <ref>` IMPLIES `require: <ref>`. A baked plugin candy is
+	// host-built and COPYed into every composing image (generate.go
+	// emitBakedPlugins), but the COPY alone does not pull it into the require
+	// chain — so its version: would NOT reach the composing image's
+	// EffectiveVersion (effective_version.go walks the require-resolved candy set
+	// via collectAllBoxCandies → ResolveCandyOrder over Require). Without the
+	// implication a changed baked plugin whose own version: bumped but no other
+	// layer's did leaves EffectiveVersion (the ai.opencharly.version label)
+	// unchanged, so charly clean retention + short-name resolution treat it as
+	// the same image and a stale baked plugin escapes rebuild. Folding the baked
+	// plugin candy into require also makes it reach the scanned candy set (the
+	// same path qualifyRemoteSiblingDeps documents for the baked-binary lookup).
+	// Dedupe by bare (map-key) name so a candy declaring BOTH does not double-add.
+	for _, bp := range layer.BakePlugin {
+		already := false
+		for _, req := range layer.Require {
+			if req.Bare() == bp.Bare() {
+				already = true
+				break
+			}
+		}
+		if !already {
+			layer.Require = append(layer.Require, bp)
+		}
+	}
+
 	layer.service = ly.Service
 	// derivePackageSectionsFromCalamares is the SOLE populator of the package
 	// surface (layer.tagSections + layer.topPackages, plus the arch `aur` format

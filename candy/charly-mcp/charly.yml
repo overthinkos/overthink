@@ -11,24 +11,25 @@ charly-mcp:
             checkout. Verifiable at build (the composed charly binary and the
             /workspace mount land in the image) and at deploy (the MCP endpoint comes
             up and enumerates tools derived from the charly Kong CLI model).
-    charly-mcp-require:
-        require:
-            # plugin-mcp is the OUT-OF-TREE plugin that serves the `mcp:` check verb
-            # (the github.com/modelcontextprotocol/go-sdk MCP CLIENT lives there, not in
-            # charly's core check surface). This candy AUTHORS `mcp:` checks, so requiring
-            # plugin-mcp puts it in every composing image's scanned candy set; the host's
-            # collectReferencedPluginWords then build-connects it before the baked `mcp:`
-            # checks dispatch — otherwise they SKIP with `unknown verb "mcp"`. (box/<distro>
-            # adopts the matching @github pin via reconcile later — the deliberate cross-repo
-            # lag; the R10 bed loads the LOCAL candy via the superproject override.)
-            - plugin-mcp
     charly-mcp-bake-plugin:
         bake_plugin:
-            # Bake plugin-mcp's pre-built provider binary into every composing image at
-            # /usr/lib/charly/plugins/, so the in-container `charly mcp serve` resolves the
-            # external `mcp` command at runtime — the deployed container has neither the
-            # candy source nor a go toolchain to build it. (generate.go emitBakedPlugins →
-            # plugin_loader.go bakedPluginBinary.)
+            # plugin-mcp is the OUT-OF-TREE plugin that serves the `mcp:` check verb
+            # (the github.com/modelcontextprotocol/go-sdk MCP CLIENT lives there, not in
+            # charly's core check surface). Bake its pre-built provider binary into every
+            # composing image at /usr/lib/charly/plugins/, so the in-container
+            # `charly mcp serve` resolves the external `mcp` command at runtime — the
+            # deployed container has neither the candy source nor a go toolchain to build
+            # it. (generate.go emitBakedPlugins → plugin_loader.go bakedPluginBinary.)
+            #
+            # `bake_plugin:` IMPLIES `require:` (unified.go populateCandyFromYAML): the
+            # baked plugin candy joins this candy's require chain, so (a) its version:
+            # contributes to every composing image's EffectiveVersion (a baked-plugin
+            # change forces a rebuild) and (b) it lands in the scanned candy set, where
+            # the host's collectReferencedPluginWords build-connects it before the baked
+            # `mcp:` checks dispatch — otherwise they SKIP with `unknown verb "mcp"`.
+            # (box/<distro> adopts the matching @github pin via reconcile later — the
+            # deliberate cross-repo lag; the R10 bed loads the LOCAL candy via the
+            # superproject override.)
             - plugin-mcp
     charly-mcp-candy:
         candy:

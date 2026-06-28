@@ -61,3 +61,84 @@ func TestComputeEffectiveVersions(t *testing.T) {
 		t.Error("expected a hard error for a candyless external-base image with no version:")
 	}
 }
+
+// TestBakePluginImpliesRequire_FeedsEffectiveVersion proves the S0 hash-gap fix:
+// a candy that declares ONLY `bake_plugin: <ref>` (no explicit require:) still
+// pulls the baked plugin candy into its require chain, so the baked plugin's
+// version: contributes to the composing image's EffectiveVersion — and bumping
+// the baked plugin's version bumps the image identity. Without the implication
+// in populateCandyFromYAML, ResolveCandyOrder never walks to the plugin candy,
+// the candy set excludes it, and EffectiveVersion stays pinned to the (lower)
+// consumer version — a stale baked plugin would escape rebuild. This test FAILS
+// without the bake_plugin→require implication.
+func TestBakePluginImpliesRequire_FeedsEffectiveVersion(t *testing.T) {
+	// The consumer candy declares ONLY bake_plugin (no explicit require:).
+	consumer := &Candy{Name: "consumer-candy"}
+	populateCandyFromYAML(consumer, &CandyYAML{
+		Version:    "2026.100.0000", // lower than the baked plugin below
+		BakePlugin: []string{"plugin-baked"},
+	})
+
+	// The implication: the baked plugin ref is now in the require set.
+	if !candyRequires(consumer, "plugin-baked") {
+		t.Fatalf("bake_plugin did not imply require: consumer.Require = %v", consumer.Require)
+	}
+	// And it was not double-added (it's a set).
+	if n := countCandyRequire(consumer, "plugin-baked"); n != 1 {
+		t.Fatalf("plugin-baked appears %d times in require, want exactly 1", n)
+	}
+
+	plugin := &Candy{Name: "plugin-baked", Version: "2026.200.0000"} // the newest version
+	layers := map[string]*Candy{
+		"consumer-candy": consumer,
+		"plugin-baked":   plugin,
+	}
+	images := map[string]*ResolvedBox{
+		// An image composing ONLY the consumer candy. Its EffectiveVersion must
+		// reflect the baked plugin's (higher) version, reached via the implied require.
+		"img": {Name: "img", Candy: []string{"consumer-candy"}, IsExternalBase: true, Base: "quay.io/x:1"},
+	}
+	g := &Generator{Boxes: images, Candies: layers}
+	if err := g.computeEffectiveVersions(); err != nil {
+		t.Fatalf("computeEffectiveVersions: %v", err)
+	}
+	if got := images["img"].EffectiveVersion; got != "2026.200.0000" {
+		t.Fatalf("EffectiveVersion = %q, want 2026.200.0000 (the baked plugin's version reached via the implied require)", got)
+	}
+
+	// Bumping the baked plugin's version bumps the composing image's identity.
+	plugin.Version = "2026.300.0000"
+	g2 := &Generator{Boxes: map[string]*ResolvedBox{
+		"img": {Name: "img", Candy: []string{"consumer-candy"}, IsExternalBase: true, Base: "quay.io/x:1"},
+	}, Candies: layers}
+	if err := g2.computeEffectiveVersions(); err != nil {
+		t.Fatal(err)
+	}
+	if got := g2.Boxes["img"].EffectiveVersion; got != "2026.300.0000" {
+		t.Fatalf("after baked-plugin bump: EffectiveVersion = %q, want 2026.300.0000", got)
+	}
+
+	// Declaring BOTH bake_plugin and an explicit require of the same ref does not
+	// double-add (the redundant case the cutover removes from candy/charly-mcp).
+	both := &Candy{Name: "both"}
+	populateCandyFromYAML(both, &CandyYAML{
+		Version:    "2026.100.0000",
+		Require:    []string{"plugin-baked"},
+		BakePlugin: []string{"plugin-baked"},
+	})
+	if n := countCandyRequire(both, "plugin-baked"); n != 1 {
+		t.Fatalf("explicit require + bake_plugin double-added: plugin-baked appears %d times, want 1", n)
+	}
+}
+
+func candyRequires(l *Candy, bare string) bool { return countCandyRequire(l, bare) > 0 }
+
+func countCandyRequire(l *Candy, bare string) int {
+	n := 0
+	for _, r := range l.Require {
+		if r.Bare() == bare {
+			n++
+		}
+	}
+	return n
+}

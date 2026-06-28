@@ -46,7 +46,7 @@ func TestCommandSeam_PluginCommandInjected(t *testing.T) {
 }
 
 // TestCommandProviders_ExtractedLeafCommands proves every leaf-domain command extracted
-// into a dedicated COMMAND-class provider (alias/ssh/preempt — the builtin leaf-domain
+// into a dedicated COMMAND-class provider (alias/ssh — the builtin leaf-domain
 // batch) is (1) registered in providerRegistry as a CommandProvider with the matching
 // Reserved() word, and (2) collected by collectCommandPlugins() and injected into the REAL
 // charly CLI grammar via kong.Plugins, so its subcommand path parses and selects exactly as
@@ -60,11 +60,11 @@ func TestCommandProviders_ExtractedLeafCommands(t *testing.T) {
 	}{
 		{"alias", []string{"alias", "list"}, "alias list"},
 		{"ssh", []string{"ssh", "tunnel", "spice", "myvm"}, "ssh tunnel spice <vm>"},
-		{"preempt", []string{"preempt", "status"}, "preempt status"},
-		// `mcp`, `secrets`, `udev`, and `tmux` are intentionally absent: `charly mcp serve` (C1),
-		// `charly secrets …` (C2), `charly udev …`, and `charly tmux …` (the first welded-command
-		// externalization) are now EXTERNAL commands served out-of-process by candy/plugin-mcp /
-		// candy/plugin-secrets / candy/plugin-udev / candy/plugin-tmux, not builtin CommandProviders.
+		// `mcp`, `secrets`, `udev`, `tmux`, and `preempt` are intentionally absent: `charly mcp
+		// serve` (C1), `charly secrets …` (C2), `charly udev …`, `charly tmux …` (the first
+		// welded-command externalization), and `charly preempt …` (the second) are now EXTERNAL
+		// commands served out-of-process by candy/plugin-mcp / candy/plugin-secrets /
+		// candy/plugin-udev / candy/plugin-tmux / candy/plugin-preempt, not builtin CommandProviders.
 	}
 	for _, tc := range cases {
 		t.Run(tc.word, func(t *testing.T) {
@@ -269,7 +269,7 @@ func TestCommandProviders_CheckNestedPluginsInjected(t *testing.T) {
 // does not expose "start an MCP server" as one of its own tools).
 func TestCommandProviders_ExtractedReachMCP(t *testing.T) {
 	paths := cliModelLeafPaths(t)
-	for _, name := range []string{"alias.list", "preempt.status"} {
+	for _, name := range []string{"alias.list"} {
 		if !paths[name] {
 			t.Errorf("%s missing from the CLI model after extracting its command into a CommandProvider", name)
 		}
@@ -282,5 +282,8 @@ func TestCommandProviders_ExtractedReachMCP(t *testing.T) {
 	}
 	if paths["tmux.list"] {
 		t.Error("tmux.list unexpectedly present in the builtin CLI model — `tmux` is now an external command (candy/plugin-tmux, the first welded-command externalization), not a builtin CommandProvider")
+	}
+	if paths["preempt.status"] {
+		t.Error("preempt.status unexpectedly present in the builtin CLI model — `preempt` is now an external command (candy/plugin-preempt, the second welded-command externalization), not a builtin CommandProvider")
 	}
 }

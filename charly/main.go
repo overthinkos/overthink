@@ -59,13 +59,26 @@ type CLI struct {
 	// manifest from the candy declaration (so the CLI-served command:secrets word, absent from
 	// the gRPC Describe, is not missed). Reuses collectPluginProviders (R3).
 	PluginProviders PluginProvidersCmd `cmd:"" name:"__plugin-providers" hidden:"" help:"internal: print a candy's plugin.providers (one <class>:<word> per line)"`
-	Migrate         MigrateCmd         `cmd:"" help:"Migrate any opencharly config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
-	Settings        SettingsCmd        `cmd:"" help:"Manage runtime configuration (get/set/list)"`
+
+	// __preempt-status / __preempt-restore expose the in-core resource arbiter (preempt.go,
+	// ResourceArbiter — which STAYS core: shared by `charly vm create`, `charly vm gpu`, and the
+	// check-bed runner) to the externalized `charly preempt …` COMMAND plugin
+	// (candy/plugin-preempt). The plugin shells back to these sanctioned hidden verbs (the SAME
+	// __cli-model / __plugin-providers internal-command pattern) so the operator-facing
+	// `charly preempt status`/`restore` CLI is unchanged while its implementation moved out of core.
+	PreemptStatus  PreemptStatusInternalCmd  `cmd:"" name:"__preempt-status" hidden:"" help:"internal: print active resource-arbitration leases (the externalized charly preempt plugin shells back here)"`
+	PreemptRestore PreemptRestoreInternalCmd `cmd:"" name:"__preempt-restore" hidden:"" help:"internal: recover preempted holders (the externalized charly preempt plugin shells back here)"`
+
+	Migrate  MigrateCmd  `cmd:"" help:"Migrate any opencharly config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
+	Settings SettingsCmd `cmd:"" help:"Manage runtime configuration (get/set/list)"`
 	// Every non-machinery command — the deploy-lifecycle + leaf-domain set (alias,
-	// ssh, secrets, preempt, mcp, start, stop, status, restart, update, remove, logs,
+	// ssh, start, stop, status, restart, update, remove, logs,
 	// shell, cmd, cp, volume, service, config, bundle, reap-orphans) PLUS vm, feature, and
 	// check — is no longer a hardcoded field: each arrives via cli.Plugins as a builtin
 	// CommandProvider in its own plugin_command_<name>.go (collectCommandPlugins()).
+	// (preempt — like mcp/secrets/udev/tmux — is now an EXTERNAL command served
+	// out-of-process by candy/plugin-preempt, dispatched via syscall.Exec, not a builtin
+	// CommandProvider; see collectExternalCommandPlugins.)
 	// KongCommand() returns the existing <Name>Cmd struct verbatim, so the Run handler (and
 	// the core machinery it calls) is unchanged: only the CLI registration LOCATION moved.
 	// check is special-cased: its nested out-of-process command plugins (charly check

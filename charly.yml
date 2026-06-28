@@ -1398,3 +1398,57 @@ check-udev-local:
         plugin_input:
             command: charly udev status
             in_container: false
+
+# =================================================================
+# check-preempt-local — R10 witness for the externalized `charly preempt` COMMAND
+# (candy/plugin-preempt, command:preempt) — the SECOND welded-command externalization.
+# A disposable kind:local deploy on host: local that runs the GPU-less, deterministic
+# `charly preempt status` host-side:
+#   - `charly preempt status` → exits 0 and (on a fresh, lease-free bed host) prints
+#     "No active preemption leases." — proving the externalized command + the hidden-command
+#     shell-back dispatch end-to-end: the host charly resolves the `preempt` word via the
+#     discovered candy/plugin-preempt prescan, syscall.Exec's the plugin binary (host-built,
+#     or baked at /usr/lib/charly/plugins by pkg/arch), and the plugin shells back to the
+#     in-core arbiter via `charly __preempt-status` (newResourceArbiter().Status()).
+# `restore` needs a live GPU-preemption scenario (a running preemptible holder + an exclusive
+# claimant) — out of scope for this bed; its dispatch is covered by the Go e2e
+# (TestExternalCommandExecPlan_Preempt) + the hidden-command arbiter test
+# (TestPreemptStatusInternal_RendersArbiterLeases).
+# =================================================================
+check-preempt-app:
+    local:
+        description: |-
+            Minimal kind:local template for the check-preempt-local bed — composes the
+            command-only candy/plugin-preempt (no install content) so the bed exercises the
+            externalized `charly preempt` CLI host-side.
+    check-preempt-candy:
+        candy:
+            - plugin-preempt
+check-preempt-local:
+    local:
+        from: check-preempt-app
+        host: local
+        disposable: true
+        lifecycle: dev
+        description: >-
+            Sole proof of the externalized `charly preempt` COMMAND (candy/plugin-preempt,
+            command:preempt), the second welded-command externalization in the
+            core-externalization program. A disposable kind:local deploy on host: local runs
+            `charly preempt status` host-side: the host charly resolves the `preempt` word via
+            the discovered candy/plugin-preempt prescan and syscall.Exec's the plugin binary,
+            which shells back to the in-core resource arbiter via the hidden
+            `charly __preempt-status` verb (newResourceArbiter().Status()). On a fresh, GPU-less,
+            lease-free bed host the command exits 0 and reports no active preemption leases —
+            proving the externalized command + the hidden-command shell-back dispatch end-to-end.
+    preempt-status-runs:
+        check: command=charly preempt status exits 0 and reports a clean arbiter (no active leases) on a fresh GPU-less host
+        id: preempt-status-runs
+        exit_status: 0
+        stdout:
+            - contains: 'No active preemption leases.'
+        context:
+            - runtime
+        plugin: command
+        plugin_input:
+            command: charly preempt status
+            in_container: false

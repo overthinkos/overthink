@@ -1,7 +1,7 @@
 package main
 
 // preemptCommand is the `charly preempt` command group as a dedicated COMMAND-class
-// provider (the externalizable pattern landed for udev — see plugin_command_udev.go).
+// provider (the externalizable dedicated-provider pattern — see plugin_command_alias.go).
 // It self-registers via registerDedicatedBuiltin and reaches the CLI root through
 // collectCommandPlugins() → kong.Plugins; KongCommand() returns PreemptCmd verbatim
 // (status + restore subcommands + Run handlers), so `charly preempt …` parses and

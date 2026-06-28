@@ -34,8 +34,10 @@ func (CliModelCmd) Run() error {
 }
 
 // buildCLIModel reflects the CLI struct (+ the builtin command-provider grammar, so an
-// extracted command like `udev` is described identically to a hardcoded field) into an
-// sdk.CLIModel — the same model walk the MCP server formerly did in-process.
+// extracted command like `alias` is described identically to a hardcoded field) into an
+// sdk.CLIModel — the same model walk the MCP server formerly did in-process. EXTERNAL
+// commands (mcp / secrets / udev, served out-of-process) are NOT reflected here — they are
+// dispatched via syscall.Exec, not the gRPC registry, so they carry no in-process grammar.
 func buildCLIModel() (*sdk.CLIModel, error) {
 	var modelCLI CLI
 	modelCLI.Plugins = collectCommandPlugins()

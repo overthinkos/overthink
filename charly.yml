@@ -1335,3 +1335,66 @@ check-local-app:
         plugin_input:
             command: "test -f /etc/check-local-marker"
             in_container: false
+# =================================================================
+# check-udev-local — R10 witness for the externalized `charly udev` COMMAND
+# (candy/plugin-udev, command:udev) — the first externalizable-command precedent.
+# A disposable kind:local deploy on host: local that runs the two GPU-less,
+# deterministic udev sub-commands host-side:
+#   - `charly udev generate` → asserts the exact 99-charly-container-access rule lines on stdout
+#   - `charly udev status`   → exits 0 (graceful device + rule report on a GPU-less host)
+# The host `charly` resolves the `udev` word via the discovered candy/plugin-udev
+# prescan and syscall.Exec's the plugin binary (host-built, or baked at
+# /usr/lib/charly/plugins by pkg/arch). install/remove (sudo + udevadm, host-mutating)
+# stay out of the bed — the Go e2e (TestExternalCommandExecPlan_Udev) + plugin-udev's
+# build-context ADE check cover the dispatch + module-builds legs.
+# =================================================================
+check-udev-app:
+    local:
+        description: |-
+            Minimal kind:local template for the check-udev-local bed — composes the
+            command-only candy/plugin-udev (no install content) so the bed exercises the
+            externalized `charly udev` CLI host-side.
+    check-udev-candy:
+        candy:
+            - plugin-udev
+check-udev-local:
+    local:
+        from: check-udev-app
+        host: local
+        disposable: true
+        lifecycle: dev
+        description: >-
+            Sole proof of the externalized `charly udev` COMMAND (candy/plugin-udev,
+            command:udev), the first externalizable-command precedent in the
+            core-externalization program. A disposable kind:local deploy on host: local runs
+            the two GPU-less udev sub-commands host-side: `charly udev generate` asserts the
+            exact 99-charly-container-access rule lines on stdout (the host charly resolves the
+            `udev` word via the discovered candy/plugin-udev prescan and syscall.Exec's the
+            plugin binary), and `charly udev status` exits 0 with a graceful device + rule
+            report on a GPU-less host.
+    udev-generate-rules:
+        check: command=charly udev generate prints the exact 99-charly-container-access rule lines
+        id: udev-generate-rules
+        stdout:
+            - contains: 'SUBSYSTEM=="drm", KERNEL=="card[0-9]*", GROUP="render", MODE="0660"'
+            - contains: 'SUBSYSTEM=="kfd", KERNEL=="kfd", GROUP="render", MODE="0660"'
+            - contains: 'SUBSYSTEM=="vfio", GROUP="kvm", MODE="0660"'
+        context:
+            - runtime
+        plugin: command
+        plugin_input:
+            command: charly udev generate
+            in_container: false
+    udev-status-runs:
+        check: command=charly udev status exits 0 and reports device + rule status (GPU-less graceful)
+        id: udev-status-runs
+        exit_status: 0
+        stdout:
+            - contains: 'GPU Devices:'
+            - contains: 'Udev Rules:'
+        context:
+            - runtime
+        plugin: command
+        plugin_input:
+            command: charly udev status
+            in_container: false

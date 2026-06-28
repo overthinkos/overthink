@@ -11,8 +11,48 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/alecthomas/kong"
 	"golang.org/x/sys/unix"
 )
+
+// command.go is the command:udev leg of this plugin — the externalized `charly udev …` CLI,
+// ported OUT of charly's core (the deleted charly/udev.go + plugin_command_udev.go) so the
+// GPU-detection + udev-rule-writing code no longer links into the core binary. It owns the
+// ENTIRE `charly udev` surface verbatim from the former core command (generate / install /
+// remove / status + every helper).
+//
+// Dispatch contract (charly/provider_command_external.go dispatchExternalCommand): on
+// `charly udev <args…>`, charly RESOLVES this plugin's binary and syscall.Exec's it with the
+// pass-through tokens after the `udev` word, in CLI mode (the go-plugin handshake cookie is
+// stripped, so sdk.Main runs cliMain instead of serving gRPC). The plugin therefore owns real
+// terminal stdio/TTY — the `sudo tee` / `sudo udevadm` shell-outs of `udev install` / `remove`
+// reach the real terminal natively.
+
+// cliMain is the CLI-mode entry point (sdk.Main calls it when charly fork/exec'd this plugin
+// as a command passthrough). It parses the pass-through tokens against UdevCmd and dispatches
+// the selected subcommand via kctx.Run() (each leaf carries its own Run handler). Returns the
+// process exit code.
+func cliMain(args []string) int {
+	var grp UdevCmd
+	parser, err := kong.New(&grp,
+		kong.Name("udev"),
+		kong.Description("charly udev — manage udev rules for GPU device access in containers"),
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "plugin-udev: build kong parser: %v\n", err)
+		return 1
+	}
+	kctx, err := parser.Parse(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "plugin-udev: parse `charly udev %v`: %v\n", args, err)
+		return 1
+	}
+	if err := kctx.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "charly udev: %v\n", err)
+		return 1
+	}
+	return 0
+}
 
 const udevRuleFile = "/etc/udev/rules.d/99-charly-container-access.rules"
 
@@ -167,7 +207,7 @@ func (c *UdevInstallCmd) Run() error {
 		fmt.Fprintf(os.Stderr, "Warning: failed to trigger udev for KFD: %v\n", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Reloaded udev rules and triggered device re-checkuation\n")
+	fmt.Fprintf(os.Stderr, "Reloaded udev rules and triggered device re-evaluation\n")
 	return nil
 }
 

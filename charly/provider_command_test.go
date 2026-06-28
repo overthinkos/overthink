@@ -46,8 +46,8 @@ func TestCommandSeam_PluginCommandInjected(t *testing.T) {
 }
 
 // TestCommandProviders_ExtractedLeafCommands proves every leaf-domain command extracted
-// into a dedicated COMMAND-class provider (alias/tmux/ssh/preempt — the udev batch
-// siblings) is (1) registered in providerRegistry as a CommandProvider with the matching
+// into a dedicated COMMAND-class provider (alias/tmux/ssh/preempt — the builtin leaf-domain
+// batch) is (1) registered in providerRegistry as a CommandProvider with the matching
 // Reserved() word, and (2) collected by collectCommandPlugins() and injected into the REAL
 // charly CLI grammar via kong.Plugins, so its subcommand path parses and selects exactly as
 // before the extraction. The test FAILS if any dedicated registration regresses or the
@@ -62,9 +62,10 @@ func TestCommandProviders_ExtractedLeafCommands(t *testing.T) {
 		{"tmux", []string{"tmux", "list", "mybox"}, "tmux list <box>"},
 		{"ssh", []string{"ssh", "tunnel", "spice", "myvm"}, "ssh tunnel spice <vm>"},
 		{"preempt", []string{"preempt", "status"}, "preempt status"},
-		// `mcp` and `secrets` are intentionally absent: `charly mcp serve` (C1) and
-		// `charly secrets …` (C2) are now EXTERNAL commands served out-of-process by
-		// candy/plugin-mcp / candy/plugin-secrets, not builtin CommandProviders.
+		// `mcp`, `secrets`, and `udev` are intentionally absent: `charly mcp serve` (C1),
+		// `charly secrets …` (C2), and `charly udev …` are now EXTERNAL commands served
+		// out-of-process by candy/plugin-mcp / candy/plugin-secrets / candy/plugin-udev,
+		// not builtin CommandProviders.
 	}
 	for _, tc := range cases {
 		t.Run(tc.word, func(t *testing.T) {
@@ -100,7 +101,7 @@ func TestCommandProviders_ExtractedLeafCommands(t *testing.T) {
 }
 
 // TestCommandProviders_DeployLifecycleCommands proves every deploy-lifecycle + remaining
-// leaf command extracted into a dedicated COMMAND-class provider (the udev/alias-template
+// leaf command extracted into a dedicated COMMAND-class provider (the deploy-lifecycle
 // batch: start/stop/status/restart/update/remove/logs/shell/cmd/cp/volume/service/config/
 // bundle/reap-orphans) is (1) registered in providerRegistry as a CommandProvider with the
 // matching Reserved() word, and (2) collected by collectCommandPlugins() and injected into

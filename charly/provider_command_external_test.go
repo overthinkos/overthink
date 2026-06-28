@@ -55,6 +55,50 @@ func TestExternalCommandExecPlan_PassthroughArgs(t *testing.T) {
 	assertCommandEnv(t, env)
 }
 
+// TestExternalCommandExecPlan_Udev proves the externalized `charly udev` command rides the
+// SAME fork/exec seam: a dynamic Kong holder built for the `udev` word parses `udev generate`,
+// externalCommandExecPlan resolves the (baked) plugin-udev binary by word and builds the exec
+// argv `<bin> generate` + the CLI-mode env (handshake cookie stripped, CHARLY_BIN stamped).
+// This is the externalization gate — `charly udev` no longer resolves to a builtin
+// CommandProvider; it resolves to candy/plugin-udev over this path.
+func TestExternalCommandExecPlan_Udev(t *testing.T) {
+	const word = "udev"
+	t.Setenv(sdk.Handshake.MagicCookieKey, sdk.Handshake.MagicCookieValue)
+	bakedPluginBinaries[provKey(ClassCommand, word)] = "/fake/plugins/plugin-" + word
+	defer delete(bakedPluginBinaries, provKey(ClassCommand, word))
+
+	field := exportedCommandField(word)
+	holder := externalCommandHolder(word, field)
+	var cli struct{ kong.Plugins }
+	cli.Plugins = kong.Plugins{holder}
+	parser, err := kong.New(&cli, kong.Name("charly"))
+	if err != nil {
+		t.Fatalf("kong.New with the udev command holder: %v", err)
+	}
+	if _, err := parser.Parse([]string{word, "generate"}); err != nil {
+		t.Fatalf("kong.Parse `charly udev generate`: %v", err)
+	}
+
+	d := externalCommandDispatch{word: word, holder: holder, field: field}
+	bin, argv, env, err := externalCommandExecPlan(d)
+	if err != nil {
+		t.Fatalf("externalCommandExecPlan: %v", err)
+	}
+	if want := "/fake/plugins/plugin-" + word; bin != want {
+		t.Fatalf("bin = %q, want the baked binary %q", bin, want)
+	}
+	want := []string{bin, "generate"}
+	if len(argv) != len(want) {
+		t.Fatalf("argv = %v, want %v", argv, want)
+	}
+	for i := range want {
+		if argv[i] != want[i] {
+			t.Fatalf("argv[%d] = %q, want %q (full %v)", i, argv[i], want[i], argv)
+		}
+	}
+	assertCommandEnv(t, env)
+}
+
 // TestExternalCommandExecPlan_NestedCheckCommand proves a NestedCommandProvider's dynamic
 // command nests UNDER `check` (kong.Plugins embedded in a CheckCmd-like parent), parses
 // `check examplekube …`, keys the dispatch table by the full path "check examplekube"

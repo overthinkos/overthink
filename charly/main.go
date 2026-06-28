@@ -59,10 +59,10 @@ type CLI struct {
 	// manifest from the candy declaration (so the CLI-served command:secrets word, absent from
 	// the gRPC Describe, is not missed). Reuses collectPluginProviders (R3).
 	PluginProviders PluginProvidersCmd `cmd:"" name:"__plugin-providers" hidden:"" help:"internal: print a candy's plugin.providers (one <class>:<word> per line)"`
-	Migrate  MigrateCmd        `cmd:"" help:"Migrate any opencharly config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
-	Settings SettingsCmd       `cmd:"" help:"Manage runtime configuration (get/set/list)"`
+	Migrate         MigrateCmd         `cmd:"" help:"Migrate any opencharly config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
+	Settings        SettingsCmd        `cmd:"" help:"Manage runtime configuration (get/set/list)"`
 	// Every non-machinery command — the deploy-lifecycle + leaf-domain set (alias, tmux,
-	// ssh, secrets, preempt, mcp, udev, start, stop, status, restart, update, remove, logs,
+	// ssh, secrets, preempt, mcp, start, stop, status, restart, update, remove, logs,
 	// shell, cmd, cp, volume, service, config, bundle, reap-orphans) PLUS vm, feature, and
 	// check — is no longer a hardcoded field: each arrives via cli.Plugins as a builtin
 	// CommandProvider in its own plugin_command_<name>.go (collectCommandPlugins()).

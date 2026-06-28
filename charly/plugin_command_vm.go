@@ -1,8 +1,8 @@
 package main
 
 // vmCommand is the `charly vm` command tree extracted into its OWN file as a
-// dedicated COMMAND-class provider — the same externalizable pattern landed for
-// udev (see plugin_command_udev.go for the full rationale). It self-registers via
+// dedicated COMMAND-class provider — the same externalizable dedicated-provider
+// pattern (see plugin_command_alias.go for the full rationale). It self-registers via
 // registerDedicatedBuiltin, is absent from builtinProviderInstances + the
 // `providers:` manifest, and reaches the CLI root through collectCommandPlugins()
 // → kong.Plugins. KongCommand() returns VmCmd verbatim (its subcommands' Run

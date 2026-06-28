@@ -80,16 +80,30 @@ type CLI struct {
 	FeaturePending  FeaturePendingInternalCmd  `cmd:"" name:"__feature-pending" hidden:"" help:"internal: list agent-graded plan steps (the externalized charly feature plugin shells back here)"`
 	FeatureValidate FeatureValidateInternalCmd `cmd:"" name:"__feature-validate" hidden:"" help:"internal: parse + binding-consistency check for plan: blocks (the externalized charly feature plugin shells back here)"`
 
+	// __vm re-homes the WHOLE in-core VmCmd tree (vm.go / vm_snapshot_cmd.go — build/create/
+	// start/stop/destroy/console/ssh/snapshot/gpu/import/clone/cp-box/list) onto ONE hidden
+	// command, exposing it to the externalized `charly vm …` COMMAND plugin (candy/plugin-vm,
+	// command:vm). The VmCmd Run handlers STAY core — they drive the libvirt/qemu backends,
+	// cloud-init, the VM deploy target, and the VmOp resolution RPCs the plugin's verb:libvirt
+	// serves — so they cannot move to the plugin (R3); the plugin is a THIN forwarder that
+	// syscall.Exec's `charly __vm <args…>` (command.go), inheriting charly's stdio/TTY so
+	// `charly vm console` / `charly vm ssh` keep their interactive terminal. This is the SAME
+	// internal-command pattern as __preempt-status / __feature-list, but re-homing the whole
+	// subtree onto one hidden command instead of one hidden command per leaf (the VmCmd grammar
+	// is large + nested, so the plugin forwards raw args rather than re-expressing each leaf).
+	VmInternal VmCmd `cmd:"" name:"__vm" hidden:"" help:"internal: the VM lifecycle command tree (the externalized charly vm plugin forwards here)"`
+
 	Migrate  MigrateCmd  `cmd:"" help:"Migrate any opencharly config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
 	Settings SettingsCmd `cmd:"" help:"Manage runtime configuration (get/set/list)"`
 	// Every non-machinery command — the deploy-lifecycle + leaf-domain set (alias,
 	// ssh, start, stop, status, restart, update, remove, logs,
-	// shell, cmd, cp, volume, service, config, bundle, reap-orphans) PLUS vm and
-	// check — is no longer a hardcoded field: each arrives via cli.Plugins as a builtin
+	// shell, cmd, cp, volume, service, config, bundle, reap-orphans) PLUS check
+	// — is no longer a hardcoded field: each arrives via cli.Plugins as a builtin
 	// CommandProvider in its own plugin_command_<name>.go (collectCommandPlugins()).
-	// (preempt and feature — like mcp/secrets/udev/tmux — are now EXTERNAL commands served
-	// out-of-process by candy/plugin-preempt / candy/plugin-feature, dispatched via
-	// syscall.Exec, not builtin CommandProviders; see collectExternalCommandPlugins.)
+	// (mcp/secrets/udev/tmux/preempt/feature AND vm are now EXTERNAL commands served
+	// out-of-process by candy/plugin-* , dispatched via syscall.Exec, not builtin
+	// CommandProviders; see collectExternalCommandPlugins. vm forwards to the hidden
+	// __vm core command above — its VmCmd Run handlers stay core.)
 	// KongCommand() returns the existing <Name>Cmd struct verbatim, so the Run handler (and
 	// the core machinery it calls) is unchanged: only the CLI registration LOCATION moved.
 	// check is special-cased: its nested out-of-process command plugins (charly check

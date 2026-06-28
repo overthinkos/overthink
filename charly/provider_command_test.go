@@ -165,21 +165,21 @@ func TestCommandProviders_DeployLifecycleCommands(t *testing.T) {
 }
 
 // TestCommandProviders_NonMachineryCommands proves the remaining non-machinery commands
-// extracted into dedicated COMMAND-class providers — vm and check — are (1)
+// extracted into dedicated COMMAND-class providers — check — are (1)
 // registered in providerRegistry as a CommandProvider with the matching Reserved() word,
 // and (2) collected by collectCommandPlugins() and injected into the REAL charly CLI
 // grammar via kong.Plugins, so each subcommand path parses and selects exactly as before
-// the extraction (the Run handlers — VM lifecycle, the check tree — are preserved verbatim).
+// the extraction (the Run handlers — the check tree — are preserved verbatim).
 // The test FAILS if any dedicated registration regresses or the command seam stops wiring one
-// of them into the root. (`feature` is no longer here — it is an EXTERNAL command served
-// out-of-process by candy/plugin-feature, the third welded-command externalization.)
+// of them into the root. (`feature` and `vm` are no longer here — each is an EXTERNAL command
+// served out-of-process by candy/plugin-feature / candy/plugin-vm; vm is the fourth
+// welded-command externalization, forwarding to the hidden __vm core command.)
 func TestCommandProviders_NonMachineryCommands(t *testing.T) {
 	cases := []struct {
 		word     string   // Reserved() + top-level command name
 		parse    []string // argv selecting a leaf subcommand
 		selected string   // expected ctx.Command() after parse
 	}{
-		{"vm", []string{"vm", "list"}, "vm list"},
 		{"check", []string{"check", "box", "myimg"}, "check box <image>"},
 	}
 	for _, tc := range cases {

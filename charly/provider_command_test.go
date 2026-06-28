@@ -60,11 +60,12 @@ func TestCommandProviders_ExtractedLeafCommands(t *testing.T) {
 	}{
 		{"alias", []string{"alias", "list"}, "alias list"},
 		{"ssh", []string{"ssh", "tunnel", "spice", "myvm"}, "ssh tunnel spice <vm>"},
-		// `mcp`, `secrets`, `udev`, `tmux`, and `preempt` are intentionally absent: `charly mcp
-		// serve` (C1), `charly secrets …` (C2), `charly udev …`, `charly tmux …` (the first
-		// welded-command externalization), and `charly preempt …` (the second) are now EXTERNAL
-		// commands served out-of-process by candy/plugin-mcp / candy/plugin-secrets /
-		// candy/plugin-udev / candy/plugin-tmux / candy/plugin-preempt, not builtin CommandProviders.
+		// `mcp`, `secrets`, `udev`, `tmux`, `preempt`, and `feature` are intentionally absent:
+		// `charly mcp serve` (C1), `charly secrets …` (C2), `charly udev …`, `charly tmux …` (the
+		// first welded-command externalization), `charly preempt …` (the second), and
+		// `charly feature …` (the third) are now EXTERNAL commands served out-of-process by
+		// candy/plugin-mcp / candy/plugin-secrets / candy/plugin-udev / candy/plugin-tmux /
+		// candy/plugin-preempt / candy/plugin-feature, not builtin CommandProviders.
 	}
 	for _, tc := range cases {
 		t.Run(tc.word, func(t *testing.T) {
@@ -163,14 +164,15 @@ func TestCommandProviders_DeployLifecycleCommands(t *testing.T) {
 	}
 }
 
-// TestCommandProviders_NonMachineryCommands proves the last three non-machinery commands
-// extracted into dedicated COMMAND-class providers — vm, feature, and check — are (1)
+// TestCommandProviders_NonMachineryCommands proves the remaining non-machinery commands
+// extracted into dedicated COMMAND-class providers — vm and check — are (1)
 // registered in providerRegistry as a CommandProvider with the matching Reserved() word,
 // and (2) collected by collectCommandPlugins() and injected into the REAL charly CLI
 // grammar via kong.Plugins, so each subcommand path parses and selects exactly as before
-// the extraction (the Run handlers — VM lifecycle, plan-description authoring, the check
-// tree — are preserved verbatim). The test FAILS if any dedicated registration regresses
-// or the command seam stops wiring one of them into the root.
+// the extraction (the Run handlers — VM lifecycle, the check tree — are preserved verbatim).
+// The test FAILS if any dedicated registration regresses or the command seam stops wiring one
+// of them into the root. (`feature` is no longer here — it is an EXTERNAL command served
+// out-of-process by candy/plugin-feature, the third welded-command externalization.)
 func TestCommandProviders_NonMachineryCommands(t *testing.T) {
 	cases := []struct {
 		word     string   // Reserved() + top-level command name
@@ -178,7 +180,6 @@ func TestCommandProviders_NonMachineryCommands(t *testing.T) {
 		selected string   // expected ctx.Command() after parse
 	}{
 		{"vm", []string{"vm", "list"}, "vm list"},
-		{"feature", []string{"feature", "list"}, "feature list"},
 		{"check", []string{"check", "box", "myimg"}, "check box <image>"},
 	}
 	for _, tc := range cases {
@@ -285,5 +286,8 @@ func TestCommandProviders_ExtractedReachMCP(t *testing.T) {
 	}
 	if paths["preempt.status"] {
 		t.Error("preempt.status unexpectedly present in the builtin CLI model — `preempt` is now an external command (candy/plugin-preempt, the second welded-command externalization), not a builtin CommandProvider")
+	}
+	if paths["feature.list"] {
+		t.Error("feature.list unexpectedly present in the builtin CLI model — `feature` is now an external command (candy/plugin-feature, the third welded-command externalization), not a builtin CommandProvider")
 	}
 }

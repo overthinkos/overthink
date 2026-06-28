@@ -1452,3 +1452,58 @@ check-preempt-local:
         plugin_input:
             command: charly preempt status
             in_container: false
+
+# =================================================================
+# check-feature-local — R10 witness for the externalized `charly feature` COMMAND
+# (candy/plugin-feature, command:feature) — the THIRD welded-command externalization.
+# A disposable kind:local deploy on host: local that runs the deterministic, GPU-less
+# `charly feature list candy` host-side against THIS project:
+#   - `charly feature list candy` → exits 0 and lists every candy + its plan summary; the
+#     externalized command resolves the `feature` word via the discovered candy/plugin-feature
+#     prescan, syscall.Exec's the plugin binary (host-built, or baked at /usr/lib/charly/plugins
+#     by pkg/arch), and the plugin shells back to the in-core unified loader + plan model via
+#     `charly __feature-list` (LoadConfig / ScanCandy). The output is asserted to contain the
+#     `plugin-feature` candy itself (always present in this project), proving the externalized
+#     command + the hidden-command shell-back + the in-core loader dispatch end-to-end.
+# `pending`/`validate` ride the SAME hidden-command seam (their dispatch is covered by the Go
+# e2e TestExternalCommandExecPlan_Feature + the in-core loader test
+# TestRenderFeatureList_InvokesInCoreLoader / TestRenderFeatureValidate_InvokesValidatePlanSteps).
+# =================================================================
+check-feature-app:
+    local:
+        description: |-
+            Minimal kind:local template for the check-feature-local bed — composes the
+            command-only candy/plugin-feature (no install content) so the bed exercises the
+            externalized `charly feature` CLI host-side.
+    check-feature-candy:
+        candy:
+            - plugin-feature
+check-feature-local:
+    local:
+        from: check-feature-app
+        host: local
+        disposable: true
+        lifecycle: dev
+        description: >-
+            Sole proof of the externalized `charly feature` COMMAND (candy/plugin-feature,
+            command:feature), the third welded-command externalization in the
+            core-externalization program. A disposable kind:local deploy on host: local runs
+            `charly feature list candy` host-side: the host charly resolves the `feature` word
+            via the discovered candy/plugin-feature prescan and syscall.Exec's the plugin binary,
+            which shells back to the in-core unified loader + plan model via the hidden
+            `charly __feature-list` verb (LoadConfig / ScanCandy). The command exits 0 and lists
+            the project's candies — including the `plugin-feature` candy itself — proving the
+            externalized command + the hidden-command shell-back + the in-core loader dispatch
+            end-to-end.
+    feature-list-runs:
+        check: command=charly feature list candy exits 0 and lists the plugin-feature candy (proving the in-core loader ran via the externalized command)
+        id: feature-list-runs
+        exit_status: 0
+        stdout:
+            - contains: 'plugin-feature'
+        context:
+            - runtime
+        plugin: command
+        plugin_input:
+            command: charly feature list candy
+            in_container: false

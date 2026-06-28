@@ -5,8 +5,10 @@ package main
 //
 // These run an entity's OWN baked plan steps (the `plan:` list, shipped in
 // the ai.opencharly.description OCI label) as acceptance tests — the RUN
-// half of the `charly feature {list,pending,validate}` family
-// (see description_cmd.go). Both reuse the shared plan engine
+// half of the `charly feature {list,pending,validate}` family (the inspection
+// half is the externalized command plugin candy/plugin-feature, which shells
+// back to the hidden `charly __feature-{list,pending,validate}` core commands
+// in feature_internal_cmd.go). Both reuse the shared plan engine
 // (RunPlan, description_run.go) and the same target/var resolution as
 // `charly check box` / `charly check live` (R3); the only new behaviour is surfacing
 // step results as a first-class pass/fail run and, for the live verb,
@@ -92,8 +94,9 @@ func planTagFilter(tag string) (*TagExpr, error) {
 // ---------------------------------------------------------------------------
 
 // BoxFeatureCmd groups `charly box feature run` (and room for future build-scope
-// feature verbs). The run-verb lives here, per description_cmd.go's design
-// note, so it fits the existing build-mode command hierarchy.
+// feature verbs). The run-verb lives here — a child of box/check, NOT part of the
+// externalized inspection family (candy/plugin-feature) — so it fits the existing
+// build-mode command hierarchy.
 type BoxFeatureCmd struct {
 	Run BoxFeatureRunCmd `cmd:"" help:"Run a box's baked plan steps against a disposable container (build scope; prose-only steps need a live deployment — see charly check feature run)"`
 }

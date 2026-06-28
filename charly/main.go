@@ -69,16 +69,27 @@ type CLI struct {
 	PreemptStatus  PreemptStatusInternalCmd  `cmd:"" name:"__preempt-status" hidden:"" help:"internal: print active resource-arbitration leases (the externalized charly preempt plugin shells back here)"`
 	PreemptRestore PreemptRestoreInternalCmd `cmd:"" name:"__preempt-restore" hidden:"" help:"internal: recover preempted holders (the externalized charly preempt plugin shells back here)"`
 
+	// __feature-list / __feature-pending / __feature-validate expose the in-core plan-description
+	// machinery (LoadConfig / ScanCandy — the deepest loader — the Step plan model, and
+	// validatePlanSteps, which STAYS core: it is SHARED with `charly box validate`, R3) to the
+	// externalized `charly feature …` COMMAND plugin (candy/plugin-feature). The plugin shells
+	// back to these sanctioned hidden verbs (the SAME __cli-model / __plugin-providers /
+	// __preempt-status internal-command pattern) so the operator-facing `charly feature
+	// list`/`pending`/`validate` CLI is unchanged while its implementation moved out of core.
+	FeatureList     FeatureListInternalCmd     `cmd:"" name:"__feature-list" hidden:"" help:"internal: enumerate every kind: entity + its plan (the externalized charly feature plugin shells back here)"`
+	FeaturePending  FeaturePendingInternalCmd  `cmd:"" name:"__feature-pending" hidden:"" help:"internal: list agent-graded plan steps (the externalized charly feature plugin shells back here)"`
+	FeatureValidate FeatureValidateInternalCmd `cmd:"" name:"__feature-validate" hidden:"" help:"internal: parse + binding-consistency check for plan: blocks (the externalized charly feature plugin shells back here)"`
+
 	Migrate  MigrateCmd  `cmd:"" help:"Migrate any opencharly config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
 	Settings SettingsCmd `cmd:"" help:"Manage runtime configuration (get/set/list)"`
 	// Every non-machinery command — the deploy-lifecycle + leaf-domain set (alias,
 	// ssh, start, stop, status, restart, update, remove, logs,
-	// shell, cmd, cp, volume, service, config, bundle, reap-orphans) PLUS vm, feature, and
+	// shell, cmd, cp, volume, service, config, bundle, reap-orphans) PLUS vm and
 	// check — is no longer a hardcoded field: each arrives via cli.Plugins as a builtin
 	// CommandProvider in its own plugin_command_<name>.go (collectCommandPlugins()).
-	// (preempt — like mcp/secrets/udev/tmux — is now an EXTERNAL command served
-	// out-of-process by candy/plugin-preempt, dispatched via syscall.Exec, not a builtin
-	// CommandProvider; see collectExternalCommandPlugins.)
+	// (preempt and feature — like mcp/secrets/udev/tmux — are now EXTERNAL commands served
+	// out-of-process by candy/plugin-preempt / candy/plugin-feature, dispatched via
+	// syscall.Exec, not builtin CommandProviders; see collectExternalCommandPlugins.)
 	// KongCommand() returns the existing <Name>Cmd struct verbatim, so the Run handler (and
 	// the core machinery it calls) is unchanged: only the CLI registration LOCATION moved.
 	// check is special-cased: its nested out-of-process command plugins (charly check

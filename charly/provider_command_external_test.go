@@ -99,6 +99,52 @@ func TestExternalCommandExecPlan_Udev(t *testing.T) {
 	assertCommandEnv(t, env)
 }
 
+// TestExternalCommandExecPlan_Tmux proves the externalized `charly tmux` command — the FIRST
+// welded-command externalization — rides the SAME fork/exec seam: a dynamic Kong holder built
+// for the `tmux` word parses `tmux list mybox` (a leaf + box arg), externalCommandExecPlan
+// resolves the (baked) plugin-tmux binary by word and builds the exec argv `<bin> list mybox` +
+// the CLI-mode env (handshake cookie stripped, CHARLY_BIN stamped). This is the externalization
+// gate — `charly tmux` no longer resolves to a builtin CommandProvider; it resolves to
+// candy/plugin-tmux over this path, and the plugin re-expresses each leaf as a `charly cmd`/
+// `charly shell` shell-back (CHARLY_BIN is the SAME charly that dispatched it).
+func TestExternalCommandExecPlan_Tmux(t *testing.T) {
+	const word = "tmux"
+	t.Setenv(sdk.Handshake.MagicCookieKey, sdk.Handshake.MagicCookieValue)
+	bakedPluginBinaries[provKey(ClassCommand, word)] = "/fake/plugins/plugin-" + word
+	defer delete(bakedPluginBinaries, provKey(ClassCommand, word))
+
+	field := exportedCommandField(word)
+	holder := externalCommandHolder(word, field)
+	var cli struct{ kong.Plugins }
+	cli.Plugins = kong.Plugins{holder}
+	parser, err := kong.New(&cli, kong.Name("charly"))
+	if err != nil {
+		t.Fatalf("kong.New with the tmux command holder: %v", err)
+	}
+	if _, err := parser.Parse([]string{word, "list", "mybox"}); err != nil {
+		t.Fatalf("kong.Parse `charly tmux list mybox`: %v", err)
+	}
+
+	d := externalCommandDispatch{word: word, holder: holder, field: field}
+	bin, argv, env, err := externalCommandExecPlan(d)
+	if err != nil {
+		t.Fatalf("externalCommandExecPlan: %v", err)
+	}
+	if want := "/fake/plugins/plugin-" + word; bin != want {
+		t.Fatalf("bin = %q, want the baked binary %q", bin, want)
+	}
+	want := []string{bin, "list", "mybox"}
+	if len(argv) != len(want) {
+		t.Fatalf("argv = %v, want %v", argv, want)
+	}
+	for i := range want {
+		if argv[i] != want[i] {
+			t.Fatalf("argv[%d] = %q, want %q (full %v)", i, argv[i], want[i], argv)
+		}
+	}
+	assertCommandEnv(t, env)
+}
+
 // TestExternalCommandExecPlan_NestedCheckCommand proves a NestedCommandProvider's dynamic
 // command nests UNDER `check` (kong.Plugins embedded in a CheckCmd-like parent), parses
 // `check examplekube …`, keys the dispatch table by the full path "check examplekube"

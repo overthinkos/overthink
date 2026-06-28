@@ -9,7 +9,7 @@ import (
 // VM / host). Best-effort: silently ignores all errors (no daemon, no dbus,
 // headless target). It drives the venue's session bus directly with gdbus
 // (glib2) — desktops carry gdbus, and being an automatic side-effect
-// (deploy / cmd / tmux) it deliberately stays a single lightweight gdbus call
+// (deploy / cmd) it deliberately stays a single lightweight gdbus call
 // rather than transferring the 27 MB charly binary into a container just for a
 // best-effort popup. (The interactive `dbus:` check verb was externalized to
 // candy/plugin-dbus, which also drives the bus via gdbus — never godbus. charly's core

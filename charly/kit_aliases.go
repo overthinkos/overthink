@@ -9,9 +9,10 @@ import "github.com/overthinkos/overthink/charly/plugin/kit"
 // byte-identical to kit.ShellQuote; trimPreview/wrapContainerCommand moved into kit).
 var (
 	shellSingleQuote = kit.ShellQuote
-	// shellQuote is the brevity alias used across the build / deploy / notify / tmux /
-	// secrets call sites (formerly defined in wl.go, FU-14 folded onto kit.ShellQuote);
-	// it moved here when the `wl` verb externalized and wl.go was deleted.
+	// shellQuote is the brevity alias used across the build / deploy / notify call sites
+	// (formerly defined in wl.go, FU-14 folded onto kit.ShellQuote); it moved here when the
+	// `wl` verb externalized and wl.go was deleted. (The externalized `charly tmux` shell-back
+	// quoter now lives in candy/plugin-tmux, importing kit.ShellQuote directly — R3.)
 	shellQuote           = kit.ShellQuote
 	trimPreview          = kit.TrimPreview
 	wrapContainerCommand = kit.WrapContainerCommand

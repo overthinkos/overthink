@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -307,5 +308,90 @@ func TestBuildContainerEnvFlags_PropagatesPinnedRuntimeDir(t *testing.T) {
 	got := buildContainerEnvFlags()
 	if !strings.Contains(got, "XDG_RUNTIME_DIR=/home/user/.local/share/charly-runtime") {
 		t.Errorf("an explicitly-pinned (non-/run/user) XDG_RUNTIME_DIR must be propagated; got: %q", got)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// 2026-06-29 cutover: NestedExecutor.GetFile stages on the PARENT, not the leaf
+// ---------------------------------------------------------------------------
+
+// recordingParentExecutor is a DeployExecutor (via embedded ShellExecutor) that
+// records the scripts passed to RunUser and the paths passed to GetFile and
+// returns canned bytes from GetFile — running nothing. It lets the
+// NestedExecutor.GetFile staging composition be asserted without a real
+// container or VM.
+type recordingParentExecutor struct {
+	ShellExecutor
+	runUserScripts []string
+	getFilePaths   []string
+	getFileData    []byte
+}
+
+func (r *recordingParentExecutor) RunUser(_ context.Context, script string, _ EmitOpts) error {
+	r.runUserScripts = append(r.runUserScripts, script)
+	return nil
+}
+
+func (r *recordingParentExecutor) GetFile(_ context.Context, path string, _ bool, _ EmitOpts) ([]byte, error) {
+	r.getFilePaths = append(r.getFilePaths, path)
+	return r.getFileData, nil
+}
+
+// TestNestedExecutorGetFile_StagesRedirectOnParent guards the reverse-channel
+// fix: NestedExecutor.GetFile must run ONLY `cat <remote>` through the jump and
+// apply the staging `>` redirect on the PARENT shell (after the `}` closing the
+// jump group), so the stage file lands parent-side where Parent.GetFile reads
+// it. The original bug baked the redirect INSIDE wrapWithJump, so the stage was
+// written in the leaf container while Parent.GetFile read the parent's separate
+// filesystem → "no such file" on every container→host (or VM→host) pull (first
+// hit green by the wl-screenshot PNG in check-android-emulator-pod). This test
+// FAILS against the pre-fix code (the stage path appears inside the leaf
+// heredoc body and `} > ` is absent) and PASSES with the fix, and confirms
+// binary content round-trips verbatim.
+func TestNestedExecutorGetFile_StagesRedirectOnParent(t *testing.T) {
+	png := "\x89PNG\r\n\x1a\n\x00\x01\x02\xde\xad\xbe\xef"
+	rec := &recordingParentExecutor{getFileData: []byte(png)}
+	n := &NestedExecutor{Parent: rec, Jump: NestedJump{Kind: JumpPodmanExec, Target: "charly-test-pod"}}
+
+	data, err := n.GetFile(context.Background(), "/tmp/charly-wl-screenshot.png", false, EmitOpts{})
+	if err != nil {
+		t.Fatalf("GetFile: %v", err)
+	}
+	if string(data) != png {
+		t.Fatalf("bytes not round-tripped verbatim from the parent stage:\n got %q\nwant %q", data, png)
+	}
+
+	// The stage RunUser is the one carrying `cat` + the stage path (the other
+	// recorded RunUser is the deferred `rm` cleanup).
+	var stage string
+	for _, s := range rec.runUserScripts {
+		if strings.Contains(s, "cat ") && strings.Contains(s, "charly-nested-get-") {
+			stage = s
+		}
+	}
+	if stage == "" {
+		t.Fatalf("no stage RunUser recorded; got %v", rec.runUserScripts)
+	}
+
+	// Fix signature: the jump-group close + redirect (`} > `) appears right
+	// after the heredoc terminator, i.e. the redirect runs on the PARENT.
+	if !strings.Contains(stage, "CHARLY_NESTED_SCRIPT_EOF\n} > ") {
+		t.Errorf("stage redirect not applied parent-side (expected `} > ` after the heredoc terminator):\n%s", stage)
+	}
+	// Regression guard: the stage path must NOT appear inside the leaf heredoc
+	// body (everything before the closing terminator) — that placement is the
+	// pre-fix bug (the redirect wrapped into the leaf, so the file never
+	// reached the parent).
+	leaf := stage
+	if i := strings.Index(stage, "CHARLY_NESTED_SCRIPT_EOF\n}"); i >= 0 {
+		leaf = stage[:i]
+	}
+	if strings.Contains(leaf, "charly-nested-get-") {
+		t.Errorf("stage path leaked INSIDE the leaf heredoc (the pre-fix bug):\n%s", stage)
+	}
+
+	// Parent.GetFile must pull exactly the parent-side stage path once.
+	if len(rec.getFilePaths) != 1 || !strings.HasPrefix(rec.getFilePaths[0], "/tmp/charly-nested-get-") {
+		t.Errorf("Parent.GetFile not called once with the parent stage path; got %v", rec.getFilePaths)
 	}
 }

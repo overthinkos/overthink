@@ -303,21 +303,35 @@ func (n *NestedExecutor) GetFile(ctx context.Context, remotePath string, asRoot 
 	default:
 		return nil, fmt.Errorf("NestedExecutor.GetFile: jump kind %d does not support file retricheck (add explicit support if needed)", int(n.Jump.Kind))
 	}
-	// Stage the file on the parent venue by running `cat <path>` through
-	// the jump and redirecting to a tmp path, then read from the tmp.
+	// Stage the file on the PARENT venue: run ONLY `cat <path>` through the
+	// jump so the leaf's byte-clean stdout exits the jump verbatim, then apply
+	// the staging `>` redirect on the PARENT shell (the `{ … }` group's
+	// redirect lands parent-side). The old code baked the redirect INSIDE
+	// wrapWithJump, so the stage file was written in the LEAF container while
+	// Parent.GetFile read the parent's separate filesystem → a "no such file"
+	// failure on every container→host (or VM→host) reverse-channel pull
+	// (the first consumer to hit it green: the wl-screenshot PNG). The parent
+	// `>` redirect is byte-level, so binary payloads survive intact — unlike
+	// RunCapture's protobuf-string channel. Recurses for multi-hop: each level
+	// stages on its own parent and Parent.GetFile pulls one hop closer.
 	stage := "/tmp/charly-nested-get-" + filepath.Base(remotePath)
 	cat := "cat " + deployShellQuote(remotePath)
 	if asRoot {
 		cat = "sudo " + cat
 	}
-	wrapped, err := wrapWithJump(n.Jump, cat+" > "+deployShellQuote(stage)+".tmp 2>/dev/null && mv "+deployShellQuote(stage)+".tmp "+deployShellQuote(stage), false /*staging writes are user-scope on parent*/)
+	leafCat, err := wrapWithJump(n.Jump, cat, false /*staging writes are user-scope on parent*/)
 	if err != nil {
 		return nil, err
 	}
-	if err := n.Parent.RunUser(ctx, wrapped, opts); err != nil {
+	// leafCat ends with the heredoc terminator on its own line + a trailing
+	// newline, so close the group with `}` after that newline — NOT `; }`,
+	// which would place `;` illegally right after the terminator line.
+	stageQ := deployShellQuote(stage)
+	stageScript := "{ " + leafCat + "} > " + stageQ + ".tmp 2>/dev/null && mv " + stageQ + ".tmp " + stageQ
+	if err := n.Parent.RunUser(ctx, stageScript, opts); err != nil {
 		return nil, fmt.Errorf("nested GetFile stage: %w", err)
 	}
-	defer n.Parent.RunUser(ctx, "rm -f "+deployShellQuote(stage), opts) //nolint:errcheck
+	defer n.Parent.RunUser(ctx, "rm -f "+stageQ, opts) //nolint:errcheck
 	return n.Parent.GetFile(ctx, stage, false, opts)
 }
 

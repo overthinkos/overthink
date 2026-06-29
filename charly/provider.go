@@ -117,6 +117,11 @@ const (
 	OpEmit     = sdk.OpEmit
 	OpExecute  = sdk.OpExecute
 	OpResolve  = sdk.OpResolve
+
+	// Deploy-time builder-IR legs of an externalized detection-builder (cargo/npm/pixi/aur);
+	// invoked host-side in the build PRE-PASS, never inside the pure BuildDeployPlan compile.
+	OpCollectContext = sdk.OpCollectContext
+	OpReverse        = sdk.OpReverse
 )
 
 // marshalParams / unmarshalResult are the small helpers the in-proc adapters and

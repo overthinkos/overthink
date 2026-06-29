@@ -168,6 +168,8 @@ func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) 
 	// PERF-SCOPED: connect ONLY the plugins the candy plans (run-step verbs) + candy
 	// external_builder selections + box plans reference — an unreferenced box/<distro>
 	// plugin candy is not host-built. No deploy substrate / add_candy at build (no deploy).
+	// A detection-builder's build-time multi-stage is the core embedded vocabulary
+	// (emitBuilderStages), so the build never dispatches its deploy-time plugin.
 	buildRefs := collectReferencedPluginWords(layers, cfg.Box, nil)
 	if perr := loadProjectPlugins(context.Background(), layers, buildRefs); perr != nil {
 		fmt.Fprintf(os.Stderr, "warning: build-time plugin load: %v\n", perr)
@@ -668,9 +670,9 @@ func (g *Generator) emitBuilderStages(b *strings.Builder, boxName string, img *R
 // Stage is written verbatim (egress-validated with the rest of the Containerfile).
 // The reply is CACHED on the Generator so emitExternalBuilderArtifacts can splice the
 // matching COPY --from directives post-main-FROM without re-Invoking. An unresolvable
-// external_builder, a builtin/typed BuilderProvider (no OpResolve), or an Invoke error
-// fails LOUDLY (R4) — never a silently-dropped builder stage. The cache is RESET here
-// so it scopes to ONE image.
+// external_builder, a non-external (compiled-in) provider, or an Invoke error (including a
+// detection-builder plugin rejecting OpResolve — see below) fails LOUDLY (R4) — never a
+// silently-dropped builder stage. The cache is RESET here so it scopes to ONE image.
 func (g *Generator) emitExternalBuilderStages(b *strings.Builder, img *ResolvedBox, candyOrder []string) error {
 	g.externalBuilderReplies = map[string]spec.BuilderResolveReply{}
 	for _, candyName := range candyOrder {
@@ -683,12 +685,15 @@ func (g *Generator) emitExternalBuilderStages(b *strings.Builder, img *ResolvedB
 		if !ok {
 			return fmt.Errorf("candy %q: external_builder %q is not a registered builder (an external plugin not connected at build time?)", candyName, word)
 		}
-		// A builtin BuilderProvider (pixi/cargo/npm/aur) is selected by detection
-		// files via the embedded builder: vocabulary, NOT external_builder — it has no
-		// OpResolve. Only an EXTERNAL out-of-process builder (a *grpcProvider) drives
-		// this path; reject a builtin so the author uses the right mechanism.
+		// Only an EXTERNAL out-of-process builder (a *grpcProvider) drives this build-time
+		// OpResolve path; reject any compiled-in provider (defensive — no in-proc builder exists
+		// today). NOTE: the four detection-builders (pixi/cargo/npm/aur) are ALSO external
+		// grpcProviders now, but they serve only the DEPLOY-time OpCollectContext/OpReverse legs and
+		// are SELECTED BY DETECTION (their detect-files / aur: section via the embedded builder:
+		// vocabulary), never by external_builder:. Mis-selecting one here passes this type-assert but
+		// then fails LOUDLY at resolveExternalBuilder's OpResolve Invoke (the plugin rejects the op).
 		if _, isExternal := prov.(*grpcProvider); !isExternal {
-			return fmt.Errorf("candy %q: external_builder %q resolves to a built-in builder, not an external plugin — built-in builders are selected by detection files, not external_builder", candyName, word)
+			return fmt.Errorf("candy %q: external_builder %q resolves to a compiled-in builder, not an external plugin", candyName, word)
 		}
 		reply, err := resolveExternalBuilder(prov, word, candyName, img)
 		if err != nil {

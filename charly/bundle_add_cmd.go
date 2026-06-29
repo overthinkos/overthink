@@ -731,6 +731,10 @@ func (c *BundleAddCmd) compileBoxPlans(ref *DeployRef, cfg *Config, distroCfg *D
 	var plans []*InstallPlan
 	hostCtx := detectHostContext()
 	order = pruneContainerInitForSystemd(order, hostCtx)
+	hostCtx, err = preresolveBuildersInto(hostCtx, cfg, dir, order, layers, img)
+	if err != nil {
+		return nil, "", nil, err
+	}
 	for _, candyName := range order {
 		layer := layers[candyName]
 		if layer == nil {
@@ -790,6 +794,10 @@ func (c *BundleAddCmd) compileCandyPlansWithContext(ref *DeployRef, cfg *Config,
 	}
 	hostCtx := detectHostContext()
 	order = pruneContainerInitForSystemd(order, hostCtx)
+	hostCtx, err = preresolveBuildersInto(hostCtx, cfg, dir, order, layers, ctx)
+	if err != nil {
+		return nil, "", nil, err
+	}
 	var plans []*InstallPlan
 	for _, name := range order {
 		p, err := BuildDeployPlan(layers[name], ctx, hostCtx)
@@ -850,6 +858,10 @@ func (c *BundleAddCmd) compileCandyPlans(ref *DeployRef, cfg *Config, distroCfg 
 		img.Builder = cfg.resolveEffectiveBuilder(img.Name, img.Distro, img.Base, img.IsExternalBase, img.Builder)
 	}
 	order = pruneContainerInitForSystemd(order, hostCtx)
+	hostCtx, err = preresolveBuildersInto(hostCtx, cfg, dir, order, layers, img)
+	if err != nil {
+		return nil, "", nil, err
+	}
 	var plans []*InstallPlan
 	for _, name := range order {
 		p, err := BuildDeployPlan(layers[name], img, hostCtx)
@@ -889,6 +901,23 @@ func detectHostContext() HostContext {
 		Distro:       hd.PrimaryTag(),
 		GlibcVersion: glibc,
 	}
+}
+
+// preresolveBuildersInto runs the host-side builder PRE-PASS (builder_preresolve.go) and returns
+// hostCtx with BuilderContext populated, so the subsequent PURE BuildDeployPlan compile reads
+// pre-resolved builder data (stage context + teardown ops) and NEVER dials a builder plugin. The
+// pre-pass connects EXACTLY the externalized builder plugins the deploy's resolved closure triggers,
+// on-demand + distro-gated (so a fedora deploy never connects aur), using cfg/dir to scan + load
+// scoped to those words. A pre-pass error (an externalized builder whose plugin won't connect) is
+// FATAL, never a silent skip (R4). Called at every BuildDeployPlan compile site so the purity
+// invariant holds uniformly.
+func preresolveBuildersInto(hostCtx HostContext, cfg *Config, dir string, order []string, layers map[string]*Candy, img *ResolvedBox) (HostContext, error) {
+	bc, err := preresolveBuilderContexts(context.Background(), cfg, dir, order, layers, img)
+	if err != nil {
+		return hostCtx, err
+	}
+	hostCtx.BuilderContext = bc
+	return hostCtx, nil
 }
 
 // syntheticHostBox returns a minimal ResolvedBox suitable for

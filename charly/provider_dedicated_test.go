@@ -3,17 +3,18 @@ package main
 import "testing"
 
 // TestDedicatedProviders_ResolveAndDispatch proves the externalizable
-// dedicated-provider pattern (Phase 3): the schema-less IR providers extracted into their
-// own files — step:Reboot (plugin_step_reboot.go), builder:cargo (plugin_builder_cargo.go)
-// — still register into the SAME providerRegistry and dispatch identically, even though
-// each is INTENTIONALLY absent from both builtinProviderInstances and the `providers:`
-// manifest (they self-register from a package-var initializer via registerDedicatedBuiltin).
-// The test fails if the dedicated registration regresses (provider missing) or if the typed
-// dispatch adapter is lost. (deploy:local was once such a dedicated builtin; it has since
-// externalized into candy/plugin-deploy-local — it now has NO in-proc provider, asserted by
-// TestReservedWordRegistry_DeployBijection.)
+// dedicated-provider pattern: a schema-less IR provider extracted into its own file —
+// step:Reboot (plugin_step_reboot.go) — still registers into the SAME providerRegistry and
+// dispatches identically, even though it is INTENTIONALLY absent from both
+// builtinProviderInstances and the `providers:` manifest (it self-registers from a package-var
+// initializer via registerDedicatedBuiltin). The test fails if the dedicated registration
+// regresses (provider missing) or if the typed dispatch adapter is lost. (deploy:local was once
+// such a dedicated builtin; it has since externalized into candy/plugin-deploy-local — NO in-proc
+// provider, asserted by TestReservedWordRegistry_DeployBijection. The four builders
+// (cargo/npm/pixi/aur) likewise externalized — NO in-proc provider, asserted by
+// TestExternalizedBuilders_NoInProcProvider below.)
 func TestDedicatedProviders_ResolveAndDispatch(t *testing.T) {
-	// 2. step:Reboot — resolves to a StepProvider (the per-venue Emit* dispatch).
+	// step:Reboot — resolves to a StepProvider (the per-venue Emit* dispatch).
 	sp, ok := stepProviderFor(StepKindReboot)
 	if !ok {
 		t.Fatal("stepProviderFor(StepKindReboot) not resolved — dedicated self-registration regressed")
@@ -30,97 +31,50 @@ func TestDedicatedProviders_ResolveAndDispatch(t *testing.T) {
 		t.Fatalf("step:Reboot EmitOCI: %v", err)
 	}
 
-	// 3. builder:cargo — resolves to a BuilderProvider (no bijection gate exists for
-	//    builders, so this resolve IS the wiring proof).
-	bp, ok := builderProviderFor("cargo")
-	if !ok {
-		t.Fatal("builderProviderFor(\"cargo\") not resolved — dedicated self-registration regressed")
-	}
-	if bp.Reserved() != "cargo" {
-		t.Fatalf("builder provider Reserved() = %q, want %q", bp.Reserved(), "cargo")
-	}
-	if bp.Class() != ClassBuilder {
-		t.Fatalf("builder:cargo Class() = %q, want %q", bp.Class(), ClassBuilder)
-	}
-
-	// 4. The dedicated providers are intentionally ABSENT from the manifest-driven
-	//    instance supply — the defining property of the externalizable pattern.
+	// The dedicated provider is intentionally ABSENT from the manifest-driven instance supply
+	// — the defining property of the externalizable pattern.
 	byKey := builtinInstanceMap()
-	for _, k := range []string{
-		provKey(ClassStep, string(StepKindReboot)),
-		provKey(ClassBuilder, "cargo"),
-	} {
-		if _, in := byKey[k]; in {
-			t.Fatalf("%s is still in builtinProviderInstances — must self-register from its dedicated file instead", k)
-		}
+	if _, in := byKey[provKey(ClassStep, string(StepKindReboot))]; in {
+		t.Fatalf("step:Reboot is still in builtinProviderInstances — must self-register from its dedicated file instead")
 	}
 	manifest := parseEmbeddedProviderManifest()
-	for class, word := range map[ProviderClass]string{
-		ClassStep:    string(StepKindReboot),
-		ClassBuilder: "cargo",
-	} {
-		for _, w := range manifest[string(class)] {
-			if w == word {
-				t.Fatalf("%s:%s is still in the providers: manifest — a dedicated provider must not be listed there", class, word)
-			}
+	for _, w := range manifest[string(ClassStep)] {
+		if w == string(StepKindReboot) {
+			t.Fatalf("step:Reboot is still in the providers: manifest — a dedicated provider must not be listed there")
 		}
 	}
 }
 
-// TestDedicatedProviders_BulkResolveAndAbsent proves the Phase 3 BULK extraction for the
-// remaining in-proc dedicated providers: every builder (pixi/npm/aur) lives in its OWN
-// dedicated plugin_<class>_<name>.go file, self-registers via registerDedicatedBuiltin, and
-// is INTENTIONALLY absent from both builtinProviderInstances and the `providers:` manifest —
-// yet still resolves through the SAME providerRegistry (builders have no bijection gate, so
-// the resolve IS the wiring proof). ALL FIVE deploy substrates (local/vm/pod/k8s/android)
-// are now EXTERNAL (F1) with NO in-proc deploy-target provider — see
-// TestReservedWordRegistry_DeployBijection.
-func TestDedicatedProviders_BulkResolveAndAbsent(t *testing.T) {
+// TestExternalizedBuilders_NoInProcProvider proves the four detection-builders (cargo/npm/pixi/aur)
+// are EXTERNAL out-of-process plugin candies with NO compiled-in BuilderProvider — the builder
+// analogue of TestReservedWordRegistry_DeployBijection. At process start (before any plugin
+// connects at load time) the registry resolves NONE of them, and each is recorded in the
+// externalizedBuilders set with a serving plugin candy in externalBuilderPlugins. A regression
+// that re-introduced an in-proc builtin builder would resolve here and fail.
+func TestExternalizedBuilders_NoInProcProvider(t *testing.T) {
 	byKey := builtinInstanceMap()
 	manifest := parseEmbeddedProviderManifest()
-	inManifest := func(class ProviderClass, word string) bool {
-		for _, w := range manifest[string(class)] {
-			if w == word {
-				return true
-			}
+	for _, word := range []string{"cargo", "npm", "pixi", "aur"} {
+		if !externalizedBuilders[word] {
+			t.Fatalf("builder %q must be in externalizedBuilders (single source of truth)", word)
 		}
-		return false
-	}
-
-	// Deploy targets: there are NO in-proc dedicated deploy-target providers left — ALL FIVE
-	// substrates (local/vm/pod/k8s/android) are EXTERNAL (F1, served out-of-process by
-	// candy/plugin-deploy-{local,vm,pod} / plugin-adb / plugin-kube), so none has an in-proc
-	// DeployTargetProvider (asserted by TestReservedWordRegistry_DeployBijection). Only
-	// builders remain as dedicated in-proc providers below.
-
-	// Builders: each resolves to a BuilderProvider and is absent from slice+manifest.
-	for _, word := range []string{"pixi", "npm", "aur"} {
-		bp, ok := builderProviderFor(word)
-		if !ok {
-			t.Fatalf("builderProviderFor(%q) not resolved — dedicated self-registration regressed", word)
+		if _, ok := externalBuilderPlugins[word]; !ok {
+			t.Fatalf("builder %q must name its serving plugin candy in externalBuilderPlugins", word)
 		}
-		if bp.Reserved() != word {
-			t.Fatalf("builder:%s Reserved() = %q, want %q", word, bp.Reserved(), word)
-		}
-		if bp.Class() != ClassBuilder {
-			t.Fatalf("builder:%s Class() = %q, want %q", word, bp.Class(), ClassBuilder)
+		if _, ok := providerRegistry.resolve(ClassBuilder, word); ok {
+			t.Fatalf("builder %q resolves to an in-proc provider at process start — it must be external (connected only at plugin-load time)", word)
 		}
 		if _, in := byKey[provKey(ClassBuilder, word)]; in {
-			t.Fatalf("builder:%s is still in builtinProviderInstances — must self-register from its dedicated file", word)
+			t.Fatalf("builder %q is in builtinProviderInstances — an externalized builder has no compiled-in provider", word)
 		}
-		if inManifest(ClassBuilder, word) {
-			t.Fatalf("builder:%s is still in the providers: manifest — a dedicated provider must not be listed there", word)
+		for _, w := range manifest[string(ClassBuilder)] {
+			if w == word {
+				t.Fatalf("builder %q is in the providers: manifest — an externalized builder has no compiled-in provider", word)
+			}
 		}
-	}
-
-	// aur additionally carries the optional BuilderStager half (host staging dir) — all
-	// of its methods moved with it.
-	st, ok := builderStagerFor("aur")
-	if !ok {
-		t.Fatal("builderStagerFor(\"aur\") not resolved — aur must still implement BuilderStager")
-	}
-	if st.StagingMount() != "/tmp/aur-pkgs" {
-		t.Fatalf("aur StagingMount() = %q, want %q", st.StagingMount(), "/tmp/aur-pkgs")
+		if ref, ok := externalBuilderPluginRef(word); !ok || ref == "" {
+			t.Fatalf("builder %q must produce a canonical plugin ref for submodule auto-inject", word)
+		}
 	}
 }
 

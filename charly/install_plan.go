@@ -378,6 +378,15 @@ type BuilderStep struct {
 	// host build script is config-driven, not hardcoded Go. nil only on
 	// synthetic test paths that don't supply a BuilderConfig.
 	BuilderDef *BuilderDef
+
+	// PreResolvedReverse is the builder's teardown ops, resolved HOST-SIDE in the build
+	// PRE-PASS (builder_preresolve.go → the externalized builder plugin's OpReverse) and stashed
+	// here so Reverse() is a PURE getter — the per-builder reverse-op KIND (pixi-env-remove /
+	// package-remove / …) is exactly the logic externalized out-of-process, and Reverse() runs
+	// host-side (step-view projection + RunHostStep) with no registry handle. Carried across the
+	// wire on InstallStepView.ReverseOps (the host-computed teardown field) and restored by
+	// stepFromView. Nil for a custom candy builder / a direct compile with no pre-pass.
+	PreResolvedReverse []ReverseOp
 }
 
 func (s *BuilderStep) Kind() StepKind { return StepKindBuilder }
@@ -394,12 +403,12 @@ func (s *BuilderStep) Venue() Venue       { return VenueContainerBuilder }
 func (s *BuilderStep) RequiresGate() Gate { return GateNone }
 
 func (s *BuilderStep) Reverse() []ReverseOp {
-	// The builder-specific reverse-op lives on the builder provider (the switch is
-	// gone — C5). A custom candy builder has no provider → no reverse op.
-	if bp, ok := builderProviderFor(s.Builder); ok {
-		return bp.Reverse(s)
-	}
-	return nil
+	// A PURE getter: the builder-specific reverse-op KIND is externalized to the builder
+	// plugin (OpReverse), pre-resolved host-side in the build pre-pass (builder_preresolve.go)
+	// and stashed on PreResolvedReverse. Reverse() runs host-side with no registry handle
+	// (step-view projection + RunHostStep), so it must not RPC — it echoes the stashed ops.
+	// Nil for a custom candy builder / a direct compile with no pre-pass.
+	return s.PreResolvedReverse
 }
 
 // ---------------------------------------------------------------------------

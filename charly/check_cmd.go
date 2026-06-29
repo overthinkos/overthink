@@ -873,6 +873,12 @@ func deployNodePluginContext(dir, name string) (addCandy []string, refWords []st
 		}
 	}
 	visit(node)
+	// NOTE: the externalized DETECTION-builder plugins (cargo/npm/pixi/aur) are NOT injected here.
+	// A builder is triggered by the DEPLOY's resolved image closure (a pixi.toml / aur: section), not
+	// by the deploy NODE this walk sees — and surfacing all four across a whole-box scan over-built
+	// unrelated builder plugins (aur on a fedora deploy). The build PRE-PASS (builder_preresolve.go)
+	// instead detects EXACTLY the builders the deploy triggers (distro-gated) and connects only those
+	// on-demand, by their canonical ref (ensureBuildersConnected), where it has the resolved closure.
 	return addCandy, refWords
 }
 

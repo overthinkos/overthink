@@ -1,0 +1,25 @@
+plugin-builder-pixi:
+    candy:
+        version: 2026.181.0100
+        description: |-
+            OUT-OF-TREE charly plugin serving the `pixi` builder's DEPLOY-TIME IR shim. A standalone
+            Go module (go.mod + main.go) that dispatches the two deploy-time builder ops to the
+            shared charly/plugin/kit logic (R3): OpCollectContext (the per-candy stage-context keys
+            the host records on a BuilderStep — pixi → {env_name}) and OpReverse (that step's
+            teardown ops — pixi → pixi-env-remove). The host invokes both in its build PRE-PASS,
+            BEFORE the pure BuildDeployPlan compile, so the compiler never dials a plugin. The
+            builder's BUILD-TIME multi-stage stays the CORE embedded vocabulary (emitBuilderStages);
+            selection stays DETECTION (a candy's pixi.toml), never an authored external_builder:.
+    plugin-builder-pixi-decl:
+        plugin:
+            providers:
+                - builder:pixi
+            source: github.com/overthinkos/overthink/candy/plugin-builder-pixi
+    pixi-builder-module-present:
+        check: the out-of-tree pixi builder plugin ships a buildable Go module (go.mod + the provider main) the host builds + serves out-of-process for the deploy-time OpCollectContext/OpReverse pre-pass
+        id: pixi-builder-module-present
+        context:
+            - build
+        plugin: command
+        plugin_input:
+            command: "true"

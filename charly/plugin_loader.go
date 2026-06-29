@@ -461,6 +461,13 @@ func loadPluginUnit(ctx context.Context, name string, p *CandyPluginDecl, srcDir
 //   - the caller-supplied `extra` words (a deploy's substrate kind + the inline
 //     Op.Plugin words in its FLATTENED bed plan — see deployNodePluginContext).
 //
+// The EXTERNALIZED detection-builders (cargo/npm/pixi/aur) are NOT collected here: their
+// build-time multi-stage is the core embedded vocabulary (emitBuilderStages — build never
+// dispatches the plugin), and the deploy-time OpCollectContext/OpReverse legs are connected
+// PRECISELY + on-demand by the build pre-pass (builder_preresolve.go's ensureBuildersConnected,
+// scoped to the deploy's actually-detected + distro-gated builders) — NOT surfaced across an
+// entire box scan, which over-built unrelated builder plugins (e.g. aur on a fedora deploy).
+//
 // Word-keyed + class-AGNOSTIC by design: a plugin candy loads iff ANY of its provided
 // words is in this set (pluginProvidesReferencedWord), regardless of class. Over-load
 // (a matched-but-unused word) is harmless — the idempotency guard + a connect for an

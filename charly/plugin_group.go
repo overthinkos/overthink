@@ -3,7 +3,7 @@ package main
 // groupKind is the `group` deploy-shape KIND — a TARGETLESS deploy group (resource
 // members, no own workload; the former targetless `bundle:`) — extracted into its OWN
 // file as a dedicated-builtin KindProvider (Phase 2 deploy-shape batch), mirroring the
-// step/builder dedicated-provider pattern (plugin_step_reboot.go / plugin_builder_cargo.go etc.).
+// step dedicated-provider pattern (plugin_step_reboot.go etc.).
 //
 // Unlike the tier-1 kinds (distro/builder/init/resource/target/agent/module/sidecar/
 // package-group), which became schema-carrying RegisterBuiltinPluginUnit plugins routed

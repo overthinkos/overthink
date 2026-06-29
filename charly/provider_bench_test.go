@@ -6,8 +6,8 @@ import "testing"
 // EVERY-KIND-IS-A-PLUGIN plan's "E3 perf-RDD spike — the go/no-go gate for the
 // whole vision"). The architecture's load-bearing invariant: a BUILT-IN provider
 // dispatches through its typed fast path (CheckVerbProvider.RunVerb /
-// KindProvider.DecodeNode / DeployTargetProvider.ResolveTarget / StepProvider.Emit* /
-// BuilderProvider.Reverse), which NEVER marshals the Op into the serializable Invoke
+// KindProvider.DecodeNode / DeployTargetProvider.ResolveTarget / StepProvider.Emit*),
+// which NEVER marshals the Op into the serializable Invoke
 // envelope — the JSON envelope (marshalJSON, provider.go) is paid ONLY out-of-process
 // (provider_checkenv.go: a CheckVerbProvider takes RunVerb; only a non-CheckVerbProvider
 // out-of-proc plugin falls through to invokeVerbProvider's marshalJSON). If a builtin

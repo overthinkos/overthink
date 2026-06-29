@@ -54,6 +54,15 @@ type HostContext struct {
 	// VenueContainerBuilder steps. Populated from --builder-image. ""
 	// means "use the embedded build vocabulary's default".
 	BuilderImage string
+
+	// BuilderContext carries the host-side build PRE-PASS result: each externalized
+	// detection-builder's per-candy stage context + teardown ops, keyed by
+	// builderCtxKey(candy, builder). Populated by preresolveBuilderContexts BEFORE
+	// this pure compile (the deploy command path); read by collectBuilderContext +
+	// compileBuilderSteps so the compiler NEVER dials a builder plugin (purity). Nil
+	// when no pre-pass ran (a direct BuildDeployPlan caller / test) or no externalized
+	// builder is triggered → the affected builder gets base-only context, no teardown.
+	BuilderContext map[string]builderPreresolved
 }
 
 // BuildDeployPlan compiles one Candy into an InstallPlan.
@@ -785,7 +794,13 @@ func compileBuilderSteps(layer *Candy, img *ResolvedBox, hostCtx HostContext) []
 			BuilderDef: bDef,
 		}
 		step.BuilderImage = resolveBuilderImage(bName, img, hostCtx)
-		step.RawStageContext = collectBuilderContext(layer, bName, bDef, img)
+		step.RawStageContext = collectBuilderContext(layer, bName, img, hostCtx)
+		// The builder-specific teardown ops are PRE-RESOLVED host-side (the build pre-pass,
+		// builder_preresolve.go) and stashed here so BuilderStep.Reverse() is a pure getter — no
+		// RPC at its host-side call sites. Nil when no pre-pass ran or a custom builder.
+		if pre, ok := hostCtx.BuilderContext[builderCtxKey(layer.Name, bName)]; ok {
+			step.PreResolvedReverse = pre.Reverse
+		}
 
 		// aur produces .pkg.tar.zst files in the container at /tmp/aur-pkgs/
 		// and we need to pull them out on the host target. The container
@@ -846,25 +861,23 @@ func resolveBuilderImage(name string, img *ResolvedBox, hostCtx HostContext) str
 	return ""
 }
 
-// collectBuilderContext extracts the per-builder ledger/teardown context.
-// Populates the "env_name"/"binaries"/"packages" keys the BuilderStep's
-// Reverse() method reads — best-effort; accurate env/binary detection
-// typically happens after the builder runs (binaries come from the
-// candy's Cargo.toml [[bin]] section, etc.). For now we capture names
-// derivable from the candy manifest alone; the host target refines these at
-// execution time.
-func collectBuilderContext(layer *Candy, builderName string, _ *BuilderDef, img *ResolvedBox) map[string]any {
+// collectBuilderContext extracts the per-builder ledger/teardown context: the base keys
+// ("layer"/"builder"/"home") plus the builder-specific keys ("env_name"/"packages"/…) the
+// BuilderStep's Reverse() method reads. The builder-specific keys are PRE-RESOLVED host-side
+// (the build pre-pass, builder_preresolve.go) and carried on hostCtx.BuilderContext — pixi →
+// env_name, aur → packages/replaces; cargo/npm record nothing (the host target reads
+// Cargo.toml/package.json at install time). This stays a PURE function of its inputs: it reads
+// the pre-populated map and NEVER dials a builder plugin (the externalization invariant). A
+// custom candy builder (no externalized plugin) or a direct caller with no pre-pass gets
+// base-only context.
+func collectBuilderContext(layer *Candy, builderName string, img *ResolvedBox, hostCtx HostContext) map[string]any {
 	ctx := map[string]any{
 		"layer":   layer.Name,
 		"builder": builderName,
 		"home":    img.Home,
 	}
-	// The builder-specific stage context lives on the builder provider (the switch
-	// is gone — C5): pixi → env_name, aur → packages/replaces; cargo/npm record
-	// nothing (the host target reads Cargo.toml/package.json at install time). A
-	// custom candy builder has no provider → base context only.
-	if bp, ok := builderProviderFor(builderName); ok {
-		for k, v := range bp.CollectContext(layer, img) {
+	if pre, ok := hostCtx.BuilderContext[builderCtxKey(layer.Name, builderName)]; ok {
+		for k, v := range pre.Context {
 			ctx[k] = v
 		}
 	}
@@ -888,13 +901,6 @@ func stringSliceFromYAML(v any) ([]string, bool) {
 		return out, true
 	}
 	return nil, false
-}
-
-// pixiDefaultEnvName returns the default pixi env name for a candy.
-// Pixi uses "default" unless the manifest declares otherwise; we keep it
-// simple and let the host target refine at install time.
-func pixiDefaultEnvName(_ *Candy) string {
-	return "default"
 }
 
 // ---------------------------------------------------------------------------

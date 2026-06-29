@@ -421,3 +421,53 @@ type BuilderResolveReply struct {
 	Stage         string   `json:"stage"`
 	CopyArtifacts []string `json:"copy_artifacts,omitempty"`
 }
+
+// ---------------------------------------------------------------------------
+// Deploy-time builder-IR wire — what an externalized DETECTION-builder plugin
+// (cargo/npm/pixi/aur) exchanges with the host on the OpCollectContext +
+// OpReverse legs. A builder's build-time multi-stage stays the CORE vocabulary
+// (emitBuilderStages); these two carry the per-builder DEPLOY-TIME IR shim — the
+// stage-context the compiler records on a BuilderStep, and that step's teardown
+// ops — out-of-process. The host invokes BOTH in the build PRE-PASS (host-side,
+// before the pure BuildDeployPlan compile reads the result).
+// ---------------------------------------------------------------------------
+
+// BuilderCollectInput is the OpCollectContext params: the host-supplied candy
+// descriptor an external builder plugin reads to produce its per-candy stage
+// context. The host fills the generic fields it can derive without builder-specific
+// knowledge (Candy/Builder/Home always; Packages/Replaces from the builder's
+// detect-config package section, used today only by aur). A builder reads the
+// subset it needs (pixi uses none → a constant env; cargo/npm none).
+type BuilderCollectInput struct {
+	Candy    string   `json:"candy"`
+	Builder  string   `json:"builder"`
+	Home     string   `json:"home,omitempty"`
+	Packages []string `json:"packages,omitempty"` // the builder's detect-config section packages (aur)
+	Replaces []string `json:"replaces,omitempty"` // aur `replaces:` — repo packages removed before pacman -U
+}
+
+// BuilderCollectReply is the OpCollectContext reply: the builder-specific stage-context
+// keys the host merges onto the base context ({layer,builder,home}) to form the
+// BuilderStep.RawStageContext (e.g. pixi → {env_name}, aur → {packages,replaces}).
+type BuilderCollectReply struct {
+	Context map[string]any `json:"context,omitempty"`
+}
+
+// BuilderReverseInput is the OpReverse params: the candy + its resolved stage-context
+// keys (the BuilderCollectReply.Context). The plugin maps these to its teardown ops —
+// the builder-specific reverse-op KIND (pixi-env-remove / package-remove / …) is exactly
+// the per-builder Go logic this externalization moves out-of-process.
+type BuilderReverseInput struct {
+	Candy   string         `json:"candy"`
+	Builder string         `json:"builder"`
+	Context map[string]any `json:"context,omitempty"`
+}
+
+// BuilderReverseReply is the OpReverse reply: the builder's teardown ops, stashed by
+// the host onto BuilderStep.PreResolvedReverse so BuilderStep.Reverse() is a pure getter
+// (no RPC at its host-side call sites). For aur the host renders UninstallCmd later via
+// fillReverseUninstallCmds (the format's uninstall_template), the same as a built-in
+// package-remove op — the plugin names only Kind/Format/Targets/Scope.
+type BuilderReverseReply struct {
+	ReverseOps []ReverseOp `json:"reverse_ops,omitempty"`
+}

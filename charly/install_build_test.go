@@ -8,6 +8,70 @@ import (
 	"testing"
 )
 
+// TestBuildDeployPlan_BuilderPurity_NoPluginRPC is the externalization purity gate (operator
+// requirement): BuildDeployPlan is a PURE function of its inputs and NEVER dials a builder plugin.
+// The externalized detection-builder's stage context + teardown ops are resolved out-of-process in
+// the host-side build PRE-PASS and threaded in via HostContext.BuilderContext; the compiler only
+// READS that pre-populated map. This test connects NO plugin, so if the compiler tried to RPC a
+// builder it would fail/skip — instead it must succeed and faithfully reflect the supplied data,
+// AND succeed with base-only context when none is supplied. The reverse-op derivation that moved
+// out-of-process is covered by plugin/kit/builder_test.go.
+func TestBuildDeployPlan_BuilderPurity_NoPluginRPC(t *testing.T) {
+	img := &ResolvedBox{
+		Name: "purity",
+		Home: "/home/u",
+		BuilderConfig: &BuilderConfig{Builder: map[string]*BuilderDef{
+			"pixi": {DetectFiles: []string{"pixi.toml"}},
+		}},
+	}
+	layer := &Candy{Name: "c", HasPixiToml: true}
+
+	// (a) Pre-resolved by the (simulated) pre-pass: the compiler must read it verbatim — no RPC.
+	wantRev := []ReverseOp{{Kind: ReverseOpPixiEnvRemove, Targets: []string{"myenv"}, Scope: ScopeUser, Extra: map[string]string{"layer": "c"}}}
+	pre := HostContext{BuilderContext: map[string]builderPreresolved{
+		builderCtxKey("c", "pixi"): {Context: map[string]any{"env_name": "myenv"}, Reverse: wantRev},
+	}}
+	plan, err := BuildDeployPlan(layer, img, pre)
+	if err != nil {
+		t.Fatalf("BuildDeployPlan (pre-resolved): %v", err)
+	}
+	bs := firstBuilderStep(t, plan)
+	if got := bs.RawStageContext["env_name"]; got != "myenv" {
+		t.Fatalf("RawStageContext[env_name] = %v, want the pre-resolved %q (compiler must read pre-pass data, not RPC)", got, "myenv")
+	}
+	if bs.RawStageContext["builder"] != "pixi" || bs.RawStageContext["layer"] != "c" {
+		t.Fatalf("base context lost: %+v", bs.RawStageContext)
+	}
+	if len(bs.Reverse()) != 1 || bs.Reverse()[0].Kind != ReverseOpPixiEnvRemove {
+		t.Fatalf("Reverse() = %+v, want the pre-resolved [pixi-env-remove]", bs.Reverse())
+	}
+
+	// (b) No pre-pass (HostContext{}): the compiler still succeeds with base-only context + nil
+	// teardown — it never dials a plugin (none is connected here), proving purity.
+	plan2, err := BuildDeployPlan(layer, img, HostContext{})
+	if err != nil {
+		t.Fatalf("BuildDeployPlan (no pre-pass): %v", err)
+	}
+	bs2 := firstBuilderStep(t, plan2)
+	if _, present := bs2.RawStageContext["env_name"]; present {
+		t.Fatalf("env_name present without a pre-pass = %+v (the compiler must not derive/RPC it)", bs2.RawStageContext)
+	}
+	if bs2.Reverse() != nil {
+		t.Fatalf("Reverse() without a pre-pass = %+v, want nil", bs2.Reverse())
+	}
+}
+
+func firstBuilderStep(t *testing.T, plan *InstallPlan) *BuilderStep {
+	t.Helper()
+	for _, s := range plan.Steps {
+		if bs, ok := s.(*BuilderStep); ok {
+			return bs
+		}
+	}
+	t.Fatalf("no BuilderStep in plan: %s", DescribePlan(plan))
+	return nil
+}
+
 // Integration-ish tests for BuildDeployPlan using the project's own
 // candy definitions. Not unit tests in the strict sense (they read
 // real YAML via LoadConfig + ScanAllCandyWithConfig) but they catch

@@ -113,52 +113,29 @@ func TestBuilderStepScopeByBuilder(t *testing.T) {
 	}
 }
 
+// TestBuilderStepReverse proves BuilderStep.Reverse() is a PURE getter of PreResolvedReverse
+// (the externalization invariant): the per-builder reverse-op DERIVATION moved out-of-process to
+// kit.BuilderReverse (the build pre-pass invokes it via OpReverse and stashes the result here), so
+// Reverse() must NOT recompute — it echoes the stashed ops with no registry/RPC. The derivation
+// itself is covered by plugin/kit/builder_test.go.
 func TestBuilderStepReverse(t *testing.T) {
-	// pixi → pixi-env-remove
-	pixi := &BuilderStep{
-		Builder:         "pixi",
-		CandyName:       "pre-commit",
-		RawStageContext: map[string]any{"env_name": "pre-commit"},
+	want := []ReverseOp{{Kind: ReverseOpPixiEnvRemove, Targets: []string{"default"}, Scope: ScopeUser, Extra: map[string]string{"layer": "pre-commit"}}}
+	s := &BuilderStep{
+		Builder:            "pixi",
+		CandyName:          "pre-commit",
+		RawStageContext:    map[string]any{"env_name": "default"},
+		PreResolvedReverse: want,
 	}
-	ops := pixi.Reverse()
-	if len(ops) != 1 || ops[0].Kind != ReverseOpPixiEnvRemove {
-		t.Errorf("pixi Reverse() = %+v, want [pixi-env-remove]", ops)
-	}
-
-	// cargo → cargo-uninstall with binaries from ctx
-	cargo := &BuilderStep{
-		Builder:         "cargo",
-		RawStageContext: map[string]any{"binaries": []string{"rg", "fd"}},
-	}
-	ops = cargo.Reverse()
-	if len(ops) != 1 || ops[0].Kind != ReverseOpCargoUninstall {
-		t.Errorf("cargo Reverse() = %+v, want [cargo-uninstall]", ops)
-	}
-	if len(ops[0].Targets) != 2 {
-		t.Errorf("cargo targets = %v, want 2", ops[0].Targets)
+	ops := s.Reverse()
+	if len(ops) != 1 || ops[0].Kind != ReverseOpPixiEnvRemove || ops[0].Scope != ScopeUser {
+		t.Fatalf("Reverse() = %+v, want the stashed PreResolvedReverse verbatim", ops)
 	}
 
-	// npm → npm-uninstall-g with packages from ctx (as []interface{} per yaml.v3)
-	npm := &BuilderStep{
-		Builder:         "npm",
-		RawStageContext: map[string]any{"packages": []any{"@anthropic-ai/claude-code"}},
-	}
-	ops = npm.Reverse()
-	if len(ops) != 1 || ops[0].Kind != ReverseOpNpmUninstallG {
-		t.Errorf("npm Reverse() = %+v, want [npm-uninstall-g]", ops)
-	}
-
-	// aur → package-remove (system-scope)
-	aur := &BuilderStep{
-		Builder:         "aur",
-		RawStageContext: map[string]any{"packages": []string{"some-aur-pkg"}},
-	}
-	ops = aur.Reverse()
-	if len(ops) != 1 || ops[0].Kind != ReverseOpPackageRemove {
-		t.Errorf("aur Reverse() = %+v, want [package-remove]", ops)
-	}
-	if ops[0].Scope != ScopeSystem {
-		t.Errorf("aur scope = %v, want system", ops[0].Scope)
+	// A step with NO pre-resolved reverse (a custom candy builder, or a direct compile with no
+	// pre-pass) returns nil — Reverse() never derives from RawStageContext anymore.
+	bare := &BuilderStep{Builder: "aur", RawStageContext: map[string]any{"packages": []string{"x"}}}
+	if got := bare.Reverse(); got != nil {
+		t.Fatalf("Reverse() with no PreResolvedReverse = %+v, want nil (no in-proc derivation)", got)
 	}
 }
 

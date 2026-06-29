@@ -11,12 +11,12 @@ import (
 	"github.com/overthinkos/overthink/charly/spec"
 )
 
-// install.go is the SINGLE Android app-install path (R3), ported from charly's
-// former in-tree android_install.go into this out-of-tree plugin. Both the `adb`
-// check verb (install / install-app / uninstall) AND the `target: android` deploy
-// (the `apk:` package format, via the EmitOpts AdbInvoker) reach these helpers
-// through the ONE provider — there is exactly ONE implementation of "download by
-// package id via apkeep + install" and ONE of "push a committed APK + install".
+// install.go is the SINGLE Android app-install path (R3), living in this out-of-tree
+// plugin (the adb → external-plugin dep-shed). Both the `adb` check verb (install /
+// install-app / uninstall) AND the `deploy:android` substrate (the `apk:` package
+// format, via deploy.go's installOp → dispatch) reach these helpers through the ONE
+// provider — there is exactly ONE implementation of "download by package id via apkeep
+// + install" and ONE of "push a committed APK + install".
 //
 // Venue:
 //   - in-pod (inPodContainer set): apkeep + adb run inside the emulator pod via

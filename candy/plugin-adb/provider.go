@@ -11,18 +11,16 @@ import (
 	"github.com/overthinkos/overthink/charly/spec"
 )
 
-// provider.go is the out-of-process adb verb provider — charly's host dispatches
-// an `adb:` check step to it through the registry (ResolveVerb("adb") → this
-// grpcProvider → Provider.Invoke) with the FULL #Op marshaled as params_json and a
-// CheckEnv snapshot as env. The SAME provider also serves the `target: android`
-// deploy + `charly status` collector device ops: those callers (android_plugin.go's
-// AdbInvoker) build a synthetic #Op (adb: install / uninstall / getprop / devices)
-// + an AdbDeviceEnv carrying an already-resolved AdbAddr, and read the result's
-// Message. Because the out-of-process path does NOT run a host-side
-// matcher pipeline, this Invoke OWNS the whole verdict: dispatch the method, then
-// evaluate the stdout/stderr/exit_status matchers + artifact validators itself (via
-// the shared sdk implementation — R3), and return the wire {status,message} the
-// host decodes.
+// provider.go is the out-of-process provider for BOTH capabilities the plugin serves
+// (F1). Invoke branches on the request class: a "deploy" op drives the `deploy:android`
+// SUBSTRATE lifecycle (deploy.go — gate on boot, install the host-preresolved apk specs);
+// every other op is the `adb:` check VERB. For the verb, charly's host dispatches an
+// `adb:` check step through the registry (ResolveVerb("adb") → this grpcProvider →
+// Provider.Invoke) with the FULL #Op marshaled as params_json and a CheckEnv snapshot as
+// env. Because the out-of-process verb path does NOT run a host-side matcher pipeline,
+// invokeVerb OWNS the whole verdict: dispatch the method, then evaluate the
+// stdout/stderr/exit_status matchers + artifact validators itself (via the shared sdk
+// implementation — R3), and return the wire {status,message} the host decodes.
 
 // pluginResult is the wire form a verb provider returns (the host's pluginCheckResult).
 type pluginResult struct {
@@ -40,10 +38,21 @@ func resultJSON(status, msg string) (*pb.InvokeReply, error) {
 
 type provider struct{ pb.UnimplementedProviderServer }
 
-// Invoke runs one `adb:` operation. It decodes the full #Op + the env, skips in
-// box mode (these probes need a running container with a host-mapped adb port),
+// Invoke runs one operation for the plugin's capabilities. The plugin serves BOTH
+// the `adb:` check verb AND the `deploy:android` SUBSTRATE (F1), distinguished by the
+// request's class: a "deploy" op drives the substrate install lifecycle (deploy.go);
+// every other op is the adb verb.
+func (p provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeReply, error) {
+	if req.GetClass() == "deploy" {
+		return invokeDeployAndroid(req)
+	}
+	return p.invokeVerb(ctx, req)
+}
+
+// invokeVerb runs one `adb:` verb operation. It decodes the full #Op + the env, skips
+// in box mode (these probes need a running container with a host-mapped adb port),
 // dispatches the method, and self-evaluates the matchers + artifact validators.
-func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeReply, error) {
+func (provider) invokeVerb(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeReply, error) {
 	var op spec.Op
 	if len(req.GetParamsJson()) > 0 {
 		if err := json.Unmarshal(req.GetParamsJson(), &op); err != nil {

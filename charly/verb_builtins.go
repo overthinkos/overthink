@@ -36,8 +36,9 @@ import "context"
 // core go.mod). It keeps its `adb:` discriminator + modifiers on core #Op (authoring
 // unchanged) but is NOT a CheckVerbProvider, so it dispatches via invokeVerbProvider (the
 // else-branch in runOne) once the loader registers its grpcProvider — never through this
-// in-proc set. Its goadb-backed deploy/status device ops also route through the SAME
-// provider via android_plugin.go's invokeAdbPlugin (out-of-core goadb).
+// in-proc set. The SAME plugin also serves the `deploy:android` SUBSTRATE (the
+// externalized `target: android` deploy, F1) and the goadb-backed status device probe,
+// so ALL Android device interaction — verb, deploy, status — lives in candy/plugin-adb.
 
 // appium is NOT a built-in verb — it is an EXTERNAL-CHARLY-VERB served out-of-process by
 // candy/plugin-appium (the first dep-shed: tebeka/selenium left charly's core go.mod). It

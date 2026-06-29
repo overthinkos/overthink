@@ -71,25 +71,27 @@ func (t *externalDeployTarget) deployID() string {
 // returned teardown ops + provenance into the ledger.
 func (t *externalDeployTarget) Add(ctx context.Context, dctx *DeployContext, plans []*InstallPlan, opts EmitOpts) error {
 	var node *BundleNode
+	var dir string
 	if dctx != nil {
 		node = dctx.Node
+		dir = dctx.Dir
 	}
-	return t.apply(ctx, node, plans, opts.DryRun)
+	return t.apply(ctx, node, dir, plans, opts.DryRun)
 }
 
 // Update re-applies the deployment over the wire — an idempotent re-Add (mirrors
 // LocalUnifiedTarget.Update's re-Emit). The unified Update signature carries no
-// DeployContext, so the venue descriptor carries only the deploy name; the
-// example provider derives its scratch path from the deploy name, so a re-apply
-// is byte-for-byte the same as the original Add.
+// DeployContext, so the venue descriptor carries only the deploy name; a substrate
+// preresolver (if any) re-resolves the node from the tree by name.
 func (t *externalDeployTarget) Update(ctx context.Context, plans []*InstallPlan, opts UpdateOpts) error {
-	return t.apply(ctx, nil, plans, opts.DryRun)
+	return t.apply(ctx, nil, "", plans, opts.DryRun)
 }
 
-// apply is the shared Add/Update body: marshal the plans + venue, Invoke the
-// provider with the host executor on the broker, decode the reply, and (unless
-// DryRun) persist the teardown ops + record to the ledger.
-func (t *externalDeployTarget) apply(ctx context.Context, node *BundleNode, plans []*InstallPlan, dryRun bool) error {
+// apply is the shared Add/Update body: marshal the plans + venue (with any
+// substrate-specific preresolved payload), Invoke the provider with the host
+// executor on the broker, decode the reply, and (unless DryRun) persist the
+// teardown ops + record to the ledger.
+func (t *externalDeployTarget) apply(ctx context.Context, node *BundleNode, dir string, plans []*InstallPlan, dryRun bool) error {
 	views := make([]spec.InstallPlanView, 0, len(plans))
 	for _, p := range plans {
 		if p != nil {
@@ -104,6 +106,21 @@ func (t *externalDeployTarget) apply(ctx context.Context, node *BundleNode, plan
 	// shared buildArtifactEnv flattener, R3). The plugin reads it to locate where
 	// to apply its effects on the venue.
 	venue := spec.DeployVenue{DeployName: t.name, Env: buildArtifactEnv(nil, node)}
+	// Substrate preresolution (F1): a registered host-side preresolver (e.g. the
+	// android one — resolve the live device endpoint + collect the apk install specs)
+	// produces the substrate-specific payload the plugin needs but cannot resolve
+	// itself. Skipped on a dry-run (it requires a LIVE venue — engine inspect on the
+	// running pod). The generic target never branches on the substrate; only the
+	// registered preresolver body is substrate-specific.
+	if !dryRun {
+		if pre, ok := deployPreresolverFor(t.prov.word); ok {
+			payload, perr := pre(t.name, dir, node, plans)
+			if perr != nil {
+				return fmt.Errorf("external deploy %q: preresolve substrate %q: %w", t.name, t.prov.word, perr)
+			}
+			venue.Substrate = payload
+		}
+	}
 	envJSON, err := json.Marshal(venue)
 	if err != nil {
 		return fmt.Errorf("external deploy %q: marshal venue: %w", t.name, err)

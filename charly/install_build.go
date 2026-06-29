@@ -136,8 +136,9 @@ func BuildDeployPlan(layer *Candy, img *ResolvedBox, hostCtx HostContext) (*Inst
 	plan.Steps = append(plan.Steps, shellSteps...)
 
 	// 6. Android apps: the candy manifest `apk:` package format. Compiled into ONE
-	// ApkInstallStep regardless of target; only AndroidDeployTarget executes
-	// it (every other target records a skip). See ApkInstallStep.
+	// ApkInstallStep regardless of target; the android deploy preresolver reads it
+	// host-side (collectAndroidInstalls) and the external deploy:android plugin
+	// installs the apps — every DeployTarget records a skip. See ApkInstallStep.
 	if apkStep := compileApkStep(layer); apkStep != nil {
 		plan.Steps = append(plan.Steps, apkStep)
 	}

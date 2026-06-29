@@ -91,12 +91,13 @@ func TestDedicatedProviders_ResolveAndDispatch(t *testing.T) {
 }
 
 // TestDedicatedProviders_BulkResolveAndAbsent proves the Phase 3 BULK extraction: every
-// remaining deploy-target (pod/vm/k8s/android) and builder (pixi/npm/aur) now lives in
-// its OWN dedicated plugin_<class>_<name>.go file, self-registers via
-// registerDedicatedBuiltin, and is INTENTIONALLY absent from both
-// builtinProviderInstances and the `providers:` manifest — yet still resolves through
-// the SAME providerRegistry and dispatches identically (the deploy-target bijection gate
-// still sees them registered; builders have no gate, so the resolve IS the wiring proof).
+// in-proc deploy-target (pod/vm/k8s — `android` is now an EXTERNAL substrate, F1, with NO
+// in-proc provider) and builder (pixi/npm/aur) lives in its OWN dedicated
+// plugin_<class>_<name>.go file, self-registers via registerDedicatedBuiltin, and is
+// INTENTIONALLY absent from both builtinProviderInstances and the `providers:` manifest —
+// yet still resolves through the SAME providerRegistry and dispatches identically (the
+// deploy-target bijection gate still sees them registered; builders have no gate, so the
+// resolve IS the wiring proof).
 func TestDedicatedProviders_BulkResolveAndAbsent(t *testing.T) {
 	byKey := builtinInstanceMap()
 	manifest := parseEmbeddedProviderManifest()
@@ -112,12 +113,11 @@ func TestDedicatedProviders_BulkResolveAndAbsent(t *testing.T) {
 	// Deploy targets: each resolves to a DeployTargetProvider that constructs the
 	// expected UnifiedDeployTarget (behavior-preserving), and is absent from slice+manifest.
 	wantTarget := map[string]func(UnifiedDeployTarget) bool{
-		"pod":     func(t UnifiedDeployTarget) bool { _, ok := t.(*PodUnifiedTarget); return ok },
-		"vm":      func(t UnifiedDeployTarget) bool { _, ok := t.(*VmUnifiedTarget); return ok },
-		"k8s":     func(t UnifiedDeployTarget) bool { _, ok := t.(*K8sUnifiedTarget); return ok },
-		"android": func(t UnifiedDeployTarget) bool { _, ok := t.(*AndroidUnifiedTarget); return ok },
+		"pod": func(t UnifiedDeployTarget) bool { _, ok := t.(*PodUnifiedTarget); return ok },
+		"vm":  func(t UnifiedDeployTarget) bool { _, ok := t.(*VmUnifiedTarget); return ok },
+		"k8s": func(t UnifiedDeployTarget) bool { _, ok := t.(*K8sUnifiedTarget); return ok },
 	}
-	for _, word := range []string{"pod", "vm", "k8s", "android"} {
+	for _, word := range []string{"pod", "vm", "k8s"} {
 		dp, ok := providerRegistry.ResolveDeploy(word)
 		if !ok {
 			t.Fatalf("ResolveDeploy(%q) not registered — dedicated self-registration regressed", word)

@@ -826,13 +826,16 @@ func (s *RepoChangeStep) Reverse() []ReverseOp {
 // (parallel to SystemPackagesStep for rpm/deb/pac, and BuilderStep for aur).
 //
 // Unlike every other step, an apk install lands on a RUNNING Android device,
-// not the build/host filesystem, so ONLY AndroidDeployTarget executes it
-// (via the shared installer in android_install.go: apkeep + adb). Every
-// other target SKIPS it — OCITarget emits nothing (there is no device at
-// image-build time), and Local/Vm/Pod targets record a skip (a host/VM/pod
-// is not an Android device). This is the same "wrong venue → skip" shape
-// `aur:` uses off-Arch, expressed as a clean recorded skip rather than an
-// error (an image legitimately builds without installing apps).
+// not the build/host filesystem. `target: android` is an EXTERNAL deploy
+// substrate (F1): NO in-proc DeployTarget executes this step — the host-side
+// android deploy preresolver (collectAndroidInstalls, android_deploy_preresolve.go)
+// READS it to collect the apk install specs and ships them to the deploy:android
+// plugin (candy/plugin-adb: apkeep + adb), which drives the device. Every
+// DeployTarget SKIPS it — OCITarget emits nothing (no device at image-build time),
+// and Local/Vm/Pod targets record a skip (a host/VM/pod is not an Android device).
+// This is the same "wrong venue → skip" shape `aur:` uses off-Arch, expressed as a
+// clean recorded skip rather than an error (an image legitimately builds without
+// installing apps).
 type ApkInstallStep struct {
 	Packages  []ApkPackageSpec
 	CandyName string
@@ -844,14 +847,14 @@ func (s *ApkInstallStep) Kind() StepKind { return StepKindApkInstall }
 // Scope is system — installing an app mutates device-global package state.
 func (s *ApkInstallStep) Scope() Scope { return ScopeSystem }
 
-// Venue is host-native — AndroidDeployTarget orchestrates apkeep + adb from
-// the host (apkeep itself may run in-pod, but the step is driven host-side).
+// Venue is host-native — the android deploy preresolver reads this step from the
+// host (the install itself runs in the deploy:android plugin over the wire).
 func (s *ApkInstallStep) Venue() Venue       { return VenueHostNative }
 func (s *ApkInstallStep) RequiresGate() Gate { return GateNone }
 
-// Reverse returns no ledger ops — Android teardown is not ledger-based.
-// `charly bundle del <android>` (AndroidUnifiedTarget.Del) re-resolves the
-// deploy's apk candies and `pm uninstall`s each package directly.
+// Reverse returns no STATIC ledger ops — Android teardown ops are DYNAMIC, recorded
+// from the deploy:android plugin's OpExecute reply (the uninstall reverse ops) at
+// deploy time, replayed at `charly bundle del` like any external deploy substrate.
 func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
 
 // ---------------------------------------------------------------------------
@@ -877,7 +880,7 @@ func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
 //     there as the documented fallback).
 //   - OCITarget SKIPS it — no makepkg in a container image build; the image
 //     bakes one self-contained binary via the candy's COPY/curl `cmd:` task.
-//   - AndroidDeployTarget / K8sDeployTarget SKIP it (no Arch package surface).
+//   - the android substrate (external) / K8sDeployTarget SKIP it (no Arch package surface).
 //
 // The PKGBUILD location is resolved at EMIT time (not compile time), so the
 // step carries only the author's hint (`PkgbuildRef`) plus the candy's source
@@ -999,18 +1002,6 @@ func (s *ExternalPluginStep) RequiresGate() Gate { return GateNone }
 // OpExecute DeployReply at emit time (EmitLocal/EmitVM append reply.ReverseOps to the
 // CandyRecord), exactly like the external deploy target — never recomputed.
 func (s *ExternalPluginStep) Reverse() []ReverseOp { return nil }
-
-// PackageIDs returns the installable package ids (committed-APK entries with
-// no `package:` id are excluded — they can't be uninstalled by id).
-func (s *ApkInstallStep) PackageIDs() []string {
-	var out []string
-	for _, p := range s.Packages {
-		if p.Package != "" {
-			out = append(out, p.Package)
-		}
-	}
-	return out
-}
 
 // ---------------------------------------------------------------------------
 // InstallPlan — the top-level IR container.

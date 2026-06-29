@@ -21,7 +21,7 @@ import (
 // invokeKubePlugin dispatches one synthetic kube #Op (merge-kubeconfig) to the
 // registered out-of-process kube provider and returns the plugin's message (or an
 // error when the plugin reports a failure). It is a swappable package-level var
-// (like invokeAdbPlugin / InspectContainer) so the deploy callers stay
+// (like InspectContainer) so the deploy callers stay
 // unit-testable without a live plugin. Mirrors invokeVerbProvider's Operation
 // envelope + pluginCheckResult decode (R3).
 var invokeKubePlugin = func(op *Op) (string, error) {

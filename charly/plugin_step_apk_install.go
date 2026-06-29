@@ -13,14 +13,18 @@ import (
 // schema-carrying RegisterBuiltinPluginUnit path; it self-registers via
 // registerDedicatedBuiltin below and is INTENTIONALLY absent from both the
 // builtinProviderInstances slice and the `providers:` manifest, yet dispatches identically
-// through providerRegistry.ResolveStep. Each Emit* preserves its venue's EXACT prior
-// behaviour (behavior-preserving): only a kind:android device executes it, so every venue
-// here records a skip.
+// through providerRegistry.ResolveStep. NO DeployTarget executes an ApkInstallStep: the
+// android substrate is EXTERNAL (F1), so its host-side preresolver (collectAndroidInstalls,
+// android_deploy_preresolve.go) READS this step to collect the apk install specs and ships
+// them to the deploy:android plugin (candy/plugin-adb), which drives the device. Every Emit*
+// venue here therefore records a skip — the step is provenance the preresolver consumes,
+// never executed in-line by a DeployTarget.
 type apkInstallStepProvider struct{ builtinStepBase }
 
 func (apkInstallStepProvider) Reserved() string { return string(StepKindApkInstall) }
 func (apkInstallStepProvider) EmitOCI(_ *OCITarget, _ InstallStep, _ *InstallPlan) error {
-	// No device at image-build time; the deploy-time AndroidDeployTarget runs it.
+	// No device at image-build time; the android deploy preresolver reads this step
+	// host-side at deploy and the deploy:android plugin installs the apps.
 	return nil
 }
 func (apkInstallStepProvider) EmitLocal(t *LocalDeployTarget, step InstallStep, _ *InstallPlan, _ EmitOpts, rec *CandyRecord, start time.Time) error {

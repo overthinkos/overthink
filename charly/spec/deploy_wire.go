@@ -1,5 +1,7 @@
 package spec
 
+import "encoding/json"
+
 // deploy_wire.go — the deploy IR wire types shared between charly's core
 // (package main) and the plugin SDK / out-of-tree plugins.
 //
@@ -144,9 +146,42 @@ type InstallPlanView struct {
 // deploy Invoke: the deploy's name plus the merged deploy-node env (KEY=VALUE
 // lines flattened to a map). The plugin reads it to locate where to apply its
 // effects (e.g. a scratch dir) — the analogue of snapshotCheckEnv for a verb.
+//
+// Substrate carries a substrate-SPECIFIC preresolved payload a registered
+// host-side deploy preresolver produced for the external substrate word (e.g.
+// AndroidDeployVenue for deploy:android — the resolved adb endpoint + the apk
+// install specs). It is OPAQUE to the generic externalDeployTarget (which never
+// branches on the substrate); only the matching plugin decodes it. nil for an
+// external substrate with no preresolver (the marker-only example).
 type DeployVenue struct {
 	DeployName string            `json:"deploy_name"`
 	Env        map[string]string `json:"env,omitempty"`
+	Substrate  json.RawMessage   `json:"substrate,omitempty"`
+}
+
+// AndroidDeployVenue is the preresolved deploy:android substrate payload the
+// host's android deploy preresolver produces (in DeployVenue.Substrate) and the
+// candy/plugin-adb deploy:android provider decodes. The host resolves the device
+// endpoint (adb-server addr / in-pod engine+container / serial / google-play
+// creds) and collects the apk install specs from the deploy's compiled plans
+// (committed-APK Apk fields rewritten to ABSOLUTE host paths the plugin reads;
+// package entries carry package/source/arch/app_version), so the plugin needs no
+// project context and no goadb-less host resolution — it only drives the device.
+type AndroidDeployVenue struct {
+	AdbAddr     string           `json:"adb_addr"`
+	Engine      string           `json:"engine,omitempty"`
+	Container   string           `json:"container,omitempty"`
+	Serial      string           `json:"serial,omitempty"`
+	GoogleEmail string           `json:"google_email,omitempty"`
+	GoogleToken string           `json:"google_token,omitempty"`
+	Installs    []ApkPackageSpec `json:"installs,omitempty"`
+	// BootTimeout / InstallDeadline / InstallInterval are the readiness +
+	// install-retry windows the host ships (no magic numbers in the plugin):
+	// boot gates sys.boot_completed; the install retries past PackageManager
+	// post-boot init (a real synchronization condition, not a fixed sleep).
+	BootTimeout     string `json:"boot_timeout,omitempty"`
+	InstallDeadline string `json:"install_deadline,omitempty"`
+	InstallInterval string `json:"install_interval,omitempty"`
 }
 
 // DeployReply is the structured result an external deploy provider returns from

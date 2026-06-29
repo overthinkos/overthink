@@ -19,9 +19,9 @@ import (
 //   - the CHECK verb: charly's CheckEnv (provider_checkenv.go) → Box/Instance/Mode/
 //     ContainerName; the plugin resolves the device's adb-server port from
 //     ContainerName via engine inspect.
-//   - the deploy/status seams: charly's AdbDeviceEnv (android_plugin.go) → an
-//     already-resolved AdbAddr (host:port) plus the in-pod Engine/Container + the
-//     google-play creds the by-package installer needs.
+//   - the deploy:android SUBSTRATE (deploy.go): built from the host-preresolved
+//     spec.AndroidDeployVenue → an already-resolved AdbAddr (host:port) plus the in-pod
+//     Engine/Container + the google-play creds the by-package installer needs.
 //
 // JSON is structural, so one struct decodes both producers — each sets only the
 // fields it has, the rest stay zero.

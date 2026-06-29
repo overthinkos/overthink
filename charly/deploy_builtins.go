@@ -17,5 +17,7 @@ package main
 
 // k8sTarget (the `k8s` deploy target) lives in plugin_deploy_k8s.go.
 
-// androidTarget (the `android` deploy target) lives in plugin_deploy_android_reg.go
-// (the `_reg` suffix dodges the implicit GOOS=android build constraint).
+// android has NO in-proc deploy target — it is an EXTERNAL deploy substrate (F1),
+// served out-of-process by candy/plugin-adb (deploy:android). ResolveTarget routes
+// `target: android` to externalDeployTarget; the host-side device-endpoint resolution
+// + apk-spec collection live in android_deploy_preresolve.go.

@@ -7,8 +7,9 @@ android-test-apps:
             install-app` probe verb. Carries the F-Droid client (org.fdroid.fdroid)
             fetched from APKPure (apk-pure, no credentials) for the x86_64
             emulator. A `target: android` deploy applies this layer's `apk:` list
-            onto the running device through AndroidDeployTarget (apkeep in-pod for
-            an image device, host apkeep + goadb for a remote endpoint). Pair with
+            onto the running device through the external deploy:android substrate
+            (candy/plugin-adb: apkeep in-pod for an image device, host apkeep + goadb
+            for a remote endpoint). Pair with
             the `android-apidemos` layer (committed-APK path) to exercise both
             apk-entry kinds.
 

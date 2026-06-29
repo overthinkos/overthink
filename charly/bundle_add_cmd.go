@@ -116,10 +116,10 @@ func (c *BundleAddCmd) Run() error {
 	}
 
 	// Connect + register every OUT-OF-TREE plugin candy the deploy composes BEFORE any
-	// target.Add/Emit dispatches — so a target whose deploy path drives an external verb
-	// (e.g. the android target → the adb plugin's install / wait-for-device device ops via
-	// invokeAdbPlugin), OR whose SUBSTRATE is an external deploy provider (the E3-deploy
-	// externalDeployTarget), resolves its grpcProvider out-of-process. The shared
+	// target.Add/Emit dispatches — so a target whose deploy path drives an external verb,
+	// OR whose SUBSTRATE is an external deploy provider (the E3-deploy externalDeployTarget,
+	// e.g. the now-externalized `android` substrate served by candy/plugin-adb's
+	// deploy:android provider), resolves its grpcProvider out-of-process. The shared
 	// loadDeployPlugins (deploy_add_shared.go) — also called by bundle del + charly
 	// update — adds THIS deploy's add_candy: candies (+ any CLI --add-candy) to the scan
 	// (the image-closure scan never reaches them), so a deploy that add_candy's an
@@ -416,11 +416,12 @@ func (c *BundleAddCmd) compileNodePlans(target, refStr, tag, path string, addCan
 	var base string
 	var candySet []string
 
-	if target == "local" || target == "vm" || target == "android" || isExternalDeploySubstrate(target) {
-		// Target-only deploys (local/vm/android + an EXTERNAL deploy substrate)
-		// compile no primary image plan — the workload is entirely add_candy:
-		// (for an external substrate, the candies whose plan views the host marshals
-		// to the out-of-process provider). base is the deploy path identity.
+	if target == "local" || target == "vm" || isExternalDeploySubstrate(target) {
+		// Target-only deploys (local/vm + an EXTERNAL deploy substrate, incl. the
+		// now-externalized android — covered by isExternalDeploySubstrate) compile no
+		// primary image plan — the workload is entirely add_candy: (for an external
+		// substrate, the candies whose plan views/specs the host marshals to the
+		// out-of-process provider). base is the deploy path identity.
 		base = path
 	} else {
 		ref, err := ResolveDeployRef(refStr, dir)

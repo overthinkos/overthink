@@ -3,46 +3,15 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
-// TestInstallWithRetry covers the PackageManager-init-race remedy: the install
-// retries until it succeeds, and returns the last error if it never does.
-func TestInstallWithRetry(t *testing.T) {
-	// Succeeds on the 3rd attempt (PM settles).
-	n := 0
-	out, err := installWithRetry(2*time.Second, time.Millisecond, func() (string, error) {
-		n++
-		if n < 3 {
-			return "", fmt.Errorf("Failed to parse APK file (attempt %d)", n)
-		}
-		return "Success", nil
-	})
-	if err != nil || out != "Success" {
-		t.Fatalf("installWithRetry should succeed once op does: out=%q err=%v (attempts=%d)", out, err, n)
-	}
-	if n != 3 {
-		t.Errorf("expected 3 attempts, got %d", n)
-	}
-
-	// Never succeeds → returns the last error after the deadline (not a panic/hang).
-	m := 0
-	_, err = installWithRetry(20*time.Millisecond, time.Millisecond, func() (string, error) {
-		m++
-		return "", fmt.Errorf("permanently broken")
-	})
-	if err == nil {
-		t.Error("installWithRetry should return the last error when the op never succeeds")
-	}
-	if m < 2 {
-		t.Errorf("expected multiple attempts before the deadline, got %d", m)
-	}
-}
+// The install-retry race remedy (installWithRetry) moved out of core with the deploy
+// ORCHESTRATION in the F1 android-substrate externalization; it now lives in
+// candy/plugin-adb (deploy.go), which drives the device install loop out-of-process.
 
 // TestCompileApkStep verifies the candy `apk:` package format compiles into a
 // single ApkInstallStep carrying every entry, and that an empty apk: list
@@ -75,13 +44,8 @@ func TestCompileApkStep(t *testing.T) {
 	if apk.CandyName != "test-apps" || apk.CandyDir != "/layers/test-apps" {
 		t.Errorf("CandyName/CandyDir = %q/%q", apk.CandyName, apk.CandyDir)
 	}
-	// PackageIDs excludes committed-APK entries (no id to uninstall by).
-	ids := apk.PackageIDs()
-	if len(ids) != 1 || ids[0] != "org.fdroid.fdroid" {
-		t.Errorf("PackageIDs = %v, want [org.fdroid.fdroid]", ids)
-	}
 	if apk.Reverse() != nil {
-		t.Errorf("ApkInstallStep.Reverse() should be nil (android teardown is not ledger-based)")
+		t.Errorf("ApkInstallStep.Reverse() should be nil (android teardown ops are dynamic, recorded from the deploy:android plugin reply)")
 	}
 }
 

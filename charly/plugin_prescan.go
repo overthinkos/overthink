@@ -77,14 +77,28 @@ func recognizedDeploySubstrate(word string) bool {
 }
 
 // isExternalDeploySubstrate reports whether target names an EXTERNAL (out-of-process)
-// deploy substrate — a recognized deploy word that is NOT one of the core in-process
-// substrate kinds (pod/vm/k8s/local/android/group, the resourceKindSet; a group's
-// Target is "" and never matches). Such a deploy applies in place on the host venue
-// via the E3b reverse channel, so the bed runner treats it like a kind:local deploy
-// (no image build, no config/start, bundle-del teardown).
+// deploy substrate served over the E3b reverse channel. Two cases:
+//
+//   - A NON-kind word (e.g. exampledeploy, not in resourceKindSet) is external iff
+//     recognized — a connected provider OR a pre-scanned declaration.
+//   - A CUE-kind substrate word (pod/vm/k8s/local/android/group ∈ resourceKindSet) is
+//     external iff it has been MIGRATED to an external plugin (externalizedDeploySubstrates,
+//     F1) AND a plugin declaring it is recognized. A still-builtin substrate kind
+//     (pod/vm/k8s/local/group today) is NOT external — its in-proc DeployTargetProvider
+//     serves it. (A group's Target is "" and never matches.)
+//
+// A true result makes the bed runner treat the deploy like a kind:local deploy (no
+// image build, no config/start, bundle-del teardown). This classification is keyed on
+// the ROOT deploy node: the android R10 bed is a POD root with NESTED target:android
+// children — its pod root is NOT externalized (returns false → normal image-build +
+// charly start), while each nested android child resolves to the external plugin
+// through its own per-child ResolveTarget dispatch, not this root classifier.
 func isExternalDeploySubstrate(target string) bool {
-	if target == "" || resourceKindSet[target] {
+	if target == "" {
 		return false
+	}
+	if resourceKindSet[target] {
+		return externalizedDeploySubstrates[target] && recognizedDeploySubstrate(target)
 	}
 	return recognizedDeploySubstrate(target)
 }

@@ -2,10 +2,10 @@ package main
 
 // unified_targets.go — The unified deploy-target abstraction.
 //
-// UnifiedDeployTarget/LifecycleTarget adapters for each of the five
-// legacy DeployTarget implementers (LocalDeployTarget, VmDeployTarget,
-// PodDeployTarget, K8sDeployTarget, AndroidDeployTarget), plus the
-// ResolveTarget dispatcher.
+// UnifiedDeployTarget/LifecycleTarget adapters for the in-proc DeployTarget
+// implementers (LocalDeployTarget, VmDeployTarget, PodDeployTarget,
+// K8sDeployTarget) plus externalDeployTarget (the out-of-process substrate
+// adapter — e.g. android), and the ResolveTarget dispatcher.
 //
 // Each adapter wraps an existing legacy target via struct embedding.
 // Methods on the adapter take precedence over inherited legacy methods
@@ -253,29 +253,13 @@ func (t *K8sUnifiedTarget) Executor() DeployExecutor { return nil }
 // Del / Test / Update for k8s also live in unified_targets_k8s.go.
 
 // ---------------------------------------------------------------------------
-// AndroidUnifiedTarget — adapter over AndroidDeployTarget.
-//
-// A target: android deploy installs its add_candy: candies' apk: packages
-// onto a kind:android DEVICE (an in-pod emulator or a remote adb endpoint).
-// Like K8s it only implements UnifiedDeployTarget (not LifecycleTarget) —
-// the device's lifecycle belongs to its pod deploy / the remote host, not
-// to the android deploy. Start/Stop/etc. are not meaningful here.
+// android is an EXTERNAL deploy substrate (F1) — `target: android` resolves to
+// externalDeployTarget over the E3b reverse channel, served out-of-process by
+// candy/plugin-adb (deploy:android). There is no in-proc android UnifiedDeployTarget;
+// the device-endpoint resolution + apk-spec collection the install needs are produced
+// host-side by the registered android deploy preresolver (android_deploy_preresolve.go)
+// and shipped in DeployVenue.Substrate.
 // ---------------------------------------------------------------------------
-
-type AndroidUnifiedTarget struct {
-	*AndroidDeployTarget
-
-	// NodeName is the charly.yml identifier.
-	NodeName string
-}
-
-func (t *AndroidUnifiedTarget) Name() string             { return t.NodeName }
-func (t *AndroidUnifiedTarget) Kind() string             { return "android" }
-func (t *AndroidUnifiedTarget) Executor() DeployExecutor { return nil }
-
-// Add / Del for the android target live in unified_targets_android.go —
-// Add resolves + readiness-gates the device then installs apks; Del
-// uninstalls them best-effort.
 
 // ---------------------------------------------------------------------------
 // ResolveTarget — the unified dispatcher.
@@ -334,7 +318,8 @@ var (
 	_ UnifiedDeployTarget = (*VmUnifiedTarget)(nil)
 	_ UnifiedDeployTarget = (*PodUnifiedTarget)(nil)
 	_ UnifiedDeployTarget = (*K8sUnifiedTarget)(nil)
-	_ UnifiedDeployTarget = (*AndroidUnifiedTarget)(nil)
+	// android has no in-proc UnifiedDeployTarget — it is an external substrate (F1),
+	// resolved to externalDeployTarget below.
 	_ UnifiedDeployTarget = (*externalDeployTarget)(nil)
 
 	_ LifecycleTarget = (*LocalUnifiedTarget)(nil)
@@ -344,6 +329,6 @@ var (
 	// disposable bed's fresh-rebuild R10 gate) can Rebuild it (re-apply via the
 	// reverse channel). Start/Stop/Logs/Shell error like the host target.
 	_ LifecycleTarget = (*externalDeployTarget)(nil)
-	// K8sUnifiedTarget + AndroidUnifiedTarget intentionally NOT in the
-	// LifecycleTarget set (cluster / device lifecycle is external).
+	// K8sUnifiedTarget intentionally NOT in the LifecycleTarget set (cluster
+	// lifecycle is external).
 )

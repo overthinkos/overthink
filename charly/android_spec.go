@@ -9,7 +9,8 @@ package main
 // deploy. The apps themselves are NOT a kind — `apk` is a package format
 // declared in candies like pac/aur/rpm/deb (see ApkPackageSpec + the
 // candy manifest's `apk:` field), and an android deploy applies candies (their
-// `apk:` packages) onto the device via AndroidDeployTarget.
+// `apk:` packages) onto the device via a `target: android` deploy — an EXTERNAL
+// deploy substrate (F1) served out-of-process by candy/plugin-adb (deploy:android).
 //
 // Build-vs-runtime split: the Android system image + API level are baked
 // into the referenced kind:box at BUILD time (sdkmanager in the

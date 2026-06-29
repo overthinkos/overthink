@@ -13,9 +13,11 @@ package main
 // ResolveTarget (unified_targets.go) → an UnifiedDeployTarget adapter. The
 // adapter CONSTRUCTS its live embedded legacy target (SSHExecutor + VmDeployTarget
 // for vm, Generator + PodDeployTarget for pod, LocalDeployTarget for local,
-// AndroidDeployTarget for android, K8sDeployTarget for k8s) from the DeployContext
-// it receives, then runs the kind-specific deploy. There is no per-kind dispatch
-// switch in the cmd files — the kind lives behind the adapter method.
+// K8sDeployTarget for k8s) from the DeployContext it receives, then runs the
+// kind-specific deploy. The `android` substrate is EXTERNAL (F1) — it resolves to
+// externalDeployTarget over the reverse channel, not an embedded legacy target.
+// There is no per-kind dispatch switch in the cmd files — the kind lives behind the
+// adapter method.
 
 import (
 	"context"

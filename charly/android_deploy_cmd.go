@@ -1,27 +1,45 @@
 package main
 
-// android_deploy_cmd.go — shared kind:android helpers (device + apk
-// resolution) used by AndroidUnifiedTarget.Add / .Del (unified_targets_apk.go).
+// android_deploy_cmd.go — HOST-SIDE kind:android device resolution.
 //
-// A `target: android` deploy installs its candies' `apk:` packages onto a
-// kind:android DEVICE (an in-pod emulator or a remote adb endpoint). The
-// apps ride in on the deploy's add_candy: set — the SAME overlay mechanism
-// the local/vm targets use — so the android Add receives the already-compiled
-// plans and hands their ApkInstallStep entries to AndroidDeployTarget.
-//
-// The device must already be reachable (the emulator pod started, or the
-// endpoint's adb server up). The android Add gates on sys.boot_completed
-// before installing — never a fixed sleep.
+// `target: android` is an EXTERNAL deploy substrate served out-of-process by
+// candy/plugin-adb (deploy:android — see android_deploy_preresolve.go). These
+// helpers resolve a kind:android DEVICE (an in-pod emulator or a remote adb
+// endpoint) to its adb endpoint host-side WITHOUT goadb (engine inspect only), and
+// are shared by the deploy:android preresolver AND the `charly status`
+// AndroidCollector (R3). The goadb wire talk + the app install/uninstall live in
+// candy/plugin-adb; this file does only device-endpoint resolution.
 
 import (
 	"fmt"
 	"strings"
-	"time"
 )
 
-// androidBootDeadline bounds the readiness gate for a freshly-started
-// emulator (cold boot of an API-36 Play-Store image is the worst case).
-const androidBootDeadline = 5 * time.Minute
+// AndroidDevice is a resolved install target — enough for the deploy:android
+// preresolver to address a specific Android device (an in-pod emulator or a remote
+// adb endpoint) over the wire, and for the status collector to derive presence. It
+// is a pure HOST-SIDE handle; the goadb wire talk lives in candy/plugin-adb, fed the
+// AdbAddr/Engine/Container/Serial/creds via spec.AndroidDeployVenue.
+type AndroidDevice struct {
+	Engine    string // container engine (podman|docker) — only for in-pod (Container != "")
+	Container string // emulator pod container name; "" => host/endpoint venue
+	AdbAddr   string // "host:port" of the device's adb server (resolved host-side via engine inspect)
+	Serial    string // adb serial (default emulator-5554)
+
+	// GoogleEmail / GoogleToken are the apkeep google-play credentials, resolved
+	// from the credential store. Used ONLY on the host venue (the in-pod venue reads
+	// them from the container env). Empty when unset.
+	GoogleEmail string
+	GoogleToken string
+}
+
+// serial returns the device serial, defaulting to the emulator serial.
+func (d AndroidDevice) serial() string {
+	if d.Serial != "" {
+		return d.Serial
+	}
+	return "emulator-5554"
+}
 
 // adbServerPort is the in-container adb-server port the emulator publishes
 // (container :5037 → the host's HOST_PORT:5037). The host resolves the mapped
@@ -30,10 +48,10 @@ const androidBootDeadline = 5 * time.Minute
 const adbServerPort = 5037
 
 // adbAddrForContainer resolves the "127.0.0.1:<host-port>" adb-server address for
-// an already-known running container (its published 5037). Relocated from the
-// deleted charly/adb.go (the adb → external-plugin dep-shed): it is host-side only
-// (engine inspect, no goadb), so it stays in core to build the AdbDeviceEnv the adb
-// plugin consumes. Used by resolveAndroidDevice for the in-pod / nested device.
+// an already-known running container (its published 5037). It is host-side only
+// (engine inspect, no goadb), so it stays in core to build the spec.AndroidDeployVenue
+// the deploy:android plugin consumes. Used by resolveAndroidDevice for the in-pod /
+// nested device.
 func adbAddrForContainer(engine, containerName string) (string, error) {
 	insp, err := InspectContainer(engine, containerName)
 	if err != nil {
@@ -84,44 +102,6 @@ func findAndroidSpec(dir, name string) *AndroidSpec {
 		return nil
 	}
 	return uf.Android[name]
-}
-
-// androidApkPackageIDs re-resolves the deploy's add_candy: candies and
-// collects every apk: package id (committed-APK entries have no id and are
-// skipped — they can't be uninstalled by id). Best-effort; returns nil on
-// resolution failure.
-func androidApkPackageIDs(node *BundleNode, dir string) []string {
-	cfg, err := LoadConfig(dir)
-	if err != nil {
-		return nil
-	}
-	layers, err := ScanAllCandyWithConfig(dir, cfg)
-	if err != nil {
-		return nil
-	}
-	var ids []string
-	for _, ref := range node.AddCandy {
-		lref, err := ResolveDeployRefAsCandy(ref, dir)
-		if err != nil {
-			continue
-		}
-		order, err := ResolveCandyOrder([]string{lref.Name}, layers, nil)
-		if err != nil {
-			continue
-		}
-		for _, name := range order {
-			l := layers[name]
-			if l == nil {
-				continue
-			}
-			for _, a := range l.Apk() {
-				if a.Package != "" {
-					ids = append(ids, a.Package)
-				}
-			}
-		}
-	}
-	return ids
 }
 
 // resolveAndroidDevice builds the AndroidDevice install handle from the spec
@@ -247,15 +227,4 @@ func resolveAndroidGoogleCreds(ga *AndroidGoogleAccount) (email, token string) {
 	email, _ = store.Get("charly/secret", emailKey)
 	token, _ = store.Get("charly/secret", tokenKey)
 	return email, token
-}
-
-// waitAndroidReady blocks until the device reports sys.boot_completed=1 or the
-// deadline elapses, via the adb plugin's `wait-for-device` method (which polls the
-// kernel boot flag — the check IS the readiness condition, never a fixed sleep). The
-// goadb poll itself runs out-of-core in candy/plugin-adb.
-func waitAndroidReady(dev AndroidDevice, timeout time.Duration) error {
-	if _, err := invokeAdbPlugin(&Op{Adb: "wait-for-device", Timeout: timeout.String()}, dev.toEnv()); err != nil {
-		return fmt.Errorf("android device (%s): %w", dev.AdbAddr, err)
-	}
-	return nil
 }

@@ -12,7 +12,7 @@ package main
 // Ledger shape (verified against live on-disk state):
 //
 //   deploys/<deploy-id>.json   DeployRecord — written by VmDeployTarget for
-//                              its guest-side ledger; the host LocalDeployTarget
+//                              its guest-side ledger; the host the local deploy target
 //                              records at CANDY granularity only, so this dir is
 //                              typically EMPTY for plain host deploys.
 //   candy/<candy>.json        CandyRecord — written by EVERY local apply
@@ -20,7 +20,7 @@ package main
 //                              of deploy-ids that pulled this candy in; this is
 //                              the populated, authoritative source.
 //
-// Because the host LocalDeployTarget never writes a DeployRecord, a collector
+// Because the host the local deploy target never writes a DeployRecord, a collector
 // that read deploys/ alone would emit ZERO rows for real host deploys. So this
 // collector takes the UNION: every explicit DeployRecord in deploys/, PLUS a
 // synthesized row per deploy-id that appears in some CandyRecord.deployed_by

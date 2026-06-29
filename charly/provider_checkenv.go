@@ -275,8 +275,8 @@ func (r *Runner) invokeVerbProvider(ctx context.Context, prov Provider, word str
 	op := &Operation{Reserved: word, Op: OpRun, Params: params, Env: env}
 	var out *Result
 	if ei, ok := prov.(executorInvoker); ok && r.Exec != nil {
-		// A check verb never drives the F3 build channel, so the build-engine context is
-		// the zero value (no project Config needed for RunCapture/GetFile).
+		// A check verb never drives the RunHostStep host-engine channel, so the host-engine
+		// context is the zero value (no project Config needed for RunCapture/GetFile).
 		out, err = ei.InvokeWithExecutor(ctx, op, r.Exec, buildEngineContext{})
 	} else {
 		out, err = prov.Invoke(ctx, op)

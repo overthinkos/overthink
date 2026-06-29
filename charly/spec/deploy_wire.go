@@ -145,7 +145,7 @@ type InstallPlanView struct {
 	// Steps is the serializable per-step IR — the ordered InstallStep sequence the
 	// in-core InstallPlan carries, projected onto the wire union below. An external
 	// deploy/step plugin walks it and EXECUTES each step on the venue (the out-of-proc
-	// twin of LocalDeployTarget's in-proc walk), pushing files via the ExecutorService
+	// twin of the local deploy target's in-proc walk), pushing files via the ExecutorService
 	// PutFile leg and running shell via RunSystem/RunUser.
 	Steps []InstallStepView `json:"steps,omitempty"`
 }
@@ -184,6 +184,20 @@ type InstallStepView struct {
 	Scope Scope  `json:"scope,omitempty"`
 	Venue int    `json:"venue,omitempty"`
 	Gate  string `json:"gate,omitempty"`
+
+	// ReverseOps is the step's host-computed teardown ops — step.Reverse() called ONCE
+	// host-side in stepToView. An OUT-OF-PROCESS plugin that EXECUTES a plugin-renderable
+	// step itself (via RunSystem/RunUser/PutFile) cannot call the package-main Reverse()
+	// method, so it ECHOES these into its DeployReply for record-and-replay teardown — the
+	// Reverse() rule stays ONCE in package main (R3); the plugin gains zero reverse logic.
+	// For the two deploy-time-stateful kinds (ServicePackaged.PriorEnabled,
+	// ShellHook.EnvFile), the host captures that state on the live venue BEFORE projecting
+	// the view, so the recorded ops are faithful. The HOST-ENGINE kinds (Builder /
+	// LocalPkgInstall / SystemPackages / act-Op / ExternalPlugin) ride RunHostStep, which
+	// returns their reverse ops separately, so the plugin ignores this field for the kinds
+	// it routes to RunHostStep. Like the Scope/Venue/Gate advisory fields, stepFromView
+	// IGNORES it (round-trip identity is unaffected).
+	ReverseOps []ReverseOp `json:"reverse_ops,omitempty"`
 
 	// Shared identity / provenance.
 	CandyName string `json:"candy_name,omitempty"` // every kind

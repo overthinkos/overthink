@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"time"
 )
 
 // repoChangeStepProvider is the `RepoChange` InstallStep IR provider, extracted into its
@@ -20,9 +19,6 @@ type repoChangeStepProvider struct{ builtinStepBase }
 func (repoChangeStepProvider) Reserved() string { return string(StepKindRepoChange) }
 func (repoChangeStepProvider) EmitOCI(t *OCITarget, step InstallStep, _ *InstallPlan) error {
 	return t.emitRepoChange(step.(*RepoChangeStep))
-}
-func (repoChangeStepProvider) EmitLocal(t *LocalDeployTarget, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
-	return t.execRepoChange(step.(*RepoChangeStep), plan, opts, rec, start)
 }
 func (repoChangeStepProvider) EmitVM(t *VmDeployTarget, ctx context.Context, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord) error {
 	if !opts.AllowRepoChanges {

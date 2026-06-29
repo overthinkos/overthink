@@ -21,10 +21,10 @@ import (
 type executorReverseServer struct {
 	pb.UnimplementedExecutorServiceServer
 	exec DeployExecutor
-	// build is the host BUILD-ENGINE context (project Config + dir) the F3 RunBuildStep
+	// build is the host BUILD-ENGINE context (project Config + dir) the RunHostStep host-engine
 	// leg needs to run a BuilderStep's host build (EnsureImagePresent + BuilderRun resolve
 	// a short / namespace-qualified builder image and fall back to a local `charly box
-	// build`). Zero value for a verb/kind/deploy Invoke that never drives RunBuildStep.
+	// build`). Zero value for a verb/kind/deploy Invoke that never drives RunHostStep.
 	build buildEngineContext
 }
 
@@ -83,26 +83,31 @@ func (s *executorReverseServer) GetFile(ctx context.Context, req *pb.GetFileRequ
 	return &pb.GetFileReply{Content: content, Error: errString(err)}, nil
 }
 
-// RunBuildStep is the F3 BUILD channel leg: an OUT-OF-PROCESS deploy/step plugin walking
-// an InstallPlan hits a BuilderStep (pixi/npm/cargo/aur) or LocalPkgInstallStep — the two
-// step kinds RunSystem/PutFile cannot execute because they need the HOST build ENGINE
-// (podman / makepkg / EnsureImagePresent), which STAYS in charly's core and cannot move
-// into the leaf plugin/kit package. The plugin dials back here; the host reconstructs the
-// concrete step from its serializable view, runs the EXISTING build machinery on the host
-// (via the venue-agnostic runVenueBuilderStep / execLocalPkgInstall the in-proc deploy
-// targets use — no second implementation, R3), installs the produced artifact onto the
-// venue via s.exec, and returns the step's recorded ReverseOps so the plugin folds them
-// into its DeployReply (record-and-replay teardown). The plugin owns the plan WALK
-// ordering; the host owns the build ENGINE. A build/install failure rides the reply's
-// error field (the RPC itself succeeds, like runReply).
-func (s *executorReverseServer) RunBuildStep(ctx context.Context, req *pb.BuildStepRequest) (*pb.BuildStepReply, error) {
+// RunHostStep is the HOST-ENGINE channel leg (the generalization of the former F3 build channel): an
+// OUT-OF-PROCESS deploy/step plugin walking an InstallPlan hits one of the five step kinds
+// it CANNOT execute itself because each needs in-core host machinery that cannot move into
+// the leaf plugin/kit package — BuilderStep (podman / BuilderRun / EnsureImagePresent),
+// LocalPkgInstallStep (makepkg + pacman/dnf/apt), SystemPackagesStep (the format's
+// phase.install.host template, rendered from the project DistroConfig), an act-verb OpStep
+// (a builtin ProvisionActor shell that needs the in-proc provider registry), or an
+// ExternalPluginStep (a verb served by ANOTHER out-of-process plugin, dispatched over a
+// NESTED reverse channel). The plugin dials back here; the host reconstructs the concrete
+// step from its serializable view, runs the EXISTING in-core machinery on the host (the
+// SAME helpers the in-proc deploy targets use — no second implementation, R3), applies the
+// effect onto the venue via s.exec, and returns the step's recorded ReverseOps so the
+// plugin folds them into its DeployReply (record-and-replay teardown). Every OTHER
+// (plugin-renderable) kind the plugin EXECUTES itself via the RunSystem/RunUser/PutFile
+// legs — reaching RunHostStep with one is a plugin-walk bug (loud error). The plugin owns
+// the plan WALK ordering; the host owns the host ENGINE. A host-engine/apply failure rides
+// the reply's error field (the RPC itself succeeds, like runReply).
+func (s *executorReverseServer) RunHostStep(ctx context.Context, req *pb.HostStepRequest) (*pb.HostStepReply, error) {
 	var view spec.InstallStepView
 	if err := json.Unmarshal(req.GetStepJson(), &view); err != nil {
-		return &pb.BuildStepReply{Error: fmt.Sprintf("decode step view: %v", err)}, nil
+		return &pb.HostStepReply{Error: fmt.Sprintf("decode step view: %v", err)}, nil
 	}
 	step, err := stepFromView(view)
 	if err != nil {
-		return &pb.BuildStepReply{Error: err.Error()}, nil
+		return &pb.HostStepReply{Error: err.Error()}, nil
 	}
 	opts := decodeReverseEmitOpts(req.GetOptsJson())
 
@@ -111,30 +116,74 @@ func (s *executorReverseServer) RunBuildStep(ctx context.Context, req *pb.BuildS
 	case *BuilderStep:
 		venueHome, herr := s.exec.ResolveHome(ctx, "")
 		if herr != nil {
-			return &pb.BuildStepReply{Error: fmt.Sprintf("resolve venue home: %v", herr)}, nil
+			return &pb.HostStepReply{Error: fmt.Sprintf("resolve venue home: %v", herr)}, nil
 		}
 		if rerr := runVenueBuilderStep(ctx, s.exec, venueHome, s.build, st, opts); rerr != nil {
-			return &pb.BuildStepReply{Error: rerr.Error()}, nil
+			return &pb.HostStepReply{Error: rerr.Error()}, nil
 		}
 		reverseOps = st.Reverse()
 	case *LocalPkgInstallStep:
 		supported := venueHasPkgManager(ctx, s.exec, st.LocalPkg, opts)
 		if rerr := execLocalPkgInstall(ctx, s.exec, st, supported, s.exec.Venue(), opts); rerr != nil {
-			return &pb.BuildStepReply{Error: rerr.Error()}, nil
+			return &pb.HostStepReply{Error: rerr.Error()}, nil
 		}
 		reverseOps = st.Reverse()
+	case *SystemPackagesStep:
+		// The format's phase.install.host template lives in the resolved DistroConfig the
+		// plugin cannot reach — render it host-side (the SAME renderHostPackageCommand the
+		// in-proc local deploy target/VmDeployTarget use, R3) and RunSystem on the venue.
+		cmd, rerr := renderHostPackageCommand(s.build.DistroCfg, st)
+		if rerr != nil {
+			return &pb.HostStepReply{Error: rerr.Error()}, nil
+		}
+		if cmd != "" { // empty = no host render for this phase (a clean no-op, not an error)
+			if rerr := s.exec.RunSystem(ctx, cmd, opts); rerr != nil {
+				return &pb.HostStepReply{Error: fmt.Sprintf("system packages %s: %v", st.Format, rerr)}, nil
+			}
+		}
+		reverseOps = st.Reverse()
+	case *OpStep:
+		// An act-verb OpStep (a `run: plugin: <verb>` whose builtin ProvisionActor shell
+		// needs the in-proc registry). resolveProvisionScript is the SAME Op→act-shell seam
+		// the in-proc deploy path (renderOpCommand) uses (R3). A NON-act OpStep
+		// (mkdir/copy/write/link/setcap/download/cmd/plugin:command) is plugin-renderable and
+		// must NOT arrive here — ok=false is a loud plugin-walk bug.
+		script, ok := resolveProvisionScript(st.Op, st.Distros)
+		if !ok {
+			return &pb.HostStepReply{Error: fmt.Sprintf("RunHostStep: OpStep verb is not act-capable (a plugin-renderable OpStep must be executed by the plugin via RunSystem/RunUser, not routed to RunHostStep)")}, nil
+		}
+		runErr := s.exec.RunUser(ctx, script, opts)
+		if st.Scope() == ScopeSystem {
+			runErr = s.exec.RunSystem(ctx, script, opts)
+		}
+		if runErr != nil {
+			return &pb.HostStepReply{Error: runErr.Error()}, nil
+		}
+		reverseOps = st.Reverse()
+	case *ExternalPluginStep:
+		// A verb served by ANOTHER out-of-process plugin — the host stands up a SECOND
+		// reverse channel on THAT plugin's broker (a nested reverse channel, delegating to
+		// the SAME venue executor s.exec) and Invokes its OpExecute. executeExternalPluginStep
+		// is the SAME seam the in-proc deploy targets use (R3); plan is nil (the venue-name
+		// derivation only seeds a deterministic scratch dir, which the verb's plugin_input
+		// already supplies). The nested plugin's teardown ReverseOps ride the reply.
+		reply, rerr := executeExternalPluginStep(ctx, st, nil, s.exec, s.build)
+		if rerr != nil {
+			return &pb.HostStepReply{Error: rerr.Error()}, nil
+		}
+		reverseOps = reply.ReverseOps
 	default:
-		// F3 is the BUILD channel: only the two build-engine-requiring step kinds route
-		// here. Every other kind the plugin EXECUTES itself via the RunSystem/RunUser/
-		// PutFile legs (F2) — reaching RunBuildStep with one is a plugin-walk bug.
-		return &pb.BuildStepReply{Error: fmt.Sprintf("RunBuildStep: step kind %q is not a build-engine step (only Builder / LocalPkgInstall route through the F3 build channel; execute every other kind via RunSystem/PutFile)", view.Kind)}, nil
+		// Only the five host-engine step kinds route here. Every other (plugin-renderable)
+		// kind the plugin EXECUTES itself via the RunSystem/RunUser/PutFile legs — reaching
+		// RunHostStep with one is a plugin-walk bug.
+		return &pb.HostStepReply{Error: fmt.Sprintf("RunHostStep: step kind %q is not a host-engine step (only Builder / LocalPkgInstall / SystemPackages / act-verb Op / ExternalPlugin route through the host-engine channel; execute every other kind via RunSystem/RunUser/PutFile)", view.Kind)}, nil
 	}
 
 	revJSON, err := json.Marshal(reverseOps)
 	if err != nil {
-		return &pb.BuildStepReply{Error: fmt.Sprintf("marshal reverse ops: %v", err)}, nil
+		return &pb.HostStepReply{Error: fmt.Sprintf("marshal reverse ops: %v", err)}, nil
 	}
-	return &pb.BuildStepReply{ReverseOpsJson: revJSON}, nil
+	return &pb.HostStepReply{ReverseOpsJson: revJSON}, nil
 }
 
 // errString is err.Error() or "" — the reverse-channel convention (the RPC succeeds; the

@@ -13,7 +13,7 @@ import (
 )
 
 // DeployExecutor abstracts shell execution + file placement for deploy
-// targets. LocalDeployTarget uses ShellExecutor (spawns bash directly);
+// targets. the local deploy target uses ShellExecutor (spawns bash directly);
 // VmDeployTarget uses SSHExecutor (wraps scripts as `ssh vm sudo bash -s`,
 // uses scp for file transfers). Nested topologies (container-in-vm,
 // vm-in-container, host-in-vm-in-container, etc.) use NestedExecutor,
@@ -107,7 +107,7 @@ type DeployExecutor interface {
 	// resolving an unprivileged user's home).
 	//
 	// Bundled as part of the 2026-05 shell:-schema cutover. Replaces the
-	// `LocalDeployTarget.HostHome = os.Getenv("HOME")` static-field
+	// `the local deploy target.HostHome = os.Getenv("HOME")` static-field
 	// initialization that mis-targeted SSH deploys: the operator's
 	// $HOME is not the remote user's home, so every shell-rc edit
 	// (env.d sourcing block included) was landing in the wrong place

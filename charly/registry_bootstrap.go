@@ -30,7 +30,7 @@ import (
 // box⊻layer into uf.Box/uf.Candy) — so it cannot use the schema-carrying RegisterBuiltinPluginUnit /
 // runPluginKind path the tier-1 kinds use. The per-class bijection gates below still prove every such
 // provider is registered (deploy/step have a gate, kinds have checkKindProviderBijection; builders have
-// none). See plugin_deploy_local.go, plugin_step_reboot.go, plugin_builder_cargo.go,
+// none). See candy/plugin-deploy-local, plugin_step_reboot.go, plugin_builder_cargo.go,
 // plugin_group.go, plugin_substrate.go, plugin_candy.go.
 var builtinProviderInstances = []Provider{
 	// verbs (ClassVerb) — none of the extracted verbs are here: each is a dedicated plugin

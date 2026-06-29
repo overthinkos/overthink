@@ -125,21 +125,23 @@ func (e *Executor) GetFile(ctx context.Context, path string, asRoot bool) ([]byt
 	return r.GetContent(), nil
 }
 
-// RunBuildStep is the F3 BUILD-channel leg: a deploy/step plugin walking an InstallPlan
-// that hits a BuilderStep (pixi/npm/cargo/aur) or LocalPkgInstallStep — the only two
-// step kinds RunSystem/PutFile cannot execute, because they need the HOST build ENGINE
-// (podman / makepkg / EnsureImagePresent) that stays in charly's core — drives this. The
-// host reconstructs the step, runs the existing build machinery on the host, installs the
-// produced artifact onto the venue, and returns the step's recorded reverse ops. The
-// plugin folds them into its DeployReply (sdk.BuildDeployReply) so `charly bundle del`
-// replays them (record-and-replay teardown). The plugin owns the plan WALK; the host owns
-// the build ENGINE. A non-nil error is a build/install FAILURE on the venue.
-func (e *Executor) RunBuildStep(ctx context.Context, step spec.InstallStepView, optsJSON []byte) ([]spec.ReverseOp, error) {
+// RunHostStep is the HOST-ENGINE channel leg (the generalization of the former F3 build channel): a
+// deploy/step plugin walking an InstallPlan that hits one of the five step kinds it cannot
+// execute itself — BuilderStep (podman / makepkg / EnsureImagePresent), LocalPkgInstallStep,
+// SystemPackagesStep (the DistroConfig package-template render), an act-verb OpStep (a
+// builtin ProvisionActor that needs the in-proc registry), or an ExternalPluginStep (a verb
+// served by ANOTHER out-of-process plugin, dispatched over a nested reverse channel) — drives
+// this. The host reconstructs the step, runs the existing in-core machinery on the host,
+// applies the effect onto the venue, and returns the step's recorded reverse ops. The plugin
+// folds them into its DeployReply (sdk.BuildDeployReply) so `charly bundle del` replays them
+// (record-and-replay teardown). The plugin owns the plan WALK; the host owns the host ENGINE.
+// A non-nil error is a host-engine/apply FAILURE on the venue.
+func (e *Executor) RunHostStep(ctx context.Context, step spec.InstallStepView, optsJSON []byte) ([]spec.ReverseOp, error) {
 	stepJSON, err := json.Marshal(step)
 	if err != nil {
 		return nil, err
 	}
-	r, callErr := e.client.RunBuildStep(ctx, &pb.BuildStepRequest{StepJson: stepJSON, OptsJson: optsJSON})
+	r, callErr := e.client.RunHostStep(ctx, &pb.HostStepRequest{StepJson: stepJSON, OptsJson: optsJSON})
 	if callErr != nil {
 		return nil, callErr
 	}

@@ -15,7 +15,7 @@ import (
 
 // SSHExecutor implements DeployExecutor against an SSH-reachable guest.
 // Used by VmDeployTarget to run the same InstallPlan IR that
-// LocalDeployTarget runs — but wrapped as `ssh <user>@<host> sudo
+// the local deploy target runs — but wrapped as `ssh <user>@<host> sudo
 // bash -s` instead of direct local bash, and scp for file transfers.
 //
 // The builder-container path (VenueContainerBuilder steps for
@@ -216,7 +216,7 @@ func (e *SSHExecutor) Kind() string { return "ssh" }
 // non-empty user goes through `getent passwd <user>` so callers can
 // resolve any user's home on the guest.
 //
-// This replaces the bug where `LocalDeployTarget.HostHome` was
+// This replaces the bug where `the local deploy target.HostHome` was
 // initialized from `os.Getenv("HOME")` — the operator's home, not the
 // guest user's. Any subsequent shell-rc edit (env.d sourcing block,
 // new shell:-schema managed-block, etc.) now lands in the right place.

@@ -3,6 +3,8 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 )
 
 // Tests for renderDownloadScript — the host-side download executor.
@@ -14,7 +16,7 @@ func TestDownloadScriptPlain(t *testing.T) {
 		Mode:     "0755",
 		Extract:  "none",
 	}
-	out := renderDownloadScript(task, nil)
+	out := kit.RenderDownloadScript(task, nil)
 	if !strings.Contains(out, "curl -fL --retry 3 -o /usr/local/bin/foo") {
 		t.Errorf("missing curl call: %s", out)
 	}
@@ -33,7 +35,7 @@ func TestDownloadScriptTarGzWithStrip(t *testing.T) {
 		Extract:         "tar.gz",
 		StripComponents: 1,
 	}
-	out := renderDownloadScript(task, nil)
+	out := kit.RenderDownloadScript(task, nil)
 	if !strings.Contains(out, "tar -xzf") {
 		t.Errorf("missing tar -xzf: %s", out)
 	}
@@ -54,7 +56,7 @@ func TestDownloadScriptAutoDetectExtract(t *testing.T) {
 	}
 	for url, sentinel := range tests {
 		task := &Op{Download: url, To: "/tmp/out"}
-		out := renderDownloadScript(task, nil)
+		out := kit.RenderDownloadScript(task, nil)
 		if !strings.Contains(out, sentinel) {
 			t.Errorf("URL %q: expected %q, got:\n%s", url, sentinel, out)
 		}
@@ -71,7 +73,7 @@ func TestDownloadScriptEnvVars(t *testing.T) {
 			"API_KEY":     "secret",
 		},
 	}
-	out := renderDownloadScript(task, nil)
+	out := kit.RenderDownloadScript(task, nil)
 	if !strings.Contains(out, "export API_KEY=secret") {
 		t.Errorf("missing API_KEY export: %s", out)
 	}
@@ -87,7 +89,7 @@ func TestDownloadScriptInclude(t *testing.T) {
 		Extract:        "tar.gz",
 		ExtractInclude: []string{"bin/foo", "share/doc/foo"},
 	}
-	out := renderDownloadScript(task, nil)
+	out := kit.RenderDownloadScript(task, nil)
 	if !strings.Contains(out, "bin/foo") {
 		t.Errorf("missing bin/foo path: %s", out)
 	}
@@ -98,7 +100,7 @@ func TestDownloadScriptInclude(t *testing.T) {
 
 func TestDownloadScriptTmpCleanup(t *testing.T) {
 	task := &Op{Download: "https://example.com/x.tar.gz", To: "/tmp/out"}
-	out := renderDownloadScript(task, nil)
+	out := kit.RenderDownloadScript(task, nil)
 	if !strings.Contains(out, `trap 'rm -rf "$ovtmp"' EXIT`) {
 		t.Errorf("missing tmp cleanup trap: %s", out)
 	}

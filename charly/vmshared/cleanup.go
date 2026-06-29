@@ -105,7 +105,7 @@ var sweepablePatterns = []string{
 	"charly-secrets-",            // secrets_gpg.go
 	"charly-libvirt-screenshot-", // libvirt_ops.go
 	"charly-cidata-",             // cloud_init_iso.go
-	"charly-aur-",                // deploy_target_local.go
+	"charly-aur-",                // deploy_host_helpers.go
 	"charly-priv-",               // privileged_runner.go
 }
 

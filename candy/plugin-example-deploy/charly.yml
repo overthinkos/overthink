@@ -16,7 +16,7 @@ plugin-example-deploy:
             (c) PUSH a file via the reverse-channel PutFile leg, and (d) — when the plan
             carries a BuilderStep or LocalPkgInstallStep, the two kinds the F2
             RunSystem/PutFile legs cannot execute because they need the HOST build ENGINE
-            — drive the F3 RunBuildStep reverse leg so the host builds the artifact and
+            — drive the RunHostStep host-engine reverse leg so the host builds the artifact and
             installs it onto the venue (proven by composing examplebuild-localpkg, whose
             charly-f3-witness package is built with makepkg + installed with pacman -U
             over the channel). It returns plugin-script reverse ops the host records in

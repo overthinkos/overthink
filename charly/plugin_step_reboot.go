@@ -2,9 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"time"
 )
 
 // rebootStepProvider is the `Reboot` InstallStep IR provider — skipped on OCI/local,
@@ -20,13 +17,6 @@ type rebootStepProvider struct{ builtinStepBase }
 func (rebootStepProvider) Reserved() string { return string(StepKindReboot) }
 func (rebootStepProvider) EmitOCI(_ *OCITarget, _ InstallStep, _ *InstallPlan) error {
 	return nil // no machine to reboot during an image build
-}
-func (rebootStepProvider) EmitLocal(t *LocalDeployTarget, step InstallStep, _ *InstallPlan, _ EmitOpts, rec *CandyRecord, start time.Time) error {
-	s := step.(*RebootStep)
-	fmt.Fprintf(os.Stderr, "warning: candy %q requests a reboot; skipping on target:local (reboot the host yourself if a new kernel module must load)\n", s.CandyName)
-	t.noteStep(rec, StepKindReboot, s.Scope(), VenueSkip,
-		fmt.Sprintf("candy=%s skipped: reboot not performed on target:local", s.CandyName), start)
-	return nil
 }
 func (rebootStepProvider) EmitVM(t *VmDeployTarget, ctx context.Context, step InstallStep, _ *InstallPlan, opts EmitOpts, _ *CandyRecord) error {
 	return t.execReboot(ctx, step.(*RebootStep), opts)

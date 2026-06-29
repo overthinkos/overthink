@@ -10,7 +10,7 @@ package main
 //
 //   - OCITarget        → deploy-mode pod-overlay (add_candy) Containerfile emission (charly bundle add <name>)
 //   - ContainerDeploy  → deploy-mode overlay + quadlet (charly bundle add <name>)
-//   - LocalDeployTarget → deploy-mode host execution (charly bundle add host)
+//   - the local deploy target → deploy-mode host execution (charly bundle add host)
 //
 // `charly box build`/`generate` do NOT consume this IR — they emit Containerfile
 // text directly via generate.go writeCandySteps→emitTasks. The IR is deploy-only.
@@ -22,7 +22,7 @@ package main
 //
 // This file defines only types and interfaces — no logic. The compiler that
 // turns the candy manifest → InstallPlan lives in install_build.go; the emitters live
-// in build_target_oci.go / deploy_target_pod.go / deploy_target_local.go.
+// in build_target_oci.go / deploy_target_pod.go / deploy_host_helpers.go.
 
 import (
 	"os"
@@ -36,7 +36,7 @@ import (
 // destinations) instead of expanding `~`/`$HOME` against a compile-time home.
 // Each DeployTarget resolves it at emit time via InstallPlan.ResolveHome with
 // the home of the ACTUAL destination — img.Home for the OCI/pod-overlay build,
-// the host home for LocalDeployTarget, the GUEST home for VmDeployTarget. This
+// the host home for the local deploy target, the GUEST home for VmDeployTarget. This
 // is what lets a `target: vm` deploy write env.d that points at the guest
 // user's home (/home/<guest-user>) rather than the host operator's home.
 // The `{{.Home}}` spelling matches the existing builder-artifact convention
@@ -215,7 +215,7 @@ type ReverseOp = spec.ReverseOp
 // ---------------------------------------------------------------------------
 
 // InstallStep is the common interface every concrete step implements.
-// Consumers (OCITarget / LocalDeployTarget) switch on Kind() to dispatch
+// Consumers (OCITarget / the local deploy target) switch on Kind() to dispatch
 // to the right rendering or execution path.
 type InstallStep interface {
 	// Kind returns the step's concrete type discriminator.
@@ -725,7 +725,7 @@ func (s *ShellHookStep) Reverse() []ReverseOp {
 //   - OCITarget: snippet bytes are content-address-staged and COPYed to
 //     a system-wide drop-in (/etc/profile.d/charly-<candy>.sh for bash/zsh/sh,
 //     /etc/fish/conf.d/charly-<candy>.fish for fish).
-//   - LocalDeployTarget / VmDeployTarget: managed-block append to the
+//   - the local deploy target / VmDeployTarget: managed-block append to the
 //     user's rc file (~/.bashrc, ~/.zshrc, ~/.profile) keyed by
 //     `# opencharly:begin <Marker>` fence; for fish, a per-candy drop-in at
 //     ~/.config/fish/conf.d/charly-<candy>.fish (no fence needed, file IS the
@@ -874,7 +874,7 @@ func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
 //
 // Like ApkInstallStep, the step is compiled REGARDLESS of target and each
 // DeployTarget decides whether to execute or skip:
-//   - LocalDeployTarget (Arch/CachyOS host) and VmDeployTarget (Arch/CachyOS
+//   - the local deploy target (Arch/CachyOS host) and VmDeployTarget (Arch/CachyOS
 //     guest) EXECUTE it (build on host → transfer → pacman -U on the target).
 //   - On a NON-pac deploy target the executor records a clean skip (a Fedora /
 //     Debian host has no pacman; the candy's own `cmd:` task curls the binary
@@ -933,7 +933,7 @@ func (s *LocalPkgInstallStep) Reverse() []ReverseOp { return nil }
 // Only targets that OWN a rebootable machine act on it: VmDeployTarget reboots
 // the guest over SSH and waits for it to return. OCITarget / PodDeployTarget have
 // no machine to reboot at build time and skip it (the external k8s substrate does
-// not consume the IR at all); LocalDeployTarget refuses to reboot the operator's
+// not consume the IR at all); the local deploy target refuses to reboot the operator's
 // host unattended (skip + warn). Mirrors the ApkInstallStep "only one target
 // executes" pattern.
 type RebootStep struct {
@@ -1062,7 +1062,7 @@ func (p *InstallPlan) wireView() spec.InstallPlanView {
 // ResolveHome substitutes the deferred HomeToken with a concrete home in
 // every home-bearing step field, in place. Each DeployTarget calls this once
 // at emit time with the home of its real destination: img.Home for the
-// OCI/pod-overlay build, the host home for LocalDeployTarget, the GUEST home
+// OCI/pod-overlay build, the host home for the local deploy target, the GUEST home
 // (SSH executor ResolveHome) for VmDeployTarget. Idempotent — fields without
 // the token are left untouched, so a second call is a no-op.
 //
@@ -1192,7 +1192,7 @@ type EmitOpts struct {
 // emitters satisfy. Taking a slice of plans (rather than a single plan)
 // lets whole-image deploys pass all per-candy plans at once and let the
 // target merge them — useful because OCITarget may want to emit a single
-// Containerfile for the image while LocalDeployTarget may batch steps
+// Containerfile for the image while the local deploy target may batch steps
 // across candies.
 type DeployTarget interface {
 	Name() string

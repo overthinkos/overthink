@@ -1,7 +1,7 @@
 package main
 
 // builder_venue.go — the VENUE-AGNOSTIC BuilderStep execution path, shared (R3) by
-// the VM deploy target AND the F3 build channel (the host-served RunBuildStep reverse
+// the VM deploy target AND the RunHostStep host-engine channel (the host-served reverse
 // leg). It builds a BuilderStep's artifacts on the HOST (where podman + the builder
 // images live) and installs them onto an arbitrary venue via the DeployExecutor:
 //
@@ -15,7 +15,7 @@ package main
 // buildDepPkgsOnHost → the aur dep-builder) STAYS the irreducible core (package main);
 // this function is the orchestration that drives it against a venue executor. It is the
 // SAME body the VM target used (extracted verbatim, behavior-preserving), so an
-// out-of-process deploy/step plugin driving a BuilderStep over the F3 reverse channel
+// out-of-process deploy/step plugin driving a BuilderStep over the RunHostStep reverse channel
 // runs the IDENTICAL machinery a built-in VM deploy runs — no second implementation.
 
 import (
@@ -26,16 +26,23 @@ import (
 	"path/filepath"
 )
 
-// buildEngineContext is the host BUILD-ENGINE context the F3 reverse channel carries so
-// the host-served RunBuildStep leg can run a BuilderStep's host build (EnsureImagePresent
-// + BuilderRun need the project Config + dir to resolve a short / namespace-qualified
-// builder image and to fall back to a local `charly box build`). The deploy lifecycle
-// supplies it (the DeployContext's Cfg + Dir for an external deploy substrate; the
-// Local/VM target's own Cfg + ProjectDir for an external `run: plugin:` step). The build
-// ENGINE itself is never carried across the process boundary — only this descriptor is.
+// buildEngineContext is the host-ENGINE context the reverse channel carries so the
+// host-served RunHostStep leg can run the in-core machinery a HOST-ENGINE step kind needs:
+// a BuilderStep's host build (EnsureImagePresent + BuilderRun need the project Config + dir
+// to resolve a short / namespace-qualified builder image and to fall back to a local
+// `charly box build`), and a SystemPackagesStep's host package-install render (the format's
+// phase.install.host template lives in the resolved DistroConfig). The deploy lifecycle
+// supplies it (the DeployContext's Cfg + Dir + DistroCfg for an external deploy substrate;
+// the Local/VM target's own Cfg + ProjectDir + DistroCfg for an external `run: plugin:`
+// step). The ENGINE itself is never carried across the process boundary — only this
+// descriptor is.
 type buildEngineContext struct {
 	Cfg        *Config
 	ProjectDir string
+	// DistroCfg is the resolved distro: vocabulary the SystemPackagesStep host render
+	// (renderHostPackageCommand) needs to look up the format's phase.install.host
+	// template. Zero for an Invoke whose plan has no SystemPackagesStep.
+	DistroCfg *DistroConfig
 }
 
 // builderStepImage resolves the builder image ref for a BuilderStep:

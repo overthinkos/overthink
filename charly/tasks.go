@@ -174,7 +174,7 @@ func stageInlineContent(buildDir, contextRelPrefix, candyName, content string) (
 // TARGETARCH (set via ENV in emitVarsEnv); the host/vm-deploy paths
 // have no such mechanism, so this helper translates uname → BuildKit
 // inline. Used by renderDownloadScript and renderTaskCommand on
-// LocalDeployTarget. Lines end in \n; suitable for direct
+// the local deploy target. Lines end in \n; suitable for direct
 // strings.Builder.WriteString.
 func buildArchExports() string {
 	return "BUILD_ARCH=$(uname -m)\n" +

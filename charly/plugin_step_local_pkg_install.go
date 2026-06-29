@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"time"
 )
 
 // localPkgInstallStepProvider is the `LocalPkgInstall` InstallStep IR provider, extracted
@@ -18,9 +17,6 @@ type localPkgInstallStepProvider struct{ builtinStepBase }
 func (localPkgInstallStepProvider) Reserved() string { return string(StepKindLocalPkgInstall) }
 func (localPkgInstallStepProvider) EmitOCI(t *OCITarget, step InstallStep, _ *InstallPlan) error {
 	return t.emitLocalPkgInstall(step.(*LocalPkgInstallStep))
-}
-func (localPkgInstallStepProvider) EmitLocal(t *LocalDeployTarget, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
-	return t.execLocalPkg(step.(*LocalPkgInstallStep), plan, opts, rec, start)
 }
 func (localPkgInstallStepProvider) EmitVM(t *VmDeployTarget, ctx context.Context, step InstallStep, _ *InstallPlan, opts EmitOpts, _ *CandyRecord) error {
 	s := step.(*LocalPkgInstallStep)

@@ -30,6 +30,14 @@ func stepToView(step InstallStep) spec.InstallStepView {
 		Scope: step.Scope(),
 		Venue: int(step.Venue()),
 		Gate:  string(step.RequiresGate()),
+		// The step's teardown ops, computed ONCE host-side (Fork A): a plugin that
+		// executes a plugin-renderable step itself cannot call the package-main Reverse()
+		// method, so it ECHOES these. For the deploy-time-stateful kinds the caller
+		// captures the venue state (PriorEnabled / EnvFile) on the live venue BEFORE
+		// projecting the view, so these ops are faithful. Advisory for the HOST-ENGINE
+		// kinds (RunHostStep returns their reverse ops separately). Ignored by
+		// stepFromView — never affects round-trip identity.
+		ReverseOps: step.Reverse(),
 	}
 	switch s := step.(type) {
 	case *SystemPackagesStep:

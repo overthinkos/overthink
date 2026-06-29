@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 )
 
 // apkInstallStepProvider is the `ApkInstall` InstallStep IR provider, extracted into its
@@ -25,12 +24,6 @@ func (apkInstallStepProvider) Reserved() string { return string(StepKindApkInsta
 func (apkInstallStepProvider) EmitOCI(_ *OCITarget, _ InstallStep, _ *InstallPlan) error {
 	// No device at image-build time; the android deploy preresolver reads this step
 	// host-side at deploy and the deploy:android plugin installs the apps.
-	return nil
-}
-func (apkInstallStepProvider) EmitLocal(t *LocalDeployTarget, step InstallStep, _ *InstallPlan, _ EmitOpts, rec *CandyRecord, start time.Time) error {
-	s := step.(*ApkInstallStep)
-	t.noteStep(rec, StepKindApkInstall, s.Scope(), VenueSkip,
-		fmt.Sprintf("candy=%s skipped: apk installs only on a kind:android device", s.CandyName), start)
 	return nil
 }
 func (apkInstallStepProvider) EmitVM(_ *VmDeployTarget, _ context.Context, step InstallStep, _ *InstallPlan, _ EmitOpts, _ *CandyRecord) error {

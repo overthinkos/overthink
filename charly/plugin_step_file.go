@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"time"
 )
 
 // fileStepProvider is the `File` InstallStep IR provider, extracted into its OWN file as
@@ -18,9 +17,6 @@ type fileStepProvider struct{ builtinStepBase }
 func (fileStepProvider) Reserved() string { return string(StepKindFile) }
 func (fileStepProvider) EmitOCI(t *OCITarget, step InstallStep, _ *InstallPlan) error {
 	return t.emitFile(step.(*FileStep))
-}
-func (fileStepProvider) EmitLocal(t *LocalDeployTarget, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
-	return t.execFile(step.(*FileStep), plan, opts, rec, start)
 }
 func (fileStepProvider) EmitVM(t *VmDeployTarget, ctx context.Context, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord) error {
 	s := step.(*FileStep)

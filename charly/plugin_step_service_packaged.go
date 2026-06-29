@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"time"
 )
 
 // servicePackagedStepProvider is the `ServicePackaged` InstallStep IR provider, extracted
@@ -19,9 +18,6 @@ type servicePackagedStepProvider struct{ builtinStepBase }
 func (servicePackagedStepProvider) Reserved() string { return string(StepKindServicePackaged) }
 func (servicePackagedStepProvider) EmitOCI(t *OCITarget, step InstallStep, _ *InstallPlan) error {
 	return t.emitServicePackaged(step.(*ServicePackagedStep))
-}
-func (servicePackagedStepProvider) EmitLocal(t *LocalDeployTarget, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
-	return t.execServicePackaged(step.(*ServicePackagedStep), plan, opts, rec, start)
 }
 func (servicePackagedStepProvider) EmitVM(t *VmDeployTarget, ctx context.Context, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord) error {
 	if !opts.WithServices {

@@ -103,7 +103,7 @@ func TestExternalDeployPlugin_ReverseChannelEndToEnd(t *testing.T) {
 		t.Fatalf("Add did not write the deploy record: rec=%v err=%v", rec, err)
 	}
 	if rec.Target != "exampledeploy" {
-		t.Fatalf("deploy record target = %q, want %q (must NOT be \"host\" — would collide with LocalUnifiedTarget.Del's scan)", rec.Target, "exampledeploy")
+		t.Fatalf("deploy record target = %q, want %q (must NOT be \"host\" — would collide with the local deploy target.Del's scan)", rec.Target, "exampledeploy")
 	}
 	crec, err := ReadCandyRecord(paths, "plugin-example-deploy")
 	if err != nil || crec == nil {

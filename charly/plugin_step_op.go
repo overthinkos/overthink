@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"time"
 )
 
 // opStepProvider is the `Op` (task) InstallStep IR provider, extracted into its OWN file
@@ -18,9 +17,6 @@ type opStepProvider struct{ builtinStepBase }
 func (opStepProvider) Reserved() string { return string(StepKindOp) }
 func (opStepProvider) EmitOCI(t *OCITarget, step InstallStep, _ *InstallPlan) error {
 	return t.emitOp(step.(*OpStep))
-}
-func (opStepProvider) EmitLocal(t *LocalDeployTarget, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
-	return t.execOp(step.(*OpStep), plan, opts, rec, start)
 }
 func (opStepProvider) EmitVM(t *VmDeployTarget, ctx context.Context, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord) error {
 	s := step.(*OpStep)

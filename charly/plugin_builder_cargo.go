@@ -26,5 +26,5 @@ func (cargoBuilder) Reverse(s *BuilderStep) []ReverseOp {
 }
 func (cargoBuilder) CollectContext(_ *Candy, _ *ResolvedBox) map[string]any { return nil }
 
-// Self-register at package-var init (before any init()), mirroring localTarget.
+// Self-register at package-var init (before any init()), mirroring the local deploy provider.
 var _ = registerDedicatedBuiltin(cargoBuilder{})

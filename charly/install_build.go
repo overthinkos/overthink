@@ -146,7 +146,7 @@ func BuildDeployPlan(layer *Candy, img *ResolvedBox, hostCtx HostContext) (*Inst
 	// 7. Reboot: the candy manifest `reboot: true`. Emitted LAST so the reboot
 	// follows every install step of this candy. Only VmDeployTarget acts
 	// on it (reboots the guest + waits); OCI/pod/k8s skip it (no machine
-	// at build time); LocalDeployTarget skips + warns (never reboots the
+	// at build time); the local deploy target skips + warns (never reboots the
 	// operator host unattended). See RebootStep.
 	if layer.reboot {
 		plan.Steps = append(plan.Steps, &RebootStep{CandyName: layer.Name})
@@ -288,7 +288,7 @@ func primaryDistroTag(img *ResolvedBox, hostCtx HostContext) string {
 // `{{.Home}}` token rather than expanded against img.Home. Each DeployTarget
 // resolves the token at emit time against the home of the actual deploy
 // destination — img.Home for the OCI/pod-overlay build, the host home for
-// LocalDeployTarget, and the GUEST home (via the SSH executor's ResolveHome)
+// the local deploy target, and the GUEST home (via the SSH executor's ResolveHome)
 // for VmDeployTarget. Baking img.Home here was wrong for VM deploys: the
 // synthetic plan's Home was the host operator's home, so env.d on the guest
 // pointed at /home/<operator> instead of /home/<guest-user>. See
@@ -934,7 +934,7 @@ func pixiDefaultEnvName(_ *Candy) string {
 // need a runtime lazy-render step. This consolidates what used to live
 // in three different places (the deleted VmDeployTarget lazy fallback,
 // the OCI build's per-entry routing, and the legacy nothing-rendered
-// path on LocalDeployTarget) into ONE compile-time filter.
+// path on the local deploy target) into ONE compile-time filter.
 func compileServiceSteps(layer *Candy, img *ResolvedBox, hostCtx HostContext) []InstallStep {
 	var out []InstallStep
 	initIsSystemd := hostCtx.Target == "host" || hostCtx.Target == "vm"

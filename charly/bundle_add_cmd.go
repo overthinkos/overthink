@@ -76,7 +76,7 @@ type BundleDelCmd struct {
 	DryRun          bool `long:"dry-run" help:"Print the teardown plan without executing"`
 
 	// Runner routes reverse ops to the right privilege context. It is
-	// carried onto the resolved LocalUnifiedTarget by Run before Del. Nil
+	// carried onto the resolved the local deploy target by Run before Del. Nil
 	// falls back to the local-exec path in reverse_ops.go. Not exposed as
 	// a Kong flag.
 	Runner ReverseRunner `kong:"-"`
@@ -585,10 +585,13 @@ func (c *BundleDelCmd) Run() error {
 		return err
 	}
 	switch tt := utgt.(type) {
-	case *LocalUnifiedTarget:
+	case *externalDeployTarget:
+		// target:local (and any future externalized substrate) teardown honors the
+		// --keep-repo-changes / --keep-services gates + the test ReverseRunner. The
+		// external Del replays the recorded ReverseOps via teardownHostDeploy with these.
 		tt.KeepRepoChanges = c.KeepRepoChanges
 		tt.KeepServices = c.KeepServices
-		tt.RevRunner = c.Runner
+		tt.revRunner = c.Runner
 	case *VmUnifiedTarget:
 		tt.KeepRepoChanges = c.KeepRepoChanges
 		tt.KeepServices = c.KeepServices

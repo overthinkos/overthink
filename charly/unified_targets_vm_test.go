@@ -145,7 +145,7 @@ func captureVmStdout(t *testing.T, fn func()) string {
 // TestVmUnifiedTarget_Rebuild_DryRun verifies the dry-run path emits the
 // expected ordered sequence — and, critically, that it ENDS in
 // `charly bundle add <node>` so the deploy node's candies are re-applied to the
-// fresh guest, exactly like LocalUnifiedTarget/PodUnifiedTarget.Rebuild. A
+// fresh guest, exactly like the local deploy target/PodUnifiedTarget.Rebuild. A
 // VM Rebuild that recreates the domain but skips the candy re-apply (the #42
 // bug) would not emit this line, and this test would fail.
 func TestVmUnifiedTarget_Rebuild_DryRun(t *testing.T) {
@@ -192,7 +192,7 @@ func TestVmUnifiedTarget_Rebuild_DryRun(t *testing.T) {
 // TestVmUnifiedTarget_Rebuild_ReappliesCandies exercises the real (non-dry-run)
 // Rebuild body through the stubbable runCharlySubcommand seam and asserts the
 // recorded subcommand sequence ends in `deploy add <node>` — the shared
-// candy-apply primitive LocalUnifiedTarget.Rebuild and PodUnifiedTarget.Rebuild
+// candy-apply primitive the local deploy target.Rebuild and PodUnifiedTarget.Rebuild
 // also call (R3). The #42 bug (domain-recreate only) would record no such call.
 func TestVmUnifiedTarget_Rebuild_ReappliesCandies(t *testing.T) {
 	var calls [][]string

@@ -4,11 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/overthinkos/overthink/charly/spec"
 	"os"
 	"strings"
-	"time"
-
-	"github.com/overthinkos/overthink/charly/spec"
 )
 
 // plugin_step_external.go — the StepProvider for StepKindExternalPlugin: the
@@ -59,33 +57,13 @@ func (externalPluginStepProvider) EmitOCI(t *OCITarget, step InstallStep, _ *Ins
 	return nil
 }
 
-// EmitLocal is the host DEPLOY venue: Invoke(OpExecute) WITH the host executor on the
-// reverse channel, then record the plugin's returned teardown ops into the CandyRecord
-// (recordCandy persists them to the ledger; del replays them). DryRun does NOT Invoke
-// — Invoke IS the apply (the plugin runs effects on the venue), and the reverse server
-// runs them with the EmitOpts the plugin sends (nil → zero opts), so a dry-run must
-// short-circuit BEFORE the wire call (the externalDeployTarget pattern).
-func (externalPluginStepProvider) EmitLocal(t *LocalDeployTarget, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
-	s := step.(*ExternalPluginStep)
-	if opts.DryRun {
-		fmt.Printf("[dry-run] external plugin step %s (verb=%s): would execute via the E3b reverse channel\n",
-			s.CandyName, s.Op.Plugin)
-		return nil
-	}
-	reply, err := executeExternalPluginStep(opts.ContextOrDefault(), s, plan, t.exec(),
-		buildEngineContext{Cfg: t.Cfg, ProjectDir: t.ProjectDir})
-	if err != nil {
-		return err
-	}
-	rec.ReverseOps = append(rec.ReverseOps, reply.ReverseOps...)
-	t.noteStep(rec, StepKindExternalPlugin, s.Scope(), s.Venue(),
-		fmt.Sprintf("plugin: %s (candy=%s)", s.Op.Plugin, s.CandyName), start)
-	return nil
-}
-
-// EmitVM is the guest DEPLOY venue: the SAME Invoke(OpExecute) over the reverse channel
-// as EmitLocal, but the executor is the SSHExecutor, so the plugin's RunSystem/RunUser
-// run inside the guest. Records the returned ReverseOps into the guest-side ledger.
+// EmitVM is the guest DEPLOY venue: Invoke(OpExecute) over the reverse channel WITH the
+// SSHExecutor, so the plugin's RunSystem/RunUser run inside the guest. DryRun does NOT
+// Invoke — Invoke IS the apply — so a dry-run short-circuits BEFORE the wire call. Records
+// the returned ReverseOps into the guest-side ledger. (The host/local DEPLOY venue is no
+// longer an in-proc method: target:local externalized into candy/plugin-deploy-local, whose
+// kit.WalkPlans routes an ExternalPluginStep through the host's RunHostStep reverse leg —
+// the SAME executeExternalPluginStep seam below, R3.)
 func (externalPluginStepProvider) EmitVM(t *VmDeployTarget, ctx context.Context, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord) error {
 	s := step.(*ExternalPluginStep)
 	if opts.DryRun {

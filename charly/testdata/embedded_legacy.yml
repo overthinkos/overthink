@@ -1002,7 +1002,7 @@ fedora:
                     download_template: "https://github.com/overthinkos/overthink/releases/latest/download/opencharly-${ARCH}.rpm"
                     probe: command -v dnf
                 # Host-venue cells consumed by target:local / target:vm deploys
-                # (LocalDeployTarget / VmDeployTarget). install.host is the
+                # (the local deploy target / VmDeployTarget). install.host is the
                 # plain-shell analog of the install.container Containerfile RUN;
                 # uninstall_template is the deploy-teardown package removal
                 # (reverse_ops.go). dnf auto-refreshes metadata (metadata_expire)

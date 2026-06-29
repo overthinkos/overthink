@@ -415,7 +415,7 @@ func TestShQuoteEnv(t *testing.T) {
 }
 
 // TestBuildBuilderRunArgsRunAsRoot asserts the RunAsRoot path emits
-// `--user 0:0`. LocalDeployTarget.execBuilder always sets RunAsRoot=true
+// `--user 0:0`. the local deploy target.execBuilder always sets RunAsRoot=true
 // because rootless podman maps in-container uid 0 to the operator's host
 // uid; bind-mounts of $HOME/.cargo / $HOME/.npm-global / etc. are then
 // writable. Without this flag the in-container user is mapped to a

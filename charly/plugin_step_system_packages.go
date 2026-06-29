@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"time"
 )
 
 // systemPackagesStepProvider is the `SystemPackages` InstallStep IR provider, extracted
@@ -18,9 +17,6 @@ type systemPackagesStepProvider struct{ builtinStepBase }
 func (systemPackagesStepProvider) Reserved() string { return string(StepKindSystemPackages) }
 func (systemPackagesStepProvider) EmitOCI(t *OCITarget, step InstallStep, _ *InstallPlan) error {
 	return t.emitSystemPackages(step.(*SystemPackagesStep))
-}
-func (systemPackagesStepProvider) EmitLocal(t *LocalDeployTarget, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
-	return t.execSystemPackages(step.(*SystemPackagesStep), plan, opts, rec, start)
 }
 func (systemPackagesStepProvider) EmitVM(t *VmDeployTarget, ctx context.Context, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord) error {
 	s := step.(*SystemPackagesStep)

@@ -283,7 +283,7 @@ func buildDepPkgsOnHost(_ context.Context, lp *LocalPkgDef, bDef *BuilderDef, bu
 		// Cfg + ProjectDir let BuilderRun's EnsureImagePresent run the
 		// namespace-aware ResolveBox, so a namespace-qualified builder ref
 		// (e.g. the cachyos project's aur builder `charly.arch-builder`) resolves to
-		// its concrete image — matching the aur-CANDY path (deploy_target_local.go).
+		// its concrete image — matching the aur-CANDY path (deploy_host_helpers.go).
 		Cfg:        cfg,
 		ProjectDir: projectDir,
 	})
@@ -307,7 +307,7 @@ func buildDepPkgsOnHost(_ context.Context, lp *LocalPkgDef, bDef *BuilderDef, bu
 // installs them by rendering LocalPkgDef.InstallTemplate. It is venue-agnostic
 // via the DeployExecutor: PutFile is a local filesystem copy for the host
 // ShellExecutor and an scp for the SSHExecutor, and RunSystem is local sudo vs
-// `ssh sudo`. One implementation serves BOTH the localpkg step (LocalDeployTarget
+// `ssh sudo`. One implementation serves BOTH the localpkg step (the local deploy target
 // / VmDeployTarget) AND the builder's install leg (BuilderStep.LocalPkg), so
 // "ship packages to a venue and install them" has a single config-driven home
 // (R3).
@@ -387,7 +387,7 @@ func venueHasPkgManager(ctx context.Context, exec DeployExecutor, lp *LocalPkgDe
 	return strings.TrimSpace(stdout) == "yes"
 }
 
-// execLocalPkgInstall is the shared body both LocalDeployTarget and
+// execLocalPkgInstall is the shared body both the local deploy target and
 // VmDeployTarget call for a LocalPkgInstallStep: resolve the package source dir,
 // build it on the host, then transfer+install onto the target venue. `supported`
 // gates whether the install leg runs (the venue's package manager must match the

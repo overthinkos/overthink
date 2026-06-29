@@ -1,10 +1,10 @@
 package main
 
-// reverse_ops.go — execute ReverseOp slices recorded by LocalDeployTarget
+// reverse_ops.go — execute ReverseOp slices recorded by the local deploy target
 // at install time, turning them into concrete teardown commands.
 //
 // Each InstallStep's Reverse() method records a list of ReverseOps
-// when the step runs (see deploy_target_local.go). `charly bundle del`
+// when the step runs (see deploy_host_helpers.go). `charly bundle del`
 // reads those ops from the candy ledger and hands them here for
 // execution. The ops are opaque to the ledger — only the teardown
 // logic in this file understands each Kind.
@@ -146,7 +146,7 @@ func reversePackageRemove(op ReverseOp, re ReverseExecutor) error {
 
 // fillReverseUninstallCmds renders the host-venue uninstall command for every
 // ReverseOpPackageRemove op in the slice from the format's uninstall_template
-// (the embedded build vocabulary, charly/charly.yml), in place. Called at install/record time by LocalDeployTarget and
+// (the embedded build vocabulary, charly/charly.yml), in place. Called at install/record time by the local deploy target and
 // VmDeployTarget (R3 — one shared filler) when the DistroConfig is in hand, so
 // the persisted ledger op carries the exact removal command the teardown will
 // run. Ops whose format declares no uninstall_template, or whose format isn't in
@@ -364,7 +364,7 @@ func reverseRestoreEnabled(op ReverseOp, re ReverseExecutor) error {
 //nolint:unparam // uniform reverse-op handler signature (ReverseOp, ReverseExecutor); params unused by this completeness stub
 func reverseRemoveManaged(op ReverseOp, re ReverseExecutor) error {
 	// Managed-block removal happens at the session level, not per-op.
-	// This kind is present for completeness but LocalUnifiedTarget.Del
+	// This kind is present for completeness but the local deploy target.Del
 	// calls RemoveManagedBlock directly when the last deploy is torn
 	// down.
 	return nil

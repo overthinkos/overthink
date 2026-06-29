@@ -44,10 +44,15 @@ var deployTargetWords = []string{"local", "vm", "pod", "k8s", "android"}
 // listed here) consult it — so the two gates can never disagree. GENERAL for all
 // 5: pod/vm/local join this set as they migrate; the ONLY substrate-specific piece
 // is each one's registered preresolver body (android_deploy_preresolve.go /
-// k8s_deploy_preresolve.go), never a branch in the generic dispatch.
+// k8s_deploy_preresolve.go), never a branch in the generic dispatch. local needs NO
+// preresolver — its plan walk + executor selection are the generic externalDeployTarget
+// path (the executor is Shell for host:local, SSH for host:user@machine — see
+// ResolveTarget), so the plan VIEWS the host marshals already carry everything the
+// candy/plugin-deploy-local plugin needs.
 var externalizedDeploySubstrates = map[string]bool{
 	"android": true,
 	"k8s":     true,
+	"local":   true,
 }
 
 // checkDeployProviderBijection: every canonical deploy-target word is a valid kind

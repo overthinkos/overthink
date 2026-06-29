@@ -141,9 +141,9 @@ func (g *grpcProvider) Invoke(ctx context.Context, op *Operation) (*Result, erro
 // stands up the host's ExecutorService (delegating to exec) on this connection's
 // go-plugin broker, passes the broker id in the request, and the out-of-process plugin
 // dials back to run shell/SSH ops on exec's real venue. The reverse server lives for
-// the duration of the (synchronous) Invoke. `build` is the host build-engine context the
-// F3 RunBuildStep leg needs (the project Config + dir for a BuilderStep's host build);
-// the zero value is fine for a deploy/step with no builder/localpkg step to drive. Falls
+// the duration of the (synchronous) Invoke. `build` is the host-engine context the
+// RunHostStep leg needs (the project Config + dir + DistroCfg for a Builder/SystemPackages
+// host step); the zero value is fine for a deploy/step with no host-engine step to drive. Falls
 // back to a plain Invoke (broker id 0) when the connection has no broker (an in-proc
 // transport) or no executor is given.
 func (g *grpcProvider) InvokeWithExecutor(ctx context.Context, op *Operation, exec DeployExecutor, build buildEngineContext) (*Result, error) {

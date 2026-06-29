@@ -15,11 +15,19 @@ type recordingExec struct {
 	runCaptureReturn string
 	putDest          string
 	putContent       string
+	sysScripts       []string // RunSystem scripts (host-engine SystemPackages / act-OpStep arms)
+	userScripts      []string // RunUser scripts
 }
 
-func (e *recordingExec) Venue() string                                     { return "rec://test" }
-func (e *recordingExec) RunSystem(context.Context, string, EmitOpts) error { return nil }
-func (e *recordingExec) RunUser(context.Context, string, EmitOpts) error   { return nil }
+func (e *recordingExec) Venue() string { return "rec://test" }
+func (e *recordingExec) RunSystem(_ context.Context, script string, _ EmitOpts) error {
+	e.sysScripts = append(e.sysScripts, script)
+	return nil
+}
+func (e *recordingExec) RunUser(_ context.Context, script string, _ EmitOpts) error {
+	e.userScripts = append(e.userScripts, script)
+	return nil
+}
 func (e *recordingExec) RunBuilder(context.Context, BuilderRunOpts) ([]byte, error) {
 	return nil, nil
 }

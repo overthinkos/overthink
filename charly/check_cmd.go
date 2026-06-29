@@ -929,7 +929,7 @@ func (c *CheckLiveCmd) runLocalCheck() error {
 // kind:local template `check:` (base) merged with the deploy entry `check:`
 // (extends/overrides) and the per-host charly.yml overlay — and runs them on
 // `exec`. Shared by `charly check live <local>` (runLocalCheck) and
-// `charly bundle add <local> --verify` (LocalDeployTarget) so the two surfaces
+// `charly bundle add <local> --verify` (the local deploy target) so the two surfaces
 // source + run probes identically (R3). Host-context vars only (no
 // HOST_PORT:<N> / CONTAINER_IP). Returns the failure count.
 func checkLocalDeployScope(dir string, node *BundleNode, image, instance, _ string, _ []string, exec DeployExecutor, format string) (int, error) { //nolint:unparam // error return kept for symmetry with sibling deploy-scope checks

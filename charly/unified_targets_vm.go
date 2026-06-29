@@ -148,7 +148,7 @@ func (e *vmReverseExec) reverseKeepServices() bool    { return e.KeepServices }
 func (e *vmReverseExec) reverseRunner() ReverseRunner { return e.Runner }
 
 // Test runs deploy-scope checks against the live VM via its SSHExecutor.
-// Mirrors LocalUnifiedTarget.Test — only the executor differs.
+// Mirrors the local deploy target.Test — only the executor differs.
 func (t *VmUnifiedTarget) Test(ctx context.Context, checks []Op, opts TestOpts) error {
 	return runUnifiedTargetChecks(ctx, t.Executor(), t.Kind(), t.NodeName, checks, opts)
 }
@@ -233,7 +233,7 @@ func (t *VmUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
 
 // Rebuild destroys + (optionally) rebuilds the disk image + recreates +
 // starts the VM, THEN re-applies the deploy node's candies to the fresh
-// guest via the shared deploy-add path — mirroring LocalUnifiedTarget.Rebuild
+// guest via the shared deploy-add path — mirroring the local deploy target.Rebuild
 // and PodUnifiedTarget.Rebuild, which both end in `charly bundle add <node>`.
 // Without that final step the guest would come back as a bare image with the
 // deploy node's add_candy: candies (and nested pods) gone, so a config change
@@ -284,7 +284,7 @@ func (t *VmUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
 	// `charly bundle add <node>` routes through dispatchNode → ResolveTarget →
 	// VmUnifiedTarget.Add → VmDeployTarget.Emit, which SSHes in and applies the
 	// node's add_candy: candies idempotently — the SAME shared primitive
-	// LocalUnifiedTarget.Rebuild and PodUnifiedTarget.Rebuild call (R3).
+	// the local deploy target.Rebuild and PodUnifiedTarget.Rebuild call (R3).
 	if err := runCharlySubcommand("bundle", "add", t.NodeName); err != nil {
 		return fmt.Errorf("charly bundle add %s: %w", t.NodeName, err)
 	}

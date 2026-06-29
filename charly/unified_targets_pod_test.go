@@ -90,7 +90,7 @@ func TestPodUnifiedTarget_Basics(t *testing.T) {
 		t.Errorf("Kind = %q, want %q", got, "pod")
 	}
 	// With no embedded PodDeployTarget, Executor falls back to a
-	// ShellExecutor (matches LocalUnifiedTarget's nil-safety).
+	// ShellExecutor (matches the local deploy target's nil-safety).
 	if target.Executor() == nil {
 		t.Errorf("Executor: expected fallback executor, got nil")
 	}

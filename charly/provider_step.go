@@ -3,21 +3,22 @@ package main
 import (
 	"context"
 	"fmt"
-	"time"
 )
 
-// StepProvider is the typed in-process form of an InstallStep Provider: it emits
-// one step to each of the three venues (OCI image build, local deploy, VM deploy).
-// Every InstallStep kind implements it; the per-venue dispatch switches resolve the
-// step through providerRegistry.ResolveStep(step.Kind()) and call the matching
-// Emit* method — the three type-switches are gone (C4), and the dead never-wired
-// step-walker abstraction is deleted (R3). Each Emit* method preserves its venue's
-// EXACT behaviour (gate checks, ReverseOp collection, skips) cell-by-cell; the
-// per-target emitX/execX handlers it calls are unchanged.
+// StepProvider is the typed in-process form of an InstallStep Provider: it emits one step
+// to each in-proc venue — OCI image build and VM deploy. Every InstallStep kind implements
+// it; the per-venue dispatch resolves the step through
+// providerRegistry.ResolveStep(step.Kind()) and calls the matching Emit* method. Each Emit*
+// method preserves its venue's EXACT behaviour (gate checks, ReverseOp collection, skips).
+//
+// There is NO EmitLocal: target:local externalized into candy/plugin-deploy-local, whose
+// out-of-process kit.WalkPlans executes every step on the venue (the plugin-renderable kinds
+// via the F2 reverse legs, the host-engine kinds via RunHostStep) — so the in-proc local
+// per-step dispatch is gone. The VM target keeps its in-proc EmitVM walk until vm itself
+// externalizes.
 type StepProvider interface {
 	Provider
 	EmitOCI(t *OCITarget, step InstallStep, plan *InstallPlan) error
-	EmitLocal(t *LocalDeployTarget, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error
 	EmitVM(t *VmDeployTarget, ctx context.Context, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord) error
 }
 

@@ -69,7 +69,7 @@ func TestLocalCollector_EmptyLedgerNoRows(t *testing.T) {
 	}
 }
 
-// A plain host LocalDeployTarget writes only CandyRecords (deploys/ stays
+// A plain host the local deploy target writes only CandyRecords (deploys/ stays
 // empty). The collector must synthesize one row per deploy-id from the
 // deployed_by sets — this is the real-world host case proven on live disk.
 func TestLocalCollector_SynthesizesFromCandyRecords(t *testing.T) {

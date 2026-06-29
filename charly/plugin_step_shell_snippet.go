@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"time"
 )
 
 // shellSnippetStepProvider is the `ShellSnippet` InstallStep IR provider, extracted into
@@ -18,9 +17,6 @@ type shellSnippetStepProvider struct{ builtinStepBase }
 func (shellSnippetStepProvider) Reserved() string { return string(StepKindShellSnippet) }
 func (shellSnippetStepProvider) EmitOCI(t *OCITarget, step InstallStep, _ *InstallPlan) error {
 	return t.emitShellSnippet(step.(*ShellSnippetStep))
-}
-func (shellSnippetStepProvider) EmitLocal(t *LocalDeployTarget, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
-	return t.execShellSnippet(step.(*ShellSnippetStep), plan, opts, rec, start)
 }
 func (shellSnippetStepProvider) EmitVM(t *VmDeployTarget, ctx context.Context, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord) error {
 	s := step.(*ShellSnippetStep)

@@ -46,12 +46,18 @@ type externalDeployTarget struct {
 	// Tests inject a no-sudo runner.
 	revRunner ReverseRunner
 
-	// build is the host BUILD-ENGINE context (project Config + dir) the F3 RunBuildStep
-	// reverse leg needs when the plugin walks a plan carrying a BuilderStep /
-	// LocalPkgInstallStep — the build engine resolves a short / namespace-qualified
-	// builder image and falls back to a local `charly box build`. Populated by Add from
-	// the DeployContext; the zero value (no project context) is fine for a deploy whose
-	// plan has no build-engine step.
+	// KeepRepoChanges / KeepServices are the `charly bundle del --keep-…` teardown gates,
+	// set by the del-command dispatcher (bundle_add_cmd.go) for the externalized local
+	// substrate, then handed to teardownHostDeploy's ReverseExecutor in Del.
+	KeepRepoChanges bool
+	KeepServices    bool
+
+	// build is the host-ENGINE context (project Config + dir + DistroCfg) the RunHostStep
+	// reverse leg needs when the plugin walks a plan carrying a host-engine step kind
+	// (Builder / LocalPkgInstall resolve a short / namespace-qualified builder image and
+	// fall back to a local `charly box build`; SystemPackages renders the format's
+	// phase.install.host template from DistroCfg). Populated by Add from the DeployContext;
+	// the zero value (no project context) is fine for a deploy whose plan has no host-engine step.
 	build buildEngineContext
 }
 
@@ -70,28 +76,76 @@ func (t *externalDeployTarget) ledgerPaths() (*LedgerPaths, error) {
 // from the deploy name (no image / candy set), so Add and Del agree on which
 // record to write / read without scanning the ledger by Target (the external
 // target's Kind()=="host" would otherwise collide with a real host deploy in
-// LocalUnifiedTarget.Del's `Target=="host"` scan).
+// the local deploy target.Del's `Target=="host"` scan).
 func (t *externalDeployTarget) deployID() string {
 	return computeDeployID(t.name, nil, nil)
 }
 
-// Add applies the deployment via the out-of-process provider, then records the
-// returned teardown ops + provenance into the ledger.
+// Add applies the deployment via the out-of-process provider, then records the returned
+// teardown ops + provenance into the ledger. For a deployment carrying candies that declare
+// secrets / artifacts (now reached by ANY external substrate — local most of all), it does
+// the host-side secret injection BEFORE the wire payload is projected, and the candy-artifact
+// retrieval + --verify AFTER the plugin applied — the SAME shared helpers the in-proc
+// local/vm targets use (R3). All are no-ops for a deployment whose candies declare neither
+// (the android/k8s/example substrates), so the path stays generic.
 func (t *externalDeployTarget) Add(ctx context.Context, dctx *DeployContext, plans []*InstallPlan, opts EmitOpts) error {
 	var node *BundleNode
 	var dir string
 	if dctx != nil {
 		node = dctx.Node
 		dir = dctx.Dir
-		// Capture the build-engine context so the F3 RunBuildStep leg can resolve a
-		// builder image + run the host build when the plugin walks a build-engine step.
-		t.build = buildEngineContext{Cfg: dctx.Cfg, ProjectDir: dctx.Dir}
+		// Capture the host-engine context so the RunHostStep leg can resolve a builder
+		// image + run the host build, and render a SystemPackages step's host install
+		// template from DistroCfg, when the plugin walks a host-engine step.
+		t.build = buildEngineContext{Cfg: dctx.Cfg, ProjectDir: dctx.Dir, DistroCfg: dctx.DistroCfg}
 	}
-	return t.apply(ctx, node, dir, plans, opts.DryRun)
+
+	// Host-side secret injection BEFORE wireView (Part 3): resolve candy secret_requires /
+	// secret_accepts and inject them into each OpStep's env so the projected views carry the
+	// resolved values (the plugin runs the steps with secrets already present). The SAME
+	// prepareCandySecrets the in-proc local/vm Add uses (R3). candyList feeds artifact
+	// retrieval below; secretEnv feeds artifact-path substitution.
+	var candyList []*Candy
+	var secretEnv map[string]string
+	if dir != "" {
+		var serr error
+		candyList, secretEnv, serr = prepareCandySecrets(plans, dir)
+		if serr != nil {
+			return fmt.Errorf("external deploy %q: loading candies for secret resolution: %w", t.name, serr)
+		}
+	}
+
+	if err := t.apply(ctx, node, dir, plans, opts.DryRun); err != nil {
+		return err
+	}
+	if opts.DryRun {
+		return nil
+	}
+
+	// Retrieve candy artifacts (+ k3s post-hook) host-side — guarded no-op when no candy
+	// declares an artifact: block. artifactEnv = secretEnv overlaid with the node's env:.
+	artifactEnv := buildArtifactEnv(secretEnv, node)
+	if err := retrieveArtifactsAndK3s(ctx, t.exec, candyList, t.name, artifactEnv, opts); err != nil {
+		return fmt.Errorf("external deploy %q: retrieving candy artifacts: %w", t.name, err)
+	}
+
+	// --verify: run the deployment's deploy-scope check probes on the venue we just deployed
+	// to. Default (Verify=false) is a no-op. Reuses checkLocalDeployScope so external local
+	// `--verify` sources + runs probes identically to `charly check live` (R3).
+	if opts.Verify {
+		fails, verr := checkLocalDeployScope(dir, node, t.name, "", "", nil, t.exec, "text")
+		if verr != nil {
+			return fmt.Errorf("external deploy %q: --verify: %w", t.name, verr)
+		}
+		if fails > 0 {
+			return fmt.Errorf("external deploy %q: --verify: %d deploy-scope check(s) failed", t.name, fails)
+		}
+	}
+	return nil
 }
 
 // Update re-applies the deployment over the wire — an idempotent re-Add (mirrors
-// LocalUnifiedTarget.Update's re-Emit). The unified Update signature carries no
+// the local deploy target.Update's re-Emit). The unified Update signature carries no
 // DeployContext, so the venue descriptor carries only the deploy name; a substrate
 // preresolver (if any) re-resolves the node from the tree by name.
 func (t *externalDeployTarget) Update(ctx context.Context, plans []*InstallPlan, opts UpdateOpts) error {
@@ -103,6 +157,17 @@ func (t *externalDeployTarget) Update(ctx context.Context, plans []*InstallPlan,
 // executor on the broker, decode the reply, and (unless DryRun) persist the
 // teardown ops + record to the ledger.
 func (t *externalDeployTarget) apply(ctx context.Context, node *BundleNode, dir string, plans []*InstallPlan, dryRun bool) error {
+	// Fork-A host-side pre-pass (live only): resolve {{.Home}} against the venue home and
+	// capture the deploy-time-stateful reverse state (ShellHook.EnvFile, ServicePackaged
+	// .PriorEnabled) on the LIVE venue BEFORE projecting the views, so each step's
+	// host-computed Reverse() (carried in InstallStepView.ReverseOps) is faithful. The
+	// plugin ECHOES those ops; the Reverse() rule stays ONCE in package main (R3). A
+	// dry-run has no live venue, so it skips this (no teardown is recorded on a dry-run).
+	if !dryRun {
+		if err := t.prepareReverseState(ctx, plans); err != nil {
+			return fmt.Errorf("external deploy %q: %w", t.name, err)
+		}
+	}
 	views := make([]spec.InstallPlanView, 0, len(plans))
 	for _, p := range plans {
 		if p != nil {
@@ -158,6 +223,61 @@ func (t *externalDeployTarget) apply(ctx context.Context, node *BundleNode, dir 
 	return t.recordDeploy(reply)
 }
 
+// prepareReverseState is the Fork-A host-side pre-pass: it resolves the venue home and
+// captures the two deploy-time-stateful reverse inputs on the LIVE venue so the
+// host-computed step.Reverse() (carried in InstallStepView.ReverseOps for the plugin to
+// echo) is faithful:
+//
+//   - ShellHookStep.EnvFile: the env.d path the plugin will write into, derived from the
+//     resolved venue home — so the recorded teardown op (ReverseOpRemoveEnvdFile) targets
+//     the right file. plan.ResolveHome also expands {{.Home}} in EnvVars / PathAdd /
+//     ShellSnippet Destination / FileStep.Dest so the plugin receives ABSOLUTE paths.
+//   - ServicePackagedStep.PriorEnabled: probed via `systemctl is-enabled` on the venue, so
+//     teardown re-enables a unit that was already enabled before the deploy.
+//
+// Idempotent + harmless for substrates whose plans carry no such steps (android/k8s):
+// ResolveHome is a no-op without {{.Home}} tokens and the switch matches nothing.
+func (t *externalDeployTarget) prepareReverseState(ctx context.Context, plans []*InstallPlan) error {
+	home, err := t.exec.ResolveHome(ctx, "")
+	if err != nil {
+		return fmt.Errorf("resolve venue home: %w", err)
+	}
+	for _, p := range plans {
+		if p == nil {
+			continue
+		}
+		if home != "" {
+			p.ResolveHome(home)
+		}
+		for _, step := range p.Steps {
+			switch s := step.(type) {
+			case *ShellHookStep:
+				if s.EnvFile == "" && home != "" {
+					s.EnvFile = EnvdFilePath(home, s.CandyName)
+				}
+			case *ServicePackagedStep:
+				s.PriorEnabled = venueUnitEnabled(ctx, t.exec, s.Unit, s.TargetScope)
+			}
+		}
+	}
+	return nil
+}
+
+// venueUnitEnabled reports whether a systemd unit is enabled on the venue — the
+// executor-backed analogue of systemctlIsEnabled (which uses local exec.Command). Used by
+// prepareReverseState to capture ServicePackaged.PriorEnabled before the plugin enables the
+// unit, so teardown restores the prior state. A probe failure (executor error / non-zero
+// exit) reports "not enabled" (the safe default — teardown then disables, never spuriously
+// re-enables).
+func venueUnitEnabled(ctx context.Context, exec DeployExecutor, unit string, scope Scope) bool {
+	cmd := "systemctl is-enabled --quiet " + shQuoteArg(unit)
+	if scope == ScopeUser {
+		cmd = "systemctl --user is-enabled --quiet " + shQuoteArg(unit)
+	}
+	_, _, exit, err := exec.RunCapture(ctx, cmd)
+	return err == nil && exit == 0
+}
+
 // recordDeploy persists the external deploy's teardown ops + provenance into the
 // ledger via the SAME install_ledger.go path a built-in Add uses: one CandyRecord
 // carrying the ReverseOps, plus a DeployRecord keyed on deployID() that names the
@@ -198,7 +318,7 @@ func (t *externalDeployTarget) Test(ctx context.Context, checks []Op, opts TestO
 
 // Del replays the RECORDED ReverseOps for this deploy (no plugin call): reads the
 // ledger record by deployID() and reverses it via teardownHostDeploy — the SAME
-// host-teardown helper LocalUnifiedTarget.Del uses (R3). Only recorded ops are
+// host-teardown helper the local deploy target.Del uses (R3). Only recorded ops are
 // replayed, never recomputed from a manifest.
 func (t *externalDeployTarget) Del(ctx context.Context, opts DelOpts) error {
 	paths, err := t.ledgerPaths()
@@ -217,7 +337,12 @@ func (t *externalDeployTarget) Del(ctx context.Context, opts DelOpts) error {
 			rec.DeployID, rec.Target, len(rec.Candy))
 		return nil
 	}
-	re := &hostReverseExec{DryRun: opts.DryRun, Runner: t.revRunner}
+	re := &hostReverseExec{
+		DryRun:          opts.DryRun,
+		KeepRepoChanges: t.KeepRepoChanges,
+		KeepServices:    t.KeepServices,
+		Runner:          t.revRunner,
+	}
 	if err := teardownHostDeploy(paths, rec, os.Getenv("HOME"), re); err != nil {
 		return err
 	}
@@ -232,7 +357,7 @@ func (t *externalDeployTarget) Del(ctx context.Context, opts DelOpts) error {
 var ErrNotSupportedOnExternal = errors.New("lifecycle operation not supported on external deploy target")
 
 // Rebuild re-applies the external deployment (refresh semantics, mirroring
-// LocalUnifiedTarget.Rebuild): it re-runs `charly bundle add <name>` as a
+// the local deploy target.Rebuild): it re-runs `charly bundle add <name>` as a
 // subprocess, which reconnects the plugin and re-Invokes the provider — an
 // idempotent re-apply. This is the path `charly update <name>` (the bed's
 // fresh-rebuild R10 gate) takes. The Disposable gate is checked by the caller's
@@ -247,7 +372,7 @@ func (t *externalDeployTarget) Rebuild(ctx context.Context, opts RebuildOpts) er
 
 // Status reports the external deploy's presence from the ledger: "running" when a
 // deploy record exists, "stopped" otherwise (the host venue itself is always up;
-// charly-managed presence is the signal). Mirrors LocalUnifiedTarget.Status.
+// charly-managed presence is the signal). Mirrors the local deploy target.Status.
 func (t *externalDeployTarget) Status(ctx context.Context) (StatusInfo, error) {
 	paths, err := t.ledgerPaths()
 	if err != nil {

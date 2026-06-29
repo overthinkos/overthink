@@ -3,37 +3,16 @@ package main
 import "testing"
 
 // TestDedicatedProviders_ResolveAndDispatch proves the externalizable
-// dedicated-provider pattern (Phase 3): the three schema-less IR providers extracted
-// into their own files — deploy:local (plugin_deploy_local.go), step:Reboot
-// (plugin_step_reboot.go), builder:cargo (plugin_builder_cargo.go) — still register
-// into the SAME providerRegistry and dispatch identically, even though each is
-// INTENTIONALLY absent from both builtinProviderInstances and the `providers:`
-// manifest (they self-register from a package-var initializer via
-// registerDedicatedBuiltin). The test fails if the dedicated registration regresses
-// (provider missing) or if the typed dispatch adapter is lost.
+// dedicated-provider pattern (Phase 3): the schema-less IR providers extracted into their
+// own files — step:Reboot (plugin_step_reboot.go), builder:cargo (plugin_builder_cargo.go)
+// — still register into the SAME providerRegistry and dispatch identically, even though
+// each is INTENTIONALLY absent from both builtinProviderInstances and the `providers:`
+// manifest (they self-register from a package-var initializer via registerDedicatedBuiltin).
+// The test fails if the dedicated registration regresses (provider missing) or if the typed
+// dispatch adapter is lost. (deploy:local was once such a dedicated builtin; it has since
+// externalized into candy/plugin-deploy-local — it now has NO in-proc provider, asserted by
+// TestReservedWordRegistry_DeployBijection.)
 func TestDedicatedProviders_ResolveAndDispatch(t *testing.T) {
-	// 1. deploy:local — resolves to a DeployTargetProvider whose ResolveTarget yields
-	//    the LocalUnifiedTarget (the unchanged construction).
-	dp, ok := providerRegistry.ResolveDeploy("local")
-	if !ok {
-		t.Fatal("ResolveDeploy(\"local\") not registered — dedicated self-registration regressed")
-	}
-	dtp, ok := dp.(DeployTargetProvider)
-	if !ok {
-		t.Fatalf("deploy:local resolved but is not a DeployTargetProvider (got %T)", dp)
-	}
-	tgt, err := dtp.ResolveTarget(&BundleNode{}, "demo")
-	if err != nil {
-		t.Fatalf("deploy:local ResolveTarget: %v", err)
-	}
-	lt, ok := tgt.(*LocalUnifiedTarget)
-	if !ok {
-		t.Fatalf("deploy:local ResolveTarget = %T, want *LocalUnifiedTarget", tgt)
-	}
-	if lt.NodeName != "demo" {
-		t.Fatalf("deploy:local NodeName = %q, want %q", lt.NodeName, "demo")
-	}
-
 	// 2. step:Reboot — resolves to a StepProvider (the per-venue Emit* dispatch).
 	sp, ok := stepProviderFor(StepKindReboot)
 	if !ok {
@@ -68,7 +47,6 @@ func TestDedicatedProviders_ResolveAndDispatch(t *testing.T) {
 	//    instance supply — the defining property of the externalizable pattern.
 	byKey := builtinInstanceMap()
 	for _, k := range []string{
-		provKey(ClassDeployTarget, "local"),
 		provKey(ClassStep, string(StepKindReboot)),
 		provKey(ClassBuilder, "cargo"),
 	} {
@@ -78,9 +56,8 @@ func TestDedicatedProviders_ResolveAndDispatch(t *testing.T) {
 	}
 	manifest := parseEmbeddedProviderManifest()
 	for class, word := range map[ProviderClass]string{
-		ClassDeployTarget: "local",
-		ClassStep:         string(StepKindReboot),
-		ClassBuilder:      "cargo",
+		ClassStep:    string(StepKindReboot),
+		ClassBuilder: "cargo",
 	} {
 		for _, w := range manifest[string(class)] {
 			if w == word {

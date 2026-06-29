@@ -9,7 +9,7 @@
 //
 //   - writes the legacy apply/probe markers (the Add-ran witness);
 //   - WALKS the plan's steps and EXECUTES the file-write (Op `write:`) + shell-hook
-//     (env:) steps on the venue — the out-of-proc twin of LocalDeployTarget's in-proc
+//     (env:) steps on the venue — the out-of-proc twin of the in-proc local deploy walk's in-proc
 //     walk, honoring each step's advisory Scope (system → root-owned PutFile);
 //   - PUSHES a distinct plugin-originated file via the new PutFile (the binary-safe
 //     content-placement leg, the same one local/vm will use for units / the charly
@@ -102,10 +102,10 @@ func (provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeRe
 	}
 
 	// (3) WALK the plan's steps and EXECUTE them — the out-of-proc twin of
-	// LocalDeployTarget's in-proc walk. The F2 legs (RunSystem/RunUser/PutFile) execute
-	// every step kind EXCEPT the two that need the HOST build ENGINE — BuilderStep
-	// (pixi/npm/cargo/aur) and LocalPkgInstallStep (makepkg + pacman/dnf/apt). Those are
-	// driven over the F3 RunBuildStep reverse leg: the host runs the EXISTING build
+	// the in-proc local deploy walk's in-proc walk. The F2 legs (RunSystem/RunUser/PutFile) execute
+	// every plugin-renderable step kind; the HOST-ENGINE kinds — here BuilderStep
+	// (pixi/npm/cargo/aur) and LocalPkgInstallStep (makepkg + pacman/dnf/apt) — are
+	// driven over the RunHostStep reverse leg: the host runs the EXISTING build
 	// machinery and installs the artifact onto the venue, returning the step's teardown
 	// ReverseOps which we fold into the DeployReply (record-and-replay).
 	var buildReverseOps []spec.ReverseOp
@@ -114,12 +114,12 @@ func (provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeRe
 		for _, step := range p.Steps {
 			switch step.Kind {
 			case "Builder", "LocalPkgInstall":
-				// F3 BUILD channel: the host builds (makepkg / BuilderRun) + installs onto
+				// HOST-ENGINE channel: the host builds (makepkg / BuilderRun) + installs onto
 				// the venue (pacman -U / artifact transfer) — the machinery that stays in
 				// charly's core. The plugin owns the WALK ordering; the host owns the ENGINE.
-				ops, berr := exec.RunBuildStep(ctx, step, nil)
+				ops, berr := exec.RunHostStep(ctx, step, nil)
 				if berr != nil {
-					return nil, fmt.Errorf("plugin-example-deploy: F3 build step %q (candy=%s): %w", step.Kind, step.CandyName, berr)
+					return nil, fmt.Errorf("plugin-example-deploy: host-engine step %q (candy=%s): %w", step.Kind, step.CandyName, berr)
 				}
 				buildReverseOps = append(buildReverseOps, ops...)
 				if step.Kind == "LocalPkgInstall" {
@@ -164,7 +164,7 @@ func (provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeRe
 // It handles the kinds this F2 witness exercises (Op `write:` + ShellHook); any other
 // kind is a recorded no-op (this reference plugin is not the production local/vm engine
 // — that is the NEXT cutover that CONSUMES this channel). It honors the step's advisory
-// Scope to decide root-owned vs user PutFile, mirroring the in-proc LocalDeployTarget.
+// Scope to decide root-owned vs user PutFile, mirroring the in-proc local deploy walk.
 func applyStep(ctx context.Context, exec *sdk.Executor, step spec.InstallStepView) error {
 	switch step.Kind {
 	case "Op":
@@ -180,7 +180,7 @@ func applyStep(ctx context.Context, exec *sdk.Executor, step spec.InstallStepVie
 		// A shell-hook step (env: / path_append:). Render a minimal env.d file from the
 		// received EnvVars + PathAdd and place it on the venue — proving the ShellHook
 		// step's data round-tripped and was acted on. Under the disposable scratch dir
-		// (the production env.d-into-$HOME placement is LocalDeployTarget's job).
+		// (the production env.d-into-$HOME placement is the in-proc local deploy walk's job).
 		content := renderEnvd(step.EnvVars, step.PathAdd)
 		dest := stepsDir + "/env.d/" + step.CandyName + ".env"
 		return exec.PutFile(ctx, dest, []byte(content), 0o644, false)
@@ -220,7 +220,9 @@ func parseMode(mode string, def uint32) uint32 {
 	return uint32(v)
 }
 
-type meta struct{ pb.UnimplementedPluginMetaServer }
+type meta struct {
+	pb.UnimplementedPluginMetaServer
+}
 
 // Describe advertises the deploy:exampledeploy capability + its self-contained CUE
 // schema over the same channel a builtin uses; BuildCapabilities compiles the schema

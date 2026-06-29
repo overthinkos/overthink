@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"time"
 )
 
 // serviceCustomStepProvider is the `ServiceCustom` InstallStep IR provider, extracted into
@@ -19,9 +18,6 @@ type serviceCustomStepProvider struct{ builtinStepBase }
 func (serviceCustomStepProvider) Reserved() string { return string(StepKindServiceCustom) }
 func (serviceCustomStepProvider) EmitOCI(t *OCITarget, step InstallStep, _ *InstallPlan) error {
 	return t.emitServiceCustom(step.(*ServiceCustomStep))
-}
-func (serviceCustomStepProvider) EmitLocal(t *LocalDeployTarget, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
-	return t.execServiceCustom(step.(*ServiceCustomStep), plan, opts, rec, start)
 }
 func (serviceCustomStepProvider) EmitVM(t *VmDeployTarget, ctx context.Context, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord) error {
 	if !opts.WithServices {

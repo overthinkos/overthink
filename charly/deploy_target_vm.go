@@ -10,7 +10,7 @@ import (
 )
 
 // VmDeployTarget applies an InstallPlan inside a running VM over SSH.
-// Uses the same InstallPlan IR that LocalDeployTarget consumes — the
+// Uses the same InstallPlan IR that the local deploy target consumes — the
 // only difference is that bash bodies run via `ssh vm 'sudo bash -s'`
 // instead of local `sudo bash -s`.
 //
@@ -41,7 +41,7 @@ type VmDeployTarget struct {
 	// transport.
 	Exec DeployExecutor
 
-	// Distro mirrors LocalDeployTarget.Distro for gating decisions
+	// Distro mirrors the local deploy target.Distro for gating decisions
 	// (e.g. aur on non-Arch host). For a VM target, this is the
 	// GUEST distro, not the host; resolved via ssh /etc/os-release.
 	Distro *HostDistro
@@ -51,7 +51,7 @@ type VmDeployTarget struct {
 
 	// shellsPresent caches the shell-detection probe result for the
 	// duration of one Emit() call. Same shape as
-	// LocalDeployTarget.shellsPresent — populated lazily on the first
+	// the local deploy target.shellsPresent — populated lazily on the first
 	// ShellSnippetStep encountered.
 	shellsPresent map[string]bool
 
@@ -64,11 +64,11 @@ type VmDeployTarget struct {
 
 	// DistroCfg is the resolved distro: section of the embedded vocabulary (charly/charly.yml). Used by
 	// execSystemPackages to render the format's phase.install.host template —
-	// the SAME config-driven path LocalDeployTarget + the OCI container path
+	// the SAME config-driven path the local deploy target + the OCI container path
 	// use (R3). Populated by the deploy dispatcher from dctx.DistroCfg.
 	DistroCfg *DistroConfig
 
-	// Cfg + ProjectDir mirror LocalDeployTarget: they let the host-side
+	// Cfg + ProjectDir mirror the local deploy target: they let the host-side
 	// dep-closure builder (buildDepPkgsOnHost) thread them into BuilderRun's
 	// EnsureImagePresent, so a namespace-qualified builder ref (e.g. the cachyos
 	// project's aur builder `charly.arch-builder`) resolves to its concrete image.
@@ -88,7 +88,7 @@ func (t *VmDeployTarget) targetName() string { return "vm:" + t.VMName }
 //     VmCharlyInstall.Strategy.
 //  5. Ensure guest ledger dir exists.
 //
-// Then walks the plans identically to LocalDeployTarget, but with
+// Then walks the plans identically to the local deploy target, but with
 // SSH-wrapped shell execution.
 func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 	if t.Exec == nil {
@@ -254,7 +254,7 @@ func resolveDeployID(plans []*InstallPlan, fallbackKey string) string {
 }
 
 // recordCandy writes the per-candy ledger entry INTO THE GUEST via
-// t.Exec. Mirrors LocalDeployTarget.recordCandy's executor-routed
+// t.Exec. Mirrors the local deploy target.recordCandy's executor-routed
 // pattern (B6 fix) so VM deploys obey the same
 // zero-operator-side-effects invariant as nested host deploys.
 func (t *VmDeployTarget) recordCandy(paths *LedgerPaths, rec *CandyRecord, plan *InstallPlan, opts EmitOpts) error {
@@ -286,7 +286,7 @@ mkdir -p "$HOME/.config/opencharly/env.d"
 }
 
 // emitPlan walks a single InstallPlan and routes each step to the
-// appropriate DeployExecutor method. Mirrors LocalDeployTarget.emitPlan's
+// appropriate DeployExecutor method. Mirrors the local deploy target.emitPlan's
 // step-dispatch table but with SSH-wrapped execution. Collects
 // ReverseOps from each executed step so `charly bundle del vm:<name>` can
 // replay them in reverse order at teardown time.
@@ -318,7 +318,7 @@ func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts E
 }
 
 // execShellSnippet renders one (candy, shell) snippet onto the VM
-// guest. Same shape as LocalDeployTarget.execShellSnippet — probes
+// guest. Same shape as the local deploy target.execShellSnippet — probes
 // shell presence on the guest via SSH, writes drop-in or applies
 // managed-block to existing rc file. Probe result cached on the
 // target struct for the duration of Emit().
@@ -414,7 +414,7 @@ func (t *VmDeployTarget) detectGuestShell(ctx context.Context) ShellKind {
 // execSystemPackages runs the distro's package install command on the guest.
 // Renders the format's phase.install.host template from the embedded build vocabulary via the SHARED
 // config-driven renderer (renderHostPackageCommand) — the SAME path
-// LocalDeployTarget uses and the same FormatDef the OCI container path reads (R3).
+// the local deploy target uses and the same FormatDef the OCI container path reads (R3).
 func (t *VmDeployTarget) execSystemPackages(ctx context.Context, s *SystemPackagesStep, _ *InstallPlan, opts EmitOpts) error {
 	cmd, err := renderHostPackageCommand(t.DistroCfg, s)
 	if err != nil {
@@ -433,7 +433,7 @@ func (t *VmDeployTarget) execOp(ctx context.Context, s *OpStep, _ *InstallPlan, 
 		return nil
 	}
 	// copy: stages the candy file into the guest via PutFile (scp+install) —
-	// the SAME shared path LocalDeployTarget uses. The old renderVmTaskCommand
+	// the SAME shared path the local deploy target uses. The old renderVmTaskCommand
 	// emitted `install <hostCandyDir>/<f> <dst>`, referencing a host path that
 	// doesn't exist in the guest → file-not-found on every copy: task.
 	if s.Op.Copy != "" {
@@ -587,7 +587,7 @@ func (t *VmDeployTarget) writeGuestUnitFile(ctx context.Context, path, content s
 }
 
 // enableServiceUnit enables (and best-effort starts) a unit on the guest,
-// honoring its scope — the SSH-executor counterpart of LocalDeployTarget's
+// honoring its scope — the SSH-executor counterpart of the local deploy target's
 // systemctlEnable (R3: same scope semantics, target-appropriate execution).
 //
 //   - ScopeSystem: `systemctl enable` via sudo (RunSystem).
@@ -647,7 +647,7 @@ func (t *VmDeployTarget) execServiceCustom(ctx context.Context, s *ServiceCustom
 
 // execBuilder runs a builder step against the guest. It delegates to the
 // venue-agnostic runVenueBuilderStep (builder_venue.go) — the SHARED build-on-host →
-// install-onto-venue path also driven by the F3 build channel (R3). The guest home
+// install-onto-venue path also driven by the RunHostStep host-engine channel (R3). The guest home
 // (t.guestHome, resolved at preflight) is the venue home; t.Cfg + t.ProjectDir feed the
 // build engine (EnsureImagePresent + BuilderRun) so a namespace-qualified builder image
 // resolves. The VM venue collects no ReverseOp (matches the VM switch), so the returned

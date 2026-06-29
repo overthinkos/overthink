@@ -198,7 +198,7 @@ func appendHopForFlatPath(chain DeployExecutor, node *BundleNode, flatPath, leaf
 // rootExecutorForDeployNode selects the ROOT DeployExecutor for a
 // `target: local` deployment node from its `host:` field — the single source
 // of truth for "where does a local deploy's work run?", shared by
-// `charly bundle add` (LocalUnifiedTarget.Add) and `charly check live`
+// `charly bundle add` (the local deploy target.Add) and `charly check live`
 // (runLocalCheck) so neither re-implements the selection (R3):
 //
 //	host: ""  / "local"        → ShellExecutor{} (this machine, direct shell)
@@ -206,7 +206,7 @@ func appendHopForFlatPath(chain DeployExecutor, node *BundleNode, flatPath, leaf
 //	host: "<machine>" + user:  → SSHExecutor with User from node.User
 //
 // It does NOT handle the nested-inside-a-parent case (opts.ParentExec); that
-// stays in LocalUnifiedTarget.Add because it's deploy-execution-specific.
+// stays in the local deploy target.Add because it's deploy-execution-specific.
 // Returns ShellExecutor{} for a nil node.
 func rootExecutorForDeployNode(node *BundleNode) (DeployExecutor, error) {
 	if node == nil {

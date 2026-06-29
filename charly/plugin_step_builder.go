@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"time"
 )
 
 // builderStepProvider is the `Builder` InstallStep IR provider, extracted into its OWN
@@ -18,9 +17,6 @@ type builderStepProvider struct{ builtinStepBase }
 func (builderStepProvider) Reserved() string { return string(StepKindBuilder) }
 func (builderStepProvider) EmitOCI(t *OCITarget, step InstallStep, plan *InstallPlan) error {
 	return t.emitBuilder(step.(*BuilderStep), plan)
-}
-func (builderStepProvider) EmitLocal(t *LocalDeployTarget, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
-	return t.execBuilder(step.(*BuilderStep), plan, opts, rec, start)
 }
 func (builderStepProvider) EmitVM(t *VmDeployTarget, ctx context.Context, step InstallStep, plan *InstallPlan, opts EmitOpts, _ *CandyRecord) error {
 	return t.execBuilder(ctx, step.(*BuilderStep), plan, opts) // no ReverseOp (matches the VM switch)

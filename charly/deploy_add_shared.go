@@ -26,7 +26,7 @@ import (
 // BEFORE emission. Returns the resolved candy list (the caller reuses it
 // for artifact retricheck) and the secret env map.
 //
-// Shared by LocalUnifiedTarget.Add / VmUnifiedTarget.Add /
+// Shared by the local deploy target.Add / VmUnifiedTarget.Add /
 // PodUnifiedTarget.Add — the three paths that previously each ran
 // CandyForPlan + ResolveSecretForCandy + InjectSecretsIntoPlans inline.
 func prepareCandySecrets(plans []*InstallPlan, dir string) ([]*Candy, map[string]string, error) {
@@ -80,7 +80,7 @@ func loadDeployPlugins(dir, deployName string, extraAddCandy []string) {
 // substitution: the resolved secret env first, then the deploy node's
 // own env: lines overlaid (last-wins). nil node contributes nothing.
 //
-// Shared by LocalUnifiedTarget.Add / VmUnifiedTarget.Add — both feed it
+// Shared by the local deploy target.Add / VmUnifiedTarget.Add — both feed it
 // to RetrieveCandyArtifacts so rewrite rules like ${K3S_KUBECONFIG_SERVER}
 // resolve to the declared value rather than a literal placeholder. The
 // node is the dispatch-merged BundleNode (never re-read from disk).
@@ -102,7 +102,7 @@ func buildArtifactEnv(secretEnv map[string]string, node *BundleNode) map[string]
 // (merge kubeconfig + register ClusterProfile) when the candy set includes
 // k3s-server. No-op under DryRun.
 //
-// Shared by LocalUnifiedTarget.Add / VmUnifiedTarget.Add.
+// Shared by the local deploy target.Add / VmUnifiedTarget.Add.
 func retrieveArtifactsAndK3s(ctx context.Context, exec DeployExecutor, candyList []*Candy, name string, artifactEnv map[string]string, opts EmitOpts) error {
 	if opts.DryRun {
 		return nil

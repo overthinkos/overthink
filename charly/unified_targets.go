@@ -3,7 +3,7 @@ package main
 // unified_targets.go — The unified deploy-target abstraction.
 //
 // UnifiedDeployTarget/LifecycleTarget adapters for the in-proc DeployTarget
-// implementers (LocalDeployTarget, VmDeployTarget, PodDeployTarget) plus
+// implementers (the local deploy target, VmDeployTarget, PodDeployTarget) plus
 // externalDeployTarget (the out-of-process substrate adapter — android, k8s),
 // and the ResolveTarget dispatcher.
 //
@@ -29,7 +29,7 @@ import (
 // over exec, filtering to opts.OnlyIDs when set and reporting per-check failures
 // to stderr. kind ("pod"/"vm"/"host", from the adapter's Kind()) labels both the
 // no-executor and the summary errors; nodeName is the deploy identifier. Shared
-// by Pod/Vm/LocalUnifiedTarget.Test — the three were byte-identical bar the
+// by Pod/Vm/the local deploy target.Test — the three were byte-identical bar the
 // kind/name labels (R3).
 func runUnifiedTargetChecks(ctx context.Context, exec DeployExecutor, kind, nodeName string, checks []Op, opts TestOpts) error {
 	onlyIDs := make(map[string]bool, len(opts.OnlyIDs))
@@ -71,49 +71,20 @@ func runUnifiedTargetChecks(ctx context.Context, exec DeployExecutor, kind, node
 }
 
 // ---------------------------------------------------------------------------
-// LocalUnifiedTarget — adapter over LocalDeployTarget.
+// the local deploy target — adapter over the local deploy target.
 //
 // Stubbed Add/Name/Kind/Executor live here. The lifecycle and management
 // methods (Del, Test, Update, Start, Stop, Status, Logs, Shell, Rebuild)
 // live in unified_targets_host.go (C11 / Phase 3 implementation).
 // ---------------------------------------------------------------------------
 
-// LocalUnifiedTarget wraps LocalDeployTarget to satisfy
-// UnifiedDeployTarget + LifecycleTarget.
-type LocalUnifiedTarget struct {
-	*LocalDeployTarget
-
-	// NodeName is the deployment identifier from charly.yml. Distinct
-	// from the legacy LocalDeployTarget.Name() which returns the kind
-	// ("host"). UnifiedDeployTarget.Name() returns this.
-	NodeName string
-
-	// KeepRepoChanges and KeepServices are deploy-del gate flags
-	// populated by the dispatcher from `charly bundle del --keep-…`.
-	// Forwarded to runReverseOps when Del runs. Default false → repo
-	// changes and packaged services ARE reversed (the destructive
-	// teardown path).
-	KeepRepoChanges bool
-	KeepServices    bool
-
-	// RevRunner is the ReverseRunner used by ReverseOp handlers.
-	// Defaults to nil → reverse_ops.go falls back to local exec.Command,
-	// which matches the long-standing on-host teardown path. Tests
-	// substitute a mock here.
-	RevRunner ReverseRunner
-}
-
-func (t *LocalUnifiedTarget) Name() string { return t.NodeName }
-func (t *LocalUnifiedTarget) Kind() string { return "host" }
-func (t *LocalUnifiedTarget) Executor() DeployExecutor {
-	if t.LocalDeployTarget == nil {
-		return ShellExecutor{}
-	}
-	return t.exec()
-}
-
-// Add for the local target lives in unified_targets_local.go alongside
-// Del/Test/Update/Rebuild — it constructs the live LocalDeployTarget.
+// target:local has NO in-proc UnifiedDeployTarget — it externalized into the
+// candy/plugin-deploy-local out-of-process plugin (an externalizedDeploySubstrate, like
+// android/k8s). ResolveTarget routes a `local:` substrate to externalDeployTarget over the
+// E3b reverse channel; the plugin's kit.WalkPlans executes the InstallPlan on the venue
+// (the plugin-renderable kinds via the F2 reverse legs, the host-engine kinds via
+// RunHostStep). The executor is chosen by the node's host: field (ShellExecutor for
+// host:local, SSHExecutor for host:user@machine) — see ResolveTarget.
 
 // ---------------------------------------------------------------------------
 // VmUnifiedTarget — adapter over VmDeployTarget.
@@ -271,8 +242,20 @@ func ResolveTarget(node *BundleNode, name string) (UnifiedDeployTarget, error) {
 	// An OUT-OF-PROCESS deploy provider (a grpcProvider, Invoke-only) drives the deploy
 	// lifecycle via the E3b reverse channel — Add Invokes it with the host executor
 	// served on the go-plugin broker (E3-deploy). Built-in targets take the typed path.
+	//
+	// The executor is chosen by the node's host: field via the SHARED selector
+	// rootExecutorForDeployNode (R3 — the SAME logic the `charly check live` local path
+	// uses): ShellExecutor for host:local/absent (this machine), SSHExecutor for
+	// host:user@machine. This is what makes the externalized `local` substrate honor
+	// `host: user@machine` (an SSH local deploy) without the generic target branching on
+	// the substrate. android/k8s carry no host: field, so they resolve to ShellExecutor
+	// (the host venue) — unchanged from the prior hardcoded ShellExecutor{}.
 	if gp, ok := prov.(*grpcProvider); ok {
-		return &externalDeployTarget{name: name, prov: gp, exec: ShellExecutor{}}, nil
+		exec, perr := rootExecutorForDeployNode(node)
+		if perr != nil {
+			return nil, fmt.Errorf("deployment %q: %w", name, perr)
+		}
+		return &externalDeployTarget{name: name, prov: gp, exec: exec}, nil
 	}
 	return nil, fmt.Errorf("deployment %q: target %q has no in-process resolver and is not an out-of-proc plugin provider", name, node.Target)
 }
@@ -280,14 +263,12 @@ func ResolveTarget(node *BundleNode, name string) (UnifiedDeployTarget, error) {
 // compile-time assertion: every adapter satisfies the interfaces it
 // claims. If any method signature drifts, `go build` fails here.
 var (
-	_ UnifiedDeployTarget = (*LocalUnifiedTarget)(nil)
 	_ UnifiedDeployTarget = (*VmUnifiedTarget)(nil)
 	_ UnifiedDeployTarget = (*PodUnifiedTarget)(nil)
-	// android and k8s have no in-proc UnifiedDeployTarget — they are external
-	// substrates (F1), resolved to externalDeployTarget below.
+	// local, android and k8s have no in-proc UnifiedDeployTarget — they are external
+	// substrates (externalizedDeploySubstrates), resolved to externalDeployTarget below.
 	_ UnifiedDeployTarget = (*externalDeployTarget)(nil)
 
-	_ LifecycleTarget = (*LocalUnifiedTarget)(nil)
 	_ LifecycleTarget = (*VmUnifiedTarget)(nil)
 	_ LifecycleTarget = (*PodUnifiedTarget)(nil)
 	// externalDeployTarget is a LifecycleTarget so `charly update <name>` (the

@@ -1,6 +1,6 @@
 package vmshared
 
-// hostdistro.go — host distro + glibc detection for LocalDeployTarget.
+// hostdistro.go — host distro + glibc detection for the local deploy target.
 //
 // The host target needs to know (a) which distro family it's running on
 // so the compiler can pick the right format section (rpm/deb/pac), and

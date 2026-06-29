@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"time"
 )
 
 // shellHookStepProvider is the `ShellHook` InstallStep IR provider, extracted into its OWN
@@ -18,9 +17,6 @@ type shellHookStepProvider struct{ builtinStepBase }
 func (shellHookStepProvider) Reserved() string { return string(StepKindShellHook) }
 func (shellHookStepProvider) EmitOCI(t *OCITarget, step InstallStep, _ *InstallPlan) error {
 	return t.emitShellHook(step.(*ShellHookStep))
-}
-func (shellHookStepProvider) EmitLocal(t *LocalDeployTarget, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord, start time.Time) error {
-	return t.execShellHook(step.(*ShellHookStep), plan, opts, rec, start)
 }
 func (shellHookStepProvider) EmitVM(t *VmDeployTarget, ctx context.Context, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord) error {
 	s := step.(*ShellHookStep)

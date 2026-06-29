@@ -7,17 +7,16 @@ import (
 )
 
 // D3: builder-image resolution order — override > compiled step, hard-error when
-// none resolves (the dead resolver-fallback tier was removed in C5).
+// none resolves (the dead resolver-fallback tier was removed in C5). builderStepImage
+// is the venue-agnostic free helper shared by the VM target + the F3 build channel (R3).
 func TestResolveBuilderImage(t *testing.T) {
-	tgt := &VmDeployTarget{}
-
-	if img, _ := tgt.resolveBuilderImage(&BuilderStep{Builder: "npm", BuilderImage: "from-step"}, EmitOpts{BuilderImageOverride: "from-override"}); img != "from-override" {
+	if img, _ := builderStepImage(&BuilderStep{Builder: "npm", BuilderImage: "from-step"}, EmitOpts{BuilderImageOverride: "from-override"}); img != "from-override" {
 		t.Errorf("override should win, got %q", img)
 	}
-	if img, _ := tgt.resolveBuilderImage(&BuilderStep{Builder: "npm", BuilderImage: "from-step"}, EmitOpts{}); img != "from-step" {
+	if img, _ := builderStepImage(&BuilderStep{Builder: "npm", BuilderImage: "from-step"}, EmitOpts{}); img != "from-step" {
 		t.Errorf("compiled step image should win, got %q", img)
 	}
-	if _, err := tgt.resolveBuilderImage(&BuilderStep{Builder: "npm", CandyName: "claude-code"}, EmitOpts{}); err == nil {
+	if _, err := builderStepImage(&BuilderStep{Builder: "npm", CandyName: "claude-code"}, EmitOpts{}); err == nil {
 		t.Error("no image resolvable → expected error")
 	}
 }

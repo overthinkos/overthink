@@ -277,12 +277,13 @@ var Provider_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	ExecutorService_Venue_FullMethodName      = "/charlyplugin.ExecutorService/Venue"
-	ExecutorService_RunSystem_FullMethodName  = "/charlyplugin.ExecutorService/RunSystem"
-	ExecutorService_RunUser_FullMethodName    = "/charlyplugin.ExecutorService/RunUser"
-	ExecutorService_PutFile_FullMethodName    = "/charlyplugin.ExecutorService/PutFile"
-	ExecutorService_RunCapture_FullMethodName = "/charlyplugin.ExecutorService/RunCapture"
-	ExecutorService_GetFile_FullMethodName    = "/charlyplugin.ExecutorService/GetFile"
+	ExecutorService_Venue_FullMethodName        = "/charlyplugin.ExecutorService/Venue"
+	ExecutorService_RunSystem_FullMethodName    = "/charlyplugin.ExecutorService/RunSystem"
+	ExecutorService_RunUser_FullMethodName      = "/charlyplugin.ExecutorService/RunUser"
+	ExecutorService_PutFile_FullMethodName      = "/charlyplugin.ExecutorService/PutFile"
+	ExecutorService_RunCapture_FullMethodName   = "/charlyplugin.ExecutorService/RunCapture"
+	ExecutorService_GetFile_FullMethodName      = "/charlyplugin.ExecutorService/GetFile"
+	ExecutorService_RunBuildStep_FullMethodName = "/charlyplugin.ExecutorService/RunBuildStep"
 )
 
 // ExecutorServiceClient is the client API for ExecutorService service.
@@ -295,6 +296,7 @@ type ExecutorServiceClient interface {
 	PutFile(ctx context.Context, in *PutFileRequest, opts ...grpc.CallOption) (*PutFileReply, error)
 	RunCapture(ctx context.Context, in *RunRequest, opts ...grpc.CallOption) (*CaptureReply, error)
 	GetFile(ctx context.Context, in *GetFileRequest, opts ...grpc.CallOption) (*GetFileReply, error)
+	RunBuildStep(ctx context.Context, in *BuildStepRequest, opts ...grpc.CallOption) (*BuildStepReply, error)
 }
 
 type executorServiceClient struct {
@@ -359,6 +361,15 @@ func (c *executorServiceClient) GetFile(ctx context.Context, in *GetFileRequest,
 	return out, nil
 }
 
+func (c *executorServiceClient) RunBuildStep(ctx context.Context, in *BuildStepRequest, opts ...grpc.CallOption) (*BuildStepReply, error) {
+	out := new(BuildStepReply)
+	err := c.cc.Invoke(ctx, ExecutorService_RunBuildStep_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ExecutorServiceServer is the server API for ExecutorService service.
 // All implementations must embed UnimplementedExecutorServiceServer
 // for forward compatibility
@@ -369,6 +380,7 @@ type ExecutorServiceServer interface {
 	PutFile(context.Context, *PutFileRequest) (*PutFileReply, error)
 	RunCapture(context.Context, *RunRequest) (*CaptureReply, error)
 	GetFile(context.Context, *GetFileRequest) (*GetFileReply, error)
+	RunBuildStep(context.Context, *BuildStepRequest) (*BuildStepReply, error)
 	mustEmbedUnimplementedExecutorServiceServer()
 }
 
@@ -393,6 +405,9 @@ func (UnimplementedExecutorServiceServer) RunCapture(context.Context, *RunReques
 }
 func (UnimplementedExecutorServiceServer) GetFile(context.Context, *GetFileRequest) (*GetFileReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetFile not implemented")
+}
+func (UnimplementedExecutorServiceServer) RunBuildStep(context.Context, *BuildStepRequest) (*BuildStepReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RunBuildStep not implemented")
 }
 func (UnimplementedExecutorServiceServer) mustEmbedUnimplementedExecutorServiceServer() {}
 
@@ -515,6 +530,24 @@ func _ExecutorService_GetFile_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ExecutorService_RunBuildStep_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(BuildStepRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServiceServer).RunBuildStep(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ExecutorService_RunBuildStep_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServiceServer).RunBuildStep(ctx, req.(*BuildStepRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ExecutorService_ServiceDesc is the grpc.ServiceDesc for ExecutorService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -545,6 +578,10 @@ var ExecutorService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetFile",
 			Handler:    _ExecutorService_GetFile_Handler,
+		},
+		{
+			MethodName: "RunBuildStep",
+			Handler:    _ExecutorService_RunBuildStep_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

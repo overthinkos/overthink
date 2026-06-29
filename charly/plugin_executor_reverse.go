@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 
 	pb "github.com/overthinkos/overthink/charly/plugin/proto"
+	"github.com/overthinkos/overthink/charly/spec"
 )
 
 // executorReverseServer is the HOST side of the E3b reverse channel: it serves the
@@ -19,6 +21,11 @@ import (
 type executorReverseServer struct {
 	pb.UnimplementedExecutorServiceServer
 	exec DeployExecutor
+	// build is the host BUILD-ENGINE context (project Config + dir) the F3 RunBuildStep
+	// leg needs to run a BuilderStep's host build (EnsureImagePresent + BuilderRun resolve
+	// a short / namespace-qualified builder image and fall back to a local `charly box
+	// build`). Zero value for a verb/kind/deploy Invoke that never drives RunBuildStep.
+	build buildEngineContext
 }
 
 func (s *executorReverseServer) Venue(context.Context, *pb.Empty) (*pb.VenueReply, error) {
@@ -74,6 +81,60 @@ func (s *executorReverseServer) RunCapture(ctx context.Context, req *pb.RunReque
 func (s *executorReverseServer) GetFile(ctx context.Context, req *pb.GetFileRequest) (*pb.GetFileReply, error) {
 	content, err := s.exec.GetFile(ctx, req.GetPath(), req.GetAsRoot(), decodeReverseEmitOpts(req.GetOptsJson()))
 	return &pb.GetFileReply{Content: content, Error: errString(err)}, nil
+}
+
+// RunBuildStep is the F3 BUILD channel leg: an OUT-OF-PROCESS deploy/step plugin walking
+// an InstallPlan hits a BuilderStep (pixi/npm/cargo/aur) or LocalPkgInstallStep — the two
+// step kinds RunSystem/PutFile cannot execute because they need the HOST build ENGINE
+// (podman / makepkg / EnsureImagePresent), which STAYS in charly's core and cannot move
+// into the leaf plugin/kit package. The plugin dials back here; the host reconstructs the
+// concrete step from its serializable view, runs the EXISTING build machinery on the host
+// (via the venue-agnostic runVenueBuilderStep / execLocalPkgInstall the in-proc deploy
+// targets use — no second implementation, R3), installs the produced artifact onto the
+// venue via s.exec, and returns the step's recorded ReverseOps so the plugin folds them
+// into its DeployReply (record-and-replay teardown). The plugin owns the plan WALK
+// ordering; the host owns the build ENGINE. A build/install failure rides the reply's
+// error field (the RPC itself succeeds, like runReply).
+func (s *executorReverseServer) RunBuildStep(ctx context.Context, req *pb.BuildStepRequest) (*pb.BuildStepReply, error) {
+	var view spec.InstallStepView
+	if err := json.Unmarshal(req.GetStepJson(), &view); err != nil {
+		return &pb.BuildStepReply{Error: fmt.Sprintf("decode step view: %v", err)}, nil
+	}
+	step, err := stepFromView(view)
+	if err != nil {
+		return &pb.BuildStepReply{Error: err.Error()}, nil
+	}
+	opts := decodeReverseEmitOpts(req.GetOptsJson())
+
+	var reverseOps []ReverseOp
+	switch st := step.(type) {
+	case *BuilderStep:
+		venueHome, herr := s.exec.ResolveHome(ctx, "")
+		if herr != nil {
+			return &pb.BuildStepReply{Error: fmt.Sprintf("resolve venue home: %v", herr)}, nil
+		}
+		if rerr := runVenueBuilderStep(ctx, s.exec, venueHome, s.build, st, opts); rerr != nil {
+			return &pb.BuildStepReply{Error: rerr.Error()}, nil
+		}
+		reverseOps = st.Reverse()
+	case *LocalPkgInstallStep:
+		supported := venueHasPkgManager(ctx, s.exec, st.LocalPkg, opts)
+		if rerr := execLocalPkgInstall(ctx, s.exec, st, supported, s.exec.Venue(), opts); rerr != nil {
+			return &pb.BuildStepReply{Error: rerr.Error()}, nil
+		}
+		reverseOps = st.Reverse()
+	default:
+		// F3 is the BUILD channel: only the two build-engine-requiring step kinds route
+		// here. Every other kind the plugin EXECUTES itself via the RunSystem/RunUser/
+		// PutFile legs (F2) — reaching RunBuildStep with one is a plugin-walk bug.
+		return &pb.BuildStepReply{Error: fmt.Sprintf("RunBuildStep: step kind %q is not a build-engine step (only Builder / LocalPkgInstall route through the F3 build channel; execute every other kind via RunSystem/PutFile)", view.Kind)}, nil
+	}
+
+	revJSON, err := json.Marshal(reverseOps)
+	if err != nil {
+		return &pb.BuildStepReply{Error: fmt.Sprintf("marshal reverse ops: %v", err)}, nil
+	}
+	return &pb.BuildStepReply{ReverseOpsJson: revJSON}, nil
 }
 
 // errString is err.Error() or "" — the reverse-channel convention (the RPC succeeds; the

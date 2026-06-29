@@ -101,14 +101,34 @@ func (provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeRe
 		return nil, err
 	}
 
-	// (3) WALK the plan's steps and EXECUTE the kinds this witness exercises — the
-	// out-of-proc twin of LocalDeployTarget's in-proc walk. Proves the serializable
-	// per-step IR round-tripped author -> host -> wire -> external process AND that the
-	// plugin can apply real steps on the venue over the reverse channel.
+	// (3) WALK the plan's steps and EXECUTE them — the out-of-proc twin of
+	// LocalDeployTarget's in-proc walk. The F2 legs (RunSystem/RunUser/PutFile) execute
+	// every step kind EXCEPT the two that need the HOST build ENGINE — BuilderStep
+	// (pixi/npm/cargo/aur) and LocalPkgInstallStep (makepkg + pacman/dnf/apt). Those are
+	// driven over the F3 RunBuildStep reverse leg: the host runs the EXISTING build
+	// machinery and installs the artifact onto the venue, returning the step's teardown
+	// ReverseOps which we fold into the DeployReply (record-and-replay).
+	var buildReverseOps []spec.ReverseOp
+	sawLocalPkg := false
 	for _, p := range plans {
 		for _, step := range p.Steps {
-			if err := applyStep(ctx, exec, step); err != nil {
-				return nil, fmt.Errorf("plugin-example-deploy: execute step %q: %w", step.Kind, err)
+			switch step.Kind {
+			case "Builder", "LocalPkgInstall":
+				// F3 BUILD channel: the host builds (makepkg / BuilderRun) + installs onto
+				// the venue (pacman -U / artifact transfer) — the machinery that stays in
+				// charly's core. The plugin owns the WALK ordering; the host owns the ENGINE.
+				ops, berr := exec.RunBuildStep(ctx, step, nil)
+				if berr != nil {
+					return nil, fmt.Errorf("plugin-example-deploy: F3 build step %q (candy=%s): %w", step.Kind, step.CandyName, berr)
+				}
+				buildReverseOps = append(buildReverseOps, ops...)
+				if step.Kind == "LocalPkgInstall" {
+					sawLocalPkg = true
+				}
+			default:
+				if err := applyStep(ctx, exec, step); err != nil {
+					return nil, fmt.Errorf("plugin-example-deploy: execute step %q: %w", step.Kind, err)
+				}
 			}
 		}
 	}
@@ -121,10 +141,23 @@ func (provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeRe
 		return nil, fmt.Errorf("plugin-example-deploy: PutFile %s: %w", pushed, err)
 	}
 
-	// ONE generic plugin-script reverse op removing every scratch dir at teardown; the
-	// host records it in the ledger and replays it.
-	reverse := sdk.PluginScriptReverseOp(spec.ScopeUser, "rm -rf "+dir+" "+stepsDir)
-	return sdk.BuildDeployReply([]spec.ReverseOp{reverse}, "plugin-example-deploy", calver)
+	// Teardown ops, replayed at `charly bundle del`:
+	//   - the user-scope scratch-dir cleanup (markers + step witnesses);
+	//   - whatever ReverseOps the F3 build steps returned (folded in — record-and-replay);
+	//   - for a localpkg build, an explicit `pacman -R` of the dummy charly-f3-witness
+	//     package. LocalPkgInstallStep.Reverse() is intentionally nil (the package is the
+	//     substrate's own OS-tracked package), so the witness records the removal itself.
+	//     ScopeSystem → the host runs it via sudo; tolerant so a partial / repeated
+	//     teardown never errors.
+	reverseOps := []spec.ReverseOp{
+		sdk.PluginScriptReverseOp(spec.ScopeUser, "rm -rf "+dir+" "+stepsDir),
+	}
+	reverseOps = append(reverseOps, buildReverseOps...)
+	if sawLocalPkg {
+		reverseOps = append(reverseOps, sdk.PluginScriptReverseOp(spec.ScopeSystem,
+			"pacman -R --noconfirm charly-f3-witness 2>/dev/null || true"))
+	}
+	return sdk.BuildDeployReply(reverseOps, "plugin-example-deploy", calver)
 }
 
 // applyStep executes ONE serialized InstallStep on the venue over the reverse channel.

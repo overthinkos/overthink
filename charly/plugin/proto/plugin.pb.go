@@ -815,6 +815,115 @@ func (x *GetFileReply) GetError() string {
 	return ""
 }
 
+// step_json = ONE spec.InstallStepView (a BuilderStep or LocalPkgInstallStep, projected
+// by stepToView); opts_json = EmitOpts. reverse_ops_json = the step's recorded
+// []spec.ReverseOp (the plugin folds them into its DeployReply for record-and-replay
+// teardown). error = a build/install FAILURE on the venue (the RPC itself succeeds — the
+// failure rides the reply field, like RunReply/CaptureReply).
+type BuildStepRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	StepJson      []byte                 `protobuf:"bytes,1,opt,name=step_json,json=stepJson,proto3" json:"step_json,omitempty"`
+	OptsJson      []byte                 `protobuf:"bytes,2,opt,name=opts_json,json=optsJson,proto3" json:"opts_json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BuildStepRequest) Reset() {
+	*x = BuildStepRequest{}
+	mi := &file_plugin_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BuildStepRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BuildStepRequest) ProtoMessage() {}
+
+func (x *BuildStepRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BuildStepRequest.ProtoReflect.Descriptor instead.
+func (*BuildStepRequest) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *BuildStepRequest) GetStepJson() []byte {
+	if x != nil {
+		return x.StepJson
+	}
+	return nil
+}
+
+func (x *BuildStepRequest) GetOptsJson() []byte {
+	if x != nil {
+		return x.OptsJson
+	}
+	return nil
+}
+
+type BuildStepReply struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ReverseOpsJson []byte                 `protobuf:"bytes,1,opt,name=reverse_ops_json,json=reverseOpsJson,proto3" json:"reverse_ops_json,omitempty"`
+	Error          string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *BuildStepReply) Reset() {
+	*x = BuildStepReply{}
+	mi := &file_plugin_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BuildStepReply) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BuildStepReply) ProtoMessage() {}
+
+func (x *BuildStepReply) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BuildStepReply.ProtoReflect.Descriptor instead.
+func (*BuildStepReply) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *BuildStepReply) GetReverseOpsJson() []byte {
+	if x != nil {
+		return x.ReverseOpsJson
+	}
+	return nil
+}
+
+func (x *BuildStepReply) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 var File_plugin_proto protoreflect.FileDescriptor
 
 const file_plugin_proto_rawDesc = "" +
@@ -874,13 +983,19 @@ const file_plugin_proto_rawDesc = "" +
 	"\topts_json\x18\x03 \x01(\fR\boptsJson\">\n" +
 	"\fGetFileReply\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\fR\acontent\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"L\n" +
+	"\x10BuildStepRequest\x12\x1b\n" +
+	"\tstep_json\x18\x01 \x01(\fR\bstepJson\x12\x1b\n" +
+	"\topts_json\x18\x02 \x01(\fR\boptsJson\"P\n" +
+	"\x0eBuildStepReply\x12(\n" +
+	"\x10reverse_ops_json\x18\x01 \x01(\fR\x0ereverseOpsJson\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error2I\n" +
 	"\n" +
 	"PluginMeta\x12;\n" +
 	"\bDescribe\x12\x13.charlyplugin.Empty\x1a\x1a.charlyplugin.Capabilities2\x90\x01\n" +
 	"\bProvider\x12@\n" +
 	"\x06Invoke\x12\x1b.charlyplugin.InvokeRequest\x1a\x19.charlyplugin.InvokeReply\x12B\n" +
-	"\fInvokeStream\x12\x1b.charlyplugin.InvokeRequest\x1a\x13.charlyplugin.Frame0\x012\x93\x03\n" +
+	"\fInvokeStream\x12\x1b.charlyplugin.InvokeRequest\x1a\x13.charlyplugin.Frame0\x012\xe1\x03\n" +
 	"\x0fExecutorService\x126\n" +
 	"\x05Venue\x12\x13.charlyplugin.Empty\x1a\x18.charlyplugin.VenueReply\x12=\n" +
 	"\tRunSystem\x12\x18.charlyplugin.RunRequest\x1a\x16.charlyplugin.RunReply\x12;\n" +
@@ -888,7 +1003,8 @@ const file_plugin_proto_rawDesc = "" +
 	"\aPutFile\x12\x1c.charlyplugin.PutFileRequest\x1a\x1a.charlyplugin.PutFileReply\x12B\n" +
 	"\n" +
 	"RunCapture\x12\x18.charlyplugin.RunRequest\x1a\x1a.charlyplugin.CaptureReply\x12C\n" +
-	"\aGetFile\x12\x1c.charlyplugin.GetFileRequest\x1a\x1a.charlyplugin.GetFileReplyB6Z4github.com/overthinkos/overthink/charly/plugin/protob\x06proto3"
+	"\aGetFile\x12\x1c.charlyplugin.GetFileRequest\x1a\x1a.charlyplugin.GetFileReply\x12L\n" +
+	"\fRunBuildStep\x12\x1e.charlyplugin.BuildStepRequest\x1a\x1c.charlyplugin.BuildStepReplyB6Z4github.com/overthinkos/overthink/charly/plugin/protob\x06proto3"
 
 var (
 	file_plugin_proto_rawDescOnce sync.Once
@@ -902,7 +1018,7 @@ func file_plugin_proto_rawDescGZIP() []byte {
 	return file_plugin_proto_rawDescData
 }
 
-var file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_plugin_proto_goTypes = []any{
 	(*Empty)(nil),              // 0: charlyplugin.Empty
 	(*Capabilities)(nil),       // 1: charlyplugin.Capabilities
@@ -918,6 +1034,8 @@ var file_plugin_proto_goTypes = []any{
 	(*CaptureReply)(nil),       // 11: charlyplugin.CaptureReply
 	(*GetFileRequest)(nil),     // 12: charlyplugin.GetFileRequest
 	(*GetFileReply)(nil),       // 13: charlyplugin.GetFileReply
+	(*BuildStepRequest)(nil),   // 14: charlyplugin.BuildStepRequest
+	(*BuildStepReply)(nil),     // 15: charlyplugin.BuildStepReply
 }
 var file_plugin_proto_depIdxs = []int32{
 	2,  // 0: charlyplugin.Capabilities.provided:type_name -> charlyplugin.ProvidedCapability
@@ -930,17 +1048,19 @@ var file_plugin_proto_depIdxs = []int32{
 	9,  // 7: charlyplugin.ExecutorService.PutFile:input_type -> charlyplugin.PutFileRequest
 	7,  // 8: charlyplugin.ExecutorService.RunCapture:input_type -> charlyplugin.RunRequest
 	12, // 9: charlyplugin.ExecutorService.GetFile:input_type -> charlyplugin.GetFileRequest
-	1,  // 10: charlyplugin.PluginMeta.Describe:output_type -> charlyplugin.Capabilities
-	4,  // 11: charlyplugin.Provider.Invoke:output_type -> charlyplugin.InvokeReply
-	5,  // 12: charlyplugin.Provider.InvokeStream:output_type -> charlyplugin.Frame
-	6,  // 13: charlyplugin.ExecutorService.Venue:output_type -> charlyplugin.VenueReply
-	8,  // 14: charlyplugin.ExecutorService.RunSystem:output_type -> charlyplugin.RunReply
-	8,  // 15: charlyplugin.ExecutorService.RunUser:output_type -> charlyplugin.RunReply
-	10, // 16: charlyplugin.ExecutorService.PutFile:output_type -> charlyplugin.PutFileReply
-	11, // 17: charlyplugin.ExecutorService.RunCapture:output_type -> charlyplugin.CaptureReply
-	13, // 18: charlyplugin.ExecutorService.GetFile:output_type -> charlyplugin.GetFileReply
-	10, // [10:19] is the sub-list for method output_type
-	1,  // [1:10] is the sub-list for method input_type
+	14, // 10: charlyplugin.ExecutorService.RunBuildStep:input_type -> charlyplugin.BuildStepRequest
+	1,  // 11: charlyplugin.PluginMeta.Describe:output_type -> charlyplugin.Capabilities
+	4,  // 12: charlyplugin.Provider.Invoke:output_type -> charlyplugin.InvokeReply
+	5,  // 13: charlyplugin.Provider.InvokeStream:output_type -> charlyplugin.Frame
+	6,  // 14: charlyplugin.ExecutorService.Venue:output_type -> charlyplugin.VenueReply
+	8,  // 15: charlyplugin.ExecutorService.RunSystem:output_type -> charlyplugin.RunReply
+	8,  // 16: charlyplugin.ExecutorService.RunUser:output_type -> charlyplugin.RunReply
+	10, // 17: charlyplugin.ExecutorService.PutFile:output_type -> charlyplugin.PutFileReply
+	11, // 18: charlyplugin.ExecutorService.RunCapture:output_type -> charlyplugin.CaptureReply
+	13, // 19: charlyplugin.ExecutorService.GetFile:output_type -> charlyplugin.GetFileReply
+	15, // 20: charlyplugin.ExecutorService.RunBuildStep:output_type -> charlyplugin.BuildStepReply
+	11, // [11:21] is the sub-list for method output_type
+	1,  // [1:11] is the sub-list for method input_type
 	1,  // [1:1] is the sub-list for extension type_name
 	1,  // [1:1] is the sub-list for extension extendee
 	0,  // [0:1] is the sub-list for field type_name
@@ -957,7 +1077,7 @@ func file_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_plugin_proto_rawDesc), len(file_plugin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

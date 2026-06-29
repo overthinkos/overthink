@@ -2,11 +2,13 @@ package sdk
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	plugin "github.com/hashicorp/go-plugin"
 
 	pb "github.com/overthinkos/overthink/charly/plugin/proto"
+	"github.com/overthinkos/overthink/charly/spec"
 )
 
 // servedBroker is the go-plugin GRPCBroker captured when this plugin's gRPC server
@@ -121,4 +123,34 @@ func (e *Executor) GetFile(ctx context.Context, path string, asRoot bool) ([]byt
 		return nil, errors.New(r.GetError())
 	}
 	return r.GetContent(), nil
+}
+
+// RunBuildStep is the F3 BUILD-channel leg: a deploy/step plugin walking an InstallPlan
+// that hits a BuilderStep (pixi/npm/cargo/aur) or LocalPkgInstallStep — the only two
+// step kinds RunSystem/PutFile cannot execute, because they need the HOST build ENGINE
+// (podman / makepkg / EnsureImagePresent) that stays in charly's core — drives this. The
+// host reconstructs the step, runs the existing build machinery on the host, installs the
+// produced artifact onto the venue, and returns the step's recorded reverse ops. The
+// plugin folds them into its DeployReply (sdk.BuildDeployReply) so `charly bundle del`
+// replays them (record-and-replay teardown). The plugin owns the plan WALK; the host owns
+// the build ENGINE. A non-nil error is a build/install FAILURE on the venue.
+func (e *Executor) RunBuildStep(ctx context.Context, step spec.InstallStepView, optsJSON []byte) ([]spec.ReverseOp, error) {
+	stepJSON, err := json.Marshal(step)
+	if err != nil {
+		return nil, err
+	}
+	r, callErr := e.client.RunBuildStep(ctx, &pb.BuildStepRequest{StepJson: stepJSON, OptsJson: optsJSON})
+	if callErr != nil {
+		return nil, callErr
+	}
+	if r.GetError() != "" {
+		return nil, errors.New(r.GetError())
+	}
+	var ops []spec.ReverseOp
+	if len(r.GetReverseOpsJson()) > 0 {
+		if err := json.Unmarshal(r.GetReverseOpsJson(), &ops); err != nil {
+			return nil, err
+		}
+	}
+	return ops, nil
 }

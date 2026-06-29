@@ -73,6 +73,21 @@ message Frame       { bytes result_json = 1; }   // one streamed result frame (s
 // probes the live container by capturing stdout/stderr/exit or pulling a venue file (a
 // screenshot/recording artifact), the kit.Executor.RunCapture/GetFile surface made
 // wire-backed.
+//
+// RunBuildStep is the F3 BUILD channel: the irreducible build ENGINE (Generator /
+// OCITarget / ResolveBox / podman / BuilderRun / EnsureImagePresent / makepkg) STAYS in
+// charly's core (package main — it cannot move into the leaf plugin/kit package without
+// dragging package main in), so an OUT-OF-PROCESS deploy/step plugin walking an
+// InstallPlan that hits a BuilderStep (pixi/npm/cargo/aur) or LocalPkgInstallStep — the
+// only two step kinds RunSystem/PutFile cannot execute, because they need HOST podman /
+// makepkg + EnsureImagePresent — dials BACK to RunBuildStep. The host reconstructs the
+// step from its serializable view, runs the EXISTING build machinery on the host, and
+// installs the produced artifact onto the venue via the EXISTING executor-based
+// transfer/install leg (the plugin's own venue, which the host already holds for this
+// Invoke), returning the step's recorded ReverseOps so the plugin folds them into its
+// DeployReply (record-and-replay teardown). The deploy/build-time counterpart of the
+// RunSystem/PutFile legs: the plugin owns the plan WALK ordering; the host owns the
+// build ENGINE.
 service ExecutorService {
   rpc Venue(Empty) returns (VenueReply);
   rpc RunSystem(RunRequest) returns (RunReply);
@@ -80,6 +95,7 @@ service ExecutorService {
   rpc PutFile(PutFileRequest) returns (PutFileReply);    // place file content on the venue (binary-safe; owner_root → root:root via sudo)
   rpc RunCapture(RunRequest) returns (CaptureReply);     // capture stdout/stderr/exit (no root escalation — callers add sudo)
   rpc GetFile(GetFileRequest) returns (GetFileReply);    // read a venue file (e.g. a record/screenshot artifact pulled back to the host)
+  rpc RunBuildStep(BuildStepRequest) returns (BuildStepReply); // F3: build a BuilderStep/LocalPkgInstallStep on the host engine + install onto the venue
 }
 message VenueReply { string venue = 1; }
 message RunRequest { string script = 1; bytes opts_json = 2; } // opts_json = EmitOpts, JSON
@@ -89,3 +105,10 @@ message PutFileReply { string error = 1; }                     // empty error = 
 message CaptureReply { string stdout = 1; string stderr = 2; int32 exit_code = 3; string error = 4; } // error = execution failure, NOT a non-zero exit
 message GetFileRequest { string path = 1; bool as_root = 2; bytes opts_json = 3; }
 message GetFileReply { bytes content = 1; string error = 2; }
+// step_json = ONE spec.InstallStepView (a BuilderStep or LocalPkgInstallStep, projected
+// by stepToView); opts_json = EmitOpts. reverse_ops_json = the step's recorded
+// []spec.ReverseOp (the plugin folds them into its DeployReply for record-and-replay
+// teardown). error = a build/install FAILURE on the venue (the RPC itself succeeds — the
+// failure rides the reply field, like RunReply/CaptureReply).
+message BuildStepRequest { bytes step_json = 1; bytes opts_json = 2; }
+message BuildStepReply { bytes reverse_ops_json = 1; string error = 2; }

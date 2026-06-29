@@ -27,7 +27,7 @@ import (
 // builtin (command + the ProvisionActor verbs) stays on the OpStep path. Mirrors the
 // build-context BuildEmitter marker interface (provider_verb.go).
 type executorInvoker interface {
-	InvokeWithExecutor(ctx context.Context, op *Operation, exec DeployExecutor) (*Result, error)
+	InvokeWithExecutor(ctx context.Context, op *Operation, exec DeployExecutor, build buildEngineContext) (*Result, error)
 }
 
 // externalPluginStepProvider is the StepKindExternalPlugin StepProvider. Each Emit*
@@ -72,7 +72,8 @@ func (externalPluginStepProvider) EmitLocal(t *LocalDeployTarget, step InstallSt
 			s.CandyName, s.Op.Plugin)
 		return nil
 	}
-	reply, err := executeExternalPluginStep(opts.ContextOrDefault(), s, plan, t.exec())
+	reply, err := executeExternalPluginStep(opts.ContextOrDefault(), s, plan, t.exec(),
+		buildEngineContext{Cfg: t.Cfg, ProjectDir: t.ProjectDir})
 	if err != nil {
 		return err
 	}
@@ -92,7 +93,8 @@ func (externalPluginStepProvider) EmitVM(t *VmDeployTarget, ctx context.Context,
 			t.VMName, s.CandyName, s.Op.Plugin)
 		return nil
 	}
-	reply, err := executeExternalPluginStep(ctx, s, plan, t.Exec)
+	reply, err := executeExternalPluginStep(ctx, s, plan, t.Exec,
+		buildEngineContext{Cfg: t.Cfg, ProjectDir: t.ProjectDir})
 	if err != nil {
 		return err
 	}
@@ -106,7 +108,7 @@ func (externalPluginStepProvider) EmitVM(t *VmDeployTarget, ctx context.Context,
 // the externalDeployTarget marshal — R3), a spec.DeployVenue rides op.Env, and the
 // live executor is stood up on the broker by InvokeWithExecutor so the plugin runs its
 // effect on the real venue. Shared by EmitLocal + EmitVM so the two venues cannot drift.
-func executeExternalPluginStep(ctx context.Context, s *ExternalPluginStep, plan *InstallPlan, exec DeployExecutor) (spec.DeployReply, error) {
+func executeExternalPluginStep(ctx context.Context, s *ExternalPluginStep, plan *InstallPlan, exec DeployExecutor, build buildEngineContext) (spec.DeployReply, error) {
 	var zero spec.DeployReply
 	prov, ok := providerRegistry.ResolveVerb(s.Op.Plugin)
 	if !ok {
@@ -128,7 +130,7 @@ func executeExternalPluginStep(ctx context.Context, s *ExternalPluginStep, plan 
 		return zero, fmt.Errorf("external plugin step %q: marshal venue: %w", s.Op.Plugin, err)
 	}
 	res, err := inv.InvokeWithExecutor(ctx,
-		&Operation{Reserved: s.Op.Plugin, Op: OpExecute, Params: params, Env: env}, exec)
+		&Operation{Reserved: s.Op.Plugin, Op: OpExecute, Params: params, Env: env}, exec, build)
 	if err != nil {
 		return zero, err
 	}

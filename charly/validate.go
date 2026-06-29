@@ -677,13 +677,15 @@ func validateCandyReferences(cfg *Config, layers map[string]*Candy, errs *Valida
 func validateCandyContents(layers map[string]*Candy, errs *ValidationError) {
 	for name, layer := range layers {
 		// Candy must have at least one install file, a candy: field (composition),
-		// data declarations, an external_builder: selection, OR a plugin: block — a
-		// plugin candy's content IS its provider declaration (its Go provider is
-		// compiled in or fetched+built), and an external_builder: candy's content is
-		// the multi-stage build artifact the selected builder bakes at image build
-		// (emitExternalBuilderStages), so both legitimately ship no install files.
-		if !layer.HasInstallFiles() && len(layer.IncludedCandy) == 0 && !layer.HasData() && layer.Plugin == nil && layer.ExternalBuilder == "" {
-			errs.Add("candy %q: must have at least one install file (candy manifest distro: packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml), a candy: field, an external_builder:, or a plugin: block", name)
+		// data declarations, an external_builder: selection, a localpkg: source, OR a
+		// plugin: block — a plugin candy's content IS its provider declaration (its Go
+		// provider is compiled in or fetched+built), an external_builder: candy's content
+		// is the multi-stage build artifact the selected builder bakes at image build
+		// (emitExternalBuilderStages), and a localpkg: candy's content is the OS package
+		// it builds + installs on a deploy target (LocalPkgInstallStep) / downloads at
+		// image build — so all legitimately ship no install files.
+		if !layer.HasInstallFiles() && len(layer.IncludedCandy) == 0 && !layer.HasData() && layer.Plugin == nil && layer.ExternalBuilder == "" && len(layer.LocalPkgFormats()) == 0 {
+			errs.Add("candy %q: must have at least one install file (candy manifest distro: packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml), a candy: field, a localpkg:, an external_builder:, or a plugin: block", name)
 		}
 
 		// version: (mandatory CalVer) and status: (working|testing|broken enum)

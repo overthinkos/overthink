@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -646,211 +645,15 @@ func (t *VmDeployTarget) execServiceCustom(ctx context.Context, s *ServiceCustom
 	return nil
 }
 
-// execBuilder runs a builder step on the HOST (where podman is
-// available), then transfers the resulting artifacts into the guest.
-//
-//   - aur:           produces .pkg.tar.zst files in a host staging dir; we
-//     tar them, scp to the guest's /tmp, and `pacman -U` via SSH.
-//   - npm/pixi/cargo: produce user-home subdirs (~/.npm-global, ~/.pixi,
-//     ~/.cargo). execHomeArtifactBuilder builds with HOME set to
-//     the GUEST home path (so shebangs/configs bake the right
-//     path), then tars the home subdirs and extracts them into
-//     the guest user's $HOME over SSH — the cross-host home
-//     translation the AUR-canary MVP deferred.
-//
-// Unknown builders honor --skip-incompatible (set by callers that legitimately
-// want to skip rpm:/deb:-only sections) and otherwise hard-error.
+// execBuilder runs a builder step against the guest. It delegates to the
+// venue-agnostic runVenueBuilderStep (builder_venue.go) — the SHARED build-on-host →
+// install-onto-venue path also driven by the F3 build channel (R3). The guest home
+// (t.guestHome, resolved at preflight) is the venue home; t.Cfg + t.ProjectDir feed the
+// build engine (EnsureImagePresent + BuilderRun) so a namespace-qualified builder image
+// resolves. The VM venue collects no ReverseOp (matches the VM switch), so the returned
+// teardown ops are discarded here.
 func (t *VmDeployTarget) execBuilder(ctx context.Context, s *BuilderStep, _ *InstallPlan, opts EmitOpts) error {
-	// Route by OUTPUT shape, not builder name: a builder that produces package
-	// FILES carries the format's local_pkg contract (s.LocalPkg, set by the
-	// compiler for the aur builder) — those go through the build-on-host →
-	// transfer → package-install leg below. Everything else is a home-artifact
-	// builder (pixi/npm/cargo) whose ~/.pixi / ~/.npm-global / ~/.cargo output is
-	// tarred into the guest home. An unknown builder with neither shape has no
-	// host build script (renderBuilderScript errors on a nil BuilderDef cell);
-	// --skip-incompatible skips it.
-	if s.LocalPkg == nil {
-		if s.BuilderDef == nil || builderPhaseTemplate(s.BuilderDef, PhaseInstall, VenueHostNative) == "" {
-			if opts.SkipIncompatible {
-				fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping builder step %q (--skip-incompatible)\n", s.Builder)
-				return nil
-			}
-			return fmt.Errorf("builder %q on VM target has no phase.install.host cell in the embedded build vocabulary (candy=%s). Run with --skip-incompatible to skip, or add the host cell", s.Builder, s.CandyName)
-		}
-		return t.execHomeArtifactBuilder(ctx, s, opts)
-	}
-
-	image, err := t.resolveBuilderImage(s, opts)
-	if err != nil {
-		return err
-	}
-	// Gate on the format's local_pkg.probe (e.g. `command -v pacman`) succeeding
-	// on the GUEST — config-driven, not a hardcoded distro/builder-name check.
-	if !venueHasPkgManager(ctx, t.Exec, s.LocalPkg, opts) {
-		return fmt.Errorf("builder %q (candy=%s) builds %s package files but the guest has no %s package manager (local_pkg.probe %q failed); cannot install the built packages",
-			s.Builder, s.CandyName, s.LocalPkg.DepBuilder, s.LocalPkg.DepBuilder, s.LocalPkg.Probe)
-	}
-
-	// Build the aur packages on the HOST through the SHARED host-side dep-build
-	// helper (R3) — the same primitive the localpkg step uses to build its
-	// dependency closure. The builder runs on the host (podman); the guest never
-	// needs a container runtime. The package glob comes from the format config.
-	matches, err := buildDepPkgsOnHost(ctx, s.LocalPkg, s.BuilderDef, image, extractStringSlice(s.RawStageContext, "packages"), s.CandyDir, t.Cfg, t.ProjectDir, opts)
-	if err != nil {
-		return fmt.Errorf("VM aur builder: %w", err)
-	}
-	if opts.DryRun {
-		return nil
-	}
-
-	// Ship the built packages to the guest and install them via the SHARED,
-	// config-driven transfer+install leg (R3) — the same primitive the localpkg
-	// step uses. The install command (e.g. `pacman -U`) comes from the format's
-	// local_pkg.install_template and is the upgrade form, so a re-run after a
-	// partial failure replaces the staging content idempotently.
-	return transferAndInstallPkgs(ctx, t.Exec, s.LocalPkg, matches, opts)
-}
-
-// resolveBuilderImage picks the builder image ref for a BuilderStep on a VM
-// target. Order: --builder-image override → compiled BuilderStep.BuilderImage.
-// The builder always runs on the HOST (podman); the guest never needs a
-// container runtime.
-func (t *VmDeployTarget) resolveBuilderImage(s *BuilderStep, opts EmitOpts) (string, error) {
-	image := opts.BuilderImageOverride
-	if image == "" {
-		image = s.BuilderImage
-	}
-	if image == "" {
-		return "", fmt.Errorf("no builder image for %s (candy=%s); set --builder-image or define builder.%s in charly.yml",
-			s.Builder, s.CandyName, s.Builder)
-	}
-	return image, nil
-}
-
-// execHomeArtifactBuilder runs a user-home builder (npm/pixi/cargo) on the
-// HOST into a staging dir that is bind-mounted AS the guest home, then ships
-// the produced home subdirs into the guest user's $HOME over SSH.
-//
-// The critical move is running the builder with HOME = the GUEST home PATH
-// (t.guestHome). npm shebangs, cargo binary rpaths, and pixi env activation
-// scripts bake the install-prefix path; baking the guest's home means the
-// artifacts work unchanged once extracted into the guest's real $HOME. Build
-// caches (.cache/) are excluded from the transfer — they're large and the
-// guest doesn't need them.
-func (t *VmDeployTarget) execHomeArtifactBuilder(ctx context.Context, s *BuilderStep, opts EmitOpts) error {
-	image, err := t.resolveBuilderImage(s, opts)
-	if err != nil {
-		return err
-	}
-	if t.guestHome == "" && !opts.DryRun {
-		return fmt.Errorf("execHomeArtifactBuilder: guest home unresolved (candy=%s)", s.CandyName)
-	}
-	guestHome := t.guestHome
-	if guestHome == "" {
-		guestHome = "/home/charly" // dry-run placeholder; never written
-	}
-
-	// Host staging dir mounted AS the guest home inside the builder, so the
-	// builder writes ~/.npm-global etc. to a host-side dir while baking the
-	// guest's home path into shebangs/configs.
-	stageHost, err := os.MkdirTemp("", "charly-vm-builder-")
-	if err != nil {
-		return fmt.Errorf("builder staging mkdir: %w", err)
-	}
-	RegisterTempCleanup(stageHost)
-	defer func() { _ = os.RemoveAll(stageHost); UnregisterTempCleanup(stageHost) }()
-
-	bindMounts := map[string]string{guestHome: stageHost}
-	envVars := UserScopeEnv(guestHome)
-	script, err := renderBuilderScript(s, guestHome)
-	if err != nil {
-		return err
-	}
-
-	out, err := BuilderRun(opts.ContextOrDefault(), BuilderRunOpts{
-		BuilderImage: image,
-		CandyDir:     s.CandyDir,
-		ScriptBody:   script,
-		BindMounts:   bindMounts,
-		Env:          envVars,
-		HostHome:     guestHome,
-		DryRun:       opts.DryRun,
-		RunAsRoot:    true,
-		// Thread Cfg + ProjectDir so BuilderRun's EnsureImagePresent can resolve
-		// a namespace-qualified / short builder ref (e.g. a bed's
-		// install_opts.builder_image: charly.arch-builder) to its concrete image —
-		// newest-local, or built on-demand from the project — instead of only
-		// accepting a full registry ref (which breaks when its tag is pruned or
-		// ghcr publishing is paused). Mirrors buildDepPkgsOnHost (localpkg.go), the
-		// aur-dep-closure builder path that already threads these. Without them,
-		// EnsureImagePresent gets cfg=nil and rejects any short/namespace ref with
-		// "requires a project directory with charly.yml".
-		Cfg:        t.Cfg,
-		ProjectDir: t.ProjectDir,
-	})
-	if len(out) > 0 {
-		_, _ = os.Stderr.Write(out)
-	}
-	if err != nil {
-		return fmt.Errorf("VM %s builder (candy=%s): %w", s.Builder, s.CandyName, err)
-	}
-	if opts.DryRun {
-		return nil
-	}
-
-	// Collect the produced home subdirs, skipping build caches.
-	entries, err := os.ReadDir(stageHost)
-	if err != nil {
-		return fmt.Errorf("reading builder staging dir: %w", err)
-	}
-	var transferDirs []string
-	for _, e := range entries {
-		if e.Name() == ".cache" {
-			continue
-		}
-		transferDirs = append(transferDirs, e.Name())
-	}
-	if len(transferDirs) == 0 {
-		return fmt.Errorf("%s builder for candy %q produced no home artifacts in %s; check the builder output above",
-			s.Builder, s.CandyName, stageHost)
-	}
-
-	// Tar the artifacts into a single tarball on the host.
-	tarDir, err := os.MkdirTemp("", "charly-vm-builder-tar-")
-	if err != nil {
-		return fmt.Errorf("tar staging mkdir: %w", err)
-	}
-	RegisterTempCleanup(tarDir)
-	defer func() { _ = os.RemoveAll(tarDir); UnregisterTempCleanup(tarDir) }()
-	tarball := filepath.Join(tarDir, "artifacts.tar.gz")
-	tarArgs := append([]string{"-C", stageHost, "-czf", tarball}, transferDirs...)
-	tarCmd := exec.CommandContext(ctx, "tar", tarArgs...)
-	tarCmd.Stderr = os.Stderr
-	if err := tarCmd.Run(); err != nil {
-		return fmt.Errorf("tar builder artifacts: %w", err)
-	}
-
-	// Ship to the guest and extract into the guest user's $HOME AS the guest
-	// user, so ownership + baked paths are correct.
-	guestTar := "/tmp/charly-builder-" + s.CandyName + ".tar.gz"
-	if err := t.Exec.PutFile(ctx, tarball, guestTar, 0o644, false, opts); err != nil {
-		return fmt.Errorf("scp builder artifacts: %w", err)
-	}
-	// Extract AS THE GUEST USER so the home artifacts (~/.npm-global, ~/.cargo,
-	// ~/.pixi) end up owned by the guest user, not root.
-	extractScript := fmt.Sprintf("set -e\nmkdir -p \"$HOME\"\ntar -C \"$HOME\" -xzf %s\n", deployShellQuote(guestTar))
-	if err := t.Exec.RunUser(ctx, extractScript, opts); err != nil {
-		return fmt.Errorf("extracting builder artifacts in guest: %w", err)
-	}
-	// Remove the tarball AS ROOT: PutFile placed it via `sudo install`, so it is
-	// root-owned, and /tmp is sticky (1777) — the guest user can't remove a
-	// root-owned file there ("Operation not permitted"). Cleaning up as root
-	// avoids leaving a root-owned tarball behind (and previously aborted the
-	// deploy under the extract script's `set -e`).
-	if err := t.Exec.RunSystem(ctx, fmt.Sprintf("rm -f %s\n", deployShellQuote(guestTar)), opts); err != nil {
-		return fmt.Errorf("removing builder tarball in guest: %w", err)
-	}
-	return nil
+	return runVenueBuilderStep(ctx, t.Exec, t.guestHome, buildEngineContext{Cfg: t.Cfg, ProjectDir: t.ProjectDir}, s, opts)
 }
 
 // (env.d rendering shared with the host path — see renderEnvdBody in

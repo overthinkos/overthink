@@ -119,7 +119,7 @@ func TestExternalPluginStep_ReverseChannelEndToEnd(t *testing.T) {
 	// 4. Execute the step over the E3b reverse channel via the local ShellExecutor
 	//    (RunUser → bash -lc, no sudo) so the plugin's marker write runs for real.
 	plan := &InstallPlan{Candy: layer.Name}
-	reply, err := executeExternalPluginStep(ctx, eps, plan, ShellExecutor{})
+	reply, err := executeExternalPluginStep(ctx, eps, plan, ShellExecutor{}, buildEngineContext{})
 	if err != nil {
 		t.Fatalf("executeExternalPluginStep: %v", err)
 	}

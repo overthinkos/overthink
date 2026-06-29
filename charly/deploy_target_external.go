@@ -45,6 +45,14 @@ type externalDeployTarget struct {
 	// matching the executor (ShellExecutor) ResolveTarget gives an external deploy.
 	// Tests inject a no-sudo runner.
 	revRunner ReverseRunner
+
+	// build is the host BUILD-ENGINE context (project Config + dir) the F3 RunBuildStep
+	// reverse leg needs when the plugin walks a plan carrying a BuilderStep /
+	// LocalPkgInstallStep — the build engine resolves a short / namespace-qualified
+	// builder image and falls back to a local `charly box build`. Populated by Add from
+	// the DeployContext; the zero value (no project context) is fine for a deploy whose
+	// plan has no build-engine step.
+	build buildEngineContext
 }
 
 func (t *externalDeployTarget) Name() string             { return t.name }
@@ -75,6 +83,9 @@ func (t *externalDeployTarget) Add(ctx context.Context, dctx *DeployContext, pla
 	if dctx != nil {
 		node = dctx.Node
 		dir = dctx.Dir
+		// Capture the build-engine context so the F3 RunBuildStep leg can resolve a
+		// builder image + run the host build when the plugin walks a build-engine step.
+		t.build = buildEngineContext{Cfg: dctx.Cfg, ProjectDir: dctx.Dir}
 	}
 	return t.apply(ctx, node, dir, plans, opts.DryRun)
 }
@@ -134,7 +145,7 @@ func (t *externalDeployTarget) apply(ctx context.Context, node *BundleNode, dir 
 		return nil
 	}
 	res, err := t.prov.InvokeWithExecutor(ctx,
-		&Operation{Reserved: t.prov.word, Op: OpExecute, Params: params, Env: envJSON}, t.exec)
+		&Operation{Reserved: t.prov.word, Op: OpExecute, Params: params, Env: envJSON}, t.exec, t.build)
 	if err != nil {
 		return err
 	}

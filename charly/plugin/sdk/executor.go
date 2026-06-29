@@ -72,6 +72,29 @@ func runErr(r *pb.RunReply, err error) error {
 	return nil
 }
 
+// PutFile places file content at a path on the venue — the deploy/step file-PLACEMENT
+// leg. An out-of-process deploy/step plugin that EXECUTES an InstallPlan's steps ships
+// the bytes (a service unit, an env.d file, the charly binary, a builder artifact);
+// the host materializes them and delegates to the live DeployExecutor.PutFile.
+// ownerRoot == true installs the file as root:root (root-owned system paths); mode is
+// the octal permission bits. Binary-safe (proto bytes). A non-empty reply error is the
+// placement failure on the venue.
+func (e *Executor) PutFile(ctx context.Context, remotePath string, content []byte, mode uint32, ownerRoot bool) error {
+	r, err := e.client.PutFile(ctx, &pb.PutFileRequest{
+		Path:      remotePath,
+		Content:   content,
+		Mode:      mode,
+		OwnerRoot: ownerRoot,
+	})
+	if err != nil {
+		return err
+	}
+	if r.GetError() != "" {
+		return errors.New(r.GetError())
+	}
+	return nil
+}
+
 // RunCapture runs a command on the venue and returns stdout/stderr/exit separately —
 // the check-verb capture leg (an out-of-process exec-based check verb probing the live
 // container). A non-empty reply error is an EXECUTION failure, NOT a non-zero exit

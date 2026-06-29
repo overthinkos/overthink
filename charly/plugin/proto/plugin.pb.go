@@ -515,6 +515,126 @@ func (x *RunReply) GetError() string {
 	return ""
 }
 
+type PutFileRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Content       []byte                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
+	Mode          uint32                 `protobuf:"varint,3,opt,name=mode,proto3" json:"mode,omitempty"`
+	OwnerRoot     bool                   `protobuf:"varint,4,opt,name=owner_root,json=ownerRoot,proto3" json:"owner_root,omitempty"`
+	OptsJson      []byte                 `protobuf:"bytes,5,opt,name=opts_json,json=optsJson,proto3" json:"opts_json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PutFileRequest) Reset() {
+	*x = PutFileRequest{}
+	mi := &file_plugin_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PutFileRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PutFileRequest) ProtoMessage() {}
+
+func (x *PutFileRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PutFileRequest.ProtoReflect.Descriptor instead.
+func (*PutFileRequest) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *PutFileRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *PutFileRequest) GetContent() []byte {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *PutFileRequest) GetMode() uint32 {
+	if x != nil {
+		return x.Mode
+	}
+	return 0
+}
+
+func (x *PutFileRequest) GetOwnerRoot() bool {
+	if x != nil {
+		return x.OwnerRoot
+	}
+	return false
+}
+
+func (x *PutFileRequest) GetOptsJson() []byte {
+	if x != nil {
+		return x.OptsJson
+	}
+	return nil
+}
+
+type PutFileReply struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Error         string                 `protobuf:"bytes,1,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PutFileReply) Reset() {
+	*x = PutFileReply{}
+	mi := &file_plugin_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PutFileReply) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PutFileReply) ProtoMessage() {}
+
+func (x *PutFileReply) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PutFileReply.ProtoReflect.Descriptor instead.
+func (*PutFileReply) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *PutFileReply) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 type CaptureReply struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Stdout        string                 `protobuf:"bytes,1,opt,name=stdout,proto3" json:"stdout,omitempty"`
@@ -527,7 +647,7 @@ type CaptureReply struct {
 
 func (x *CaptureReply) Reset() {
 	*x = CaptureReply{}
-	mi := &file_plugin_proto_msgTypes[9]
+	mi := &file_plugin_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -539,7 +659,7 @@ func (x *CaptureReply) String() string {
 func (*CaptureReply) ProtoMessage() {}
 
 func (x *CaptureReply) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_proto_msgTypes[9]
+	mi := &file_plugin_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -552,7 +672,7 @@ func (x *CaptureReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CaptureReply.ProtoReflect.Descriptor instead.
 func (*CaptureReply) Descriptor() ([]byte, []int) {
-	return file_plugin_proto_rawDescGZIP(), []int{9}
+	return file_plugin_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CaptureReply) GetStdout() string {
@@ -594,7 +714,7 @@ type GetFileRequest struct {
 
 func (x *GetFileRequest) Reset() {
 	*x = GetFileRequest{}
-	mi := &file_plugin_proto_msgTypes[10]
+	mi := &file_plugin_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -606,7 +726,7 @@ func (x *GetFileRequest) String() string {
 func (*GetFileRequest) ProtoMessage() {}
 
 func (x *GetFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_proto_msgTypes[10]
+	mi := &file_plugin_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -619,7 +739,7 @@ func (x *GetFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFileRequest.ProtoReflect.Descriptor instead.
 func (*GetFileRequest) Descriptor() ([]byte, []int) {
-	return file_plugin_proto_rawDescGZIP(), []int{10}
+	return file_plugin_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetFileRequest) GetPath() string {
@@ -653,7 +773,7 @@ type GetFileReply struct {
 
 func (x *GetFileReply) Reset() {
 	*x = GetFileReply{}
-	mi := &file_plugin_proto_msgTypes[11]
+	mi := &file_plugin_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -665,7 +785,7 @@ func (x *GetFileReply) String() string {
 func (*GetFileReply) ProtoMessage() {}
 
 func (x *GetFileReply) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_proto_msgTypes[11]
+	mi := &file_plugin_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -678,7 +798,7 @@ func (x *GetFileReply) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFileReply.ProtoReflect.Descriptor instead.
 func (*GetFileReply) Descriptor() ([]byte, []int) {
-	return file_plugin_proto_rawDescGZIP(), []int{11}
+	return file_plugin_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetFileReply) GetContent() []byte {
@@ -733,6 +853,15 @@ const file_plugin_proto_rawDesc = "" +
 	"\x06script\x18\x01 \x01(\tR\x06script\x12\x1b\n" +
 	"\topts_json\x18\x02 \x01(\fR\boptsJson\" \n" +
 	"\bRunReply\x12\x14\n" +
+	"\x05error\x18\x01 \x01(\tR\x05error\"\x8e\x01\n" +
+	"\x0ePutFileRequest\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
+	"\acontent\x18\x02 \x01(\fR\acontent\x12\x12\n" +
+	"\x04mode\x18\x03 \x01(\rR\x04mode\x12\x1d\n" +
+	"\n" +
+	"owner_root\x18\x04 \x01(\bR\townerRoot\x12\x1b\n" +
+	"\topts_json\x18\x05 \x01(\fR\boptsJson\"$\n" +
+	"\fPutFileReply\x12\x14\n" +
 	"\x05error\x18\x01 \x01(\tR\x05error\"q\n" +
 	"\fCaptureReply\x12\x16\n" +
 	"\x06stdout\x18\x01 \x01(\tR\x06stdout\x12\x16\n" +
@@ -751,11 +880,12 @@ const file_plugin_proto_rawDesc = "" +
 	"\bDescribe\x12\x13.charlyplugin.Empty\x1a\x1a.charlyplugin.Capabilities2\x90\x01\n" +
 	"\bProvider\x12@\n" +
 	"\x06Invoke\x12\x1b.charlyplugin.InvokeRequest\x1a\x19.charlyplugin.InvokeReply\x12B\n" +
-	"\fInvokeStream\x12\x1b.charlyplugin.InvokeRequest\x1a\x13.charlyplugin.Frame0\x012\xce\x02\n" +
+	"\fInvokeStream\x12\x1b.charlyplugin.InvokeRequest\x1a\x13.charlyplugin.Frame0\x012\x93\x03\n" +
 	"\x0fExecutorService\x126\n" +
 	"\x05Venue\x12\x13.charlyplugin.Empty\x1a\x18.charlyplugin.VenueReply\x12=\n" +
 	"\tRunSystem\x12\x18.charlyplugin.RunRequest\x1a\x16.charlyplugin.RunReply\x12;\n" +
-	"\aRunUser\x12\x18.charlyplugin.RunRequest\x1a\x16.charlyplugin.RunReply\x12B\n" +
+	"\aRunUser\x12\x18.charlyplugin.RunRequest\x1a\x16.charlyplugin.RunReply\x12C\n" +
+	"\aPutFile\x12\x1c.charlyplugin.PutFileRequest\x1a\x1a.charlyplugin.PutFileReply\x12B\n" +
 	"\n" +
 	"RunCapture\x12\x18.charlyplugin.RunRequest\x1a\x1a.charlyplugin.CaptureReply\x12C\n" +
 	"\aGetFile\x12\x1c.charlyplugin.GetFileRequest\x1a\x1a.charlyplugin.GetFileReplyB6Z4github.com/overthinkos/overthink/charly/plugin/protob\x06proto3"
@@ -772,7 +902,7 @@ func file_plugin_proto_rawDescGZIP() []byte {
 	return file_plugin_proto_rawDescData
 }
 
-var file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_plugin_proto_goTypes = []any{
 	(*Empty)(nil),              // 0: charlyplugin.Empty
 	(*Capabilities)(nil),       // 1: charlyplugin.Capabilities
@@ -783,9 +913,11 @@ var file_plugin_proto_goTypes = []any{
 	(*VenueReply)(nil),         // 6: charlyplugin.VenueReply
 	(*RunRequest)(nil),         // 7: charlyplugin.RunRequest
 	(*RunReply)(nil),           // 8: charlyplugin.RunReply
-	(*CaptureReply)(nil),       // 9: charlyplugin.CaptureReply
-	(*GetFileRequest)(nil),     // 10: charlyplugin.GetFileRequest
-	(*GetFileReply)(nil),       // 11: charlyplugin.GetFileReply
+	(*PutFileRequest)(nil),     // 9: charlyplugin.PutFileRequest
+	(*PutFileReply)(nil),       // 10: charlyplugin.PutFileReply
+	(*CaptureReply)(nil),       // 11: charlyplugin.CaptureReply
+	(*GetFileRequest)(nil),     // 12: charlyplugin.GetFileRequest
+	(*GetFileReply)(nil),       // 13: charlyplugin.GetFileReply
 }
 var file_plugin_proto_depIdxs = []int32{
 	2,  // 0: charlyplugin.Capabilities.provided:type_name -> charlyplugin.ProvidedCapability
@@ -795,18 +927,20 @@ var file_plugin_proto_depIdxs = []int32{
 	0,  // 4: charlyplugin.ExecutorService.Venue:input_type -> charlyplugin.Empty
 	7,  // 5: charlyplugin.ExecutorService.RunSystem:input_type -> charlyplugin.RunRequest
 	7,  // 6: charlyplugin.ExecutorService.RunUser:input_type -> charlyplugin.RunRequest
-	7,  // 7: charlyplugin.ExecutorService.RunCapture:input_type -> charlyplugin.RunRequest
-	10, // 8: charlyplugin.ExecutorService.GetFile:input_type -> charlyplugin.GetFileRequest
-	1,  // 9: charlyplugin.PluginMeta.Describe:output_type -> charlyplugin.Capabilities
-	4,  // 10: charlyplugin.Provider.Invoke:output_type -> charlyplugin.InvokeReply
-	5,  // 11: charlyplugin.Provider.InvokeStream:output_type -> charlyplugin.Frame
-	6,  // 12: charlyplugin.ExecutorService.Venue:output_type -> charlyplugin.VenueReply
-	8,  // 13: charlyplugin.ExecutorService.RunSystem:output_type -> charlyplugin.RunReply
-	8,  // 14: charlyplugin.ExecutorService.RunUser:output_type -> charlyplugin.RunReply
-	9,  // 15: charlyplugin.ExecutorService.RunCapture:output_type -> charlyplugin.CaptureReply
-	11, // 16: charlyplugin.ExecutorService.GetFile:output_type -> charlyplugin.GetFileReply
-	9,  // [9:17] is the sub-list for method output_type
-	1,  // [1:9] is the sub-list for method input_type
+	9,  // 7: charlyplugin.ExecutorService.PutFile:input_type -> charlyplugin.PutFileRequest
+	7,  // 8: charlyplugin.ExecutorService.RunCapture:input_type -> charlyplugin.RunRequest
+	12, // 9: charlyplugin.ExecutorService.GetFile:input_type -> charlyplugin.GetFileRequest
+	1,  // 10: charlyplugin.PluginMeta.Describe:output_type -> charlyplugin.Capabilities
+	4,  // 11: charlyplugin.Provider.Invoke:output_type -> charlyplugin.InvokeReply
+	5,  // 12: charlyplugin.Provider.InvokeStream:output_type -> charlyplugin.Frame
+	6,  // 13: charlyplugin.ExecutorService.Venue:output_type -> charlyplugin.VenueReply
+	8,  // 14: charlyplugin.ExecutorService.RunSystem:output_type -> charlyplugin.RunReply
+	8,  // 15: charlyplugin.ExecutorService.RunUser:output_type -> charlyplugin.RunReply
+	10, // 16: charlyplugin.ExecutorService.PutFile:output_type -> charlyplugin.PutFileReply
+	11, // 17: charlyplugin.ExecutorService.RunCapture:output_type -> charlyplugin.CaptureReply
+	13, // 18: charlyplugin.ExecutorService.GetFile:output_type -> charlyplugin.GetFileReply
+	10, // [10:19] is the sub-list for method output_type
+	1,  // [1:10] is the sub-list for method input_type
 	1,  // [1:1] is the sub-list for extension type_name
 	1,  // [1:1] is the sub-list for extension extendee
 	0,  // [0:1] is the sub-list for field type_name
@@ -823,7 +957,7 @@ func file_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_plugin_proto_rawDesc), len(file_plugin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   3,
 		},

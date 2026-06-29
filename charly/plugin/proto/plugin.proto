@@ -64,20 +64,28 @@ message Frame       { bytes result_json = 1; }   // one streamed result frame (s
 // InvokeRequest.executor_broker_id, and the plugin dials that id to run ops against the
 // real venue. Built-in providers use the typed DeployExecutor directly (no wire).
 // RunSystem/RunUser/Venue are the deploy/step/builder legs (fire-a-script, error-only);
-// RunCapture/GetFile are the CHECK-VERB legs — an out-of-process exec-based check verb
-// (record — and dbus/wl when they externalize) probes the live container by capturing
-// stdout/stderr/exit or pulling a venue file (a screenshot/recording artifact), the
-// kit.Executor.RunCapture/GetFile surface made wire-backed.
+// PutFile is the deploy/step file-PLACEMENT leg — an out-of-process deploy/step plugin
+// that EXECUTES an InstallPlan's steps pushes file content (units, env.d, the charly
+// binary, builder artifacts) onto the venue, the kit.Executor.PutFile surface made
+// wire-backed (the host materializes the carried bytes to a temp file, then delegates
+// to the live DeployExecutor.PutFile). RunCapture/GetFile are the CHECK-VERB legs — an
+// out-of-process exec-based check verb (record — and dbus/wl when they externalize)
+// probes the live container by capturing stdout/stderr/exit or pulling a venue file (a
+// screenshot/recording artifact), the kit.Executor.RunCapture/GetFile surface made
+// wire-backed.
 service ExecutorService {
   rpc Venue(Empty) returns (VenueReply);
   rpc RunSystem(RunRequest) returns (RunReply);
   rpc RunUser(RunRequest) returns (RunReply);
+  rpc PutFile(PutFileRequest) returns (PutFileReply);    // place file content on the venue (binary-safe; owner_root → root:root via sudo)
   rpc RunCapture(RunRequest) returns (CaptureReply);     // capture stdout/stderr/exit (no root escalation — callers add sudo)
   rpc GetFile(GetFileRequest) returns (GetFileReply);    // read a venue file (e.g. a record/screenshot artifact pulled back to the host)
 }
 message VenueReply { string venue = 1; }
 message RunRequest { string script = 1; bytes opts_json = 2; } // opts_json = EmitOpts, JSON
 message RunReply   { string error = 1; }                       // empty error = success
+message PutFileRequest { string path = 1; bytes content = 2; uint32 mode = 3; bool owner_root = 4; bytes opts_json = 5; } // content placed at path; mode = octal perms; opts_json = EmitOpts
+message PutFileReply { string error = 1; }                     // empty error = success
 message CaptureReply { string stdout = 1; string stderr = 2; int32 exit_code = 3; string error = 4; } // error = execution failure, NOT a non-zero exit
 message GetFileRequest { string path = 1; bool as_root = 2; bytes opts_json = 3; }
 message GetFileReply { bytes content = 1; string error = 2; }

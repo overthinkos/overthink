@@ -147,11 +147,28 @@ func (m Matcher) MarshalYAML() (any, error) { //nolint:unparam // error return k
 	return map[string]any{m.Op: m.Value}, nil
 }
 
+// MarshalJSON makes the JSON write path the exact inverse of UnmarshalJSON. A ZERO
+// (absent) matcher — Op=="" — marshals to `null`, which UnmarshalJSON maps back to the
+// zero value; without this, the default struct marshal emitted `{"op":""}`, which
+// UnmarshalJSON's single-key-map branch misread as Op="op" (an asymmetry that corrupted
+// every zero matcher round-tripped through JSON — e.g. the all-zero check-matcher fields
+// of an install Op carried in the per-step IR, or a baked-label Plan step). A NON-zero
+// matcher marshals to the SAME canonical `{"op":...,"value":...}` form the default
+// marshaler produced, so real matchers (and existing baked labels) are byte-unchanged.
+func (m Matcher) MarshalJSON() ([]byte, error) {
+	if m.Op == "" {
+		return []byte("null"), nil
+	}
+	type alias Matcher // break the MarshalJSON recursion; emit the canonical struct form
+	return json.Marshal(alias(m))
+}
+
 // UnmarshalJSON accepts the canonical `{"op":"...","value":...}` form, an
-// operator-map (`{"equals": X}`), and a bare scalar (`"PONG"` → equals).
+// operator-map (`{"equals": X}`), a bare scalar (`"PONG"` → equals), and `null` /
+// empty (→ the zero matcher, the inverse of MarshalJSON's zero case).
 func (m *Matcher) UnmarshalJSON(data []byte) error {
 	s := bytes.TrimSpace(data)
-	if len(s) == 0 {
+	if len(s) == 0 || string(s) == "null" {
 		return nil
 	}
 	if s[0] == '{' {

@@ -1036,11 +1036,11 @@ type InstallPlan struct {
 }
 
 // wireView projects the rich in-core InstallPlan onto the JSON-roundtrippable
-// spec.InstallPlanView the host marshals into an external deploy provider's
-// op.Params. The Steps interface slice is deliberately dropped — it cannot
-// round-trip across the process boundary (a serializable per-step IR for
-// external plugins that EXECUTE steps is a future cutover); the provenance
-// fields prove the plan travelled.
+// spec.InstallPlanView the host marshals into an external deploy/step provider's
+// op.Params. The Steps interface slice round-trips through the SINGLE stepsToView /
+// stepsFromView converter (step_view.go) — an external deploy/step plugin walks the
+// same ordered step IR the in-proc DeployTargets walk and EXECUTES it on the venue (R3;
+// proven by the step-IR round-trip test). The remaining fields are identity + provenance.
 func (p *InstallPlan) wireView() spec.InstallPlanView {
 	if p == nil {
 		return spec.InstallPlanView{}
@@ -1055,6 +1055,7 @@ func (p *InstallPlan) wireView() spec.InstallPlanView {
 		AddCandies:      p.AddCandies,
 		BuilderImage:    p.BuilderImage,
 		Meta:            p.Meta,
+		Steps:           stepsToView(p.Steps),
 	}
 }
 

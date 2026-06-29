@@ -280,6 +280,7 @@ const (
 	ExecutorService_Venue_FullMethodName      = "/charlyplugin.ExecutorService/Venue"
 	ExecutorService_RunSystem_FullMethodName  = "/charlyplugin.ExecutorService/RunSystem"
 	ExecutorService_RunUser_FullMethodName    = "/charlyplugin.ExecutorService/RunUser"
+	ExecutorService_PutFile_FullMethodName    = "/charlyplugin.ExecutorService/PutFile"
 	ExecutorService_RunCapture_FullMethodName = "/charlyplugin.ExecutorService/RunCapture"
 	ExecutorService_GetFile_FullMethodName    = "/charlyplugin.ExecutorService/GetFile"
 )
@@ -291,6 +292,7 @@ type ExecutorServiceClient interface {
 	Venue(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*VenueReply, error)
 	RunSystem(ctx context.Context, in *RunRequest, opts ...grpc.CallOption) (*RunReply, error)
 	RunUser(ctx context.Context, in *RunRequest, opts ...grpc.CallOption) (*RunReply, error)
+	PutFile(ctx context.Context, in *PutFileRequest, opts ...grpc.CallOption) (*PutFileReply, error)
 	RunCapture(ctx context.Context, in *RunRequest, opts ...grpc.CallOption) (*CaptureReply, error)
 	GetFile(ctx context.Context, in *GetFileRequest, opts ...grpc.CallOption) (*GetFileReply, error)
 }
@@ -330,6 +332,15 @@ func (c *executorServiceClient) RunUser(ctx context.Context, in *RunRequest, opt
 	return out, nil
 }
 
+func (c *executorServiceClient) PutFile(ctx context.Context, in *PutFileRequest, opts ...grpc.CallOption) (*PutFileReply, error) {
+	out := new(PutFileReply)
+	err := c.cc.Invoke(ctx, ExecutorService_PutFile_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *executorServiceClient) RunCapture(ctx context.Context, in *RunRequest, opts ...grpc.CallOption) (*CaptureReply, error) {
 	out := new(CaptureReply)
 	err := c.cc.Invoke(ctx, ExecutorService_RunCapture_FullMethodName, in, out, opts...)
@@ -355,6 +366,7 @@ type ExecutorServiceServer interface {
 	Venue(context.Context, *Empty) (*VenueReply, error)
 	RunSystem(context.Context, *RunRequest) (*RunReply, error)
 	RunUser(context.Context, *RunRequest) (*RunReply, error)
+	PutFile(context.Context, *PutFileRequest) (*PutFileReply, error)
 	RunCapture(context.Context, *RunRequest) (*CaptureReply, error)
 	GetFile(context.Context, *GetFileRequest) (*GetFileReply, error)
 	mustEmbedUnimplementedExecutorServiceServer()
@@ -372,6 +384,9 @@ func (UnimplementedExecutorServiceServer) RunSystem(context.Context, *RunRequest
 }
 func (UnimplementedExecutorServiceServer) RunUser(context.Context, *RunRequest) (*RunReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RunUser not implemented")
+}
+func (UnimplementedExecutorServiceServer) PutFile(context.Context, *PutFileRequest) (*PutFileReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PutFile not implemented")
 }
 func (UnimplementedExecutorServiceServer) RunCapture(context.Context, *RunRequest) (*CaptureReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RunCapture not implemented")
@@ -446,6 +461,24 @@ func _ExecutorService_RunUser_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ExecutorService_PutFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PutFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServiceServer).PutFile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ExecutorService_PutFile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServiceServer).PutFile(ctx, req.(*PutFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ExecutorService_RunCapture_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RunRequest)
 	if err := dec(in); err != nil {
@@ -500,6 +533,10 @@ var ExecutorService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RunUser",
 			Handler:    _ExecutorService_RunUser_Handler,
+		},
+		{
+			MethodName: "PutFile",
+			Handler:    _ExecutorService_PutFile_Handler,
 		},
 		{
 			MethodName: "RunCapture",

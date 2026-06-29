@@ -124,12 +124,13 @@ type ReverseOp struct {
 // host across the go-plugin boundary on an OpExecute Invoke.
 // ---------------------------------------------------------------------------
 
-// InstallPlanView is the JSON-roundtrippable wire VIEW of an InstallPlan. The
-// rich in-core InstallPlan (package main) carries a `Steps []InstallStep`
-// interface slice that cannot round-trip across the process boundary, so the
-// host marshals this provenance-only view into op.Params and the plugin decodes
-// it via sdk.DecodeInstallPlans. (Serializable per-step IR for external plugins
-// that EXECUTE steps is a future cutover — this view proves the plan travels.)
+// InstallPlanView is the JSON-roundtrippable wire VIEW of an InstallPlan. The rich
+// in-core InstallPlan (package main) carries a `Steps []InstallStep` interface slice;
+// the host serializes it into the Steps field below via the SINGLE stepToView /
+// stepFromView converter (package main charly/step_view.go), so an EXTERNAL deploy/step
+// plugin that EXECUTES the plan walks the same ordered step IR the in-proc DeployTargets
+// walk — the wire path and the in-proc path carry identical data (R3; proven by the
+// step-IR round-trip test). The remaining fields are the plan's identity + provenance.
 type InstallPlanView struct {
 	DeployID        string            `json:"deploy_id,omitempty"`
 	Box             string            `json:"box,omitempty"`
@@ -140,6 +141,146 @@ type InstallPlanView struct {
 	AddCandies      []string          `json:"add_candies,omitempty"`
 	BuilderImage    string            `json:"builder_image,omitempty"`
 	Meta            map[string]string `json:"meta,omitempty"`
+
+	// Steps is the serializable per-step IR — the ordered InstallStep sequence the
+	// in-core InstallPlan carries, projected onto the wire union below. An external
+	// deploy/step plugin walks it and EXECUTES each step on the venue (the out-of-proc
+	// twin of LocalDeployTarget's in-proc walk), pushing files via the ExecutorService
+	// PutFile leg and running shell via RunSystem/RunUser.
+	Steps []InstallStepView `json:"steps,omitempty"`
+}
+
+// ---------------------------------------------------------------------------
+// InstallStepView — the serializable per-step IR.
+// ---------------------------------------------------------------------------
+
+// InstallStepView is the JSON-roundtrippable wire form of ONE InstallStep. The in-core
+// IR (package main install_plan.go) has 13 concrete step types behind the InstallStep
+// interface; this is their tagged-union projection, discriminated by Kind (the
+// StepKind string). It is a SUPERSET struct: each kind populates the subset of fields
+// it carries, all `omitempty` so the wire stays compact.
+//
+// What it deliberately does NOT carry: Scope() / Venue() / RequiresGate() / Reverse().
+// Those are METHODS computed from the stored fields on the concrete step, not stored
+// data — so stepFromView reconstructs the SAME concrete Go step type and all four
+// methods (and therefore the step's execute semantics + ordering) are byte-identical
+// to the in-proc path. The wire view carries only the stored data; the behaviour rides
+// along for free. That is the structural guarantee the in-proc and wire paths cannot
+// diverge (R3).
+//
+// The package-main↔view mapping lives in ONE place — stepToView / stepFromView
+// (charly/step_view.go) — and the step-IR round-trip test proves every kind survives
+// stepFromView(stepToView(s)) DeepEqual-intact.
+type InstallStepView struct {
+	Kind string `json:"kind"` // the StepKind discriminator ("File","ShellHook","Op",…)
+
+	// Derived ADVISORY fields — the step's Scope()/Venue()/RequiresGate() method
+	// results, populated by stepToView so an executing plugin knows where the effect
+	// lands (system → sudo / root-owned PutFile, user → no sudo), where it runs, and
+	// which opt-in gate it needs, WITHOUT recomputing the rule (R3 — the rule lives on
+	// the concrete step's methods, called once in stepToView). stepFromView IGNORES
+	// them: the reconstructed concrete step recomputes the same values from its stored
+	// fields, so these never participate in step round-trip identity.
+	Scope Scope  `json:"scope,omitempty"`
+	Venue int    `json:"venue,omitempty"`
+	Gate  string `json:"gate,omitempty"`
+
+	// Shared identity / provenance.
+	CandyName string `json:"candy_name,omitempty"` // every kind
+	CandyDir  string `json:"candy_dir,omitempty"`  // Builder / Op / ApkInstall / LocalPkgInstall
+
+	// SystemPackagesStep + RepoChangeStep + LocalPkgInstallStep.
+	Format string `json:"format,omitempty"`
+	// SystemPackagesStep + BuilderStep three-phase tag (int Phase: prepare/install/cleanup).
+	Phase int `json:"phase,omitempty"`
+
+	// SystemPackagesStep.
+	Packages          []string         `json:"packages,omitempty"`
+	Repos             []map[string]any `json:"repos,omitempty"` // each = a RepoSpec.Raw map
+	Options           []string         `json:"options,omitempty"`
+	Copr              []string         `json:"copr,omitempty"`
+	Modules           []string         `json:"modules,omitempty"`
+	Exclude           []string         `json:"exclude,omitempty"`
+	Keys              []string         `json:"keys,omitempty"`
+	CacheMount        []CacheMountView `json:"cache_mount,omitempty"`
+	RawInstallContext map[string]any   `json:"raw_install_context,omitempty"`
+
+	// BuilderStep.
+	Builder         string         `json:"builder,omitempty"`
+	BuilderImage    string         `json:"builder_image,omitempty"`
+	Artifacts       []ArtifactView `json:"artifacts,omitempty"`
+	RawStageContext map[string]any `json:"raw_stage_context,omitempty"`
+	BuilderDef      *BuilderDef    `json:"builder_def,omitempty"`
+	// LocalPkg is shared by BuilderStep (aur) + LocalPkgInstallStep.
+	LocalPkg *LocalPkg `json:"local_pkg,omitempty"`
+
+	// OpStep + ExternalPluginStep (Op + the shared user/ctx/distro fields).
+	Op           *Op               `json:"op,omitempty"`
+	CtxPath      string            `json:"ctx_path,omitempty"`
+	ResolvedUser string            `json:"resolved_user,omitempty"`
+	To           string            `json:"to,omitempty"`
+	CandyVars    map[string]string `json:"candy_vars,omitempty"`
+	Distros      []string          `json:"distros,omitempty"`
+
+	// FileStep.
+	Source string `json:"source,omitempty"`
+	Dest   string `json:"dest,omitempty"`
+	Mode   uint32 `json:"mode,omitempty"` // os.FileMode underlying value
+	Owner  string `json:"owner,omitempty"`
+
+	// ServicePackagedStep + ServiceCustomStep.
+	Unit          string `json:"unit,omitempty"`           // packaged unit name
+	Name          string `json:"name,omitempty"`           // custom service name
+	TargetScope   Scope  `json:"target_scope,omitempty"`   // both
+	Enable        bool   `json:"enable,omitempty"`         // both
+	OverridesText string `json:"overrides_text,omitempty"` // packaged drop-in
+	OverridesPath string `json:"overrides_path,omitempty"` // packaged drop-in
+	PriorEnabled  bool   `json:"prior_enabled,omitempty"`  // packaged
+	UnitText      string `json:"unit_text,omitempty"`      // custom unit body
+	UnitPath      string `json:"unit_path,omitempty"`      // custom unit path
+
+	// ShellHookStep.
+	EnvVars map[string]string `json:"env_vars,omitempty"`
+	PathAdd []string          `json:"path_add,omitempty"`
+	EnvFile string            `json:"env_file,omitempty"`
+
+	// ShellSnippetStep.
+	Origin      string   `json:"origin,omitempty"`
+	Shell       string   `json:"shell,omitempty"`
+	Snippet     string   `json:"snippet,omitempty"`
+	PathAppend  []string `json:"path_append,omitempty"`
+	Destination string   `json:"destination,omitempty"`
+	Marker      string   `json:"marker,omitempty"`
+	UseDropin   bool     `json:"use_dropin,omitempty"`
+	Priority    int      `json:"priority,omitempty"`
+
+	// RepoChangeStep.
+	File     string `json:"file,omitempty"`
+	Content  string `json:"content,omitempty"`
+	Checksum string `json:"checksum,omitempty"`
+
+	// ApkInstallStep.
+	ApkPackages []ApkPackageSpec `json:"apk_packages,omitempty"`
+
+	// LocalPkgInstallStep.
+	PkgbuildRef string `json:"pkgbuild_ref,omitempty"`
+	ProjectDir  string `json:"project_dir,omitempty"`
+}
+
+// CacheMountView is the wire mirror of package main's CacheMountSpec (a BuildKit
+// cache-mount config carried on a SystemPackagesStep). Kept tiny + spec-homed so the
+// step view is fully self-describing on the SDK side.
+type CacheMountView struct {
+	Dst     string `json:"dst,omitempty"`
+	Sharing string `json:"sharing,omitempty"`
+}
+
+// ArtifactView is the wire mirror of package main's ArtifactRef (a BuilderStep output
+// path to extract back to the venue / final image).
+type ArtifactView struct {
+	ContainerPath string `json:"container_path,omitempty"`
+	HostPath      string `json:"host_path,omitempty"`
+	Chown         bool   `json:"chown,omitempty"`
 }
 
 // DeployVenue is the venue descriptor the host puts in op.Env for an external

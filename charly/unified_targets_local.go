@@ -10,7 +10,7 @@ package main
 //   - Methods that don't apply to the host target (Start, Stop, Logs)
 //     return ErrNotSupportedOnHost — the host is always running, has no
 //     separate journal we own, and isn't ours to "stop". The pattern
-//     mirrors ErrNotSupportedOnK8s for k8s targets.
+//     mirrors ErrNotSupportedOnExternal for external substrates.
 
 import (
 	"context"
@@ -26,7 +26,7 @@ import (
 // meaning on a host target. The host is always running (you can't
 // "start" or "stop" your own machine through charly); charly-managed log
 // streams don't apply (logs of "the host" would be the system journal,
-// outside charly's contract). Mirrors ErrNotSupportedOnK8s.
+// outside charly's contract). Mirrors ErrNotSupportedOnExternal.
 var ErrNotSupportedOnHost = errors.New("lifecycle operation not supported on host target")
 
 // hostReverseExec is an inline ReverseExecutor adapter combining a
@@ -245,8 +245,8 @@ func (t *LocalUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) erro
 }
 
 // Start, Stop, Logs: not applicable to the host target. The host is
-// always running; we don't own its journal. Mirror ErrNotSupportedOnK8s
-// pattern for K8sUnifiedTarget.
+// always running; we don't own its journal. Mirror the
+// ErrNotSupportedOnExternal pattern for external substrates.
 func (t *LocalUnifiedTarget) Start(ctx context.Context) error {
 	return fmt.Errorf("host %q: %w", t.NodeName, ErrNotSupportedOnHost)
 }

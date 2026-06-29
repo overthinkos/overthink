@@ -69,7 +69,7 @@ func TestHostUnifiedTarget_Basics(t *testing.T) {
 
 // TestHostUnifiedTarget_NotSupportedMethods verifies the three
 // lifecycle methods that do not apply to host targets return
-// ErrNotSupportedOnHost. Mirrors the K8sUnifiedTarget pattern.
+// ErrNotSupportedOnHost. Mirrors the external-substrate pattern.
 func TestHostUnifiedTarget_NotSupportedMethods(t *testing.T) {
 	target := &LocalUnifiedTarget{NodeName: "host"}
 	ctx := context.Background()

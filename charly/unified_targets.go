@@ -3,9 +3,9 @@ package main
 // unified_targets.go — The unified deploy-target abstraction.
 //
 // UnifiedDeployTarget/LifecycleTarget adapters for the in-proc DeployTarget
-// implementers (LocalDeployTarget, VmDeployTarget, PodDeployTarget,
-// K8sDeployTarget) plus externalDeployTarget (the out-of-process substrate
-// adapter — e.g. android), and the ResolveTarget dispatcher.
+// implementers (LocalDeployTarget, VmDeployTarget, PodDeployTarget) plus
+// externalDeployTarget (the out-of-process substrate adapter — android, k8s),
+// and the ResolveTarget dispatcher.
 //
 // Each adapter wraps an existing legacy target via struct embedding.
 // Methods on the adapter take precedence over inherited legacy methods
@@ -15,14 +15,12 @@ package main
 // Add()/Del()/Test()/Update() and the lifecycle methods (Start/Stop/
 // Status/Logs/Shell/Rebuild) are the canonical implementations: Add()
 // CONSTRUCTS its live embedded target from the DeployContext and runs
-// the kind-specific deploy; Del() walks the ledger / runs kubectl /
-// uninstalls apks per kind. ResolveTarget(node, name) returns the right
+// the kind-specific deploy; Del() walks the ledger per kind. ResolveTarget(node, name) returns the right
 // adapter; the cmd files (deploy_add_cmd.go) carry no per-kind dispatch
 // switch — they build the DeployContext and call target.Add / target.Del.
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 )
@@ -71,12 +69,6 @@ func runUnifiedTargetChecks(ctx context.Context, exec DeployExecutor, kind, node
 	}
 	return nil
 }
-
-// ErrNotSupportedOnK8s is returned by lifecycle methods on the K8s
-// target. K8s cluster lifecycle is kubectl-managed outside charly; charly
-// start/stop/status/logs/shell/rebuild have no meaning for a k8s
-// "deployment" in our schema.
-var ErrNotSupportedOnK8s = errors.New("lifecycle operation not supported on kubernetes target")
 
 // ---------------------------------------------------------------------------
 // LocalUnifiedTarget — adapter over LocalDeployTarget.
@@ -223,42 +215,16 @@ func (t *PodUnifiedTarget) Executor() DeployExecutor {
 // (Generator + ResolvedBox + base-image DistroDef + baseRef CalVer).
 
 // ---------------------------------------------------------------------------
-// K8sUnifiedTarget — adapter over K8sDeployTarget.
-//
-// Only implements UnifiedDeployTarget (not LifecycleTarget). Cluster
-// lifecycle is kubectl-managed; Start/Stop/etc. return
-// ErrNotSupportedOnK8s wrapped with the deployment name.
-// ---------------------------------------------------------------------------
-
-type K8sUnifiedTarget struct {
-	*K8sDeployTarget
-
-	// NodeName is the charly.yml identifier (e.g. "k8s-cluster").
-	NodeName string
-}
-
-func (t *K8sUnifiedTarget) Name() string { return t.NodeName }
-func (t *K8sUnifiedTarget) Kind() string { return "k8s" }
-
-// Executor returns a nil DeployExecutor — k8s operations go through
-// Kustomize + kubectl, not shell. Callers that need to run a shell
-// primitive against a k8s target must special-case this (they don't
-// today; no code path exists).
-func (t *K8sUnifiedTarget) Executor() DeployExecutor { return nil }
-
-// Add for the k8s target emits a Kustomize tree from (caps, node,
-// cluster) — it does NOT consume the InstallPlan IR (plans is ignored,
-// per K8sDeployTarget.Emit being a no-op). Body in unified_targets_k8s.go.
-//
-// Del / Test / Update for k8s also live in unified_targets_k8s.go.
-
-// ---------------------------------------------------------------------------
-// android is an EXTERNAL deploy substrate (F1) — `target: android` resolves to
-// externalDeployTarget over the E3b reverse channel, served out-of-process by
-// candy/plugin-adb (deploy:android). There is no in-proc android UnifiedDeployTarget;
-// the device-endpoint resolution + apk-spec collection the install needs are produced
-// host-side by the registered android deploy preresolver (android_deploy_preresolve.go)
-// and shipped in DeployVenue.Substrate.
+// android and k8s are EXTERNAL deploy substrates (F1) — `target: android` /
+// `target: k8s` resolve to externalDeployTarget over the E3b reverse channel,
+// served out-of-process by candy/plugin-adb (deploy:android) and candy/plugin-kube
+// (deploy:k8s). There is no in-proc android/k8s UnifiedDeployTarget; the
+// substrate-specific inputs the host must resolve (the android device endpoint +
+// apk specs; the k8s image Capabilities + cluster template, used to GENERATE the
+// egress-validated Kustomize tree) are produced host-side by each substrate's
+// registered deploy preresolver (android_deploy_preresolve.go /
+// k8s_deploy_preresolve.go) and shipped in DeployVenue.Substrate. The plugin then
+// drives the live external system (the device / the cluster via kubectl).
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -317,9 +283,8 @@ var (
 	_ UnifiedDeployTarget = (*LocalUnifiedTarget)(nil)
 	_ UnifiedDeployTarget = (*VmUnifiedTarget)(nil)
 	_ UnifiedDeployTarget = (*PodUnifiedTarget)(nil)
-	_ UnifiedDeployTarget = (*K8sUnifiedTarget)(nil)
-	// android has no in-proc UnifiedDeployTarget — it is an external substrate (F1),
-	// resolved to externalDeployTarget below.
+	// android and k8s have no in-proc UnifiedDeployTarget — they are external
+	// substrates (F1), resolved to externalDeployTarget below.
 	_ UnifiedDeployTarget = (*externalDeployTarget)(nil)
 
 	_ LifecycleTarget = (*LocalUnifiedTarget)(nil)
@@ -329,6 +294,4 @@ var (
 	// disposable bed's fresh-rebuild R10 gate) can Rebuild it (re-apply via the
 	// reverse channel). Start/Stop/Logs/Shell error like the host target.
 	_ LifecycleTarget = (*externalDeployTarget)(nil)
-	// K8sUnifiedTarget intentionally NOT in the LifecycleTarget set (cluster
-	// lifecycle is external).
 )

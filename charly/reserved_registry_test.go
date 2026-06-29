@@ -75,28 +75,30 @@ func TestReservedWordRegistry_KindsDispatchable(t *testing.T) {
 }
 
 // TestReservedWordRegistry_DeployBijection proves the F1 substrate-kind-plugin dispatch
-// seam: the deploy-target bijection ACCEPTS an EXTERNALIZED substrate (android) that has
-// NO in-proc DeployTargetProvider — it is served out-of-process by candy/plugin-adb,
-// whose grpcProvider connects at plugin-load time — while every still-builtin substrate
-// (pod/vm/k8s/local) keeps its in-proc provider; and FAILS when a word would have BOTH
-// (the in-proc XOR externalized invariant).
+// seam: the deploy-target bijection ACCEPTS an EXTERNALIZED substrate (android, k8s) that
+// has NO in-proc DeployTargetProvider — it is served out-of-process by candy/plugin-adb
+// (android) / candy/plugin-kube (k8s), whose grpcProvider connects at plugin-load time —
+// while every still-builtin substrate (pod/vm/local) keeps its in-proc provider; and FAILS
+// when a word would have BOTH (the in-proc XOR externalized invariant).
 func TestReservedWordRegistry_DeployBijection(t *testing.T) {
-	// Positive: the live registry (pod/vm/k8s/local builtin + android externalized) passes
+	// Positive: the live registry (pod/vm/local builtin + android/k8s externalized) passes
 	// — the same gate the init() bijection runs at process start.
 	if err := checkDeployProviderBijection(); err != nil {
 		t.Fatalf("live deploy-target bijection is broken: %v", err)
 	}
 
-	// android is THE externalized substrate (F1): in externalizedDeploySubstrates AND
-	// INTENTIONALLY without an in-proc DeployTargetProvider.
-	if !externalizedDeploySubstrates["android"] {
-		t.Fatal("android must be in externalizedDeploySubstrates (the F1 source of truth)")
-	}
-	if _, ok := providerRegistry.resolve(ClassDeployTarget, "android"); ok {
-		t.Fatal("android must NOT have an in-proc DeployTargetProvider — it is externalized (F1)")
+	// android and k8s are THE externalized substrates (F1): in externalizedDeploySubstrates
+	// AND INTENTIONALLY without an in-proc DeployTargetProvider.
+	for _, w := range []string{"android", "k8s"} {
+		if !externalizedDeploySubstrates[w] {
+			t.Fatalf("%s must be in externalizedDeploySubstrates (the F1 source of truth)", w)
+		}
+		if _, ok := providerRegistry.resolve(ClassDeployTarget, w); ok {
+			t.Fatalf("%s must NOT have an in-proc DeployTargetProvider — it is externalized (F1)", w)
+		}
 	}
 	// Every still-builtin substrate keeps its in-proc provider and is NOT externalized.
-	for _, w := range []string{"pod", "vm", "k8s", "local"} {
+	for _, w := range []string{"pod", "vm", "local"} {
 		if externalizedDeploySubstrates[w] {
 			t.Errorf("%s should still be a builtin substrate, not externalized", w)
 		}

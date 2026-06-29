@@ -184,6 +184,31 @@ type AndroidDeployVenue struct {
 	InstallInterval string `json:"install_interval,omitempty"`
 }
 
+// K8sDeployVenue is the preresolved deploy:k8s substrate payload the host's k8s
+// deploy preresolver (charly/k8s_deploy_preresolve.go) produces in
+// DeployVenue.Substrate and the candy/plugin-kube deploy:k8s provider decodes.
+//
+// Unlike deploy:android — where the plugin DRIVES the device and the host only
+// resolves the endpoint + apk specs — the k8s Kustomize GENERATOR
+// (GenerateK8sKustomize) stays in charly's core: it consumes the package-main
+// Capabilities/BoxMetadata type (read from the image's OCI labels via
+// ExtractMetadata) AND the CUE egress gate (#K8sObject / #Kustomization) the
+// out-of-process plugin cannot reach, AND it has a SECOND in-core consumer
+// (`charly bundle from-box --target k8s`, k8s_deploy_from_box.go). So the host
+// generates the egress-validated Kustomize tree under .opencharly/k8s/<name>/ and
+// ships only the resolved overlay path + tree root. The plugin owns the LIVE
+// cluster I/O — `kubectl apply -k <OverlayPath>` at deploy, and the recorded
+// teardown (`kubectl delete -k` + remove the tree) replayed at `charly bundle del`
+// — the k8s analogue of plugin-adb installing apps after the host resolves the
+// specs. The host generates what needs core machinery; the plugin does the live
+// external-system I/O it owns.
+type K8sDeployVenue struct {
+	OverlayPath string `json:"overlay_path"`           // <root>/overlays/<inst> — the `kubectl apply -k` argument
+	TreeRoot    string `json:"tree_root,omitempty"`    // <root> = .opencharly/k8s/<name> — removed at teardown
+	KubeContext string `json:"kube_context,omitempty"` // kind:k8s template's kubeconfig_context → `kubectl --context` (empty → current-context)
+	DeployName  string `json:"deploy_name,omitempty"`  // for plugin-side log messages
+}
+
 // DeployReply is the structured result an external deploy provider returns from
 // an OpExecute Invoke: the teardown ops the host records into the ledger, plus a
 // provenance record. The host writes both via the SAME install_ledger.go path a

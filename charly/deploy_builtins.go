@@ -15,9 +15,9 @@ package main
 
 // podTarget (the `pod` deploy target) lives in plugin_deploy_pod.go.
 
-// k8sTarget (the `k8s` deploy target) lives in plugin_deploy_k8s.go.
-
-// android has NO in-proc deploy target — it is an EXTERNAL deploy substrate (F1),
-// served out-of-process by candy/plugin-adb (deploy:android). ResolveTarget routes
-// `target: android` to externalDeployTarget; the host-side device-endpoint resolution
-// + apk-spec collection live in android_deploy_preresolve.go.
+// android and k8s have NO in-proc deploy target — they are EXTERNAL deploy
+// substrates (F1), served out-of-process by candy/plugin-adb (deploy:android) /
+// candy/plugin-kube (deploy:k8s). ResolveTarget routes `target: android` /
+// `target: k8s` to externalDeployTarget; the host-side substrate preresolution
+// (device-endpoint + apk specs; cluster template + Capabilities → the generated
+// Kustomize tree) lives in android_deploy_preresolve.go / k8s_deploy_preresolve.go.

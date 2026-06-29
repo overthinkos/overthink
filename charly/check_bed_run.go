@@ -475,7 +475,10 @@ func runCheckBed(exe, name string, node BundleNode, opts bedRunOpts) (*bedRunRes
 	// Group bed: no root image — build EACH member's substrate (the same set
 	// bringUpMembers brings up). A pod member builds its box image; a VM member
 	// builds its disk (vm build) so bringUpMembers' vm create has a disk to boot;
-	// a kind:local member carries no image to build (it applies candies in place).
+	// a k8s member (an external-substrate workload, e.g. the check-k8s-deploy bed's
+	// box) builds its box image so the deploy preresolver's ExtractMetadata finds it
+	// locally; a kind:local member carries no image to build (it applies candies in
+	// place).
 	if isGroup {
 		for _, memberKey := range sortedMemberKeys(node.Members) {
 			m := node.Members[memberKey]

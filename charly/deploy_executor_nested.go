@@ -14,8 +14,8 @@ import (
 // deploy_executor_nested.go — the composable executor that turns the
 // flat DeployTarget interface into a recursive dispatcher.
 //
-// Every DeployTarget today (LocalDeployTarget, VmDeployTarget,
-// PodDeployTarget, K8sDeployTarget) runs InstallStep primitives
+// Every IR-consuming DeployTarget today (LocalDeployTarget, VmDeployTarget,
+// PodDeployTarget) runs InstallStep primitives
 // through a single DeployExecutor. When a deployment is nested inside
 // another — a container inside a VM, a VM inside a container, a host-
 // deploy inside any of the above — the child's executor is a

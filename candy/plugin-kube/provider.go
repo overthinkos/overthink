@@ -11,14 +11,17 @@ import (
 	"github.com/overthinkos/overthink/charly/spec"
 )
 
-// provider.go is the out-of-process kube verb provider — charly's host dispatches
-// a `kube:` check step to it through the registry (ResolveVerb("kube") → this
-// grpcProvider → Provider.Invoke) with the FULL #Op marshaled as params_json and a
-// CheckEnv snapshot as env. The SAME provider also serves the k3s kubeconfig-merge
-// the deploy seam needs: that caller (k8s_plugin.go's invokeKubePlugin) builds a
-// synthetic #Op (kube: merge-kubeconfig + the retrieved kubeconfig path + context)
-// and reads the result's Message. Because the out-of-process path does NOT run the
-// host-side matcher pipeline, this Invoke OWNS the whole verdict:
+// provider.go is the out-of-process provider for ALL of plugin-kube's capabilities.
+// Invoke branches on the request class: a "deploy" op drives the `deploy:k8s`
+// SUBSTRATE (deploy.go — `kubectl apply -k` on the host-generated Kustomize tree);
+// every other op is the `kube:` check VERB. For the verb, charly's host dispatches a
+// `kube:` check step through the registry (ResolveVerb("kube") → this grpcProvider →
+// Provider.Invoke) with the FULL #Op marshaled as params_json and a CheckEnv snapshot
+// as env. The SAME provider also serves the k3s kubeconfig-merge the deploy seam
+// needs: that caller (k8s_plugin.go's invokeKubePlugin) builds a synthetic #Op (kube:
+// merge-kubeconfig + the retrieved kubeconfig path + context) and reads the result's
+// Message. Because the out-of-process verb path does NOT run the host-side matcher
+// pipeline, this Invoke OWNS the whole verdict:
 // dispatch the method, then evaluate the stdout/stderr/exit_status matchers itself
 // (via the shared sdk implementation — R3), and return the wire {status,message}
 // the host decodes.
@@ -49,11 +52,17 @@ type kubeEnv struct {
 
 type provider struct{ pb.UnimplementedProviderServer }
 
-// Invoke runs one `kube:` operation. It decodes the full #Op + the env, handles
-// the merge-kubeconfig deploy seam first, skips in box mode (cluster probes need a
-// reachable cluster, never a disposable `charly check box`), dispatches the method,
-// and self-evaluates the matchers.
+// Invoke runs one operation for the plugin's capabilities. The plugin serves BOTH
+// the `kube:` check verb AND the `deploy:k8s` SUBSTRATE (F1), distinguished by the
+// request's class: a "deploy" op runs `kubectl apply -k` against the host-generated
+// Kustomize tree (deploy.go); every other op is the `kube:` verb. It decodes the
+// full #Op + the env, handles the merge-kubeconfig deploy seam first, skips in box
+// mode (cluster probes need a reachable cluster, never a disposable `charly check
+// box`), dispatches the method, and self-evaluates the matchers.
 func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeReply, error) {
+	if req.GetClass() == "deploy" {
+		return invokeDeployK8s(req)
+	}
 	var op spec.Op
 	if len(req.GetParamsJson()) > 0 {
 		if err := json.Unmarshal(req.GetParamsJson(), &op); err != nil {

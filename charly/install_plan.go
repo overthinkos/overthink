@@ -730,7 +730,8 @@ func (s *ShellHookStep) Reverse() []ReverseOp {
 //     `# opencharly:begin <Marker>` fence; for fish, a per-candy drop-in at
 //     ~/.config/fish/conf.d/charly-<candy>.fish (no fence needed, file IS the
 //     unit). UseDropin discriminates the two paths.
-//   - K8sDeployTarget: skipped (no shell in pods).
+//   - the external k8s substrate: does not consume the InstallPlan IR at all
+//     (the host generates a Kustomize tree separately — no shell snippet).
 type ShellSnippetStep struct {
 	CandyName   string   // candy this snippet belongs to (also Marker source)
 	Origin      string   // "<candy>" or "box" or "deploy" (for ledger refcount + LabelShell origin)
@@ -880,7 +881,7 @@ func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
 //     there as the documented fallback).
 //   - OCITarget SKIPS it — no makepkg in a container image build; the image
 //     bakes one self-contained binary via the candy's COPY/curl `cmd:` task.
-//   - the android substrate (external) / K8sDeployTarget SKIP it (no Arch package surface).
+//   - the android / k8s substrates (external) SKIP it (no Arch package surface).
 //
 // The PKGBUILD location is resolved at EMIT time (not compile time), so the
 // step carries only the author's hint (`PkgbuildRef`) plus the candy's source
@@ -930,10 +931,11 @@ func (s *LocalPkgInstallStep) Reverse() []ReverseOp { return nil }
 // module only loads on a fresh boot with nouveau blacklisted.
 //
 // Only targets that OWN a rebootable machine act on it: VmDeployTarget reboots
-// the guest over SSH and waits for it to return. OCITarget / PodDeployTarget /
-// K8sDeployTarget have no machine to reboot at build time and skip it;
-// LocalDeployTarget refuses to reboot the operator's host unattended (skip +
-// warn). Mirrors the ApkInstallStep "only one target executes" pattern.
+// the guest over SSH and waits for it to return. OCITarget / PodDeployTarget have
+// no machine to reboot at build time and skip it (the external k8s substrate does
+// not consume the IR at all); LocalDeployTarget refuses to reboot the operator's
+// host unattended (skip + warn). Mirrors the ApkInstallStep "only one target
+// executes" pattern.
 type RebootStep struct {
 	CandyName string
 }
@@ -1159,7 +1161,6 @@ type EmitOpts struct {
 	Verify               bool // run layer tests after install
 	Pull                 bool // force re-fetch of remote refs / image pull
 	BuilderImageOverride string
-	K8sApply             bool // target=k8s: run `kubectl apply -k` after generating the kustomize tree
 
 	// ParentExec is the DeployExecutor of the parent deployment in a
 	// nested tree. Non-nil iff this target is dispatched as a child of

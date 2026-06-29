@@ -3,8 +3,8 @@ package main
 // deploy_target_unified.go — the canonical DeployTarget interface.
 //
 // The legacy DeployTarget interface in install_plan.go is the 2-method
-// contract (Name + Emit) that the five target implementers (local, vm,
-// pod, k8s, android) satisfy at the IR-emission level. This file defines
+// contract (Name + Emit) that the in-proc target implementers (local, vm,
+// pod) satisfy at the IR-emission level. This file defines
 // the lifecycle-and-management contract layered on top: UnifiedDeployTarget
 // with the per-verb methods, plus LifecycleTarget for the live-runtime
 // targets.
@@ -12,10 +12,10 @@ package main
 // Every `charly bundle add` / `charly bundle del` / `charly update` dispatches through
 // ResolveTarget (unified_targets.go) → an UnifiedDeployTarget adapter. The
 // adapter CONSTRUCTS its live embedded legacy target (SSHExecutor + VmDeployTarget
-// for vm, Generator + PodDeployTarget for pod, LocalDeployTarget for local,
-// K8sDeployTarget for k8s) from the DeployContext it receives, then runs the
-// kind-specific deploy. The `android` substrate is EXTERNAL (F1) — it resolves to
-// externalDeployTarget over the reverse channel, not an embedded legacy target.
+// for vm, Generator + PodDeployTarget for pod, LocalDeployTarget for local) from
+// the DeployContext it receives, then runs the kind-specific deploy. The `android`
+// and `k8s` substrates are EXTERNAL (F1) — they resolve to externalDeployTarget
+// over the reverse channel, not an embedded legacy target.
 // There is no per-kind dispatch switch in the cmd files — the kind lives behind the
 // adapter method.
 

@@ -217,7 +217,7 @@ func (t *externalDeployTarget) Del(ctx context.Context, opts DelOpts) error {
 // ErrNotSupportedOnExternal is returned by lifecycle methods that have no meaning
 // for an external (out-of-process) deploy target. Like the host target it runs on
 // the host venue with no separate runtime to start/stop or journal to stream;
-// mirrors ErrNotSupportedOnHost / ErrNotSupportedOnK8s.
+// mirrors ErrNotSupportedOnHost.
 var ErrNotSupportedOnExternal = errors.New("lifecycle operation not supported on external deploy target")
 
 // Rebuild re-applies the external deployment (refresh semantics, mirroring

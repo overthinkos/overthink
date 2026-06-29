@@ -124,9 +124,9 @@ func k8sDeployEntries(uf *UnifiedFile) []string {
 	return names
 }
 
-// k8sImageRef resolves the image a k8s deploy runs, mirroring
-// K8sUnifiedTarget.Add: the node's explicit Box, falling back to the
-// deploy name.
+// k8sImageRef resolves the image a k8s deploy runs, mirroring the k8s deploy
+// preresolver (k8s_deploy_preresolve.go): the node's explicit Box, falling back
+// to the deploy name.
 func k8sImageRef(name string, node BundleNode) string {
 	if node.Image != "" {
 		return node.Image

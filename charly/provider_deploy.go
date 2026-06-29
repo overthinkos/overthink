@@ -42,11 +42,12 @@ var deployTargetWords = []string{"local", "vm", "pod", "k8s", "android"}
 // over the E3b reverse channel. Both checkDeployProviderBijection (in-proc XOR
 // externalized) and isExternalDeploySubstrate (a substrate kind is external iff
 // listed here) consult it — so the two gates can never disagree. GENERAL for all
-// 5: pod/vm/k8s/local join this set as they migrate; the ONLY android-specific
-// piece is the registered preresolver body (android_deploy_preresolve.go), never a
-// branch in the generic dispatch.
+// 5: pod/vm/local join this set as they migrate; the ONLY substrate-specific piece
+// is each one's registered preresolver body (android_deploy_preresolve.go /
+// k8s_deploy_preresolve.go), never a branch in the generic dispatch.
 var externalizedDeploySubstrates = map[string]bool{
 	"android": true,
+	"k8s":     true,
 }
 
 // checkDeployProviderBijection: every canonical deploy-target word is a valid kind

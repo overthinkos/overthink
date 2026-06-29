@@ -436,7 +436,7 @@ func (c *CheckLiveCmd) runVm() error {
 	// triggers a reboot would otherwise be tested mid-restart. WaitForSSH (poll
 	// until sshd answers) and WaitForCloudInit (retry until an ssh connection
 	// survives a `cloud-init status` poll) are real synchronization primitives,
-	// not fixed sleeps — the same SSHExecutor preflight VmDeployTarget.Emit runs
+	// not fixed sleeps — the same SSHExecutor preflight the external vm deploy walk runs
 	// at deploy time. Fast no-op on an already-settled guest (zero added
 	// latency); the VM analog of waitForContainerReady for the bed runner.
 	gate := &SSHExecutor{Host: VmSshAlias(vmName), ConnectTimeout: 5}
@@ -810,29 +810,92 @@ func deployNodePluginContext(dir, name string) (addCandy []string, refWords []st
 	if err != nil || tree == nil {
 		return nil, nil
 	}
-	node, ok := tree[name]
+	// Resolve the named node, walking a DOTTED path into nested children (the bed runner
+	// deploys a nested child via `charly bundle add <root>.<child>` — its name is dotted and
+	// is NOT a top-level tree key). Without dotted resolution a nested-child deploy surfaces
+	// NO plugin words and its substrate word never loads its provider (ResolveTarget →
+	// "unknown target"). The single source for "given a (possibly dotted) deploy name, which
+	// node?".
+	node, ok := resolveDeployNodeByPath(tree, name)
 	if !ok {
 		return nil, nil
 	}
-	addCandy = node.AddCandy
-	if node.Target != "" {
-		refWords = append(refWords, node.Target)
-	}
-	for i := range node.Plan {
-		op := &node.Plan[i].Op
-		if w := op.Plugin; w != "" {
-			refWords = append(refWords, w)
+	inSubmodule := selfSuperprojectOverridePair(dir) != ""
+	// Collect the node's plugin words AND recurse into its nested children: a deploy whose
+	// OWN substrate OR whose nested children's substrates are externalized must load each
+	// serving plugin. Two cases this covers, GENERALLY (never substrate-special-cased):
+	//   - a dotted child deploy (check-arch-vm.arch-host) — node IS the nested child, so its
+	//     OWN target (e.g. `local`) is surfaced + its plugin auto-injected;
+	//   - a single-process tree deploy (a pod root walked in one process, its nested children
+	//     of a DIFFERENT substrate) — the recursion surfaces every child's substrate word.
+	var visit func(n *BundleNode)
+	visit = func(n *BundleNode) {
+		if n == nil {
+			return
 		}
-		// Also surface each step's VERB discriminator. A closed-#Op EXTERNAL check verb
-		// (libvirt/spice/kube/adb/appium) is NOT a `plugin:` word, so without this the loader
-		// never build-connects the out-of-process plugin candy serving it — e.g. a bed's
-		// `libvirt: list` step would SKIP with "unknown verb". Over-load safe: a compiled-in
-		// verb's candy is already registered, and a non-plugin verb has no candy to load.
-		if v, err := op.Kind(); err == nil && v != "" {
-			refWords = append(refWords, v)
+		addCandy = append(addCandy, n.AddCandy...)
+		if n.Target != "" {
+			refWords = append(refWords, n.Target)
+			// An EXTERNALIZED deploy substrate (vm/local/android/k8s) is served by an
+			// out-of-process plugin candy. A main-repo project discovers that candy from
+			// candy/ directly (its `discover:` scans candy/*), but a box/<distro> SUBMODULE
+			// scans only its own + imported candies — so the parent's
+			// candy/plugin-deploy-<substrate> is absent from the submodule's scan and the
+			// substrate word would never resolve to its provider. Auto-inject the canonical
+			// ref via ExtraCandyRefs, but ONLY in a submodule context — the main repo already
+			// has it locally, and injecting a remote ref there over the local candy is both
+			// redundant and (for an as-yet-unpublished plugin) a fetch failure. In a submodule
+			// bed CHARLY_REPO_OVERRIDE redirects the ref to the local superproject under
+			// development. The SAME host-side-plugin pattern as vmPluginCandyRef (verb:libvirt),
+			// generalized to every external substrate (R3).
+			if inSubmodule {
+				if ref, ok := externalDeploySubstratePluginRef(n.Target); ok {
+					addCandy = append(addCandy, ref)
+				}
+			}
+		}
+		for i := range n.Plan {
+			op := &n.Plan[i].Op
+			if w := op.Plugin; w != "" {
+				refWords = append(refWords, w)
+			}
+			// Also surface each step's VERB discriminator. A closed-#Op EXTERNAL check verb
+			// (libvirt/spice/kube/adb/appium) is NOT a `plugin:` word, so without this the
+			// loader never build-connects the out-of-process plugin candy serving it — e.g. a
+			// bed's `libvirt: list` step would SKIP with "unknown verb". Over-load safe: a
+			// compiled-in verb's candy is already registered, and a non-plugin verb has none.
+			if v, err := op.Kind(); err == nil && v != "" {
+				refWords = append(refWords, v)
+			}
+		}
+		for _, ck := range sortedNestedKeys(n.Children) {
+			visit(n.Children[ck])
 		}
 	}
+	visit(node)
 	return addCandy, refWords
+}
+
+// resolveDeployNodeByPath resolves a (possibly DOTTED) deploy name to its BundleNode,
+// descending node.Children for each dotted segment (the SAME nested-tree shape
+// ResolveDeployChain walks). A bare name is the top-level entry; a dotted name
+// (root.child[.grandchild…]) is the nested child the bed runner deploys via `charly bundle
+// add <root>.<child>`. Returns false when any segment is absent.
+func resolveDeployNodeByPath(tree map[string]BundleNode, name string) (*BundleNode, bool) {
+	parts := strings.Split(name, ".")
+	root, ok := tree[parts[0]]
+	if !ok {
+		return nil, false
+	}
+	cur := &root
+	for _, seg := range parts[1:] {
+		child, ok := cur.Children[seg]
+		if !ok || child == nil {
+			return nil, false
+		}
+		cur = child
+	}
+	return cur, true
 }
 
 // isLocalTarget returns true when c.Box names a `target: local` deployment

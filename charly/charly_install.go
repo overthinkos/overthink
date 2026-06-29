@@ -18,7 +18,7 @@ const (
 )
 
 // ResolveCharlyInstallStrategy reads spec.CloudInit.CharlyInstall and applies
-// the default. Used by VmDeployTarget to decide which post-boot action
+// the default. Used by the vm deploy's PrepareVenue to decide which post-boot action
 // (if any) to perform for delivering the charly binary into the guest.
 func ResolveCharlyInstallStrategy(spec *VmSpec) CharlyInstallStrategy {
 	if spec == nil || spec.CloudInit == nil || spec.CloudInit.CharlyInstall == nil {
@@ -93,7 +93,7 @@ func EnsureCharlyInVenue(ctx context.Context, exec DeployExecutor, opts EmitOpts
 	return tmp, nil
 }
 
-// EnsureCharlyInGuest is the VM-deploy strategy coordinator that VmDeployTarget calls
+// EnsureCharlyInGuest is the VM-deploy strategy coordinator the vm lifecycle hook's PrepareVenue calls
 // after the guest is booted, sshd is up, and cloud-init has finished. It layers
 // the cloud-init `charly_install.strategy` policy on top of the generic
 // EnsureCharlyInVenue mechanism:

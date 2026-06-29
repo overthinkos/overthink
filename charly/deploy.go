@@ -375,7 +375,7 @@ func findVmDeployNode(deploys map[string]BundleNode, name, vmName string) (Bundl
 // (the kind:vm entity name) — operator overlay first, then project config,
 // via the shared findVmDeployNode. Returns "" when no entry declares a vm
 // entity. THE single deploy-key→vm-entity resolver so `charly update <bed>`
-// (VmUnifiedTarget) and any other vm-deploy consumer agree: the deploy KEY
+// (the vm lifecycle hook's Rebuild) and any other vm-deploy consumer agree: the deploy KEY
 // (e.g. check-k3s-vm) is NOT the vm entity name (k3s-vm) when they differ —
 // blindly using the key breaks `charly vm create`/`destroy` for such beds.
 func vmEntityForDeploy(deployName string) string {

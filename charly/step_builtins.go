@@ -1,11 +1,11 @@
 package main
 
-// The built-in InstallStep kinds as StepProviders. Each Emit* method preserves
-// its venue's EXACT prior switch-case behaviour (the per-target emitX/execX
-// handlers are unchanged); only the three type-switches + a dead never-wired
-// step-walker are gone (C4). The VM venue collects ReverseOps + applies gate checks
-// inline, so each EmitVM mirrors its case (which steps append s.Reverse(), which gate,
-// which skip).
+// The built-in InstallStep kinds as StepProviders. The ONE remaining in-proc venue is
+// EmitOCI (the pod-overlay add_candy: Containerfile synthesis), preserving its emitX
+// handlers unchanged. Both target:local AND target:vm externalized (into
+// candy/plugin-deploy-local / candy/plugin-deploy-vm), so the in-proc per-deploy-step walk
+// (the former EmitLocal/EmitVM) is gone — the deploy-venue behaviour (gates + ReverseOp
+// collection) now lives in the out-of-process kit.WalkPlans.
 
 // Every built-in InstallStep provider now lives in its OWN dedicated file as the
 // externalizable dedicated-provider pattern (Phase 3); each self-registers via

@@ -11,7 +11,7 @@
 	// deploy_id (the filename + refcount key), target (the deploy venue), and
 	// deployed_at are always set. image is OPTIONAL: a candy-only host/vm deploy
 	// (add_candy onto an existing target, no container image) legitimately leaves
-	// it empty — see deploy_target_vm.go's `if deployRec.Image == ""` fallback.
+	// it empty — the deploy_id (not the image) is the required ledger key.
 	deploy_id:       string & !=""
 	target:          string & !=""
 	deployed_at:     string & !=""

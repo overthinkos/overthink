@@ -28,7 +28,6 @@ package main
 // block is removed from the shell init file.
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/user"
@@ -218,48 +217,12 @@ func ShellInitFilePath(shell ShellKind, hostHome string) string {
 	}
 }
 
-// EnsureManagedBlock inserts (or updates) the env.d-sourcing managed block in
-// the shell init file on the LOCAL filesystem. Thin wrapper over
-// EnsureManagedBlockVia with a local ShellExecutor — the single write path is
-// the executor-based one, so the local-deploy and vm-deploy code paths can't
-// drift (R3). Returns the file path written.
-func EnsureManagedBlock(shell ShellKind, hostHome string) (string, error) {
-	return EnsureManagedBlockVia(context.Background(), ShellExecutor{}, shell, hostHome, EmitOpts{})
-}
-
-// EnsureManagedBlockVia inserts (or updates) the env.d-sourcing managed block
-// in the shell init file via a DeployExecutor, so the SAME code path serves a
-// local deploy (ShellExecutor → host filesystem) and a VM deploy (SSHExecutor
-// → guest filesystem). `home` is the DESTINATION user's home — the host
-// operator's for local, the GUEST user's for vm. PutFile's `install -D`
-// creates parent dirs (e.g. ~/.config/fish/conf.d). Returns the path written.
-func EnsureManagedBlockVia(ctx context.Context, exec DeployExecutor, shell ShellKind, home string, opts EmitOpts) (string, error) {
-	path := ShellInitFilePath(shell, home)
-	body := ManagedBlockBody(shell, home)
-	existing, err := exec.GetFile(ctx, path, false, opts)
-	if err != nil && !isFileNotFoundErr(err) {
-		return "", fmt.Errorf("EnsureManagedBlockVia read %s: %w", path, err)
-	}
-	updated := replaceOrAppendManagedBlock(string(existing), body, "")
-	if opts.DryRun {
-		return path, nil
-	}
-	tmp, err := os.CreateTemp("", "charly-managed-block-")
-	if err != nil {
-		return "", fmt.Errorf("EnsureManagedBlockVia tmp: %w", err)
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath) //nolint:errcheck
-	if _, err := tmp.WriteString(updated); err != nil {
-		_ = tmp.Close()
-		return "", fmt.Errorf("EnsureManagedBlockVia stage: %w", err)
-	}
-	_ = tmp.Close()
-	if err := exec.PutFile(ctx, tmpPath, path, 0644, false, opts); err != nil {
-		return "", fmt.Errorf("EnsureManagedBlockVia write %s: %w", path, err)
-	}
-	return path, nil
-}
+// The env.d-sourcing managed block is written by the deploy walk's finalizer: in-proc by
+// the OCI build path's helpers, and for the externalized local/vm deploys by the
+// out-of-process kit.WalkPlans (its ensureVenueManagedBlock, sharing ManagedBlockBody /
+// ShellInitFilePath / replaceOrAppendManagedBlock via the kit aliases — R3). The former
+// in-proc managed-block writers were retired when target:vm
+// (the last in-proc caller) externalized.
 
 // RemoveManagedBlock strips the managed block from the shell init
 // file. Used at full-teardown when no candies remain deployed.

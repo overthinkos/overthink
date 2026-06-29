@@ -93,7 +93,7 @@ func TestSaveVmDeployState_LockReleasedBetweenCalls(t *testing.T) {
 // VM bed (e.g. check-k3s-vm) writes its vm_state under the BUNDLE key
 // (check-k3s-vm) cross-referencing the VM ENTITY (k3s-vm), but every teardown
 // caller reaches removeVmDeployEntry with the prefixed ENTITY form (vm:k3s-vm —
-// VmUnifiedTarget.Del rewrites t.NodeName to "vm:"+node.Vm; `charly vm destroy`
+// the vm lifecycle hook PostTeardown computes the entry key as "vm:"+node.From; `charly vm destroy`
 // builds "vm:"+box). The pre-fix code did an exact-key delete on "vm:k3s-vm",
 // missed the bundle-keyed entry, and the entry leaked (domain destroyed, config
 // entry left behind). The fix: the write persists the `vm:` cross-ref, and
@@ -105,7 +105,7 @@ func TestRemoveVmDeployEntry_RemovesBundleKeyedBedEntry(t *testing.T) {
 	t.Cleanup(func() { DeployConfigPath = orig })
 
 	// Seed through the REAL write path under the bundle/bed key (dctx.Name) with
-	// the resolved VM entity — exactly how VmUnifiedTarget.Add persists it.
+	// the resolved VM entity — exactly how the vm lifecycle hook PrepareVenue persists it.
 	if err := saveVmDeployState("check-k3s-vm", "k3s-vm", &VmDeployState{SshPort: 40161, Backend: "auto"}); err != nil {
 		t.Fatalf("seed write: %v", err)
 	}

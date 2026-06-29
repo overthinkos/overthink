@@ -163,7 +163,7 @@
 	seed_iso?:                   string
 	ssh_port?:                   int
 	ssh_user?:                   string
-	backend?:                    "auto" | "qemu" | "libvirt" // "auto" persisted pre-resolution (unified_targets_vm.go)
+	backend?:                    "auto" | "qemu" | "libvirt" // "auto" persisted pre-resolution (the vm deploy lifecycle hook)
 	cloud_init_rendered_digest?: string
 	charly_install_strategy?:    "auto" | "scp" | "url" | "skip"
 	...

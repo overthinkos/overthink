@@ -87,7 +87,7 @@ func (t *PodUnifiedTarget) engine() string {
 
 // Test runs deploy-scope checks against the live container via its
 // executor (podman-exec wrapper). Mirrors the local deploy target.Test +
-// VmUnifiedTarget.Test — only the executor differs.
+// the vm deploy's Test — only the executor differs.
 func (t *PodUnifiedTarget) Test(ctx context.Context, checks []Op, opts TestOpts) error {
 	return runUnifiedTargetChecks(ctx, t.Executor(), t.Kind(), t.NodeName, checks, opts)
 }

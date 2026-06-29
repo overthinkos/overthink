@@ -117,48 +117,9 @@ func TestResolveHomeSubstitutesAcrossSteps(t *testing.T) {
 	}
 }
 
-// D2: the env.d-sourcing managed block is written via the executor to the
-// DESTINATION user's home — so a VM deploy writes /home/<guest-user>/.profile,
-// not the host operator's home. The block sources the guest's env.d dir.
-func TestEnsureManagedBlockViaUsesGuestHome(t *testing.T) {
-	rec := &recordingExec{}
-	path, err := EnsureManagedBlockVia(context.Background(), rec, ShellBash, "/home/cachy", EmitOpts{})
-	if err != nil {
-		t.Fatalf("EnsureManagedBlockVia: %v", err)
-	}
-	// bash → ~/.bashrc (a bash login prefers ~/.bash_profile → ~/.bashrc over
-	// ~/.profile, so the env.d block must land in ~/.bashrc to load).
-	if path != "/home/cachy/.bashrc" {
-		t.Errorf("managed block path = %q, want /home/cachy/.bashrc", path)
-	}
-	if rec.putDest != "/home/cachy/.bashrc" {
-		t.Errorf("PutFile dest = %q, want /home/cachy/.bashrc", rec.putDest)
-	}
-	if !strings.Contains(rec.putContent, "/home/cachy/.config/opencharly/env.d") {
-		t.Errorf("managed block doesn't source the guest env.d dir:\n%s", rec.putContent)
-	}
-	if !strings.Contains(rec.putContent, "opencharly:begin") {
-		t.Errorf("managed block fence missing:\n%s", rec.putContent)
-	}
-}
-
-// D2: the guest's login shell is detected from the guest /etc/passwd, not the
-// host operator's $SHELL — CachyOS ships fish as the interactive default, so
-// the env.d block must land in fish's conf.d, not ~/.profile.
-func TestDetectGuestShell(t *testing.T) {
-	for _, tc := range []struct {
-		passwdShell string
-		want        ShellKind
-	}{
-		{"/usr/bin/fish", ShellFish},
-		{"/bin/zsh", ShellZsh},
-		{"/bin/bash", ShellBash},
-		{"/usr/bin/nonexistent", ShellBash}, // unknown → bash
-		{"", ShellBash},                     // detection failure → bash
-	} {
-		tgt := &VmDeployTarget{Exec: &recordingExec{runCaptureReturn: tc.passwdShell}}
-		if got := tgt.detectGuestShell(context.Background()); got != tc.want {
-			t.Errorf("detectGuestShell(%q) = %q, want %q", tc.passwdShell, got, tc.want)
-		}
-	}
-}
+// The env.d-sourcing managed block (written to the DESTINATION user's home) and the
+// guest login-shell detection moved into the out-of-process kit.WalkPlans finalizer
+// (kit.ensureVenueManagedBlock + kit.DetectShellFromPath) when target:vm externalized —
+// the former in-proc managed-block writer + the in-proc VM-target guest-shell detection are gone, so
+// their unit tests retired here; kit's render_test + the check-arch-vm bed cover the
+// replacement (env.d sourced from the guest home on a live VM deploy).

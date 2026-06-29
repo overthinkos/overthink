@@ -223,7 +223,7 @@ gemini:
 # Bed-to-verb coverage map:
 #   check-k3s-vm               (vm)  — k8s (all 13 methods) + guest-side
 #                                     file/service/port/process, http via
-#                                     port-forward, VmDeployTarget end-to-end
+#                                     port-forward, the external vm deploy end-to-end
 #   check-k8s-deploy           (vm)  — the EXTERNALIZED deploy:k8s substrate (F1):
 #                                     a k3s VM cluster + a target:k8s workload
 #                                     member (check-k8s-deploy-app) applied via the
@@ -259,7 +259,7 @@ check-k3s-vm:
         disposable: true
         lifecycle: dev
         description: >-
-            Sole deterministic proof of the VmDeployTarget->k8s end-to-end path and the full 13-method k8s probe surface against a real k3s control plane, and the R10 for ssh.port_auto. A disposable libvirt Arch cloud VM (host 16443->guest 6443 forward, charly installed via cloud-init) overlays k3s-server over SSH, then runs guest command/process/port/file probes plus the full k8s suite (nodes/wait-nodes/pods/wait-ready/addons/ingressclass/storageclass/raw/service) against cluster vm-k3s-vm, an agent-check matching probe, and a host-side charly status --json (status-shows-vm).
+            Sole deterministic proof of the external-vm-deploy->k8s end-to-end path and the full 13-method k8s probe surface against a real k3s control plane, and the R10 for ssh.port_auto. A disposable libvirt Arch cloud VM (host 16443->guest 6443 forward, charly installed post-boot via the vm substrate (EnsureCharlyInGuest)) overlays k3s-server over SSH, then runs guest command/process/port/file probes plus the full k8s suite (nodes/wait-nodes/pods/wait-ready/addons/ingressclass/storageclass/raw/service) against cluster vm-k3s-vm, an agent-check matching probe, and a host-side charly status --json (status-shows-vm).
     check-k3s-vm-add_candy:
         add_candy:
             - k3s-server

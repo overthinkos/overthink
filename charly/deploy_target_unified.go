@@ -11,10 +11,10 @@ package main
 //
 // Every `charly bundle add` / `charly bundle del` / `charly update` dispatches through
 // ResolveTarget (unified_targets.go) → an UnifiedDeployTarget adapter. The
-// adapter CONSTRUCTS its live embedded legacy target (SSHExecutor + VmDeployTarget
-// for vm, Generator + PodDeployTarget for pod, the local deploy target for local) from
-// the DeployContext it receives, then runs the kind-specific deploy. The `android`
-// and `k8s` substrates are EXTERNAL (F1) — they resolve to externalDeployTarget
+// adapter CONSTRUCTS its live embedded legacy target (Generator + PodDeployTarget
+// for pod, the local deploy target for local) from
+// the DeployContext it receives, then runs the kind-specific deploy. The `vm`,
+// `android`, and `k8s` substrates are EXTERNAL — they resolve to externalDeployTarget
 // over the reverse channel, not an embedded legacy target.
 // There is no per-kind dispatch switch in the cmd files — the kind lives behind the
 // adapter method.

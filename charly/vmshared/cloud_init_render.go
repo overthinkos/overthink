@@ -44,7 +44,7 @@ type CloudInitRuntimeParams struct {
 //     (if the key-injection channel is enabled AND SSHPublicKey != "")
 //  2. Minimum packages: {openssh, curl, tar} unioned with user's Packages
 //  3. Minimum runcmd: {systemctl enable --now sshd} prepended
-//  4. charly_install: NOT a cloud-init concern — VmDeployTarget delivers charly
+//  4. charly_install: NOT a cloud-init concern — the vm deploy's PrepareVenue delivers charly
 //     post-boot (auto/scp stage it; skip verifies). No charly download runcmd.
 //  5. VmCloudInit.Extra: raw cloud-config YAML appended as a second
 //     document (separated by ---) if non-empty
@@ -311,7 +311,7 @@ func composePackages(userPkgs []string, distro string) []string {
 }
 
 // composeRunCmd prepends charly's minimum boot task (enable sshd) and appends the
-// user's runcmd. charly is NOT installed via cloud-init — VmDeployTarget
+// user's runcmd. charly is NOT installed via cloud-init — the vm deploy's PrepareVenue
 // delivers it post-boot per charly_install.strategy (auto/scp stage the host binary;
 // skip verifies presence).
 //

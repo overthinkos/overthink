@@ -89,13 +89,14 @@ func TestDedicatedProviders_BulkResolveAndAbsent(t *testing.T) {
 
 	// Deploy targets: each resolves to a DeployTargetProvider that constructs the
 	// expected UnifiedDeployTarget (behavior-preserving), and is absent from slice+manifest.
-	// k8s is NOT here — it is an EXTERNAL substrate (F1, served by candy/plugin-kube),
-	// so it has no in-proc DeployTargetProvider (see TestReservedWordRegistry_DeployBijection).
+	// pod is the ONLY remaining in-proc dedicated deploy target — local, vm, android and
+	// k8s are EXTERNAL substrates (F1, served by candy/plugin-deploy-{local,vm} /
+	// plugin-adb / plugin-kube), so they have no in-proc DeployTargetProvider (see
+	// TestReservedWordRegistry_DeployBijection).
 	wantTarget := map[string]func(UnifiedDeployTarget) bool{
 		"pod": func(t UnifiedDeployTarget) bool { _, ok := t.(*PodUnifiedTarget); return ok },
-		"vm":  func(t UnifiedDeployTarget) bool { _, ok := t.(*VmUnifiedTarget); return ok },
 	}
-	for _, word := range []string{"pod", "vm"} {
+	for _, word := range []string{"pod"} {
 		dp, ok := providerRegistry.ResolveDeploy(word)
 		if !ok {
 			t.Fatalf("ResolveDeploy(%q) not registered — dedicated self-registration regressed", word)

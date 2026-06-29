@@ -120,7 +120,7 @@ func (v *VMCollector) enrichFromDeploy(cs *DeploymentStatus, entity string, opts
 	}
 	// Surface the guest SSH endpoint as a host->guest:22 port mapping so the
 	// PORTS column reflects how an operator reaches the VM. This is the live
-	// truth recorded by VmDeployTarget on first apply.
+	// truth recorded by the vm lifecycle hook's PrepareVenue on first apply.
 	if state.SshPort > 0 {
 		cs.Ports = append(cs.Ports, PortMapping{
 			HostPort: state.SshPort,

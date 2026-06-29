@@ -42,17 +42,54 @@ var deployTargetWords = []string{"local", "vm", "pod", "k8s", "android"}
 // over the E3b reverse channel. Both checkDeployProviderBijection (in-proc XOR
 // externalized) and isExternalDeploySubstrate (a substrate kind is external iff
 // listed here) consult it — so the two gates can never disagree. GENERAL for all
-// 5: pod/vm/local join this set as they migrate; the ONLY substrate-specific piece
-// is each one's registered preresolver body (android_deploy_preresolve.go /
-// k8s_deploy_preresolve.go), never a branch in the generic dispatch. local needs NO
-// preresolver — its plan walk + executor selection are the generic externalDeployTarget
+// 5: pod joins this set as it migrates; the ONLY substrate-specific piece is each one's
+// registered preresolver body (android_deploy_preresolve.go / k8s_deploy_preresolve.go) OR
+// lifecycle hook (vm_deploy_lifecycle.go), never a branch in the generic dispatch. local
+// needs NEITHER — its plan walk + executor selection are the generic externalDeployTarget
 // path (the executor is Shell for host:local, SSH for host:user@machine — see
 // ResolveTarget), so the plan VIEWS the host marshals already carry everything the
 // candy/plugin-deploy-local plugin needs.
+//
+// vm is served by candy/plugin-deploy-vm (kit.WalkPlans over the GUEST SSHExecutor). Unlike
+// the others it owns a real venue LIFECYCLE, so it registers a substrateLifecycle
+// (vm_deploy_lifecycle.go): the host-side hook that boots the domain + builds the guest
+// SSHExecutor the reverse channel serves, runs the nested pod-in-guest orchestration, and
+// owns Start/Stop/Status/Logs/Shell/Rebuild + the ssh-config / charly.yml-entry / ephemeral
+// teardown bookkeeping. The deploy WALK is still external; only the venue lifecycle stays
+// host-side (the host-owns-the-engine principle, like k8s keeping GenerateK8sKustomize in core).
 var externalizedDeploySubstrates = map[string]bool{
 	"android": true,
 	"k8s":     true,
 	"local":   true,
+	"vm":      true,
+}
+
+// externalDeploySubstratePlugins maps each first-party EXTERNALIZED deploy-substrate word
+// to the candy SUBPATH of the plugin that serves it (in the default project repo). It is the
+// substrate→plugin-candy companion of externalizedDeploySubstrates: that set says a word is
+// external; this map says WHICH candy serves it.
+var externalDeploySubstratePlugins = map[string]string{
+	"local":   "candy/plugin-deploy-local",
+	"vm":      "candy/plugin-deploy-vm",
+	"android": "candy/plugin-adb",
+	"k8s":     "candy/plugin-kube",
+}
+
+// externalDeploySubstratePluginRef returns the canonical @github ref to the candy serving an
+// externalized deploy SUBSTRATE word, and whether the word is a first-party externalized
+// substrate. A box/<distro> SUBMODULE's beds reference the substrate plugin nowhere in their
+// own candy closure — a main-repo project discovers it from candy/ directly (its `discover:`
+// scans candy/*), but a submodule scans only its own + imported candies — so the deploy/check
+// plugin-load paths auto-inject this ref (via ExtraCandyRefs) ONLY in a submodule context, so
+// the substrate word resolves to its out-of-process provider. In a submodule bed
+// CHARLY_REPO_OVERRIDE redirects it to the local superproject under development — the SAME
+// host-side-plugin pattern as vmPluginCandyRef for verb:libvirt (vm_plugin_client.go, R3).
+func externalDeploySubstratePluginRef(word string) (string, bool) {
+	sub, ok := externalDeploySubstratePlugins[word]
+	if !ok {
+		return "", false
+	}
+	return "@" + DefaultProjectRepo + "/" + sub, true
 }
 
 // checkDeployProviderBijection: every canonical deploy-target word is a valid kind
@@ -77,7 +114,12 @@ func checkDeployProviderBijection() error {
 		case ext && hasBuiltin:
 			problems = append(problems, w+" (externalized substrate must NOT also have an in-proc DeployTargetProvider)")
 		case ext && !hasBuiltin:
-			// OK — served out-of-process by an external plugin connected at load time.
+			// OK — served out-of-process by an external plugin connected at load time. It MUST
+			// also name its canonical plugin candy so a box/<distro> submodule can auto-inject
+			// the ref (externalDeploySubstratePluginRef) and resolve the substrate word.
+			if _, ok := externalDeploySubstratePlugins[w]; !ok {
+				problems = append(problems, w+" (externalized substrate has no externalDeploySubstratePlugins entry — a submodule can't discover its plugin candy)")
+			}
 		case !ext && !hasBuiltin:
 			problems = append(problems, w+" (no DeployTargetProvider and not an externalized substrate)")
 		default: // !ext && hasBuiltin

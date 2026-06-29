@@ -8,10 +8,11 @@ package kit
 //     ShellHook, ShellSnippet, ServicePackaged, ServiceCustom, RepoChange) the plugin
 //     renders + executes ITSELF via the F2 legs (RunSystem/RunUser/PutFile/GetFile), using
 //     the SHARED pure render helpers (render.go / profile.go).
-//   - HOST-ENGINE kinds (Builder, LocalPkgInstall, SystemPackages, an act-verb Op, and
-//     ExternalPlugin) the plugin CANNOT execute itself — they need in-core host machinery
-//     (podman/makepkg, the project DistroConfig, the provider registry, a nested broker) —
-//     so it dials RunHostStep and the host runs them against the same venue executor.
+//   - HOST-ENGINE kinds (Builder, LocalPkgInstall, SystemPackages, an act-verb Op,
+//     ExternalPlugin, and Reboot) the plugin CANNOT execute itself — they need in-core host
+//     machinery (podman/makepkg, the project DistroConfig, the provider registry, a nested
+//     broker, the deterministic boot_id reboot poll) — so it dials RunHostStep and the host
+//     runs them against the same venue executor (Reboot only on a charly-owned VM guest).
 //
 // Teardown ops: for the plugin-renderable kinds the host pre-computed step.Reverse() into
 // view.ReverseOps (Fork A), so the plugin ECHOES them — the Reverse() rule stays ONCE in
@@ -98,6 +99,13 @@ func walkStep(ctx context.Context, exec DeployExecutor, step spec.InstallStepVie
 		return exec.RunHostStep(ctx, step, nil)
 	case "ExternalPlugin":
 		return exec.RunHostStep(ctx, step, nil)
+	case "Reboot":
+		// A `reboot: true` layer. The host owns the reboot engine (record the guest boot_id,
+		// fire the reboot, poll until the boot_id changes + the executor reconnects — a
+		// deterministic primitive the leaf plugin cannot replicate). The host is VENUE-AWARE:
+		// it reboots a charly-owned VM guest but skip-and-notes a host venue (target:local),
+		// so this routing is uniform while the reboot policy stays host-side. No teardown op.
+		return exec.RunHostStep(ctx, step, nil)
 	case "Op":
 		// An act-verb Op (a builtin ProvisionActor: Plugin set and not the `command` verb)
 		// needs the in-proc registry — route to RunHostStep. Every other Op variant is
@@ -123,9 +131,6 @@ func walkStep(ctx context.Context, exec DeployExecutor, step spec.InstallStepVie
 	case "ApkInstall":
 		// Only an android deploy installs apk packages; on any other venue it is a no-op
 		// (the in-proc targets record a skip). No teardown.
-		return nil, nil
-	case "Reboot":
-		// Never reboot the venue from a plugin walk (the in-proc local target skips + warns).
 		return nil, nil
 	default:
 		return nil, fmt.Errorf("WalkPlans: unsupported step kind %q", step.Kind)

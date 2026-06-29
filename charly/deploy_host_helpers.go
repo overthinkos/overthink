@@ -5,9 +5,9 @@ package main
 // They formerly lived in the deleted in-proc local-target file (removed in this cutover):
 //
 //   - renderHostPackageCommand: the format's phase.install.host package-install render
-//     (used by VmDeployTarget AND the RunHostStep SystemPackages arm).
+//     (used by the external vm deploy AND the RunHostStep SystemPackages arm).
 //   - renderBuilderScript + hostBuilderContext: the builder phase.install.host render
-//     (used by VmDeployTarget.execBuilder AND the venue-agnostic runVenueBuilderStep).
+//     (used by the host-engine builder leg: RunHostStep → runVenueBuilderStep).
 //   - isFileNotFoundErr / EmitOpts.ContextOrDefault: small shared utilities.
 //   - runSudoShell / runSudoArgs: the host sudo wrappers used by deploy_executor.go +
 //     reverse_ops.go.

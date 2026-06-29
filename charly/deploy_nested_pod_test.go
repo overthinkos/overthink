@@ -195,7 +195,7 @@ func TestDeriveDeploymentName(t *testing.T) {
 // workstation shape (~/.config/charly/deploy.yml's cachyos-gpu has
 // target/vm/preemptible but no nested:) that surfaced the failure: a whole-node
 // re-read of the operator deploy.yml (operator clobbering project) would drop
-// nested: and silently skip deployNestedPodsInGuest. VmUnifiedTarget.Add
+// nested: and silently skip deployNestedPodsInGuest. The vm lifecycle hook PostApply
 // consumes this merged node directly. The check-bed keys (no operator overlay)
 // were never affected — which is why the bug hid behind a green pod bed. The
 // end-to-end consumption proof is the live `charly check live cachyos-gpu.selkies-kde`

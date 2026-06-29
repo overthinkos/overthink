@@ -45,7 +45,7 @@ var runCharlySubcommand = func(args ...string) error {
 // the child's "error" is actually just "already running" or similar.
 //
 // A package var (like runCharlySubcommand) so tests can stub the
-// child-process boundary — e.g. unified_targets_vm_test.go records the
+// child-process boundary — e.g. the vm deploy lifecycle tests record the
 // `charly vm start` call without spawning charly.
 var runCharlySubcommandCapture = func(args ...string) (string, error) {
 	exe := os.Args[0]

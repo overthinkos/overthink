@@ -7,7 +7,7 @@ import (
 )
 
 // TestCharlyUpdatePreservesPerHostDeployFields reproduces the operator's scenario
-// through the ACTUAL `charly update <vm>` path: VmUnifiedTarget.Rebuild shells
+// through the ACTUAL `charly update <vm>` path: the vm lifecycle hook Rebuild shells
 // `charly vm destroy` (removeVmDeployEntry) then `charly vm create` (saveVmDeployState).
 // The per-host entry carries `preemptible` (a LOCAL deploy property) + env +
 // tunnel; the destroy→create cycle must NOT clobber any of them. Against the

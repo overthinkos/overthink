@@ -30,7 +30,7 @@ type CloudImageBuildResult struct {
 	BaseImageSHA256 string
 
 	// CloudInitDigest is sha256 of the rendered user-data — used by
-	// VmDeployTarget to detect whether the seed ISO needs regeneration
+	// the vm lifecycle to detect whether the seed ISO needs regeneration
 	// (drift from last-recorded digest).
 	CloudInitDigest string
 }

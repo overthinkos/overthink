@@ -435,7 +435,7 @@ bare-pod:
 
 // TestRemoveVmDeployEntry_SelectiveAndIdempotent pins the deploy-lifecycle
 // cleanup primitive that `charly vm destroy` (vm.go) and `charly bundle del vm:<name>`
-// (unified_targets_vm.go) rely on to remove a VM's deploy.yml entry on teardown
+// (the vm lifecycle hook's PostTeardown) rely on to remove a VM's deploy.yml entry on teardown
 // — the inverse of the saveVmDeployState written on add. It proves the two
 // load-bearing properties of the fix:
 //

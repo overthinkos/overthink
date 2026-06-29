@@ -23,7 +23,7 @@ type PortSpec struct {
 	Protocol string
 }
 
-// VmDeployState is the runtime state VmDeployTarget writes on first apply.
+// VmDeployState is the runtime state the vm lifecycle hook's PrepareVenue writes on first apply.
 // Source: charly/deploy.go VmDeployState.
 type VmDeployState struct {
 	InstanceID              string                  `yaml:"instance_id,omitempty" json:"instance_id,omitempty"`

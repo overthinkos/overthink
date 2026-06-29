@@ -3,8 +3,8 @@ package main
 // unified_targets.go — The unified deploy-target abstraction.
 //
 // UnifiedDeployTarget/LifecycleTarget adapters for the in-proc DeployTarget
-// implementers (the local deploy target, VmDeployTarget, PodDeployTarget) plus
-// externalDeployTarget (the out-of-process substrate adapter — android, k8s),
+// implementers (the local deploy target, PodDeployTarget) plus
+// externalDeployTarget (the out-of-process substrate adapter — vm, android, k8s),
 // and the ResolveTarget dispatcher.
 //
 // Each adapter wraps an existing legacy target via struct embedding.
@@ -87,54 +87,16 @@ func runUnifiedTargetChecks(ctx context.Context, exec DeployExecutor, kind, node
 // host:local, SSHExecutor for host:user@machine) — see ResolveTarget.
 
 // ---------------------------------------------------------------------------
-// VmUnifiedTarget — adapter over VmDeployTarget.
+// target:vm has NO in-proc UnifiedDeployTarget — it externalized into the
+// candy/plugin-deploy-vm out-of-process plugin (an externalizedDeploySubstrate, like
+// local/android/k8s). ResolveTarget routes a `vm:` substrate to externalDeployTarget over
+// the E3b reverse channel; the plugin's kit.WalkPlans executes the InstallPlan inside the
+// GUEST (the plugin-renderable kinds via the F2 reverse legs, the host-engine kinds via
+// RunHostStep). Unlike the other externalized substrates, vm owns a real venue lifecycle, so
+// it registers a substrateLifecycle (vm_deploy_lifecycle.go) — the host-side hook that boots
+// the domain, builds the guest SSHExecutor the reverse channel serves, deploys nested pods,
+// and owns Start/Stop/Status/Logs/Shell/Rebuild + the teardown bookkeeping.
 // ---------------------------------------------------------------------------
-
-type VmUnifiedTarget struct {
-	*VmDeployTarget
-
-	// NodeName is the charly.yml identifier (e.g. "arch-vm"). Distinct
-	// from VmDeployTarget.Name ("vm:" + VMName legacy) and
-	// VmDeployTarget.VMName (the underlying kind:vm entity name).
-	NodeName string
-
-	// Instance is the optional per-instance suffix for multi-instance
-	// VMs. Combined with the entity name to form the libvirt/qemu
-	// domain via vmName(entity, instance).
-	Instance string
-
-	// KeepRepoChanges and KeepServices are deploy-del gate flags
-	// populated by the dispatcher from `charly bundle del --keep-…`.
-	// Forwarded to runReverseOps when Del runs.
-	KeepRepoChanges bool
-	KeepServices    bool
-
-	// RevRunner is the ReverseRunner used by guest-side ReverseOp
-	// teardown. Typically an *sshReverseRunner constructed by the
-	// dispatcher from the persisted vm_state in charly.yml. Nil →
-	// Del builds it itself from buildVmReverseRunner(NodeName).
-	RevRunner ReverseRunner
-
-	// NodeOnly mirrors `charly bundle add --node-only`: when true, Add does
-	// NOT descend into nested target:pod children (the caller deploys
-	// them explicitly afterwards via the dotted path). Set by the
-	// dispatcher from BundleAddCmd.NodeOnly.
-	NodeOnly bool
-}
-
-func (t *VmUnifiedTarget) Name() string { return t.NodeName }
-func (t *VmUnifiedTarget) Kind() string { return "vm" }
-func (t *VmUnifiedTarget) Executor() DeployExecutor {
-	if t.VmDeployTarget == nil {
-		return nil
-	}
-	return t.Exec
-}
-
-// Add for the vm target lives in unified_targets_vm.go alongside
-// Del/Test/Update/Rebuild — it constructs the live VmDeployTarget
-// (ssh-config stanza + auto-boot + SSHExecutor) and deploys nested
-// pods from the merged dctx.Node.
 
 // ---------------------------------------------------------------------------
 // PodUnifiedTarget — adapter over PodDeployTarget.
@@ -255,7 +217,11 @@ func ResolveTarget(node *BundleNode, name string) (UnifiedDeployTarget, error) {
 		if perr != nil {
 			return nil, fmt.Errorf("deployment %q: %w", name, perr)
 		}
-		return &externalDeployTarget{name: name, prov: gp, exec: exec}, nil
+		// node is stored so a substrate with a lifecycle hook (vm) can resolve its kind:vm
+		// entity for the host-side lifecycle (PrepareVenue / Rebuild / teardown). For vm the
+		// rootExecutorForDeployNode placeholder (ShellExecutor, no host: field) is REPLACED by
+		// the guest SSHExecutor the lifecycle hook's PrepareVenue returns in apply().
+		return &externalDeployTarget{name: name, prov: gp, exec: exec, node: node}, nil
 	}
 	return nil, fmt.Errorf("deployment %q: target %q has no in-process resolver and is not an out-of-proc plugin provider", name, node.Target)
 }
@@ -263,16 +229,16 @@ func ResolveTarget(node *BundleNode, name string) (UnifiedDeployTarget, error) {
 // compile-time assertion: every adapter satisfies the interfaces it
 // claims. If any method signature drifts, `go build` fails here.
 var (
-	_ UnifiedDeployTarget = (*VmUnifiedTarget)(nil)
 	_ UnifiedDeployTarget = (*PodUnifiedTarget)(nil)
-	// local, android and k8s have no in-proc UnifiedDeployTarget — they are external
+	// local, vm, android and k8s have no in-proc UnifiedDeployTarget — they are external
 	// substrates (externalizedDeploySubstrates), resolved to externalDeployTarget below.
 	_ UnifiedDeployTarget = (*externalDeployTarget)(nil)
 
-	_ LifecycleTarget = (*VmUnifiedTarget)(nil)
 	_ LifecycleTarget = (*PodUnifiedTarget)(nil)
-	// externalDeployTarget is a LifecycleTarget so `charly update <name>` (the
-	// disposable bed's fresh-rebuild R10 gate) can Rebuild it (re-apply via the
-	// reverse channel). Start/Stop/Logs/Shell error like the host target.
+	// externalDeployTarget is a LifecycleTarget so `charly update <name>` (the disposable
+	// bed's fresh-rebuild R10 gate) can Rebuild it. For a substrate with a lifecycle hook
+	// (vm) Rebuild + Start/Stop/Status/Logs/Shell delegate to the hook (the `charly vm`
+	// family + the domain re-create); for a hookless substrate (local/android/k8s) Rebuild
+	// re-applies and Start/Stop/Logs/Shell error like the host target.
 	_ LifecycleTarget = (*externalDeployTarget)(nil)
 )

@@ -216,7 +216,7 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 // Without this fix, dispatcher loops that destroy + recreate VMs
 // (`charly check run check-k3s-vm`, `charly update <vm-bed>`) fail at the post-create
 // SSH step with "Host key verification failed", which surfaces in
-// VmDeployTarget.WaitForSSH as "Could not resolve hostname" — see the
+// the vm deploy's SSHExecutor.WaitForSSH preflight as "Could not resolve hostname" — see the
 // 2026-05-06 R10 follow-up RCA.
 func publishVmSshAlias(home, vmName, deployName string, spec *VmSpec, rt VmRuntimeParams) error {
 	stateDir := filepath.Join(home, ".local", "share", "charly", "vm", "charly-"+vmName)

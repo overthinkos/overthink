@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/overthinkos/overthink/charly/spec"
-	"os"
 	"strings"
+
+	"github.com/overthinkos/overthink/charly/spec"
 )
 
 // plugin_step_external.go — the StepProvider for StepKindExternalPlugin: the
@@ -25,7 +25,7 @@ import (
 // builtin (command + the ProvisionActor verbs) stays on the OpStep path. Mirrors the
 // build-context BuildEmitter marker interface (provider_verb.go).
 type executorInvoker interface {
-	InvokeWithExecutor(ctx context.Context, op *Operation, exec DeployExecutor, build buildEngineContext) (*Result, error)
+	InvokeWithExecutor(ctx context.Context, op *Operation, exec DeployExecutor, build buildEngineContext, rebootable bool) (*Result, error)
 }
 
 // externalPluginStepProvider is the StepKindExternalPlugin StepProvider. Each Emit*
@@ -57,35 +57,20 @@ func (externalPluginStepProvider) EmitOCI(t *OCITarget, step InstallStep, _ *Ins
 	return nil
 }
 
-// EmitVM is the guest DEPLOY venue: Invoke(OpExecute) over the reverse channel WITH the
-// SSHExecutor, so the plugin's RunSystem/RunUser run inside the guest. DryRun does NOT
-// Invoke — Invoke IS the apply — so a dry-run short-circuits BEFORE the wire call. Records
-// the returned ReverseOps into the guest-side ledger. (The host/local DEPLOY venue is no
-// longer an in-proc method: target:local externalized into candy/plugin-deploy-local, whose
+// The guest/host DEPLOY venue is no longer an in-proc Emit* method: BOTH target:local AND
+// target:vm externalized into candy/plugin-deploy-local / candy/plugin-deploy-vm, whose
 // kit.WalkPlans routes an ExternalPluginStep through the host's RunHostStep reverse leg —
-// the SAME executeExternalPluginStep seam below, R3.)
-func (externalPluginStepProvider) EmitVM(t *VmDeployTarget, ctx context.Context, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord) error {
-	s := step.(*ExternalPluginStep)
-	if opts.DryRun {
-		fmt.Fprintf(os.Stderr, "[dry-run] vm:%s external plugin step %s (verb=%s)\n",
-			t.VMName, s.CandyName, s.Op.Plugin)
-		return nil
-	}
-	reply, err := executeExternalPluginStep(ctx, s, plan, t.Exec,
-		buildEngineContext{Cfg: t.Cfg, ProjectDir: t.ProjectDir})
-	if err != nil {
-		return err
-	}
-	rec.ReverseOps = append(rec.ReverseOps, reply.ReverseOps...)
-	return nil
-}
+// the executeExternalPluginStep seam below (R3). EmitOCI (the pod-overlay build venue) is
+// the only remaining in-proc Emit* this provider implements.
 
 // executeExternalPluginStep Invokes the external plugin verb's OpExecute over the E3b
 // reverse channel and returns the decoded DeployReply (its ReverseOps recorded by the
 // caller). plugin_input rides op.Params UNWRAPPED (the SAME shape emitPluginFragment /
 // the externalDeployTarget marshal — R3), a spec.DeployVenue rides op.Env, and the
 // live executor is stood up on the broker by InvokeWithExecutor so the plugin runs its
-// effect on the real venue. Shared by EmitLocal + EmitVM so the two venues cannot drift.
+// effect on the real venue. The reverse channel is NOT rebootable here (a nested verb-step
+// never reboots the venue; only a RebootStep on a vm deploy does). Reached from the host's
+// RunHostStep when a deploy plugin walks an ExternalPluginStep (the nested reverse channel).
 func executeExternalPluginStep(ctx context.Context, s *ExternalPluginStep, plan *InstallPlan, exec DeployExecutor, build buildEngineContext) (spec.DeployReply, error) {
 	var zero spec.DeployReply
 	prov, ok := providerRegistry.ResolveVerb(s.Op.Plugin)
@@ -108,7 +93,7 @@ func executeExternalPluginStep(ctx context.Context, s *ExternalPluginStep, plan 
 		return zero, fmt.Errorf("external plugin step %q: marshal venue: %w", s.Op.Plugin, err)
 	}
 	res, err := inv.InvokeWithExecutor(ctx,
-		&Operation{Reserved: s.Op.Plugin, Op: OpExecute, Params: params, Env: env}, exec, build)
+		&Operation{Reserved: s.Op.Plugin, Op: OpExecute, Params: params, Env: env}, exec, build, false)
 	if err != nil {
 		return zero, err
 	}

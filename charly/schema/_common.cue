@@ -296,7 +296,7 @@
 
 	// --- file/copy/write SHARED modifier ---
 	// `mode` is the SHARED octal-permission modifier: the copy/write install verbs read
-	// Op.Mode at deploy (deploy_target_local.go / deploy_target_vm.go via parseTaskMode),
+	// Op.Mode at deploy (the external local/vm deploy walk via kit.ParseTaskMode),
 	// so it STAYS in #Op. The file-EXCLUSIVE fields (file/exists/owner/group_of/filetype/
 	// contains/sha256) LEFT #Op — they are read ONLY by the `file` plugin verb and now live
 	// in its #FileInput (candy/plugin-file, with the contains-default semantic

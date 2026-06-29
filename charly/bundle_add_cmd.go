@@ -322,9 +322,12 @@ func (c *BundleAddCmd) dispatchNode(path string, node *BundleNode, parentExec De
 	// Add signature is uniform; kind-specific knobs live on the struct,
 	// matching how Del's gate flags are wired).
 	switch tt := utgt.(type) {
-	case *VmUnifiedTarget:
-		tt.NodeName = deployName
-		tt.NodeOnly = c.NodeOnly
+	case *externalDeployTarget:
+		// An external substrate with a lifecycle hook (vm) honors --node-only the SAME way
+		// the in-proc VM target did: skip the substrate PostApply (the nested target:pod
+		// children — the caller deploys them via the dotted path). Inert for hookless
+		// substrates (local/android/k8s), which have no PostApply.
+		tt.nodeOnly = c.NodeOnly
 	case *PodUnifiedTarget:
 		// Nested pods flatten the dotted path into the container name;
 		// a top-level pod keeps the deploy key.
@@ -416,11 +419,11 @@ func (c *BundleAddCmd) compileNodePlans(target, refStr, tag, path string, addCan
 	var base string
 	var candySet []string
 
-	if target == "local" || target == "vm" || isExternalDeploySubstrate(target) {
-		// Target-only deploys (local/vm + an EXTERNAL deploy substrate, incl. the
-		// now-externalized android — covered by isExternalDeploySubstrate) compile no
-		// primary image plan — the workload is entirely add_candy: (for an external
-		// substrate, the candies whose plan views/specs the host marshals to the
+	if target == "local" || isExternalDeploySubstrate(target) {
+		// Target-only deploys (local + every EXTERNAL deploy substrate, incl. the
+		// now-externalized vm/android/k8s — all covered by isExternalDeploySubstrate)
+		// compile no primary image plan — the workload is entirely add_candy: (for an
+		// external substrate, the candies whose plan views/specs the host marshals to the
 		// out-of-process provider). base is the deploy path identity.
 		base = path
 	} else {
@@ -586,24 +589,16 @@ func (c *BundleDelCmd) Run() error {
 	}
 	switch tt := utgt.(type) {
 	case *externalDeployTarget:
-		// target:local (and any future externalized substrate) teardown honors the
-		// --keep-repo-changes / --keep-services gates + the test ReverseRunner. The
-		// external Del replays the recorded ReverseOps via teardownHostDeploy with these.
+		// target:local / target:vm (and any future externalized substrate) teardown honors
+		// the --keep-repo-changes / --keep-services gates + the test ReverseRunner. The
+		// external Del replays the recorded ReverseOps via teardownHostDeploy with these (for
+		// vm over the guest SSH reverse runner the lifecycle hook supplies; for local-remote
+		// over the SSH executor; otherwise locally). A vm's ssh-config / charly.yml-entry /
+		// ephemeral cleanup is the lifecycle hook's PostTeardown (it resolves the entity from
+		// t.node, set by ResolveTarget — no NodeName rewrite needed here).
 		tt.KeepRepoChanges = c.KeepRepoChanges
 		tt.KeepServices = c.KeepServices
 		tt.revRunner = c.Runner
-	case *VmUnifiedTarget:
-		tt.KeepRepoChanges = c.KeepRepoChanges
-		tt.KeepServices = c.KeepServices
-		// The VM ledger record + guest-side teardown key off "vm:<entity>"
-		// (VmDeployTarget.targetName). For a schema-v4 key whose `vm:`
-		// cross-ref names a different entity (e.g. check-k3s-vm → vm: k3s-vm),
-		// rewrite the adapter's NodeName to the prefixed entity form so
-		// findVmDeployRecord / buildVmReverseRunner / removeVmDeployEntry
-		// resolve correctly. A legacy "vm:<name>" key passes through.
-		if !strings.HasPrefix(c.Name, "vm:") && node != nil && node.From != "" {
-			tt.NodeName = "vm:" + node.From
-		}
 	case *PodUnifiedTarget:
 		tt.KeepImage = c.KeepImage
 	}

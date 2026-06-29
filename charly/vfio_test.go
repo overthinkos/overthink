@@ -265,44 +265,11 @@ func TestTransferImageToGuestReloadsCorrupt(t *testing.T) {
 
 // --- Render consolidation: VM + local share ONE render path per functionality ---
 
-// A copy: task MUST stage the candy file through the executor's PutFile
-// (scp+install over SSH), never a rendered `install <hostCandyDir>/<f> <dst>`
-// — the host path doesn't exist in the guest (the socat relay-wrapper 404 bug).
-func TestVmExecTaskCopyStagesViaPutFile(t *testing.T) {
-	fe := &fakeGuestExec{}
-	tgt := &VmDeployTarget{Exec: fe}
-	s := &OpStep{
-		Op:       &Op{Copy: "relay-wrapper", To: "/usr/local/bin/relay-wrapper", Mode: "0755"},
-		CandyDir: "/host/cache/layers/socat",
-	}
-	if err := tgt.execOp(context.Background(), s, &InstallPlan{}, EmitOpts{}); err != nil {
-		t.Fatalf("execTask copy: %v", err)
-	}
-	if !fe.putCalled {
-		t.Error("copy: task did not route through PutFile — would 404 on a host-path install in the guest")
-	}
-	if fe.runCalled {
-		t.Error("copy: task ran a shell command instead of PutFile")
-	}
-}
-
-// A non-copy task renders through the SHARED renderTaskCommand and runs via the
-// executor (RunSystem for system scope) — proving VM no longer has its own
-// renderVmTaskCommand.
-func TestVmExecTaskCmdUsesSharedRenderer(t *testing.T) {
-	fe := &fakeGuestExec{}
-	tgt := &VmDeployTarget{Exec: fe}
-	s := &OpStep{Op: cmdOpP("echo hi"), ResolvedUser: "root"}
-	if err := tgt.execOp(context.Background(), s, &InstallPlan{}, EmitOpts{}); err != nil {
-		t.Fatalf("execTask cmd: %v", err)
-	}
-	if !fe.runCalled {
-		t.Error("cmd: task did not run via the executor")
-	}
-	if fe.putCalled {
-		t.Error("cmd: task should not have called PutFile")
-	}
-}
+// The in-proc VM Op-step execution (copy stages via PutFile; a non-copy verb renders via
+// the shared renderOpCommand) moved into the out-of-process kit.WalkPlans (kit.walkOp) when
+// target:vm externalized — the in-proc VM-target Op execution is gone, so its two unit tests retired
+// here. kit owns walkOp's copy-vs-render split (the SAME renderOpCommand, exercised below by
+// TestSharedRenderersConsolidated) and the check-arch-vm bed proves it end-to-end in a guest.
 
 // renderTaskCommand is the ONE shared task renderer; copy: is explicitly NOT
 // handled here (it must be staged via PutFile in execTask), and pac package

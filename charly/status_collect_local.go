@@ -11,7 +11,7 @@ package main
 //
 // Ledger shape (verified against live on-disk state):
 //
-//   deploys/<deploy-id>.json   DeployRecord — written by VmDeployTarget for
+//   deploys/<deploy-id>.json   DeployRecord — written by the external vm deploy for
 //                              its guest-side ledger; the host the local deploy target
 //                              records at CANDY granularity only, so this dir is
 //                              typically EMPTY for plain host deploys.

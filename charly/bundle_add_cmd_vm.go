@@ -21,8 +21,8 @@ import (
 // Idempotent: cp-box skips a present image; from-box re-applies cleanly on
 // `charly update`. The host never needs the project for the child (the guest reads
 // the labels). nil node / no nested pods → no-op. Shared by
-// VmUnifiedTarget.Add (auto-deploy after Emit) and the dotted-path dispatch
-// `charly bundle add <vm-bed>.<child>`.
+// the vm lifecycle hook's PostApply (nested-pod deploy after the vm walk) and
+// the dotted-path dispatch `charly bundle add <vm-bed>.<child>`.
 func deployNestedPodsInGuest(vmName string, node *BundleNode, exec DeployExecutor, opts EmitOpts) error {
 	if node == nil || len(node.Children) == 0 {
 		return nil
@@ -71,7 +71,7 @@ func deployNestedPodsInGuest(vmName string, node *BundleNode, exec DeployExecuto
 		// systemd, matching how the operator's interactive session runs it.
 		// XDG_RUNTIME_DIR must be exported so the `systemctl --user` calls inside
 		// `charly bundle from-box` reach the lingering user bus over this non-login
-		// SSH session — the same pattern VmDeployTarget uses for user services.
+		// SSH session — the same pattern the external vm deploy uses for user services.
 		// charlyCmd is the explicit /tmp path to the host's own charly delivered above
 		// (the from-box authority), never the guest's PATH charly.
 		script := fmt.Sprintf(
@@ -87,62 +87,11 @@ func deployNestedPodsInGuest(vmName string, node *BundleNode, exec DeployExecuto
 	return nil
 }
 
-// findVmDeployRecord scans paths.Deploys for a record whose Target
-// matches c.Name. Returns the first match (VMs typically have a single
-// record per name; multiple only arise if a user manually force-applied
-// multiple deploy-ids, which is a pathological state we tolerate but
-// don't optimise for).
-func findVmDeployRecord(paths *LedgerPaths, vmName string) (*DeployRecord, error) {
-	entries, err := os.ReadDir(paths.Deploys)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		rec, err := ReadDeployRecord(paths, strings.TrimSuffix(e.Name(), ".json"))
-		if err != nil {
-			continue
-		}
-		if rec != nil && rec.Target == vmName {
-			return rec, nil
-		}
-	}
-	return nil, nil
-}
-
-// buildVmReverseRunner constructs a ReverseRunner pointed at the VM
-// via its managed ssh-config alias (charly-<vmName>). The deployName arg
-// may be the legacy "vm:<name>" form (rewritten by the dispatcher in
-// deploy_add_cmd.go) or already the unprefixed form. We strip the
-// "vm:" prefix so the alias matches what `charly vm create` wrote
-// ("charly-<vmName>") — without this, VmSshAlias("vm:arch") would
-// produce "charly-vm:arch" which is invalid SSH-config Host syntax.
-// All SSH connection details (User, Port, IdentityFile, host-key
-// checking) live in the managed Host stanza written by `charly vm
-// create` / runVmAdd; ssh(1) reads them from ~/.ssh/config so we
-// need only the alias here.
-func buildVmReverseRunner(deployName string) *sshReverseRunner {
-	vmName, err := vmNameFromDeployName(deployName)
-	if err != nil {
-		// Fallback: if the name doesn't carry the legacy "vm:" prefix,
-		// use it directly. Pre-cutover callers passed plain names.
-		vmName = deployName
-	}
-	exec := &SSHExecutor{
-		Host:           VmSshAlias(vmName),
-		ConnectTimeout: 10,
-	}
-	return &sshReverseRunner{exec: exec}
-}
-
 // sshReverseRunner adapts SSHExecutor to the ReverseRunner interface so
 // reverse_ops.go handlers can run tear-down commands inside the VM
-// without knowing about SSH.
+// without knowing about SSH. externalDeployTarget.Del derives one from the guest
+// SSHExecutor the vm lifecycle hook's TeardownExecutor supplies, so a vm `charly bundle del`
+// replays the recorded ReverseOps IN THE GUEST (Δ2).
 type sshReverseRunner struct {
 	exec *SSHExecutor
 }
@@ -234,7 +183,7 @@ func saveVmDeployState(deployName, vmEntity string, state *VmDeployState) error 
 	// → save the shared ~/.config/charly/charly.yml and silently drop each other's
 	// entry. Reentrancy audit: the only deploy-config-lock holders are
 	// saveDeployState + cleanDeployEntry, neither of which calls saveVmDeployState;
-	// its callers (vm_create_spec.go persist-auto-port, VmUnifiedTarget.Add,
+	// its callers (vm_create_spec.go persist-auto-port, the vm lifecycle hook's PrepareVenue,
 	// removeVmDeployEntry's siblings) hold NO deploy-config lock — so acquiring
 	// here is exactly one level, no self-deadlock (flock is per-open-fd, blocking).
 	unlock, lockErr := acquireDeployConfigLock()
@@ -307,7 +256,7 @@ func removeVmDeployEntry(deployName string) error {
 	// that, but PRESERVE every operator-authored per-host field (preemptible,
 	// env, tunnel, port, security, add_candy, install_opts, …) so a
 	// destroy→create cycle — which is exactly what `charly update <vm>` does
-	// (VmUnifiedTarget.Rebuild shells `charly vm destroy` then `charly vm create`) —
+	// (the vm lifecycle hook's Rebuild shells `charly vm destroy` then `charly vm create`) —
 	// never silently drops local config. (This is the root cause of the lost
 	// `preemptible: {holds: [nvidia-gpu]}` on the operator workstation.)
 	//
@@ -333,12 +282,12 @@ func removeVmDeployEntry(deployName string) error {
 // for deployName targets. It exists because the entry is WRITTEN and REMOVED
 // under DIFFERENT keys whenever a bundle's name differs from "vm:<entity>":
 //
-//   - WRITE: VmUnifiedTarget.Add persists vm_state via saveVmDeployState(dctx.Name)
+//   - WRITE: the vm lifecycle hook's PrepareVenue persists vm_state via saveVmDeployState(dctx.Name)
 //     — keyed by the BUNDLE name (e.g. the kind:check VM bed bundle `check-k3s-vm`,
 //     which cross-refs `vm: k3s-vm`). (charly vm create's port_auto persist keys
 //     by the prefixed entity form `vm:<entity>`.)
 //   - REMOVE: every teardown caller passes the prefixed VM-ENTITY form
-//     `vm:<entity>` — VmUnifiedTarget.Del's dispatch rewrites t.NodeName to
+//     `vm:<entity>` — the vm deploy's Del path rewrites t.NodeName to
 //     "vm:"+node.From, and `charly vm destroy` builds "vm:"+box.
 //
 // An exact-key delete on "vm:k3s-vm" therefore MISSES the `check-k3s-vm` bundle

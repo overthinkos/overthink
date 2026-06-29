@@ -308,7 +308,7 @@ func buildDepPkgsOnHost(_ context.Context, lp *LocalPkgDef, bDef *BuilderDef, bu
 // via the DeployExecutor: PutFile is a local filesystem copy for the host
 // ShellExecutor and an scp for the SSHExecutor, and RunSystem is local sudo vs
 // `ssh sudo`. One implementation serves BOTH the localpkg step (the local deploy target
-// / VmDeployTarget) AND the builder's install leg (BuilderStep.LocalPkg), so
+// / the external vm deploy) AND the builder's install leg (BuilderStep.LocalPkg), so
 // "ship packages to a venue and install them" has a single config-driven home
 // (R3).
 //
@@ -388,7 +388,7 @@ func venueHasPkgManager(ctx context.Context, exec DeployExecutor, lp *LocalPkgDe
 }
 
 // execLocalPkgInstall is the shared body both the local deploy target and
-// VmDeployTarget call for a LocalPkgInstallStep: resolve the package source dir,
+// the external vm deploy call for a LocalPkgInstallStep: resolve the package source dir,
 // build it on the host, then transfer+install onto the target venue. `supported`
 // gates whether the install leg runs (the venue's package manager must match the
 // step's format); an unsupported target or a missing source dir is a clean no-op

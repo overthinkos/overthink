@@ -8,7 +8,7 @@ import (
 )
 
 // TestRenderOpCommand_Verbs covers the pure op→shell render extracted from package main
-// (the ONE copy the in-proc VmDeployTarget AND the out-of-process kit.WalkPlans share).
+// (the ONE copy the OCI build path AND the out-of-process kit.WalkPlans share).
 func TestRenderOpCommand_Verbs(t *testing.T) {
 	cases := []struct {
 		name       string

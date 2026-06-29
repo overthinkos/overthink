@@ -292,9 +292,14 @@ func TestEnsureAndRemoveManagedBlock(t *testing.T) {
 	home := t.TempDir()
 	shell := ShellBash
 
-	path, err := EnsureManagedBlock(shell, home)
-	if err != nil {
-		t.Fatalf("EnsureManagedBlock: %v", err)
+	// The env.d-sourcing managed-block write goes through the surviving low-level
+	// helpers (ShellInitFilePath + ManagedBlockBody + EnsureManagedBlockAt) — the same
+	// pieces kit.ensureVenueManagedBlock uses after the in-proc EnsureManagedBlock wrapper
+	// retired with the target:vm externalization.
+	path := ShellInitFilePath(shell, home)
+	body := ManagedBlockBody(shell, home)
+	if _, err := EnsureManagedBlockAt(path, body, ""); err != nil {
+		t.Fatalf("EnsureManagedBlockAt: %v", err)
 	}
 	data, _ := os.ReadFile(path)
 	if !strings.Contains(string(data), "# opencharly:begin") {
@@ -302,7 +307,7 @@ func TestEnsureAndRemoveManagedBlock(t *testing.T) {
 	}
 
 	// Re-running should be idempotent.
-	if _, err := EnsureManagedBlock(shell, home); err != nil {
+	if _, err := EnsureManagedBlockAt(path, body, ""); err != nil {
 		t.Fatalf("second Ensure: %v", err)
 	}
 	data, _ = os.ReadFile(path)

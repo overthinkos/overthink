@@ -36,7 +36,7 @@ type ReverseExecutor interface {
 
 // ReverseRunner executes reversal shell scripts at the requested
 // privilege level. Implemented by both the local-exec host runner and
-// the SSH-based VM runner (deploy_target_vm.go :: SSHReverseRunner).
+// the SSH-based VM runner (sshReverseRunner, bundle_add_cmd_vm.go).
 type ReverseRunner interface {
 	// RunSystem runs a bash script as root (wraps with sudo on host
 	// runners; uses `ssh sudo bash -s` on VM runners).
@@ -147,7 +147,7 @@ func reversePackageRemove(op ReverseOp, re ReverseExecutor) error {
 // fillReverseUninstallCmds renders the host-venue uninstall command for every
 // ReverseOpPackageRemove op in the slice from the format's uninstall_template
 // (the embedded build vocabulary, charly/charly.yml), in place. Called at install/record time by the local deploy target and
-// VmDeployTarget (R3 — one shared filler) when the DistroConfig is in hand, so
+// the external vm deploy (R3 — one shared filler) when the DistroConfig is in hand, so
 // the persisted ledger op carries the exact removal command the teardown will
 // run. Ops whose format declares no uninstall_template, or whose format isn't in
 // the config, are left with an empty UninstallCmd (teardown then errors loudly

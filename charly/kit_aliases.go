@@ -29,7 +29,7 @@ var (
 // kit.RenderOpCommand; an act-`plugin:` verb (a builtin ProvisionActor) renders via the
 // in-proc registry (resolveProvisionScript) — the SAME seam the build/runtime act paths
 // use (R3). copy is staged via the executor's PutFile, never rendered. The ONE op→shell
-// render copy is kit's; the in-proc VmDeployTarget calls this wrapper, an out-of-process
+// render copy is kit's; the in-proc deploy path calls this wrapper, an out-of-process
 // deploy plugin's kit.WalkPlans calls kit.RenderOpCommand directly.
 func renderOpCommand(s *OpStep) (string, error) {
 	if s.Op == nil {

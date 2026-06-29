@@ -14,7 +14,7 @@ import (
 
 // DeployExecutor abstracts shell execution + file placement for deploy
 // targets. the local deploy target uses ShellExecutor (spawns bash directly);
-// VmDeployTarget uses SSHExecutor (wraps scripts as `ssh vm sudo bash -s`,
+// the external vm deploy uses SSHExecutor (wraps scripts as `ssh vm sudo bash -s`,
 // uses scp for file transfers). Nested topologies (container-in-vm,
 // vm-in-container, host-in-vm-in-container, etc.) use NestedExecutor,
 // which composes a parent DeployExecutor with a "shell jump" (podman

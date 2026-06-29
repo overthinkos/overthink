@@ -276,8 +276,9 @@ func (r *Runner) invokeVerbProvider(ctx context.Context, prov Provider, word str
 	var out *Result
 	if ei, ok := prov.(executorInvoker); ok && r.Exec != nil {
 		// A check verb never drives the RunHostStep host-engine channel, so the host-engine
-		// context is the zero value (no project Config needed for RunCapture/GetFile).
-		out, err = ei.InvokeWithExecutor(ctx, op, r.Exec, buildEngineContext{})
+		// context is the zero value (no project Config needed for RunCapture/GetFile) and the
+		// venue is never rebootable (a check verb never reboots the target).
+		out, err = ei.InvokeWithExecutor(ctx, op, r.Exec, buildEngineContext{}, false)
 	} else {
 		out, err = prov.Invoke(ctx, op)
 	}

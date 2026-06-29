@@ -6,20 +6,19 @@ import (
 )
 
 // StepProvider is the typed in-process form of an InstallStep Provider: it emits one step
-// to each in-proc venue — OCI image build and VM deploy. Every InstallStep kind implements
-// it; the per-venue dispatch resolves the step through
-// providerRegistry.ResolveStep(step.Kind()) and calls the matching Emit* method. Each Emit*
-// method preserves its venue's EXACT behaviour (gate checks, ReverseOp collection, skips).
+// to the ONE remaining in-proc venue — the OCI image build (the pod-overlay add_candy:
+// Containerfile synthesis). Every InstallStep kind implements it; the dispatch resolves the
+// step through providerRegistry.ResolveStep(step.Kind()) and calls EmitOCI, which preserves
+// the build venue's exact behaviour.
 //
-// There is NO EmitLocal: target:local externalized into candy/plugin-deploy-local, whose
-// out-of-process kit.WalkPlans executes every step on the venue (the plugin-renderable kinds
-// via the F2 reverse legs, the host-engine kinds via RunHostStep) — so the in-proc local
-// per-step dispatch is gone. The VM target keeps its in-proc EmitVM walk until vm itself
-// externalizes.
+// There is NO EmitLocal and NO EmitVM: BOTH target:local AND target:vm externalized (into
+// candy/plugin-deploy-local / candy/plugin-deploy-vm), whose out-of-process kit.WalkPlans
+// executes every step on the venue (the plugin-renderable kinds via the F2 reverse legs,
+// the host-engine kinds via RunHostStep) — so the in-proc per-deploy-step dispatch is gone.
+// OCITarget (the pod-overlay synthesizer) is the sole remaining in-proc StepProvider consumer.
 type StepProvider interface {
 	Provider
 	EmitOCI(t *OCITarget, step InstallStep, plan *InstallPlan) error
-	EmitVM(t *VmDeployTarget, ctx context.Context, step InstallStep, plan *InstallPlan, opts EmitOpts, rec *CandyRecord) error
 }
 
 // builtinStepBase supplies the in-proc-only Provider half (Class + a stub Invoke)

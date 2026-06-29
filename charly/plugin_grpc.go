@@ -143,17 +143,19 @@ func (g *grpcProvider) Invoke(ctx context.Context, op *Operation) (*Result, erro
 // dials back to run shell/SSH ops on exec's real venue. The reverse server lives for
 // the duration of the (synchronous) Invoke. `build` is the host-engine context the
 // RunHostStep leg needs (the project Config + dir + DistroCfg for a Builder/SystemPackages
-// host step); the zero value is fine for a deploy/step with no host-engine step to drive. Falls
-// back to a plain Invoke (broker id 0) when the connection has no broker (an in-proc
+// host step); the zero value is fine for a deploy/step with no host-engine step to drive.
+// `rebootable` marks the venue as a charly-owned guest a RebootStep may reboot mid-walk (a
+// VM); false (the default) makes a RebootStep skip-and-note (a host venue is never rebooted).
+// Falls back to a plain Invoke (broker id 0) when the connection has no broker (an in-proc
 // transport) or no executor is given.
-func (g *grpcProvider) InvokeWithExecutor(ctx context.Context, op *Operation, exec DeployExecutor, build buildEngineContext) (*Result, error) {
+func (g *grpcProvider) InvokeWithExecutor(ctx context.Context, op *Operation, exec DeployExecutor, build buildEngineContext, rebootable bool) (*Result, error) {
 	var brokerID uint32
 	if g.conn.Broker != nil && exec != nil {
 		id := g.conn.Broker.NextId()
 		var srv *grpc.Server
 		go g.conn.Broker.AcceptAndServe(id, func(opts []grpc.ServerOption) *grpc.Server {
 			srv = grpc.NewServer(opts...)
-			pb.RegisterExecutorServiceServer(srv, &executorReverseServer{exec: exec, build: build})
+			pb.RegisterExecutorServiceServer(srv, &executorReverseServer{exec: exec, build: build, rebootable: rebootable})
 			return srv
 		})
 		defer func() {

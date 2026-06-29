@@ -36,6 +36,23 @@ type externalDeployTarget struct {
 	prov *grpcProvider
 	exec DeployExecutor
 
+	// node is the dispatch-merged BundleNode (set by ResolveTarget). A substrate with a
+	// registered lifecycle hook (vm) needs it to resolve its kind:vm entity for the
+	// host-side lifecycle (start/stop/rebuild/teardown bookkeeping). nil for a ref-based
+	// deploy with no charly.yml entry.
+	node *BundleNode
+
+	// nodeOnly mirrors `charly bundle add --node-only`: when true, Add does NOT run the
+	// substrate's PostApply (vm: skip the nested target:pod children — the caller deploys
+	// them via the dotted path). Set by the dispatcher from BundleAddCmd.NodeOnly.
+	nodeOnly bool
+
+	// rebootable records whether this substrate owns a charly-managed venue that may be
+	// rebooted mid-walk (a VM guest) — true iff a substrateLifecycle is registered for the
+	// word. Threaded to the reverse server so a RebootStep reboots a VM guest but is
+	// skip-and-noted on a host venue (local). Set by apply() before the Invoke.
+	rebootable bool
+
 	// paths is the ledger root for this deploy's records. nil →
 	// DefaultLedgerPaths() (the operator ledger). Tests redirect it to a temp dir.
 	paths *LedgerPaths
@@ -115,7 +132,9 @@ func (t *externalDeployTarget) Add(ctx context.Context, dctx *DeployContext, pla
 		}
 	}
 
-	if err := t.apply(ctx, node, dir, plans, opts.DryRun); err != nil {
+	// apply runs the substrate's host-side venue preparation (vm: boot + build the guest SSH
+	// executor → t.exec), then projects the views + Invokes the plugin walk.
+	if err := t.apply(ctx, node, dir, plans, opts); err != nil {
 		return err
 	}
 	if opts.DryRun {
@@ -124,21 +143,55 @@ func (t *externalDeployTarget) Add(ctx context.Context, dctx *DeployContext, pla
 
 	// Retrieve candy artifacts (+ k3s post-hook) host-side — guarded no-op when no candy
 	// declares an artifact: block. artifactEnv = secretEnv overlaid with the node's env:.
+	// The artifact KEY is substrate-supplied (vm → "vm:<entity>" for the k3s ClusterProfile
+	// naming); the generic default is the deploy name.
 	artifactEnv := buildArtifactEnv(secretEnv, node)
-	if err := retrieveArtifactsAndK3s(ctx, t.exec, candyList, t.name, artifactEnv, opts); err != nil {
+	artifactKey := t.name
+	if life, ok := substrateLifecycleFor(t.prov.word); ok {
+		if k := life.ArtifactKey(t.name, node); k != "" {
+			artifactKey = k
+		}
+	}
+	if err := retrieveArtifactsAndK3s(ctx, t.exec, candyList, artifactKey, artifactEnv, opts); err != nil {
 		return fmt.Errorf("external deploy %q: retrieving candy artifacts: %w", t.name, err)
+	}
+
+	// Substrate host orchestration AFTER the walk (vm: nested target:pod children as
+	// persistent in-guest quadlets). Skipped under --node-only (the caller deploys children
+	// via the dotted path). No-op for substrates without a lifecycle hook.
+	if !t.nodeOnly {
+		if life, ok := substrateLifecycleFor(t.prov.word); ok {
+			if err := life.PostApply(ctx, t.name, dir, node, t.exec, opts); err != nil {
+				return fmt.Errorf("external deploy %q: post-apply: %w", t.name, err)
+			}
+		}
 	}
 
 	// --verify: run the deployment's deploy-scope check probes on the venue we just deployed
 	// to. Default (Verify=false) is a no-op. Reuses checkLocalDeployScope so external local
 	// `--verify` sources + runs probes identically to `charly check live` (R3).
+	//
+	// SKIPPED for a substrate with a lifecycle hook (vm): the in-Add --verify resolves a
+	// deploy's checks by the DEPLOY name + against the venue executor, which is correct for a
+	// flat host/local deploy but WRONG for a VM bed — (1) its libvirt:/spice: probes resolve
+	// the domain from the VM-ENTITY name (charly-<entity>, via the check runner's
+	// vmTargetName), not the deploy name; and (2) its FLATTENED plan carries the nested-child
+	// (member) checks, which are not yet deployed at Add time (the bed runner deploys members
+	// AFTER bundle add, then check-lives the whole tree). The in-proc VM target never ran an
+	// in-Add --verify for exactly this reason — verification is the bed runner's separate
+	// `charly check live` phase, which resolves the VM-entity domain + runs after the full
+	// tree is up. So a lifecycle substrate defers verification to check-live (R3 parity).
 	if opts.Verify {
-		fails, verr := checkLocalDeployScope(dir, node, t.name, "", "", nil, t.exec, "text")
-		if verr != nil {
-			return fmt.Errorf("external deploy %q: --verify: %w", t.name, verr)
-		}
-		if fails > 0 {
-			return fmt.Errorf("external deploy %q: --verify: %d deploy-scope check(s) failed", t.name, fails)
+		if _, isLifecycle := substrateLifecycleFor(t.prov.word); isLifecycle {
+			fmt.Fprintf(os.Stderr, "external deploy %q: --verify deferred to `charly check live` (the %s substrate verifies its live venue post-deploy, with the venue's runtime identity)\n", t.name, t.prov.word)
+		} else {
+			fails, verr := checkLocalDeployScope(dir, node, t.name, "", "", nil, t.exec, "text")
+			if verr != nil {
+				return fmt.Errorf("external deploy %q: --verify: %w", t.name, verr)
+			}
+			if fails > 0 {
+				return fmt.Errorf("external deploy %q: --verify: %d deploy-scope check(s) failed", t.name, fails)
+			}
 		}
 	}
 	return nil
@@ -149,14 +202,53 @@ func (t *externalDeployTarget) Add(ctx context.Context, dctx *DeployContext, pla
 // DeployContext, so the venue descriptor carries only the deploy name; a substrate
 // preresolver (if any) re-resolves the node from the tree by name.
 func (t *externalDeployTarget) Update(ctx context.Context, plans []*InstallPlan, opts UpdateOpts) error {
-	return t.apply(ctx, nil, "", plans, opts.DryRun)
+	return t.apply(ctx, t.node, "", plans, EmitOpts{
+		DryRun:           opts.DryRun,
+		AllowRepoChanges: opts.AllowRepoChanges,
+		AllowRootTasks:   opts.AllowRootTasks,
+		WithServices:     opts.WithServices,
+		AssumeYes:        opts.AssumeYes,
+	})
 }
 
-// apply is the shared Add/Update body: marshal the plans + venue (with any
-// substrate-specific preresolved payload), Invoke the provider with the host
-// executor on the broker, decode the reply, and (unless DryRun) persist the
-// teardown ops + record to the ledger.
-func (t *externalDeployTarget) apply(ctx context.Context, node *BundleNode, dir string, plans []*InstallPlan, dryRun bool) error {
+// apply is the shared Add/Update body: run the substrate's host-side venue preparation
+// (vm: boot + build the guest SSH executor the reverse channel serves), marshal the plans +
+// venue (with any substrate-specific preresolved payload), Invoke the provider with the
+// host executor on the broker, decode the reply, and (unless DryRun) persist the teardown
+// ops + record to the ledger.
+func (t *externalDeployTarget) apply(ctx context.Context, node *BundleNode, dir string, plans []*InstallPlan, opts EmitOpts) error {
+	dryRun := opts.DryRun
+	// Substrate venue preparation (Design A): a substrate with a registered lifecycle hook
+	// (vm) runs its host-side preflight (boot the domain, WaitForSSH/CloudInit, charly-in-
+	// guest, persist state) and returns the executor the reverse channel must serve — the
+	// guest SSHExecutor, NOT the ResolveTarget placeholder. Skipped on a dry-run (no live
+	// venue). The generic target never branches on the substrate word; only on whether a
+	// hook is registered. A hook'd substrate is rebootable (a RebootStep reboots its guest).
+	if !dryRun {
+		if life, ok := substrateLifecycleFor(t.prov.word); ok {
+			exec, err := life.PrepareVenue(ctx, t.name, dir, node, opts)
+			if err != nil {
+				return fmt.Errorf("external deploy %q: prepare venue: %w", t.name, err)
+			}
+			if exec != nil {
+				t.exec = exec
+			}
+			t.rebootable = true
+		} else if opts.ParentExec != nil {
+			// A NESTED external deploy with no lifecycle hook (a `target: local` child under a
+			// vm/pod) runs the walk in the PARENT'S venue (the guest / container), NOT the host:
+			// opts.ParentExec is the already-composed executor chain into the parent (built by
+			// the dispatch's ancestor walk — host→ssh-vm for a nested-local-in-vm child like
+			// arch-host). The ResolveTarget placeholder (ShellExecutor for host:local) is the
+			// FLAT-deploy executor; the nested case overrides it here. The in-proc
+			// LocalDeployTarget composed opts.ParentExec the same way — externalDeployTarget
+			// must too, or a nested-local-in-vm child wrongly applies on the operator host (R3 —
+			// the nested-deploy parity the local externalization dropped). A lifecycle substrate
+			// (vm) composes ParentExec inside PrepareVenue (NestedExecutor over the parent), so
+			// this branch is the non-lifecycle (local/android/k8s) path only.
+			t.exec = opts.ParentExec
+		}
+	}
 	// Fork-A host-side pre-pass (live only): resolve {{.Home}} against the venue home and
 	// capture the deploy-time-stateful reverse state (ShellHook.EnvFile, ServicePackaged
 	// .PriorEnabled) on the LIVE venue BEFORE projecting the views, so each step's
@@ -210,7 +302,7 @@ func (t *externalDeployTarget) apply(ctx context.Context, node *BundleNode, dir 
 		return nil
 	}
 	res, err := t.prov.InvokeWithExecutor(ctx,
-		&Operation{Reserved: t.prov.word, Op: OpExecute, Params: params, Env: envJSON}, t.exec, t.build)
+		&Operation{Reserved: t.prov.word, Op: OpExecute, Params: params, Env: envJSON}, t.exec, t.build, t.rebootable)
 	if err != nil {
 		return err
 	}
@@ -220,7 +312,77 @@ func (t *externalDeployTarget) apply(ctx context.Context, node *BundleNode, dir 
 			return fmt.Errorf("external deploy %q: decode reply: %w", t.name, err)
 		}
 	}
-	return t.recordDeploy(reply)
+	// Host-side teardown record (computeDeployID + the plugin's reverse ops) — read by Del.
+	if err := t.recordDeploy(reply); err != nil {
+		return err
+	}
+	// Venue-side self-contained ledger (deploy + per-candy layer records written THROUGH the
+	// executor into the venue's ~/.config/opencharly/installed/) — for a remote venue (a VM
+	// guest, or a nested target:local-in-guest child) this is the zero-operator-side-effects
+	// record the prior in-proc VM target wrote via *Via over the SSH executor, and what the bed's guest-ledger
+	// probes assert. A host-local venue is a no-op (recordDeploy already wrote the operator-side
+	// ledger). See recordVenueLedger.
+	return t.recordVenueLedger(plans)
+}
+
+// recordVenueLedger writes the deploy record + a per-candy layer record INTO THE VENUE via
+// the executor, so a remote venue (a VM guest, or a nested target:local deploy whose venue is
+// the guest) carries the self-contained ~/.config/opencharly/installed/{deploys,layers}
+// ledger the prior in-proc VM target wrote — the "zero-operator-side-effects" design, and the
+// records + dirs the bed's guest-ledger probes (ah-deploy-recorded / ah-ledger-deploys-dir /
+// ah-ledger-layers-dir) assert. The *Via writers resolve `~` in the VENUE shell (the guest)
+// and create BOTH ledger dirs.
+//
+// A HOST-LOCAL venue (ShellExecutor) is a no-op: recordDeploy already wrote the operator-side
+// ledger at the same paths, so the venue IS the operator host. The host-side teardown record
+// (recordDeploy: computeDeployID + reverse ops) is SEPARATE and drives `charly bundle del`
+// (the venue ledger is provenance, never replayed) — so this venue write is purely additive
+// and never disturbs teardown. Idempotent on re-apply (Update): the *Via writers overwrite.
+func (t *externalDeployTarget) recordVenueLedger(plans []*InstallPlan) error {
+	if t.exec == nil {
+		return nil
+	}
+	if _, isLocal := t.exec.(ShellExecutor); isLocal {
+		return nil // host-local venue — recordDeploy already wrote the operator-side ledger
+	}
+	paths, err := t.ledgerPaths()
+	if err != nil {
+		return err
+	}
+	// The guest deploy-record id is provenance only (Del replays the HOST record by
+	// computeDeployID, never this one), so any non-empty egress-valid id serves: prefer the
+	// plans' shared DeployID, else the deterministic host deployID (computeDeployID(name)).
+	id := t.deployID()
+	for _, p := range plans {
+		if p != nil && p.DeployID != "" {
+			id = p.DeployID
+			break
+		}
+	}
+	deployRec := &DeployRecord{
+		DeployID:   id,
+		Image:      t.name,
+		Target:     t.prov.word,
+		DeployedAt: time.Now().UTC().Format(time.RFC3339),
+	}
+	for _, p := range plans {
+		if p == nil || p.Candy == "" {
+			continue
+		}
+		ver := p.Version
+		if verr := AddCandyDeploymentVia(t.exec, paths, p.Candy, id, func(rec *CandyRecord) {
+			rec.Version = ver
+		}); verr != nil {
+			return fmt.Errorf("external deploy %q: venue ledger candy %s: %w", t.name, p.Candy, verr)
+		}
+		deployRec.Candy = append(deployRec.Candy, p.Candy)
+	}
+	// WriteDeployRecordVia creates the deploys/ dir even when no candy wrote a layer record
+	// (a boot-only deploy), so the guest-ledger dir probes still pass.
+	if werr := WriteDeployRecordVia(t.exec, paths, deployRec); werr != nil {
+		return fmt.Errorf("external deploy %q: venue ledger deploy record: %w", t.name, werr)
+	}
+	return nil
 }
 
 // prepareReverseState is the Fork-A host-side pre-pass: it resolves the venue home and
@@ -259,6 +421,24 @@ func (t *externalDeployTarget) prepareReverseState(ctx context.Context, plans []
 				s.PriorEnabled = venueUnitEnabled(ctx, t.exec, s.Unit, s.TargetScope)
 			}
 		}
+	}
+	return nil
+}
+
+// reverseRunnerForExecutor derives the ReverseRunner a `charly bundle del` replays the
+// recorded ReverseOps over, from the deploy's executor (Δ2). An explicit runner (a test
+// injection) wins. Otherwise: an *SSHExecutor venue (a vm guest, or a `local: {host:
+// user@machine}` remote) replays IN THE GUEST/on-the-remote via an sshReverseRunner; any
+// other venue (ShellExecutor for host:local) returns nil → reverse_ops falls back to local
+// exec.Command. This is the SAME generalization that makes a vm teardown run in the guest
+// AND a local-remote teardown run on the remote (R3) — previously a local-remote teardown
+// wrongly ran on the operator host.
+func reverseRunnerForExecutor(exec DeployExecutor, existing ReverseRunner) ReverseRunner {
+	if existing != nil {
+		return existing
+	}
+	if sshExec, isSSH := exec.(*SSHExecutor); isSSH {
+		return &sshReverseRunner{exec: sshExec}
 	}
 	return nil
 }
@@ -337,14 +517,40 @@ func (t *externalDeployTarget) Del(ctx context.Context, opts DelOpts) error {
 			rec.DeployID, rec.Target, len(rec.Candy))
 		return nil
 	}
+
+	// Resolve the teardown executor + reverse runner. A substrate with a lifecycle hook
+	// (vm) supplies the guest SSHExecutor so the recorded ReverseOps replay IN THE GUEST.
+	// Otherwise t.exec (the ResolveTarget-selected executor) drives it: Shell for
+	// host:local, SSH for host:user@machine. The reverse runner is DERIVED from that
+	// executor (Δ2): when it is an *SSHExecutor the teardown wraps it in an sshReverseRunner
+	// so the ops run over SSH on the venue, not on the operator host — the SAME generalization
+	// that makes a `local: {host: user@machine}` remote teardown replay remotely (R3). nil
+	// runner → reverse_ops falls back to local exec.Command (the host:local path).
+	exec := t.exec
+	if life, ok := substrateLifecycleFor(t.prov.word); ok {
+		if e, lerr := life.TeardownExecutor(t.name, t.node); lerr != nil {
+			return fmt.Errorf("external deploy %q: teardown executor: %w", t.name, lerr)
+		} else if e != nil {
+			exec = e
+		}
+	}
+	runner := reverseRunnerForExecutor(exec, t.revRunner)
 	re := &hostReverseExec{
 		DryRun:          opts.DryRun,
 		KeepRepoChanges: t.KeepRepoChanges,
 		KeepServices:    t.KeepServices,
-		Runner:          t.revRunner,
+		Runner:          runner,
 	}
 	if err := teardownHostDeploy(paths, rec, os.Getenv("HOME"), re); err != nil {
 		return err
+	}
+
+	// Substrate host-side teardown cleanup (vm: ssh-config stanza + charly.yml entry +
+	// ephemeral lifecycle). No-op for substrates without a lifecycle hook.
+	if life, ok := substrateLifecycleFor(t.prov.word); ok {
+		if err := life.PostTeardown(t.name, t.node); err != nil {
+			return fmt.Errorf("external deploy %q: post-teardown: %w", t.name, err)
+		}
 	}
 	fmt.Printf("Removed external deploy %s (%s)\n", rec.DeployID, rec.Target)
 	return nil
@@ -356,13 +562,16 @@ func (t *externalDeployTarget) Del(ctx context.Context, opts DelOpts) error {
 // mirrors ErrNotSupportedOnHost.
 var ErrNotSupportedOnExternal = errors.New("lifecycle operation not supported on external deploy target")
 
-// Rebuild re-applies the external deployment (refresh semantics, mirroring
-// the local deploy target.Rebuild): it re-runs `charly bundle add <name>` as a
-// subprocess, which reconnects the plugin and re-Invokes the provider — an
-// idempotent re-apply. This is the path `charly update <name>` (the bed's
-// fresh-rebuild R10 gate) takes. The Disposable gate is checked by the caller's
-// classification logic, so this method does not re-validate.
+// Rebuild re-creates the deployment. A substrate with a lifecycle hook (vm) delegates to
+// it — for vm: `charly vm destroy`+`build`+`create`+`start`+`charly bundle add` (re-creating
+// the domain, the WHOLE point of Design A, since `charly update <vm-bed>` — the disposable
+// bed's fresh-rebuild R10 gate — routes here). A hookless substrate (local/android/k8s) uses
+// the refresh path: re-run `charly bundle add <name>`, an idempotent re-apply. The Disposable
+// gate is checked by the caller's classification logic, so this method does not re-validate.
 func (t *externalDeployTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
+	if life, ok := substrateLifecycleFor(t.prov.word); ok {
+		return life.Rebuild(ctx, t.name, t.node, opts)
+	}
 	if opts.DryRun {
 		fmt.Printf("dry-run: charly bundle add %s\n", t.name)
 		return nil
@@ -370,10 +579,13 @@ func (t *externalDeployTarget) Rebuild(ctx context.Context, opts RebuildOpts) er
 	return runCharlySubcommand("bundle", "add", t.name)
 }
 
-// Status reports the external deploy's presence from the ledger: "running" when a
-// deploy record exists, "stopped" otherwise (the host venue itself is always up;
-// charly-managed presence is the signal). Mirrors the local deploy target.Status.
+// Status reports the deploy's runtime state. A substrate with a lifecycle hook (vm) reports
+// the live VM state (`charly vm list`); a hookless substrate reports ledger presence
+// ("running" when a deploy record exists). Mirrors the local deploy target.Status.
 func (t *externalDeployTarget) Status(ctx context.Context) (StatusInfo, error) {
+	if life, ok := substrateLifecycleFor(t.prov.word); ok {
+		return life.Status(ctx, t.name, t.node)
+	}
 	paths, err := t.ledgerPaths()
 	if err != nil {
 		return StatusInfo{}, err
@@ -389,17 +601,30 @@ func (t *externalDeployTarget) Status(ctx context.Context) (StatusInfo, error) {
 	}, nil
 }
 
-// Start, Stop, Logs, Shell: not applicable to an external deploy target (host
-// venue, no separate runtime / journal we own). Mirror the host-target pattern.
+// Start, Stop, Logs, Shell delegate to the substrate's lifecycle hook when one is registered
+// (vm: `charly vm start/stop/console/ssh`). A hookless substrate (local/android/k8s) has no
+// charly-owned runtime / journal, so they error like the host target.
 func (t *externalDeployTarget) Start(ctx context.Context) error {
+	if life, ok := substrateLifecycleFor(t.prov.word); ok {
+		return life.Start(ctx, t.name, t.node)
+	}
 	return fmt.Errorf("external deploy %q: %w", t.name, ErrNotSupportedOnExternal)
 }
 func (t *externalDeployTarget) Stop(ctx context.Context) error {
+	if life, ok := substrateLifecycleFor(t.prov.word); ok {
+		return life.Stop(ctx, t.name, t.node)
+	}
 	return fmt.Errorf("external deploy %q: %w", t.name, ErrNotSupportedOnExternal)
 }
 func (t *externalDeployTarget) Logs(ctx context.Context, opts LogsOpts) error {
+	if life, ok := substrateLifecycleFor(t.prov.word); ok {
+		return life.Logs(ctx, t.name, t.node, opts)
+	}
 	return fmt.Errorf("external deploy %q: %w", t.name, ErrNotSupportedOnExternal)
 }
 func (t *externalDeployTarget) Shell(ctx context.Context, cmd []string) error {
+	if life, ok := substrateLifecycleFor(t.prov.word); ok {
+		return life.Shell(ctx, t.name, t.node, cmd)
+	}
 	return fmt.Errorf("external deploy %q: %w", t.name, ErrNotSupportedOnExternal)
 }

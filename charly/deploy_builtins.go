@@ -11,7 +11,8 @@ package main
 
 // the local deploy provider (the `local` deploy target) lives in candy/plugin-deploy-local.
 
-// vmTarget (the `vm` deploy target) lives in plugin_deploy_vm.go.
+// the `vm` deploy substrate is external (candy/plugin-deploy-vm); it has no
+// in-proc deploy-target provider.
 
 // podTarget (the `pod` deploy target) lives in plugin_deploy_pod.go.
 

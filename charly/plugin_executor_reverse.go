@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	pb "github.com/overthinkos/overthink/charly/plugin/proto"
 	"github.com/overthinkos/overthink/charly/spec"
@@ -26,6 +27,11 @@ type executorReverseServer struct {
 	// a short / namespace-qualified builder image and fall back to a local `charly box
 	// build`). Zero value for a verb/kind/deploy Invoke that never drives RunHostStep.
 	build buildEngineContext
+	// rebootable marks the venue as a charly-owned guest a RebootStep may reboot mid-walk (a
+	// VM, set by the vm deploy substrate via InvokeWithExecutor). false (the default) makes a
+	// RebootStep skip-and-note — a host venue (target:local, host:local or host:user@machine)
+	// is NEVER rebooted by a plugin walk (the prior in-proc LocalDeployTarget skipped+warned).
+	rebootable bool
 }
 
 func (s *executorReverseServer) Venue(context.Context, *pb.Empty) (*pb.VenueReply, error) {
@@ -84,14 +90,16 @@ func (s *executorReverseServer) GetFile(ctx context.Context, req *pb.GetFileRequ
 }
 
 // RunHostStep is the HOST-ENGINE channel leg (the generalization of the former F3 build channel): an
-// OUT-OF-PROCESS deploy/step plugin walking an InstallPlan hits one of the five step kinds
+// OUT-OF-PROCESS deploy/step plugin walking an InstallPlan hits one of the six step kinds
 // it CANNOT execute itself because each needs in-core host machinery that cannot move into
 // the leaf plugin/kit package — BuilderStep (podman / BuilderRun / EnsureImagePresent),
 // LocalPkgInstallStep (makepkg + pacman/dnf/apt), SystemPackagesStep (the format's
 // phase.install.host template, rendered from the project DistroConfig), an act-verb OpStep
-// (a builtin ProvisionActor shell that needs the in-proc provider registry), or an
+// (a builtin ProvisionActor shell that needs the in-proc provider registry), an
 // ExternalPluginStep (a verb served by ANOTHER out-of-process plugin, dispatched over a
-// NESTED reverse channel). The plugin dials back here; the host reconstructs the concrete
+// NESTED reverse channel), or a RebootStep (reboot a charly-owned VM guest + wait for the
+// deterministic boot_id change — only on a rebootable venue; skip-and-noted on a host venue).
+// The plugin dials back here; the host reconstructs the concrete
 // step from its serializable view, runs the EXISTING in-core machinery on the host (the
 // SAME helpers the in-proc deploy targets use — no second implementation, R3), applies the
 // effect onto the venue via s.exec, and returns the step's recorded ReverseOps so the
@@ -131,7 +139,7 @@ func (s *executorReverseServer) RunHostStep(ctx context.Context, req *pb.HostSte
 	case *SystemPackagesStep:
 		// The format's phase.install.host template lives in the resolved DistroConfig the
 		// plugin cannot reach — render it host-side (the SAME renderHostPackageCommand the
-		// in-proc local deploy target/VmDeployTarget use, R3) and RunSystem on the venue.
+		// host-engine deploy paths use, R3) and RunSystem on the venue.
 		cmd, rerr := renderHostPackageCommand(s.build.DistroCfg, st)
 		if rerr != nil {
 			return &pb.HostStepReply{Error: rerr.Error()}, nil
@@ -172,11 +180,28 @@ func (s *executorReverseServer) RunHostStep(ctx context.Context, req *pb.HostSte
 			return &pb.HostStepReply{Error: rerr.Error()}, nil
 		}
 		reverseOps = reply.ReverseOps
+	case *RebootStep:
+		// A `reboot: true` layer. ONLY a rebootable venue (a VM guest — s.rebootable, set by
+		// the vm deploy substrate) is rebooted: the host records the guest boot_id, fires the
+		// reboot, and polls until sshd answers AND the boot_id changed (deterministic, not a
+		// sleep — the SSHExecutor dials fresh each poll, so the post-reboot reconnect is
+		// automatic). On a NON-rebootable venue (target:local host:local/remote) it skips +
+		// notes — a plugin walk NEVER reboots the operator/remote host (the prior in-proc
+		// LocalDeployTarget behaviour). RebootStep.Reverse() is empty either way.
+		if !s.rebootable {
+			fmt.Fprintf(os.Stderr, "charly: reboot requested by candy %q skipped on host venue (a plugin walk never reboots a non-VM venue)\n", st.CandyName)
+			reverseOps = st.Reverse()
+			break
+		}
+		if rerr := rebootVenueAndWait(ctx, s.exec, st.CandyName, opts); rerr != nil {
+			return &pb.HostStepReply{Error: rerr.Error()}, nil
+		}
+		reverseOps = st.Reverse()
 	default:
-		// Only the five host-engine step kinds route here. Every other (plugin-renderable)
+		// Only the six host-engine step kinds route here. Every other (plugin-renderable)
 		// kind the plugin EXECUTES itself via the RunSystem/RunUser/PutFile legs — reaching
 		// RunHostStep with one is a plugin-walk bug.
-		return &pb.HostStepReply{Error: fmt.Sprintf("RunHostStep: step kind %q is not a host-engine step (only Builder / LocalPkgInstall / SystemPackages / act-verb Op / ExternalPlugin route through the host-engine channel; execute every other kind via RunSystem/RunUser/PutFile)", view.Kind)}, nil
+		return &pb.HostStepReply{Error: fmt.Sprintf("RunHostStep: step kind %q is not a host-engine step (only Builder / LocalPkgInstall / SystemPackages / act-verb Op / ExternalPlugin / Reboot route through the host-engine channel; execute every other kind via RunSystem/RunUser/PutFile)", view.Kind)}, nil
 	}
 
 	revJSON, err := json.Marshal(reverseOps)
@@ -184,6 +209,54 @@ func (s *executorReverseServer) RunHostStep(ctx context.Context, req *pb.HostSte
 		return &pb.HostStepReply{Error: fmt.Sprintf("marshal reverse ops: %v", err)}, nil
 	}
 	return &pb.HostStepReply{ReverseOpsJson: revJSON}, nil
+}
+
+// rebootVenueAndWait reboots a charly-owned guest over the executor and waits for it to
+// return. Deterministic, not a sleep-and-pray: it records the kernel boot_id, fires the
+// reboot in the background (so the ssh session closes cleanly), then polls until the
+// executor answers again AND the boot_id has changed — so the still-up pre-reboot sshd
+// can't be mistaken for "back up". Needed by kernel-module candies (e.g. nvidia-open-dkms)
+// whose module only loads on a fresh boot. Relocated from the deleted in-proc VM-target reboot leg
+// (the SAME readiness primitive + boot_id gate), now driven host-side over the reverse channel
+// so the external vm plugin's walk reboots the guest mid-plan. The SSHExecutor dials fresh per
+// call, so the post-reboot reconnect is automatic.
+func rebootVenueAndWait(ctx context.Context, exec DeployExecutor, candyName string, opts EmitOpts) error {
+	if opts.DryRun {
+		fmt.Fprintf(os.Stderr, "[dry-run] reboot guest (candy %s) and wait for it to return\n", candyName)
+		return nil
+	}
+	venue := exec.Venue()
+	oldBoot, _, _, _ := exec.RunCapture(ctx, "cat /proc/sys/kernel/random/boot_id 2>/dev/null")
+	oldBoot = strings.TrimSpace(oldBoot)
+
+	fmt.Fprintf(os.Stderr, "reboot: requested by candy %q — rebooting guest %s and waiting for it to return\n", candyName, venue)
+	// Fire the reboot in the background so the ssh session closes cleanly (a foreground
+	// `reboot` would race the connection teardown and yield an ambiguous exit code). The 1s
+	// delay is for clean session close, not a correctness-timing workaround.
+	_ = exec.RunSystem(ctx, "(sleep 1; systemctl reboot || reboot) >/dev/null 2>&1 &\nexit 0", opts)
+
+	// BINARY/EDGE readiness (guest down→boot_id-changed) → cap-only via pollUntil (poll.go)
+	// at the GENEROUS config cap. The marker is frozen "down" for the whole legitimate reboot,
+	// so a no-progress window would be a wrong (too-short) timeout — cap-only is correct here.
+	cfg := loadedReadiness().WaitCapped(fmt.Sprintf("reboot %s", venue), PollRemote, 0)
+	if err := pollUntil(ctx, cfg, func(actx context.Context) (bool, float64, error) {
+		out, _, _, rerr := exec.RunCapture(actx, "cat /proc/sys/kernel/random/boot_id 2>/dev/null")
+		if rerr != nil {
+			return false, 0, nil // guest still down or sshd not yet accepting
+		}
+		newBoot := strings.TrimSpace(out)
+		if newBoot == "" {
+			return false, 0, nil
+		}
+		if oldBoot == "" || newBoot != oldBoot {
+			fmt.Fprintf(os.Stderr, "reboot: guest %s is back up (boot_id=%s)\n", venue, newBoot)
+			return true, 0, nil
+		}
+		return false, 0, nil // sshd back but still the pre-reboot kernel
+	}); err != nil {
+		return fmt.Errorf("guest %s did not return after reboot requested by candy %q: %w", venue, candyName, err)
+	}
+	return nil
 }
 
 // errString is err.Error() or "" — the reverse-channel convention (the RPC succeeds; the

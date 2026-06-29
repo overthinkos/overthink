@@ -154,7 +154,7 @@ aur:
         # Refresh to the current mirror state with a FULL `pacman -Syu` (never a
         # partial `-Sy`, which Arch forbids) before resolving makedepends. Same
         # template drives the OCI AUR stage AND the cross-host VM aur builder
-        # (deploy_target_vm.go), so this one refresh covers every AUR build (R3).
+        # (the external vm deploy's host-engine builder leg), so this one refresh covers every AUR build (R3).
         #
         # Host-venue build script for target:local / target:vm deploys
         # (BuilderRun runs it AS ROOT, RunAsRoot=true, matching the OCI USER root
@@ -1002,7 +1002,7 @@ fedora:
                     download_template: "https://github.com/overthinkos/overthink/releases/latest/download/opencharly-${ARCH}.rpm"
                     probe: command -v dnf
                 # Host-venue cells consumed by target:local / target:vm deploys
-                # (the local deploy target / VmDeployTarget). install.host is the
+                # (the external local/vm deploy walk via RunHostStep). install.host is the
                 # plain-shell analog of the install.container Containerfile RUN;
                 # uninstall_template is the deploy-teardown package removal
                 # (reverse_ops.go). dnf auto-refreshes metadata (metadata_expire)
@@ -1247,8 +1247,8 @@ systemd:
         label_key: ai.opencharly.service.systemd
         # service_schema lets RenderService emit a full systemd unit at
         # DEPLOY time for target: vm / target: host custom service: entries
-        # (used by VmDeployTarget.execServiceCustom →
-        # renderCustomServiceForSystemdTarget). Build-time bootc images
+        # (used by the external vm deploy's custom-service step via RunHostStep,
+        # the compile-time service render). Build-time bootc images
         # still use the candy_file: *.service file_copy model above for
         # pre-authored units — this schema is only consulted when no
         # pre-authored file exists and the compiler emits a

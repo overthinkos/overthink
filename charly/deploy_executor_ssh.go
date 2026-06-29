@@ -14,7 +14,7 @@ import (
 )
 
 // SSHExecutor implements DeployExecutor against an SSH-reachable guest.
-// Used by VmDeployTarget to run the same InstallPlan IR that
+// Used by the external vm deploy to run the same InstallPlan IR that
 // the local deploy target runs — but wrapped as `ssh <user>@<host> sudo
 // bash -s` instead of direct local bash, and scp for file transfers.
 //
@@ -109,17 +109,26 @@ func (e *SSHExecutor) RunUser(ctx context.Context, script string, opts EmitOpts)
 }
 
 // RunBuilder delegates to BuilderRun which runs the podman container
-// *on the host*. Caller (VmDeployTarget) is responsible for scp-ing
+// *on the host*. Caller (the external vm deploy) is responsible for scp-ing
 // the resulting artifacts into the guest via PutFile afterwards —
 // this executor doesn't shuttle artifact trees itself.
 func (e *SSHExecutor) RunBuilder(ctx context.Context, opts BuilderRunOpts) ([]byte, error) {
 	return BuilderRun(ctx, opts)
 }
 
-// PutFile copies a local file into the guest via scp, then uses sudo
-// install on the guest to place it with the correct mode/owner.
-// This two-step dance is needed because scp runs as the guest's
-// unprivileged user (you can't scp directly to /usr/local/bin).
+// PutFile copies a local file into the guest via scp, then `install`s it into place
+// with the correct mode/owner. This two-step dance is needed because scp runs as the
+// guest's unprivileged user (you can't scp directly to /usr/local/bin).
+//
+// ownerRoot decides the PRIVILEGE the install runs at — the SAME contract as
+// ShellExecutor.PutFile (R3): ownerRoot=true → `sudo install -o root -g root` (a
+// system-scoped file, root-owned); ownerRoot=false → a plain user-scoped `install`
+// run AS THE GUEST USER (RunUser, NO sudo) so the file AND any parent dirs `install
+// -D` creates are USER-owned. Running the non-root branch under sudo (the old bug —
+// it always RunSystem'd) created root-owned `~/.config/opencharly/{env.d,…}` in the
+// guest, which then blocked the user-scoped ledger write (`mkdir … Permission
+// denied`). The prior in-proc VM target wrote env.d via RunUser for exactly this
+// reason; the externalized walk reaches the same RunUser path through here.
 func (e *SSHExecutor) PutFile(ctx context.Context, localPath, remotePath string, mode uint32, ownerRoot bool, opts EmitOpts) error {
 	if opts.DryRun {
 		fmt.Fprintf(os.Stderr, "[dry-run] scp %s vm:%s  (mode=%o, ownerRoot=%v)\n",
@@ -141,27 +150,32 @@ func (e *SSHExecutor) PutFile(ctx context.Context, localPath, remotePath string,
 		return fmt.Errorf("scp %s -> %s: %w", localPath, tmpRemote, err)
 	}
 
-	// ssh guest: move staged file into place with correct mode+owner.
-	var installScript string
-	modeOctal := fmtOctal(mode)
-	if ownerRoot {
-		installScript = fmt.Sprintf(
-			"set -e\nsudo install -D -m %s -o root -g root %s %s\nrm -f %s\n",
-			modeOctal,
-			deployShellQuote(tmpRemote),
-			deployShellQuote(remotePath),
-			deployShellQuote(tmpRemote),
-		)
-	} else {
-		installScript = fmt.Sprintf(
-			"set -e\ninstall -D -m %s %s %s\nrm -f %s\n",
-			modeOctal,
-			deployShellQuote(tmpRemote),
-			deployShellQuote(remotePath),
-			deployShellQuote(tmpRemote),
-		)
+	// ssh guest: move staged file into place with correct mode+owner, at the privilege the
+	// ownerRoot contract dictates (sshInstallScript reports which).
+	installScript, asRoot := sshInstallScript(tmpRemote, remotePath, fmtOctal(mode), ownerRoot)
+	if asRoot {
+		return e.RunSystem(ctx, installScript, opts)
 	}
-	return e.RunSystem(ctx, installScript, opts)
+	return e.RunUser(ctx, installScript, opts)
+}
+
+// sshInstallScript builds the guest-side `install` script that moves a staged tmp file into
+// place, and reports whether it MUST run as ROOT. It is the SSH analogue of
+// ShellExecutor.PutFile's ownerRoot branch (R3): ownerRoot=true → `sudo install -o root -g
+// root` (a system-scoped, root-owned file, run via RunSystem); ownerRoot=false → a plain
+// `install` run AS THE GUEST USER (RunUser, NO sudo) so the file AND the parent dirs
+// `install -D` creates are USER-owned. Split out of PutFile so the privilege mapping is
+// unit-testable — it is the exact regression point (the user-scoped branch was previously run
+// under sudo, creating root-owned ~/.config/opencharly in the guest and blocking the
+// user-scoped ledger write).
+func sshInstallScript(tmpRemote, remotePath, modeOctal string, ownerRoot bool) (script string, asRoot bool) {
+	q := deployShellQuote
+	if ownerRoot {
+		return fmt.Sprintf("set -e\nsudo install -D -m %s -o root -g root %s %s\nrm -f %s\n",
+			modeOctal, q(tmpRemote), q(remotePath), q(tmpRemote)), true
+	}
+	return fmt.Sprintf("set -e\ninstall -D -m %s %s %s\nrm -f %s\n",
+		modeOctal, q(tmpRemote), q(remotePath), q(tmpRemote)), false
 }
 
 // GetFile retrieves the contents of a file from the guest via
@@ -260,7 +274,7 @@ var shellSingleQuoteSSH = kit.ShellQuote
 
 // WaitForSSH polls the guest's sshd until it accepts connections
 // (bounded by maxWaitSeconds). Returns nil on first successful
-// connect, error on timeout. Used by VmDeployTarget right after
+// connect, error on timeout. Used by the vm deploy's PrepareVenue right after
 // `charly vm create`.
 //
 // The loop uses a wall-clock deadline (not an iteration count) and

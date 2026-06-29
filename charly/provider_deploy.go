@@ -42,25 +42,33 @@ var deployTargetWords = []string{"local", "vm", "pod", "k8s", "android"}
 // over the E3b reverse channel. Both checkDeployProviderBijection (in-proc XOR
 // externalized) and isExternalDeploySubstrate (a substrate kind is external iff
 // listed here) consult it — so the two gates can never disagree. GENERAL for all
-// 5: pod joins this set as it migrates; the ONLY substrate-specific piece is each one's
+// 5 — ALL FIVE substrates now externalize; the ONLY substrate-specific piece is each one's
 // registered preresolver body (android_deploy_preresolve.go / k8s_deploy_preresolve.go) OR
-// lifecycle hook (vm_deploy_lifecycle.go), never a branch in the generic dispatch. local
-// needs NEITHER — its plan walk + executor selection are the generic externalDeployTarget
-// path (the executor is Shell for host:local, SSH for host:user@machine — see
-// ResolveTarget), so the plan VIEWS the host marshals already carry everything the
+// lifecycle hook (vm_deploy_lifecycle.go / pod_deploy_lifecycle.go), never a branch in the
+// generic dispatch. local needs NEITHER — its plan walk + executor selection are the generic
+// externalDeployTarget path (the executor is Shell for host:local, SSH for host:user@machine
+// — see ResolveTarget), so the plan VIEWS the host marshals already carry everything the
 // candy/plugin-deploy-local plugin needs.
 //
 // vm is served by candy/plugin-deploy-vm (kit.WalkPlans over the GUEST SSHExecutor). Unlike
-// the others it owns a real venue LIFECYCLE, so it registers a substrateLifecycle
+// local/android/k8s it owns a real venue LIFECYCLE, so it registers a substrateLifecycle
 // (vm_deploy_lifecycle.go): the host-side hook that boots the domain + builds the guest
 // SSHExecutor the reverse channel serves, runs the nested pod-in-guest orchestration, and
 // owns Start/Stop/Status/Logs/Shell/Rebuild + the ssh-config / charly.yml-entry / ephemeral
 // teardown bookkeeping. The deploy WALK is still external; only the venue lifecycle stays
 // host-side (the host-owns-the-engine principle, like k8s keeping GenerateK8sKustomize in core).
+//
+// pod is served by candy/plugin-deploy-pod, but unlike vm its plugin WALKS NOTHING: pod bakes
+// its install steps INTO the image at build time, so its substrateLifecycle hook
+// (pod_deploy_lifecycle.go) builds the overlay container image HOST-SIDE in PrepareVenue (the
+// SAME core OCITarget/Generator engine, in-process — like vm builds its disk host-side) and
+// owns the container lifecycle (config/start/remove + the `charly update` rebuild gate). The
+// plugin's Invoke is a thin acknowledgment; the build engine stays core.
 var externalizedDeploySubstrates = map[string]bool{
 	"android": true,
 	"k8s":     true,
 	"local":   true,
+	"pod":     true,
 	"vm":      true,
 }
 
@@ -71,6 +79,7 @@ var externalizedDeploySubstrates = map[string]bool{
 var externalDeploySubstratePlugins = map[string]string{
 	"local":   "candy/plugin-deploy-local",
 	"vm":      "candy/plugin-deploy-vm",
+	"pod":     "candy/plugin-deploy-pod",
 	"android": "candy/plugin-adb",
 	"k8s":     "candy/plugin-kube",
 }

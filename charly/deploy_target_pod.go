@@ -180,9 +180,6 @@ func (t *PodDeployTarget) OverlayImageRef() string {
 // Does NOT perform the final container start — that stays in start.go
 // via DeployUpCmd.
 func (t *PodDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
-	if len(plans) == 0 {
-		return nil
-	}
 	if t.Engine == "" {
 		t.Engine = "podman"
 	}
@@ -190,6 +187,13 @@ func (t *PodDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 	// Determine which plans represent overlay candies (add_candy:)
 	// rather than candies already baked into the base image. v1 heuristic:
 	// a plan's Candy is in any plan's AddCandies list → overlay.
+	//
+	// An EMPTY plan set is the no-add_candy case for an externalized pod (the
+	// external-substrate compileNodePlans skips the primary box plan — the box's candies
+	// are already baked into the base image): there is no overlay to synthesize, but the
+	// deploy-name alias must still be tagged below so `charly config/start <deploy-name>`
+	// resolves the base image when deploy-name != image-name. (collectOverlayCandies([]) is
+	// [], so the len==0 branch handles it.)
 	overlayCandies := collectOverlayCandies(plans)
 	if len(overlayCandies) == 0 {
 		// Nothing to overlay — the existing base image is deploy-ready.

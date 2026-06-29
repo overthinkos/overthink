@@ -75,25 +75,24 @@ func TestReservedWordRegistry_KindsDispatchable(t *testing.T) {
 }
 
 // TestReservedWordRegistry_DeployBijection proves the F1 substrate-kind-plugin dispatch
-// seam: the deploy-target bijection ACCEPTS an EXTERNALIZED substrate (android, k8s, local,
-// vm) that has NO in-proc DeployTargetProvider — served out-of-process by candy/plugin-adb
-// (android) / candy/plugin-kube (k8s) / candy/plugin-deploy-local (local) /
-// candy/plugin-deploy-vm (vm), whose grpcProvider connects at plugin-load time — while the
-// still-builtin substrate (pod) keeps its in-proc provider; and FAILS when a word would have
-// BOTH (the in-proc XOR externalized invariant).
+// seam: the deploy-target bijection ACCEPTS every canonical substrate (ALL FIVE now
+// externalized — android, k8s, local, pod, vm) having NO in-proc DeployTargetProvider —
+// served out-of-process by candy/plugin-adb (android) / candy/plugin-kube (k8s) /
+// candy/plugin-deploy-local (local) / candy/plugin-deploy-pod (pod) / candy/plugin-deploy-vm
+// (vm), whose grpcProvider connects at plugin-load time; and FAILS when a word is NEITHER
+// builtin NOR externalized (the in-proc XOR externalized invariant — never neither).
 func TestReservedWordRegistry_DeployBijection(t *testing.T) {
-	// Positive: the live registry (pod builtin + android/k8s/local/vm externalized) passes
-	// — the same gate the init() bijection runs at process start.
+	// Positive: the live registry (all five externalized, none in-proc) passes — the same
+	// gate the init() bijection runs at process start.
 	if err := checkDeployProviderBijection(); err != nil {
 		t.Fatalf("live deploy-target bijection is broken: %v", err)
 	}
 
-	// android, k8s, local and vm are THE externalized substrates: in
-	// externalizedDeploySubstrates AND INTENTIONALLY without an in-proc DeployTargetProvider
-	// (local → candy/plugin-deploy-local, vm → candy/plugin-deploy-vm). vm additionally
-	// registers a substrateLifecycle hook (the host-side VM lifecycle), but that is NOT an
-	// in-proc DeployTargetProvider — it has no provider in the registry.
-	for _, w := range []string{"android", "k8s", "local", "vm"} {
+	// ALL FIVE are externalized substrates: in externalizedDeploySubstrates AND
+	// INTENTIONALLY without an in-proc DeployTargetProvider. vm/pod additionally register a
+	// substrateLifecycle hook (the host-side venue lifecycle), but that is NOT an in-proc
+	// DeployTargetProvider — they have no provider in the registry.
+	for _, w := range []string{"android", "k8s", "local", "pod", "vm"} {
 		if !externalizedDeploySubstrates[w] {
 			t.Fatalf("%s must be in externalizedDeploySubstrates (the F1 source of truth)", w)
 		}
@@ -101,31 +100,26 @@ func TestReservedWordRegistry_DeployBijection(t *testing.T) {
 			t.Fatalf("%s must NOT have an in-proc DeployTargetProvider — it is externalized", w)
 		}
 	}
-	// vm is the only externalized substrate with a host-side lifecycle hook (it owns a real
-	// venue lifecycle — boot/destroy/console/ssh); local/android/k8s register none.
-	if _, ok := substrateLifecycleFor("vm"); !ok {
-		t.Error("vm must register a substrateLifecycle (the host-side VM lifecycle hook)")
+	// vm and pod own a real host-side venue lifecycle (vm: boot/destroy/console/ssh; pod:
+	// overlay build + container config/start/remove), so each registers a substrateLifecycle;
+	// the in-place substrates (local/android/k8s) register none.
+	for _, w := range []string{"vm", "pod"} {
+		if _, ok := substrateLifecycleFor(w); !ok {
+			t.Errorf("%s must register a substrateLifecycle (the host-side venue lifecycle hook)", w)
+		}
 	}
 	for _, w := range []string{"local", "android", "k8s"} {
 		if _, ok := substrateLifecycleFor(w); ok {
 			t.Errorf("%s must NOT register a substrateLifecycle (no charly-owned venue lifecycle)", w)
 		}
 	}
-	// pod is the only still-builtin substrate: it keeps its in-proc provider and is NOT externalized.
-	for _, w := range []string{"pod"} {
-		if externalizedDeploySubstrates[w] {
-			t.Errorf("%s should still be a builtin substrate, not externalized", w)
-		}
-		if _, ok := providerRegistry.resolve(ClassDeployTarget, w); !ok {
-			t.Errorf("builtin substrate %s lost its in-proc DeployTargetProvider", w)
-		}
-	}
 
-	// Negative: marking a still-builtin substrate ALSO externalized (BOTH an in-proc
-	// provider AND the externalized flag) violates the XOR and must FAIL the gate.
-	externalizedDeploySubstrates["pod"] = true
-	defer delete(externalizedDeploySubstrates, "pod")
+	// Negative: a substrate that is NEITHER externalized NOR backed by an in-proc provider
+	// violates the bijection and must FAIL the gate. Temporarily de-list pod (which has no
+	// in-proc deploy-target provider) → it is now neither → fail.
+	delete(externalizedDeploySubstrates, "pod")
+	defer func() { externalizedDeploySubstrates["pod"] = true }()
 	if err := checkDeployProviderBijection(); err == nil {
-		t.Fatal("expected bijection to FAIL when a builtin substrate is ALSO marked externalized (in-proc XOR externalized)")
+		t.Fatal("expected bijection to FAIL when a substrate is NEITHER externalized NOR an in-proc provider")
 	}
 }

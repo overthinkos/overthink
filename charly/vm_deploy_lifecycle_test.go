@@ -9,14 +9,18 @@ import (
 	"github.com/overthinkos/overthink/charly/spec"
 )
 
-// TestVmSubstrateLifecycleRegistered proves the vm substrate registers a lifecycle hook
-// (the host-side VM lifecycle), and that the other externalized substrates do NOT (their
-// venue has no charly-owned lifecycle — externalDeployTarget errors on Start/Stop/Logs/Shell).
+// TestVmSubstrateLifecycleRegistered proves the vm AND pod substrates register a lifecycle
+// hook (vm: the host-side VM boot/destroy + guest SSH executor; pod: the host-side overlay
+// image build + container config/start/remove), and that the in-place externalized
+// substrates (local/android/k8s) do NOT (their venue has no charly-owned lifecycle —
+// externalDeployTarget errors on Start/Stop/Logs/Shell).
 func TestVmSubstrateLifecycleRegistered(t *testing.T) {
-	if _, ok := substrateLifecycleFor("vm"); !ok {
-		t.Fatal("vm must register a substrateLifecycle")
+	for _, w := range []string{"vm", "pod"} {
+		if _, ok := substrateLifecycleFor(w); !ok {
+			t.Errorf("%s must register a substrateLifecycle", w)
+		}
 	}
-	for _, w := range []string{"local", "android", "k8s", "pod"} {
+	for _, w := range []string{"local", "android", "k8s"} {
 		if _, ok := substrateLifecycleFor(w); ok {
 			t.Errorf("%s must NOT register a substrateLifecycle", w)
 		}

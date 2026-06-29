@@ -67,14 +67,14 @@ func TestDedicatedProviders_ResolveAndDispatch(t *testing.T) {
 	}
 }
 
-// TestDedicatedProviders_BulkResolveAndAbsent proves the Phase 3 BULK extraction: every
-// in-proc deploy-target (pod/vm/k8s — `android` is now an EXTERNAL substrate, F1, with NO
-// in-proc provider) and builder (pixi/npm/aur) lives in its OWN dedicated
-// plugin_<class>_<name>.go file, self-registers via registerDedicatedBuiltin, and is
-// INTENTIONALLY absent from both builtinProviderInstances and the `providers:` manifest —
-// yet still resolves through the SAME providerRegistry and dispatches identically (the
-// deploy-target bijection gate still sees them registered; builders have no gate, so the
-// resolve IS the wiring proof).
+// TestDedicatedProviders_BulkResolveAndAbsent proves the Phase 3 BULK extraction for the
+// remaining in-proc dedicated providers: every builder (pixi/npm/aur) lives in its OWN
+// dedicated plugin_<class>_<name>.go file, self-registers via registerDedicatedBuiltin, and
+// is INTENTIONALLY absent from both builtinProviderInstances and the `providers:` manifest —
+// yet still resolves through the SAME providerRegistry (builders have no bijection gate, so
+// the resolve IS the wiring proof). ALL FIVE deploy substrates (local/vm/pod/k8s/android)
+// are now EXTERNAL (F1) with NO in-proc deploy-target provider — see
+// TestReservedWordRegistry_DeployBijection.
 func TestDedicatedProviders_BulkResolveAndAbsent(t *testing.T) {
 	byKey := builtinInstanceMap()
 	manifest := parseEmbeddedProviderManifest()
@@ -87,38 +87,11 @@ func TestDedicatedProviders_BulkResolveAndAbsent(t *testing.T) {
 		return false
 	}
 
-	// Deploy targets: each resolves to a DeployTargetProvider that constructs the
-	// expected UnifiedDeployTarget (behavior-preserving), and is absent from slice+manifest.
-	// pod is the ONLY remaining in-proc dedicated deploy target — local, vm, android and
-	// k8s are EXTERNAL substrates (F1, served by candy/plugin-deploy-{local,vm} /
-	// plugin-adb / plugin-kube), so they have no in-proc DeployTargetProvider (see
-	// TestReservedWordRegistry_DeployBijection).
-	wantTarget := map[string]func(UnifiedDeployTarget) bool{
-		"pod": func(t UnifiedDeployTarget) bool { _, ok := t.(*PodUnifiedTarget); return ok },
-	}
-	for _, word := range []string{"pod"} {
-		dp, ok := providerRegistry.ResolveDeploy(word)
-		if !ok {
-			t.Fatalf("ResolveDeploy(%q) not registered — dedicated self-registration regressed", word)
-		}
-		dtp, ok := dp.(DeployTargetProvider)
-		if !ok {
-			t.Fatalf("deploy:%s resolved but is not a DeployTargetProvider (got %T)", word, dp)
-		}
-		tgt, err := dtp.ResolveTarget(&BundleNode{}, "demo")
-		if err != nil {
-			t.Fatalf("deploy:%s ResolveTarget: %v", word, err)
-		}
-		if !wantTarget[word](tgt) {
-			t.Fatalf("deploy:%s ResolveTarget = %T, unexpected UnifiedDeployTarget type", word, tgt)
-		}
-		if _, in := byKey[provKey(ClassDeployTarget, word)]; in {
-			t.Fatalf("deploy:%s is still in builtinProviderInstances — must self-register from its dedicated file", word)
-		}
-		if inManifest(ClassDeployTarget, word) {
-			t.Fatalf("deploy:%s is still in the providers: manifest — a dedicated provider must not be listed there", word)
-		}
-	}
+	// Deploy targets: there are NO in-proc dedicated deploy-target providers left — ALL FIVE
+	// substrates (local/vm/pod/k8s/android) are EXTERNAL (F1, served out-of-process by
+	// candy/plugin-deploy-{local,vm,pod} / plugin-adb / plugin-kube), so none has an in-proc
+	// DeployTargetProvider (asserted by TestReservedWordRegistry_DeployBijection). Only
+	// builders remain as dedicated in-proc providers below.
 
 	// Builders: each resolves to a BuilderProvider and is absent from slice+manifest.
 	for _, word := range []string{"pixi", "npm", "aur"} {

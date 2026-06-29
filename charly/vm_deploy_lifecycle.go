@@ -38,7 +38,10 @@ var _ = func() bool {
 // runs BEFORE the plugin walks. {{.Home}} is resolved against the guest home by the generic
 // externalDeployTarget.apply (its prepareReverseState calls exec.ResolveHome on THIS
 // executor → the guest), so this hook ships no substrate payload.
-func (vmSubstrateLifecycle) PrepareVenue(ctx context.Context, name, dir string, node *BundleNode, opts EmitOpts) (DeployExecutor, error) {
+// plans is ignored: the vm plugin WALKS the deployment's plans in-guest over the returned
+// SSHExecutor (the reverse channel), so the host hook ships no plan payload — only pod
+// consumes plans (to build its overlay host-side).
+func (vmSubstrateLifecycle) PrepareVenue(ctx context.Context, name, dir string, node *BundleNode, _ []*InstallPlan, opts EmitOpts) (DeployExecutor, error) {
 	if dir == "" {
 		if cwd, err := os.Getwd(); err == nil {
 			dir = cwd
@@ -218,7 +221,9 @@ func (vmSubstrateLifecycle) TeardownExecutor(name string, node *BundleNode) (Dep
 // PostTeardown runs the host-side VM cleanup AFTER teardown: the ephemeral lifecycle
 // teardown, the charly.yml deploy-entry removal, and the managed ssh-config stanza removal
 // (stripping the Include line when it was the last managed alias). Best-effort.
-func (vmSubstrateLifecycle) PostTeardown(name string, node *BundleNode) error {
+// keepImage is ignored: a vm has no synthesized overlay image to drop (the `--keep-image`
+// gate is pod-specific).
+func (vmSubstrateLifecycle) PostTeardown(name string, node *BundleNode, _ bool) error {
 	vmName := vmEntityForLifecycle(name, node)
 
 	if dcNode, ok := loadDeployConfigForRead("vm target ephemeral-teardown").LookupKey(name); ok && dcNode.IsEphemeral() {

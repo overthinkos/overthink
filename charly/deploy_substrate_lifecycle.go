@@ -23,17 +23,22 @@ import (
 // This is the lifecycle counterpart of the deployPreresolver seam (deploy_preresolve.go):
 // a preresolver ships host-resolved DATA to the plugin (android device endpoint, k8s
 // kustomize tree); a substrateLifecycle owns host-side VENUE lifecycle the plugin cannot.
-// A substrate has at most ONE of each; vm is the only substrate that registers a
-// lifecycle hook today (pod's lifecycle joins this seam when it externalizes).
+// A substrate has at most ONE of each; vm and pod register a lifecycle hook today (vm owns
+// the domain boot/destroy + guest SSH executor; pod owns the host-side overlay image build +
+// the container config/start/remove lifecycle). local/android/k8s register none.
 type substrateLifecycle interface {
 	// PrepareVenue runs the host-side preflight for an Add/Update and returns the
-	// DeployExecutor the reverse channel serves — for vm the guest *SSHExecutor, after
+	// DeployExecutor the reverse channel serves — for vm the guest *SSHExecutor (after
 	// resolving the kind:vm entity, publishing the managed ssh-config stanza, auto-booting
 	// the domain, waiting for sshd + cloud-init + the package lock, and ensuring the charly
-	// binary is in the guest. node may be nil on the Update path (re-resolved from the tree
-	// by name, like the preresolvers). It persists the substrate's runtime state
-	// (VmDeployState). Skipped on a dry-run by the caller.
-	PrepareVenue(ctx context.Context, name, dir string, node *BundleNode, opts EmitOpts) (DeployExecutor, error)
+	// binary is in the guest); for pod a host-local ShellExecutor AFTER building the overlay
+	// container image host-side (the plugin then walks nothing). node may be nil on the
+	// Update path (re-resolved from the tree by name, like the preresolvers). plans is the
+	// deployment's compiled InstallPlan set: vm IGNORES it (the plugin walks the plans
+	// in-guest over the returned executor), while pod CONSUMES it to build the overlay
+	// (its add_candy overlay plans; empty for a pod with no add_candy). It persists any
+	// substrate runtime state (vm: VmDeployState). Skipped on a dry-run by the caller.
+	PrepareVenue(ctx context.Context, name, dir string, node *BundleNode, plans []*InstallPlan, opts EmitOpts) (DeployExecutor, error)
 
 	// ArtifactKey returns the name candy artifacts (+ the k3s ClusterProfile) are keyed
 	// under for this deploy — for vm "vm:<entity>", NOT the deploy name, because one k3s
@@ -53,8 +58,11 @@ type substrateLifecycle interface {
 	TeardownExecutor(name string, node *BundleNode) (DeployExecutor, error)
 
 	// PostTeardown runs host cleanup AFTER teardown (vm: RemoveVmSshStanza +
-	// removeVmDeployEntry + ephemeral lifecycle teardown). Best-effort by convention.
-	PostTeardown(name string, node *BundleNode) error
+	// removeVmDeployEntry + ephemeral lifecycle teardown; pod: `charly remove` + drop the
+	// <name>-overlay images + ephemeral teardown). keepImage is the `charly bundle del
+	// --keep-image` gate — honored by pod (suppress the overlay-image drop), ignored by vm.
+	// Best-effort by convention.
+	PostTeardown(name string, node *BundleNode, keepImage bool) error
 
 	// The LifecycleTarget bodies (charly start/stop/status/logs/shell + the `charly update`
 	// Rebuild). For vm these shell out to the existing `charly vm` command family; Rebuild

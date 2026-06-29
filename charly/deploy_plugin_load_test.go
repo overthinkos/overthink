@@ -89,6 +89,7 @@ func TestResolveDeployNodeByPath(t *testing.T) {
 func TestExternalDeploySubstratePluginRef(t *testing.T) {
 	want := map[string]string{
 		"vm":      "@" + DefaultProjectRepo + "/candy/plugin-deploy-vm",
+		"pod":     "@" + DefaultProjectRepo + "/candy/plugin-deploy-pod",
 		"local":   "@" + DefaultProjectRepo + "/candy/plugin-deploy-local",
 		"android": "@" + DefaultProjectRepo + "/candy/plugin-adb",
 		"k8s":     "@" + DefaultProjectRepo + "/candy/plugin-kube",
@@ -99,14 +100,11 @@ func TestExternalDeploySubstratePluginRef(t *testing.T) {
 			t.Errorf("externalDeploySubstratePluginRef(%q) = %q ok=%v, want %q", word, got, ok, exp)
 		}
 	}
-	// Every externalized substrate MUST have a plugin ref (else a submodule can't discover it).
+	// Every externalized substrate MUST have a plugin ref (else a submodule can't discover
+	// it). ALL FIVE substrates are externalized now, so this covers the whole set.
 	for word := range externalizedDeploySubstrates {
 		if _, ok := externalDeploySubstratePluginRef(word); !ok {
 			t.Errorf("externalized substrate %q has no plugin-candy ref", word)
 		}
-	}
-	// pod is a builtin in-proc substrate — no external plugin ref.
-	if _, ok := externalDeploySubstratePluginRef("pod"); ok {
-		t.Error("pod (in-proc substrate) must have no external plugin-candy ref")
 	}
 }

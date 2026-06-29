@@ -98,6 +98,23 @@ func summaryStatus(ok bool) string {
 	return "FAIL"
 }
 
+// bedExternalInPlace reports whether a bed ROOT's substrate is an EXTERNAL deploy substrate
+// that applies its workload IN PLACE — local-like: NO container image to build, NO `charly
+// config`/`charly start`, teardown via `charly bundle del` (replay the recorded reverse
+// ops). local/android/k8s/exampledeploy are in-place (they carry no `image:`).
+//
+// pod is the ONE externalized substrate that is NOT in-place: it builds + runs a container
+// image and keeps the FULL pod lifecycle (image build → config → start → check-live →
+// `charly remove` + overlay drop), so the bed runner must drive it through the DEFAULT pod
+// path exactly as the in-proc pod — only the `charly bundle add` overlay build internally
+// routes through pod's external deploy target + lifecycle hook now (invisible to the bed
+// runner). Excluding pod here is consistent with the bed runner's other substrate-identity
+// checks (isVM = target=="vm", isLocal = target=="local"); vm sidesteps the in-place logic
+// via its own `case isVM` branch, so this exclusion is pod's analogue.
+func bedExternalInPlace(target string) bool {
+	return isExternalDeploySubstrate(target) && target != "pod"
+}
+
 // printDebugRetentionNotice tells the operator that a FAILED bed was left
 // running for inspection, with the target-appropriate inspect + destroy
 // commands. Pod/local beds tear down with `charly remove`; VM beds with
@@ -112,7 +129,7 @@ func printDebugRetentionNotice(w io.Writer, name string, node BundleNode) {
 	case node.Target == "local":
 		fmt.Fprintf(w, "\n[charly check run] bed %q FAILED — local apply left in place for debugging.\n"+
 			"  destroy: charly remove %s\n", name, name)
-	case isExternalDeploySubstrate(node.Target):
+	case bedExternalInPlace(node.Target):
 		fmt.Fprintf(w, "\n[charly check run] bed %q FAILED — external deploy apply left in place for debugging.\n"+
 			"  destroy: charly bundle del %s\n", name, name)
 	default: // pod
@@ -157,7 +174,7 @@ func persistBedDeployOverrides(name string, node BundleNode) {
 	// OTHER project (validateCheckBeds: "references local template … which is not
 	// defined"), poisoning concurrent/cross-project bed runs. Local deploys persist via
 	// the install ledger, not this bundle-map path, so skipping is also lossless.
-	if node.Target == "local" || isExternalDeploySubstrate(node.Target) {
+	if node.Target == "local" || bedExternalInPlace(node.Target) {
 		return
 	}
 	saveDeployState(name, "", SaveDeployStateInput{
@@ -186,13 +203,16 @@ func persistBedDeployOverrides(name string, node BundleNode) {
 func runCheckBed(exe, name string, node BundleNode, opts bedRunOpts) (*bedRunResult, error) {
 	isVM := node.Target == "vm"
 	isLocal := node.Target == "local"
-	// An EXTERNAL deploy substrate (e.g. `exampledeploy`, served by an
-	// out-of-process deploy plugin): it applies in place on the host venue via the
-	// E3b reverse channel — like a kind:local deploy it has no image to build, runs
-	// no `charly config`/`charly start`, and tears down via `charly bundle del`
-	// (which replays the recorded reverse op). isInPlace unifies local + external
-	// at every "apply candies in place, no container lifecycle" decision below.
-	isExternalDeploy := isExternalDeploySubstrate(node.Target)
+	// An IN-PLACE EXTERNAL deploy substrate (e.g. `exampledeploy`/android/k8s/local,
+	// served by an out-of-process deploy plugin): it applies in place on the host venue via
+	// the E3b reverse channel — like a kind:local deploy it has no image to build, runs no
+	// `charly config`/`charly start`, and tears down via `charly bundle del` (which replays
+	// the recorded reverse op). isInPlace unifies local + in-place-external at every "apply
+	// candies in place, no container lifecycle" decision below. pod is EXCLUDED
+	// (bedExternalInPlace) even though its substrate is externalized: it builds + runs a
+	// container image, so it stays on the DEFAULT pod path (build → config → start → remove)
+	// exactly as the in-proc pod — only `bundle add` routes through pod's external machinery.
+	isExternalDeploy := bedExternalInPlace(node.Target)
 	isInPlace := isLocal || isExternalDeploy
 	// A GROUP bed (the §3 cross-deployment shape): no root box/vm/local cross-ref,
 	// but sibling Members (subject + driver) that ARE the deployment. It has no

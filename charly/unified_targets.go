@@ -2,10 +2,11 @@ package main
 
 // unified_targets.go — The unified deploy-target abstraction.
 //
-// UnifiedDeployTarget/LifecycleTarget adapters for the in-proc DeployTarget
-// implementers (the local deploy target, PodDeployTarget) plus
-// externalDeployTarget (the out-of-process substrate adapter — vm, android, k8s),
-// and the ResolveTarget dispatcher.
+// UnifiedDeployTarget/LifecycleTarget via externalDeployTarget (the out-of-process
+// substrate adapter — ALL FIVE substrates local/vm/pod/k8s/android externalized), and the
+// ResolveTarget dispatcher. There are no in-proc UnifiedDeployTarget adapters left; the core
+// build engines they once wrapped (PodDeployTarget overlay synthesis, the VM disk build)
+// are now invoked host-side from each substrate's lifecycle hook.
 //
 // Each adapter wraps an existing legacy target via struct embedding.
 // Methods on the adapter take precedence over inherited legacy methods
@@ -99,53 +100,17 @@ func runUnifiedTargetChecks(ctx context.Context, exec DeployExecutor, kind, node
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// PodUnifiedTarget — adapter over PodDeployTarget.
-//
-// Named "Pod" in the new schema per the approved plan. The legacy
-// struct remains PodDeployTarget until Phase 4's sweeping rename.
+// target:pod has NO in-proc UnifiedDeployTarget — it externalized into the
+// candy/plugin-deploy-pod out-of-process plugin (an externalizedDeploySubstrate, like
+// local/vm/android/k8s). ResolveTarget routes a `pod:` substrate to externalDeployTarget
+// over the E3b reverse channel. Unlike vm, pod's plugin WALKS NOTHING: pod bakes its install
+// steps INTO the image at build time, so its substrateLifecycle (pod_deploy_lifecycle.go)
+// builds the overlay container image HOST-SIDE in PrepareVenue (the SAME core
+// OCITarget/Generator engine, in-process — like vm builds its disk host-side) and owns the
+// container lifecycle (config/start/remove + the `charly update` rebuild gate). PodDeployTarget
+// (deploy_target_pod.go) is RETAINED as that core overlay-build engine; only the adapter +
+// the in-proc dedicated deploy provider were deleted.
 // ---------------------------------------------------------------------------
-
-type PodUnifiedTarget struct {
-	*PodDeployTarget
-
-	// NodeName is the charly.yml identifier (e.g. "sway-pod"). The
-	// legacy PodDeployTarget.DeployName holds the same string;
-	// we duplicate here for adapter-level symmetry with Host/Vm.
-	NodeName string
-
-	// KeepImage suppresses overlay-image removal during Del. Populated
-	// by the dispatcher from `charly bundle del --keep-image`. The unified
-	// DelOpts is uniform across kinds; pod-specific gates live here.
-	KeepImage bool
-
-	// BaseImageRef is the image ref the rebuild's image-build/check
-	// steps target. Set by the dispatcher from the charly.yml node's
-	// `box:` field (or NodeName when absent). Empty → falls back to
-	// NodeName at Rebuild time.
-	BaseImageRef string
-
-	// Add-time inputs, set by the dispatcher from BundleAddCmd flags.
-	// Tag overrides the resolved CalVer; Ref is the user-supplied image
-	// ref (persisted into charly.yml when --disposable/--lifecycle are
-	// set); Disposable / Lifecycle carry the classification opt-ins.
-	Tag        string
-	Ref        string
-	Disposable bool
-	Lifecycle  string
-}
-
-func (t *PodUnifiedTarget) Name() string { return t.NodeName }
-func (t *PodUnifiedTarget) Kind() string { return "pod" }
-func (t *PodUnifiedTarget) Executor() DeployExecutor {
-	if t.PodDeployTarget == nil {
-		return ShellExecutor{}
-	}
-	return t.exec()
-}
-
-// Add for the pod target lives in unified_targets_pod.go alongside
-// Del/Test/Update/Rebuild — it constructs the overlay PodDeployTarget
-// (Generator + ResolvedBox + base-image DistroDef + baseRef CalVer).
 
 // ---------------------------------------------------------------------------
 // android and k8s are EXTERNAL deploy substrates (F1) — `target: android` /
@@ -226,19 +191,17 @@ func ResolveTarget(node *BundleNode, name string) (UnifiedDeployTarget, error) {
 	return nil, fmt.Errorf("deployment %q: target %q has no in-process resolver and is not an out-of-proc plugin provider", name, node.Target)
 }
 
-// compile-time assertion: every adapter satisfies the interfaces it
-// claims. If any method signature drifts, `go build` fails here.
+// compile-time assertion: the external-deploy adapter satisfies the interfaces it
+// claims. If any method signature drifts, `go build` fails here. ALL FIVE substrates
+// (local/vm/pod/k8s/android) have no in-proc UnifiedDeployTarget — they are external
+// substrates (externalizedDeploySubstrates), resolved to externalDeployTarget.
 var (
-	_ UnifiedDeployTarget = (*PodUnifiedTarget)(nil)
-	// local, vm, android and k8s have no in-proc UnifiedDeployTarget — they are external
-	// substrates (externalizedDeploySubstrates), resolved to externalDeployTarget below.
 	_ UnifiedDeployTarget = (*externalDeployTarget)(nil)
 
-	_ LifecycleTarget = (*PodUnifiedTarget)(nil)
 	// externalDeployTarget is a LifecycleTarget so `charly update <name>` (the disposable
 	// bed's fresh-rebuild R10 gate) can Rebuild it. For a substrate with a lifecycle hook
-	// (vm) Rebuild + Start/Stop/Status/Logs/Shell delegate to the hook (the `charly vm`
-	// family + the domain re-create); for a hookless substrate (local/android/k8s) Rebuild
-	// re-applies and Start/Stop/Logs/Shell error like the host target.
+	// (vm: boot/destroy + domain re-create; pod: overlay rebuild + config/start) Rebuild +
+	// Start/Stop/Status/Logs/Shell delegate to the hook; for a hookless substrate
+	// (local/android/k8s) Rebuild re-applies and Start/Stop/Logs/Shell error like the host target.
 	_ LifecycleTarget = (*externalDeployTarget)(nil)
 )

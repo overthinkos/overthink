@@ -69,6 +69,12 @@ type externalDeployTarget struct {
 	KeepRepoChanges bool
 	KeepServices    bool
 
+	// KeepImage is the `charly bundle del --keep-image` gate, set by the del-command
+	// dispatcher for the externalized pod substrate (suppress the <name>-overlay image
+	// drop); handed to the substrate lifecycle hook's PostTeardown in Del. Inert for
+	// substrates whose PostTeardown ignores it (vm) or that have no lifecycle hook.
+	KeepImage bool
+
 	// build is the host-ENGINE context (project Config + dir + DistroCfg) the RunHostStep
 	// reverse leg needs when the plugin walks a plan carrying a host-engine step kind
 	// (Builder / LocalPkgInstall resolve a short / namespace-qualified builder image and
@@ -226,7 +232,7 @@ func (t *externalDeployTarget) apply(ctx context.Context, node *BundleNode, dir 
 	// hook is registered. A hook'd substrate is rebootable (a RebootStep reboots its guest).
 	if !dryRun {
 		if life, ok := substrateLifecycleFor(t.prov.word); ok {
-			exec, err := life.PrepareVenue(ctx, t.name, dir, node, opts)
+			exec, err := life.PrepareVenue(ctx, t.name, dir, node, plans, opts)
 			if err != nil {
 				return fmt.Errorf("external deploy %q: prepare venue: %w", t.name, err)
 			}
@@ -546,9 +552,11 @@ func (t *externalDeployTarget) Del(ctx context.Context, opts DelOpts) error {
 	}
 
 	// Substrate host-side teardown cleanup (vm: ssh-config stanza + charly.yml entry +
-	// ephemeral lifecycle). No-op for substrates without a lifecycle hook.
+	// ephemeral lifecycle; pod: `charly remove` + drop the <name>-overlay images +
+	// ephemeral). No-op for substrates without a lifecycle hook. t.KeepImage gates pod's
+	// overlay-image drop (vm ignores it).
 	if life, ok := substrateLifecycleFor(t.prov.word); ok {
-		if err := life.PostTeardown(t.name, t.node); err != nil {
+		if err := life.PostTeardown(t.name, t.node, t.KeepImage); err != nil {
 			return fmt.Errorf("external deploy %q: post-teardown: %w", t.name, err)
 		}
 	}

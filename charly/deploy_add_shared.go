@@ -26,9 +26,9 @@ import (
 // BEFORE emission. Returns the resolved candy list (the caller reuses it
 // for artifact retricheck) and the secret env map.
 //
-// Shared by the local deploy target.Add / the vm deploy's Add path /
-// PodUnifiedTarget.Add — the three paths that previously each ran
-// CandyForPlan + ResolveSecretForCandy + InjectSecretsIntoPlans inline.
+// Shared by the external substrate apply path AND each lifecycle hook's PrepareVenue
+// (vm: before the in-guest walk; pod: before the host-side overlay build) — the paths that
+// previously each ran CandyForPlan + ResolveSecretForCandy + InjectSecretsIntoPlans inline.
 func prepareCandySecrets(plans []*InstallPlan, dir string) ([]*Candy, map[string]string, error) {
 	candyList, err := CandyForPlan(plans, dir, nil)
 	if err != nil {

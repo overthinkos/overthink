@@ -3,21 +3,19 @@ package main
 // deploy_target_unified.go — the canonical DeployTarget interface.
 //
 // The legacy DeployTarget interface in install_plan.go is the 2-method
-// contract (Name + Emit) that the in-proc target implementers (local, vm,
-// pod) satisfy at the IR-emission level. This file defines
-// the lifecycle-and-management contract layered on top: UnifiedDeployTarget
-// with the per-verb methods, plus LifecycleTarget for the live-runtime
-// targets.
+// contract (Name + Emit) that the retained BUILD ENGINES (OCITarget, PodDeployTarget)
+// satisfy at the IR-emission level. This file defines the lifecycle-and-management
+// contract layered on top: UnifiedDeployTarget with the per-verb methods, plus
+// LifecycleTarget for the live-runtime targets.
 //
 // Every `charly bundle add` / `charly bundle del` / `charly update` dispatches through
-// ResolveTarget (unified_targets.go) → an UnifiedDeployTarget adapter. The
-// adapter CONSTRUCTS its live embedded legacy target (Generator + PodDeployTarget
-// for pod, the local deploy target for local) from
-// the DeployContext it receives, then runs the kind-specific deploy. The `vm`,
-// `android`, and `k8s` substrates are EXTERNAL — they resolve to externalDeployTarget
-// over the reverse channel, not an embedded legacy target.
-// There is no per-kind dispatch switch in the cmd files — the kind lives behind the
-// adapter method.
+// ResolveTarget (unified_targets.go) → an UnifiedDeployTarget adapter. ALL FIVE substrates
+// (local/vm/pod/k8s/android) are EXTERNAL — each resolves to the generic externalDeployTarget
+// over the executor reverse channel, served by its own out-of-process plugin. The core build
+// engines they once wrapped (PodDeployTarget overlay synthesis; the VM disk build) are now
+// invoked HOST-SIDE from each substrate's registered substrateLifecycle hook (pod/vm) or
+// preresolver (android/k8s). There is no per-kind dispatch switch in the cmd files — the kind
+// lives behind the adapter method.
 
 import (
 	"context"

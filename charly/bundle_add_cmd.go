@@ -323,21 +323,11 @@ func (c *BundleAddCmd) dispatchNode(path string, node *BundleNode, parentExec De
 	// matching how Del's gate flags are wired).
 	switch tt := utgt.(type) {
 	case *externalDeployTarget:
-		// An external substrate with a lifecycle hook (vm) honors --node-only the SAME way
-		// the in-proc VM target did: skip the substrate PostApply (the nested target:pod
-		// children — the caller deploys them via the dotted path). Inert for hookless
-		// substrates (local/android/k8s), which have no PostApply.
+		// An external substrate with a lifecycle hook honors --node-only the SAME way the
+		// in-proc targets did: skip the substrate PostApply (vm: the nested target:pod
+		// children — the caller deploys them via the dotted path; pod: a no-op PostApply).
+		// Inert for hookless substrates (local/android/k8s), which have no PostApply.
 		tt.nodeOnly = c.NodeOnly
-	case *PodUnifiedTarget:
-		// Nested pods flatten the dotted path into the container name;
-		// a top-level pod keeps the deploy key.
-		if path != "" {
-			tt.NodeName = NestedContainerName(path)
-		}
-		tt.Tag = c.Tag
-		tt.Ref = c.Ref
-		tt.Disposable = c.Disposable
-		tt.Lifecycle = c.Lifecycle
 	}
 
 	return utgt.Add(context.Background(), dctx, plans, opts)
@@ -589,18 +579,19 @@ func (c *BundleDelCmd) Run() error {
 	}
 	switch tt := utgt.(type) {
 	case *externalDeployTarget:
-		// target:local / target:vm (and any future externalized substrate) teardown honors
-		// the --keep-repo-changes / --keep-services gates + the test ReverseRunner. The
-		// external Del replays the recorded ReverseOps via teardownHostDeploy with these (for
-		// vm over the guest SSH reverse runner the lifecycle hook supplies; for local-remote
-		// over the SSH executor; otherwise locally). A vm's ssh-config / charly.yml-entry /
-		// ephemeral cleanup is the lifecycle hook's PostTeardown (it resolves the entity from
-		// t.node, set by ResolveTarget — no NodeName rewrite needed here).
+		// Every externalized substrate teardown honors the --keep-repo-changes /
+		// --keep-services gates + the test ReverseRunner. The external Del replays the
+		// recorded ReverseOps via teardownHostDeploy with these (for vm over the guest SSH
+		// reverse runner the lifecycle hook supplies; for local-remote over the SSH executor;
+		// otherwise locally). --keep-image rides through too — honored by pod's PostTeardown
+		// (suppress the <name>-overlay image drop), ignored by the others. A substrate's
+		// host-side cleanup (vm: ssh-config / charly.yml / ephemeral; pod: `charly remove` +
+		// overlay drop) is the lifecycle hook's PostTeardown (it resolves any identity from
+		// t.node, set by ResolveTarget).
 		tt.KeepRepoChanges = c.KeepRepoChanges
 		tt.KeepServices = c.KeepServices
-		tt.revRunner = c.Runner
-	case *PodUnifiedTarget:
 		tt.KeepImage = c.KeepImage
+		tt.revRunner = c.Runner
 	}
 	_ = kind // kind is informational; the adapter type already encodes it.
 

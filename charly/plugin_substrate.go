@@ -4,9 +4,9 @@ import "gopkg.in/yaml.v3"
 
 // standaloneKind is the parameterized deploy-shape KIND for the 5 resource substrates
 // (pod/vm/k8s/local/android), extracted into its OWN file as dedicated-builtin
-// KindProviders (Phase 2 deploy-shape batch), mirroring the deploy-target/step/builder
-// dedicated-provider pattern (plugin_deploy_pod.go etc.) and the group extraction
-// (plugin_group.go).
+// KindProviders (Phase 2 deploy-shape batch), mirroring the step/builder
+// dedicated-provider pattern (plugin_step_reboot.go / plugin_builder_cargo.go etc.) and the
+// group extraction (plugin_group.go).
 //
 // Each substrate kind is BOTH a standalone TEMPLATE entity AND a deploy. Like group, a
 // deploy-shape kind RECURSES over the genericNode tree (member nesting, vm→k8s, resource

@@ -901,12 +901,13 @@ func main() {
 	SweepStaleTemps()
 	defer reapPlugins()
 
-	// An OUT-OF-PROCESS command plugin's dynamic command has no Run() method, so dispatch
-	// it manually (Invoke the provider with the pass-through args); everything else runs
+	// A dynamic command plugin's command has no Run() method, so dispatch it manually:
+	// dispatchCommand routes by placement — a COMPILED-IN command candy in-proc via Invoke(OpRun),
+	// an OUT-OF-PROCESS one by syscall.Exec (F8) — with the pass-through args; everything else runs
 	// through Kong's normal ctx.Run().
 	var err error
 	if d, ok := extCmdTable[commandPathKey(ctx.Command())]; ok {
-		err = dispatchExternalCommand(d)
+		err = dispatchCommand(d)
 	} else {
 		err = ctx.Run()
 	}

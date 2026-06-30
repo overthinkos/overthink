@@ -45,6 +45,28 @@ func TestCommandSeam_PluginCommandInjected(t *testing.T) {
 	}
 }
 
+// TestCommandCompileIn_ExampleCommandInProc proves F8's command compile-in bridge: the
+// candy/plugin-example-command command candy, listed in compiled_plugins, registers IN-PROC as a
+// ClassCommand inprocProvider (NOT a *grpcProvider, NOT a static builtin CommandProvider), so
+// dispatchCommand routes `charly examplecommand` to it via Invoke(OpRun) — the in-proc placement
+// of a command candy, the LAST of the six classes to gain compiled-in placement. (End-to-end CLI
+// dispatch is exercised by the live `charly examplecommand` proof + the check-pod bed.)
+func TestCommandCompileIn_ExampleCommandInProc(t *testing.T) {
+	prov, ok := providerRegistry.resolve(ClassCommand, "examplecommand")
+	if !ok {
+		t.Fatal("compiled-in command candy plugin-example-command did not register command:examplecommand (pluginsgen/compiled_plugins)")
+	}
+	if _, isGrpc := prov.(*grpcProvider); isGrpc {
+		t.Fatal("examplecommand registered as a *grpcProvider — expected an in-proc inprocProvider (compiled-in placement)")
+	}
+	if _, isInproc := prov.(*inprocProvider); !isInproc {
+		t.Fatalf("examplecommand provider is %T, want *inprocProvider (compiled-in command, dispatched in-proc)", prov)
+	}
+	if _, isCmdProv := prov.(CommandProvider); isCmdProv {
+		t.Fatal("examplecommand should NOT be a static CommandProvider — a compiled-in command candy uses the dynamic in-proc command bridge (dispatchCommand → Invoke(OpRun))")
+	}
+}
+
 // TestCommandProviders_ExtractedLeafCommands proves every leaf-domain command extracted
 // into a dedicated COMMAND-class provider (alias/ssh — the builtin leaf-domain
 // batch) is (1) registered in providerRegistry as a CommandProvider with the matching

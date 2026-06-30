@@ -124,6 +124,38 @@ func externalCommandHolder(word, field string) any {
 	return reflect.New(holderType).Interface()
 }
 
+// dispatchCommand routes a parsed dynamic command to its provider by PLACEMENT (F8): a
+// COMPILED-IN command candy (registered in-proc as an inprocProvider — NOT a *grpcProvider and
+// NOT a static builtin CommandProvider) dispatches IN-PROC via Invoke(OpRun), so the candy's
+// handler runs inside charly's own process with native stdio/TTY; an OUT-OF-PROCESS command
+// dispatches by syscall.Exec'ing its plugin binary (dispatchExternalCommand). This is the command
+// half of placement-invisibility: the SAME command candy works compiled-in or out-of-process,
+// the dynamic Kong grammar (externalCommandHolder) identical for both — only the dispatch
+// transport differs. The dynamic grammar carries no Run() method, so dispatch is manual either way.
+func dispatchCommand(d externalCommandDispatch) error {
+	if prov, ok := providerRegistry.resolve(ClassCommand, d.word); ok {
+		if _, external := prov.(*grpcProvider); !external {
+			return dispatchInProcCommand(prov, d)
+		}
+	}
+	return dispatchExternalCommand(d)
+}
+
+// dispatchInProcCommand forwards a compiled-in command's parsed pass-through args to its in-proc
+// provider via Invoke(OpRun) — the candy's OpRun handler runs in charly's process (it owns
+// os.Stdout/Stderr/TTY natively), mirroring the OUT-OF-PROCESS plugin's pass-through `{"args":[…]}`
+// envelope (the OpRun contract), so a command candy behaves identically in either placement.
+func dispatchInProcCommand(prov Provider, d externalCommandDispatch) error {
+	params, err := marshalJSON(map[string]any{"args": externalCommandArgs(d)})
+	if err != nil {
+		return fmt.Errorf("command %q: marshal args: %w", d.word, err)
+	}
+	if _, err := prov.Invoke(context.Background(), &Operation{Reserved: d.word, Op: sdk.OpRun, Params: params}); err != nil {
+		return fmt.Errorf("command %q: %w", d.word, err)
+	}
+	return nil
+}
+
 // dispatchExternalCommand resolves the command word's plugin binary (baked into the image, or
 // host-built from the candy source — the SAME resolver the loader uses) and REPLACES the charly
 // process with it via syscall.Exec, forwarding the parsed pass-through args. The plugin runs in

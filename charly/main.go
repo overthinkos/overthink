@@ -795,6 +795,13 @@ func (c *VersionCmd) Run() error { //nolint:unparam // error return kept for int
 	return nil
 }
 
+// reapPlugins kills every connected out-of-process plugin server (each go-plugin
+// client.Kill via the registry's closers). The host's authoritative reaper: run
+// it on every charly exit path so a `__plugin serve` child is never orphaned.
+// Best-effort + idempotent (Registry.Close); safe to call from a signal handler,
+// a defer, and the explicit post-dispatch site.
+func reapPlugins() { _ = providerRegistry.Close() }
+
 func main() {
 	// Load project .env into process environment before any config resolution.
 	// Real env vars take precedence over .env values.
@@ -881,8 +888,18 @@ func main() {
 	// temp-file paths are removed on SIGTERM/SIGINT/SIGHUP, and sweep any
 	// /tmp/charly-* leftovers from prior SIGKILL'd charly invocations. See
 	// cleanup.go for the full design.
+	//
+	// Plugin-leak hygiene (CLAUDE.md R3): reap every connected out-of-process
+	// plugin server on exit so charly never orphans `__plugin serve` children.
+	// Three layers, because os.Exit skips deferred funcs: a shutdown hook covers
+	// catchable signals (Ctrl-C / `systemctl stop`), the defer covers a normal
+	// return and a panic unwind, and an explicit reap after dispatch (below)
+	// covers the os.Exit error / check-fail paths. SIGKILL / crash — the one
+	// class none of these catch — is the plugin SDK's parent-death watch's job.
+	RegisterShutdownHook(reapPlugins)
 	InstallSignalHandler()
 	SweepStaleTemps()
+	defer reapPlugins()
 
 	// An OUT-OF-PROCESS command plugin's dynamic command has no Run() method, so dispatch
 	// it manually (Invoke the provider with the pass-through args); everything else runs
@@ -893,6 +910,12 @@ func main() {
 	} else {
 		err = ctx.Run()
 	}
+	// Reap connected plugin servers NOW: every post-dispatch exit below uses
+	// os.Exit (CheckFailExitCode / FatalIfErrorf), which skips the deferred
+	// reapPlugins above. All plugin connections happen during dispatch, so this
+	// single point covers the error AND check-fail exits. Idempotent with the
+	// defer (Registry.Close nils its closers under the lock).
+	reapPlugins()
 	// `charly check` distinguishes "the thing under test is broken" from "the
 	// command/usage/infra errored" via a distinct exit code: 0 = pass,
 	// 1 = command error (Kong's FatalIfErrorf default), 2 = check checks

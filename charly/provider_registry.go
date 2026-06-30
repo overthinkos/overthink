@@ -196,8 +196,12 @@ func (r *Registry) allProviders() []Provider {
 	return out
 }
 
-// Close shuts down every plugin connection (each go-plugin client; the in-venue
-// server auto-exits on socket close — see plugin_transport.go).
+// Close shuts down every connected plugin (each go-plugin client.Kill sends the
+// gRPC Shutdown that stops the plugin server, then terminates the child — see
+// plugin_transport.go's clientCloser). The host MUST run this on exit and on a
+// shutdown signal, else the plugin servers orphan; main wires it as a deferred
+// reap, an explicit post-dispatch reap, and a RegisterShutdownHook. Idempotent:
+// closers are taken under the lock and nilled, so a second call is a no-op.
 func (r *Registry) Close() error {
 	r.mu.Lock()
 	closers := r.closers

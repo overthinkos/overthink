@@ -61,12 +61,17 @@ func Main(providerSrv pb.ProviderServer, metaSrv pb.PluginMetaServer, cli func(a
 }
 
 // Serve exposes a plugin's Provider + PluginMeta services over go-plugin gRPC and
-// blocks until the host disconnects (then auto-exits — clean teardown, no orphan).
-// The serve half of Main (a verb/kind/deploy/step/builder plugin with no CLI mode may
-// call it directly):
+// blocks serving. The host reaps it on exit by killing the client connection
+// (providerRegistry.Close → client.Kill, sending the gRPC Shutdown that stops
+// this server); go-plugin's server has no parent-death detection of its own, so
+// watchParentDeath is the backstop that self-terminates this process if the host
+// dies without reaping (crash / SIGKILL / os.Exit) — preventing orphaned
+// `__plugin serve` processes. The serve half of Main (a verb/kind/deploy/step/
+// builder plugin with no CLI mode may call it directly):
 //
 //	func main() { sdk.Serve(&myProvider{}, &myMeta{}) }
 func Serve(providerSrv pb.ProviderServer, metaSrv pb.PluginMetaServer) {
+	watchParentDeath()
 	plugin.Serve(&plugin.ServeConfig{
 		HandshakeConfig: Handshake,
 		Plugins:         PluginMap(providerSrv, metaSrv),

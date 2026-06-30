@@ -32,7 +32,40 @@ var (
 	tempCleanupsMu sync.Mutex
 	tempCleanups   = map[string]struct{}{}
 	signalOnce     sync.Once
+
+	shutdownHooksMu sync.Mutex
+	shutdownHooks   []func()
 )
+
+// RegisterShutdownHook registers fn to run on a catchable shutdown signal
+// (SIGTERM/SIGINT/SIGHUP), in the signal handler, before it re-raises the
+// signal and the process exits. It is the package-boundary seam that lets
+// package main reap resources the vmshared signal handler cannot reference
+// directly — notably the connected out-of-process plugin clients
+// (providerRegistry.Close): a Ctrl-C'd / `systemctl stop`ped charly kills its
+// plugin servers instead of orphaning them (the 77h-orphan leak). Hooks run in
+// registration order; each MUST be best-effort and bounded (the handler is
+// synchronous). A nil fn is a no-op.
+func RegisterShutdownHook(fn func()) {
+	if fn == nil {
+		return
+	}
+	shutdownHooksMu.Lock()
+	shutdownHooks = append(shutdownHooks, fn)
+	shutdownHooksMu.Unlock()
+}
+
+// runShutdownHooks runs every registered shutdown hook. Called from the signal
+// handler alongside runRegisteredCleanups (a snapshot is taken under the lock so
+// a hook may itself register without deadlocking).
+func runShutdownHooks() {
+	shutdownHooksMu.Lock()
+	hooks := append([]func(){}, shutdownHooks...)
+	shutdownHooksMu.Unlock()
+	for _, fn := range hooks {
+		fn()
+	}
+}
 
 // RegisterTempCleanup registers path for cleanup on graceful shutdown
 // (SIGTERM/SIGINT/SIGHUP). Existing `defer os.Remove(...)` callers keep
@@ -75,11 +108,14 @@ func runRegisteredCleanups() {
 
 // InstallSignalHandler arms the global signal handler exactly once.
 // Subsequent calls are no-ops. On SIGTERM/SIGINT/SIGHUP it runs the
-// registered cleanups, then re-raises the signal so the process exits
-// with the conventional 128+signum status code.
+// registered temp cleanups AND the registered shutdown hooks (plugin-client
+// reaping, etc.), then re-raises the signal so the process exits with the
+// conventional 128+signum status code.
 //
 // SIGKILL is not catchable (kernel-level). Leftover temps from a
-// SIGKILL'd charly are caught by the next invocation's SweepStaleTemps.
+// SIGKILL'd charly are caught by the next invocation's SweepStaleTemps;
+// orphaned plugin servers from a SIGKILL'd charly self-terminate via the
+// plugin SDK's parent-death watch (see plugin/sdk/parentwatch.go).
 func InstallSignalHandler() {
 	signalOnce.Do(func() {
 		ch := make(chan os.Signal, 1)
@@ -87,6 +123,7 @@ func InstallSignalHandler() {
 		go func() {
 			sig := <-ch
 			runRegisteredCleanups()
+			runShutdownHooks()
 			signal.Reset(sig)
 			_ = syscall.Kill(syscall.Getpid(), sig.(syscall.Signal))
 		}()

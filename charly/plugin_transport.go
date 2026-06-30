@@ -114,8 +114,13 @@ func connectAndDescribe(ctx context.Context, client *plugin.Client) (*PluginUnit
 	return unit, nil
 }
 
-// clientCloser adapts a go-plugin client to io.Closer. Kill() disconnects; the
-// in-venue server auto-exits when the host disconnects (clean teardown).
+// clientCloser adapts a go-plugin client to io.Closer. Kill() sends the gRPC
+// Shutdown control RPC that stops the plugin's server and then terminates the
+// child process — the authoritative reaper (go-plugin's server does NOT self-exit
+// merely because a connection dropped; it must be told to stop). The host runs
+// every closer via providerRegistry.Close on exit / on a shutdown signal; the
+// plugin SDK's parent-death watch is the backstop for the paths where that never
+// runs (crash / SIGKILL / os.Exit).
 type clientCloser struct{ c *plugin.Client }
 
 func (cc *clientCloser) Close() error { cc.c.Kill(); return nil }

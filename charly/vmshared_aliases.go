@@ -151,6 +151,7 @@ var (
 	ParseSSHTarget              = vmshared.ParseSSHTarget
 	pollUntil                   = vmshared.PollUntil
 	PromoteSnapshot             = vmshared.PromoteSnapshot
+	RegisterShutdownHook        = vmshared.RegisterShutdownHook
 	RegisterTempCleanup         = vmshared.RegisterTempCleanup
 	registryPath                = vmshared.RegistryPath
 	RenderCloudInit             = vmshared.RenderCloudInit

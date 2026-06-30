@@ -19,13 +19,13 @@ import (
 // merge, and now the deploy `kubectl apply -k` — lives in this ONE plugin (R3, no
 // duplicate kube path).
 //
-// The Kustomize GENERATOR (GenerateK8sKustomize) stays in charly's core: it
-// consumes the package-main Capabilities/BoxMetadata type + the CUE egress gate the
-// out-of-process plugin cannot reach, AND a second in-core consumer (`charly bundle
-// from-box --target k8s`). So the host's k8s deploy preresolver
-// (charly/k8s_deploy_preresolve.go) GENERATES the egress-validated tree and ships
-// its overlay path in DeployVenue.Substrate (spec.K8sDeployVenue); this provider
-// does the LIVE cluster I/O it owns:
+// The Kustomize GENERATOR moved into the compiled-in candy/plugin-k8sgen
+// (verb:k8sgen, C8/M13); charly's in-core GenerateK8sKustomize is a thin shim that
+// lifts the image Capabilities to ports/uid/gid, Invokes the generator's OpEmit,
+// then applies the host-side egress gate + disk I/O. So the host's k8s deploy
+// preresolver (charly/k8s_deploy_preresolve.go) GENERATES the egress-validated tree
+// and ships its overlay path in DeployVenue.Substrate (spec.K8sDeployVenue); this
+// provider does the LIVE cluster I/O it owns:
 //
 //   - `kubectl apply -k <overlay>` against the operator's kubeconfig (merged by
 //     K3sPostProvision for a k3s cluster) — the apply IS the deploy;

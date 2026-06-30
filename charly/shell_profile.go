@@ -222,27 +222,9 @@ func ShellInitFilePath(shell ShellKind, hostHome string) string {
 // out-of-process kit.WalkPlans (its ensureVenueManagedBlock, sharing ManagedBlockBody /
 // ShellInitFilePath / replaceOrAppendManagedBlock via the kit aliases — R3). The former
 // in-proc managed-block writers were retired when target:vm
-// (the last in-proc caller) externalized.
-
-// RemoveManagedBlock strips the managed block from the shell init
-// file. Used at full-teardown when no candies remain deployed.
-func RemoveManagedBlock(shell ShellKind, hostHome string) error {
-	path := ShellInitFilePath(shell, hostHome)
-	existing, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("RemoveManagedBlock read %s: %w", path, err)
-	}
-	stripped := stripManagedBlock(string(existing), "")
-	// Only write if something changed — preserves file mtime when
-	// there's nothing to remove.
-	if stripped == string(existing) {
-		return nil
-	}
-	return os.WriteFile(path, []byte(stripped), 0644)
-}
+// (the last in-proc caller) externalized. The GLOBAL env.d block's teardown is the
+// symmetric concern of that same out-of-process walk; the per-candy `shell_snippet:`
+// block is stripped on teardown by reverseRemoveManaged → RemoveManagedBlockAt.
 
 // markersForTag returns the begin/end fence pair for a given marker tag.
 // Empty tag yields the global-block fence (used for env.d sourcing and
@@ -399,21 +381,6 @@ func stripManagedBlock(existing, marker string) string {
 	return strings.TrimRight(out.String(), "\n") + "\n"
 }
 
-// EnsureManagedBlockAt inserts/updates a managed block at the absolute
-// file path `path`, creating the parent directory if needed. Marker is
-// required (use "" for the global block, non-empty for per-candy
-// blocks).
-func EnsureManagedBlockAt(path, body, marker string) (string, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return "", fmt.Errorf("EnsureManagedBlockAt mkdir: %w", err)
-	}
-	existing, _ := os.ReadFile(path)
-	updated := replaceOrAppendManagedBlock(string(existing), body, marker)
-	if err := os.WriteFile(path, []byte(updated), 0644); err != nil {
-		return "", fmt.Errorf("EnsureManagedBlockAt write %s: %w", path, err)
-	}
-	return path, nil
-}
 
 // RemoveManagedBlockAt strips the managed block (tagged with `marker`)
 // from the file at `path`. If `path` doesn't exist, no-op. If `path`

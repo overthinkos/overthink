@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -288,40 +289,49 @@ func TestRenderEnvdBody(t *testing.T) {
 	}
 }
 
-func TestEnsureAndRemoveManagedBlock(t *testing.T) {
-	home := t.TempDir()
-	shell := ShellBash
+// TestRemoveManagedBlockAt proves the LOCAL per-candy teardown strip (the live path
+// reverseRemoveManaged takes when runner==nil): a candy's fenced shell-snippet block is
+// removed from an rc file the user also owns, leaving the user's own content intact.
+func TestRemoveManagedBlockAt(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".bashrc")
+	begin, end := markersForTag("mycandy")
+	content := "export USER_VAR=1\n" + begin + "\nexport CANDY_VAR=2\n" + end + "\nalias ll='ls -l'\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := RemoveManagedBlockAt(path, "mycandy"); err != nil {
+		t.Fatalf("RemoveManagedBlockAt: %v", err)
+	}
+	got, _ := os.ReadFile(path)
+	if strings.Contains(string(got), "CANDY_VAR") || strings.Contains(string(got), begin) {
+		t.Errorf("per-candy managed block not stripped:\n%s", got)
+	}
+	if !strings.Contains(string(got), "USER_VAR") || !strings.Contains(string(got), "alias ll") {
+		t.Errorf("user content lost during strip:\n%s", got)
+	}
+}
 
-	// The env.d-sourcing managed-block write goes through the surviving low-level
-	// helpers (ShellInitFilePath + ManagedBlockBody + EnsureManagedBlockAt) — the same
-	// pieces kit.ensureVenueManagedBlock uses after the in-proc EnsureManagedBlock wrapper
-	// retired with the target:vm externalization.
-	path := ShellInitFilePath(shell, home)
-	body := ManagedBlockBody(shell, home)
-	if _, err := EnsureManagedBlockAt(path, body, ""); err != nil {
-		t.Fatalf("EnsureManagedBlockAt: %v", err)
+// TestRenderManagedBlockStrip proves the REMOTE per-candy teardown strip (the live path
+// reverseRemoveManaged takes when runner!=nil): the rendered POSIX-sh script, run through
+// a real shell, strips exactly the candy's fence pair in place and preserves the rest.
+func TestRenderManagedBlockStrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".bashrc")
+	begin, end := markersForTag("mycandy")
+	content := "export USER_VAR=1\n" + begin + "\nexport CANDY_VAR=2\n" + end + "\nalias ll='ls -l'\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	data, _ := os.ReadFile(path)
-	if !strings.Contains(string(data), "# opencharly:begin") {
-		t.Errorf("managed block not written; got:\n%s", data)
+	if out, err := exec.Command("sh", "-c", renderManagedBlockStrip(path, "mycandy")).CombinedOutput(); err != nil {
+		t.Fatalf("strip script failed: %v\n%s", err, out)
 	}
-
-	// Re-running should be idempotent.
-	if _, err := EnsureManagedBlockAt(path, body, ""); err != nil {
-		t.Fatalf("second Ensure: %v", err)
+	got, _ := os.ReadFile(path)
+	if strings.Contains(string(got), "CANDY_VAR") || strings.Contains(string(got), begin) {
+		t.Errorf("remote strip left the managed block:\n%s", got)
 	}
-	data, _ = os.ReadFile(path)
-	count := strings.Count(string(data), "# opencharly:begin")
-	if count != 1 {
-		t.Errorf("managed block appeared %d times, want 1; got:\n%s", count, data)
-	}
-
-	if err := RemoveManagedBlock(shell, home); err != nil {
-		t.Fatalf("RemoveManagedBlock: %v", err)
-	}
-	data, _ = os.ReadFile(path)
-	if strings.Contains(string(data), "# opencharly:begin") {
-		t.Errorf("managed block still present after remove; got:\n%s", data)
+	if !strings.Contains(string(got), "USER_VAR") || !strings.Contains(string(got), "alias ll") {
+		t.Errorf("remote strip lost user content:\n%s", got)
 	}
 }
 

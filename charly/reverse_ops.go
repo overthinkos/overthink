@@ -361,13 +361,44 @@ func reverseRestoreEnabled(op ReverseOp, re ReverseExecutor) error {
 	return nil
 }
 
-//nolint:unparam // uniform reverse-op handler signature (ReverseOp, ReverseExecutor); params unused by this completeness stub
+// reverseRemoveManaged strips the candy's per-candy managed BLOCK (a `shell_snippet:`
+// appended to an existing rc file the user may also own) from each target on teardown,
+// keyed on Extra["marker"] (the per-candy fence tag) so unrelated content and other
+// candies' blocks are left intact. Local venue: the in-proc read-strip-write
+// (RemoveManagedBlockAt). Remote venue (SSH/VM): a rendered in-place strip script over
+// the shell-only reverse runner, since it cannot read-modify-write a file in Go.
 func reverseRemoveManaged(op ReverseOp, re ReverseExecutor) error {
-	// Managed-block removal happens at the session level, not per-op.
-	// This kind is present for completeness but the local deploy target.Del
-	// calls RemoveManagedBlock directly when the last deploy is torn
-	// down.
+	marker := op.Extra["marker"]
+	for _, path := range op.Targets {
+		if re.reverseDryRun() {
+			fmt.Fprintf(os.Stderr, "[dry-run] strip managed block %q from %s\n", marker, path)
+			continue
+		}
+		if runner := re.reverseRunner(); runner != nil {
+			if err := runner.RunUser(renderManagedBlockStrip(path, marker)); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := RemoveManagedBlockAt(path, marker); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// renderManagedBlockStrip is the remote analogue of RemoveManagedBlockAt: a POSIX-sh
+// snippet that drops the marker's begin/end fence pair (and its body) from the file IN
+// PLACE on the venue. The fences come from markersForTag so they match exactly what the
+// forward walk wrote, and awk index() matches them LITERALLY (no regex). The final
+// `cat > "$f"` rewrites in place to preserve the rc file's perms/owner.
+func renderManagedBlockStrip(path, marker string) string {
+	begin, end := markersForTag(marker)
+	return fmt.Sprintf(`f=%s
+[ -f "$f" ] || exit 0
+t="$f.charly-strip.$$"
+awk -v b=%s -v e=%s 'index($0,b){s=1;next} s&&index($0,e){s=0;next} !s{print}' "$f" > "$t" && cat "$t" > "$f" && rm -f "$t"`,
+		shellQuoteSimple(path), shellQuoteSimple(begin), shellQuoteSimple(end))
 }
 
 func reverseRemoveEnvdFile(op ReverseOp, re ReverseExecutor) error {

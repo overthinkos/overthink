@@ -4,7 +4,7 @@ package main
 //
 // The observe-only goss check verbs — `process` (pgrep), `port` (listening/reachable),
 // and `dns` (resolve) — left the closed `#Op`/`spec.OpVerbs` and became BUILTIN plugin
-// units (plugin/builtins/{process,port,dns}). A plan step that authored such a verb
+// units (candy/plugin-{process,port,dns}). A plan step that authored such a verb
 // inline (e.g. `process: redis-server` + `running: true`) now authors the generic
 // plugin step `plugin: <verb>` + a typed `plugin_input:` validated against the plugin's
 // own #<Verb>Input schema.

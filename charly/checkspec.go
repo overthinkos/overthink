@@ -298,7 +298,7 @@ var VerbCatalog = map[string]VerbSpec{
 
 	// file / package / service / unix_group / user / kernel-param / mount are extracted
 	// STATE-PROVISION verbs — each BOTH a check AND an act. They left #Op/spec.OpVerbs for
-	// their builtin plugin units (charly/plugin/builtins/{file,package,service,unix_group,
+	// their builtin plugin units (candy/plugin-{file,package,service,unix_group,
 	// user,kernel_param,mount}) and dispatch via the generic `plugin:` verb, so they have no
 	// VerbCatalog entry. `package` and `service` are the TYPED-STEP verbs: each act lowers
 	// into a SystemPackagesStep / ServicePackagedStep via the TypedStepProvider (its
@@ -307,7 +307,7 @@ var VerbCatalog = map[string]VerbSpec{
 	// act-emit enabler (resolveProvisionScript — file's act is the RUNTIME touch+chmod
 	// file-creation, distinct from the write/copy BUILD-time COPY directives). http /
 	// interface / addr are observe-only goss verbs likewise extracted
-	// (charly/plugin/builtins/{http,interface,addr}).
+	// (candy/plugin-{http,interface,addr}).
 
 	// live-container — runtime only. EVERY live-container verb is now an
 	// EXTERNAL-CHARLY-VERB served out-of-process; none has a VerbCatalog entry.

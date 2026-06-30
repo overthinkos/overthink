@@ -11,7 +11,7 @@ package main
 // (rpm/dpkg/pacman probe + install) and finally `file` (stat probe + touch+chmod
 // file-creation — the LAST state-provision/goss-tier verb) followed. Each left the closed
 // `#Op`/`spec.OpVerbs` and became a BUILTIN plugin unit
-// (plugin/builtins/{unix_group,user,kernel_param,mount,command,service,package,file}). file/
+// (candy/plugin-{unix_group,user,kernel_param,mount,command,service,package,file}). file/
 // user/unix_group/kernel-param/mount are BOTH a CheckVerbProvider AND a ProvisionActor;
 // `command` is a CheckVerbProvider ONLY — its act IS the dedicated install-task emitCmd
 // branch (`plugin == "command"` in emitTasks/renderOpCommand), NOT a RenderProvisionScript;

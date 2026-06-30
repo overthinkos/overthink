@@ -1,6 +1,6 @@
 package main
 
-// gap_verbs2.go — the round-2 charly-CLI-only gap verbs: sidecar-aware
+// volume_cp_tags_cmd.go — charly-CLI verbs: sidecar-aware
 // exec/logs resolution, per-deployment volume probing + single-volume reset,
 // host↔container file copy, and local image-tag listing. Each replaces a
 // documented ad-hoc podman instruction (CLAUDE.md R4 / Key Rules).

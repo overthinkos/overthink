@@ -504,7 +504,7 @@ func migrationSteps() []MigrationStep {
 		// + groupadd), `user` (getent-passwd + useradd), `kernel-param` (sysctl read + write),
 		// `mount` (findmnt + mount) AND `command` (exec probe + install-task RUN) verbs left the
 		// closed `#Op`/`spec.OpVerbs` and became
-		// BUILTIN plugin units (plugin/builtins/{unix_group,user,kernel_param,mount,command})
+		// BUILTIN plugin units (candy/plugin-{unix_group,user,kernel_param,mount,command})
 		// whose providers are a CheckVerbProvider (+ a ProvisionActor for the first four; for
 		// `command` the act IS the dedicated install-task emitCmd branch in emitTasks/
 		// renderOpCommand, NOT a ProvisionActor) — the check half dispatches via the generic

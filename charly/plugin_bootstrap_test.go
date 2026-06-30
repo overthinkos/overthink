@@ -2,11 +2,63 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/overthinkos/overthink/charly/plugin/sdk"
 )
+
+// zzWireTestBootstrapProvider is a MARKER-GATED bootstrap provider for the F9-wiring test: it
+// bumps `version: 2026.001.0001` → HEAD ONLY for a config carrying the unique sentinel, so it
+// transforms nothing else in the test process (no global-pollution despite the global registry).
+type zzWireTestBootstrapProvider struct{}
+
+func (zzWireTestBootstrapProvider) Reserved() string     { return "zzf9wiretest" }
+func (zzWireTestBootstrapProvider) Class() ProviderClass { return ClassVerb }
+func (zzWireTestBootstrapProvider) pluginPhase() string  { return sdk.PhaseBootstrap }
+func (zzWireTestBootstrapProvider) Invoke(_ context.Context, op *Operation) (*Result, error) {
+	var in struct {
+		Config string `json:"config"`
+	}
+	_ = json.Unmarshal(op.Params, &in)
+	out := in.Config
+	if strings.Contains(out, "CHARLY_F9_WIRE_TEST") {
+		out = strings.Replace(out, "version: 2026.001.0001", "version: "+LatestSchemaVersion().String(), 1)
+	}
+	j, err := marshalJSON(map[string]string{"config": out})
+	if err != nil {
+		return nil, err
+	}
+	return &Result{JSON: j}, nil
+}
+
+// TestBootstrapTransformReachesParse proves the F9 WIRING FIX: a bootstrap plugin's rewrite of the
+// root config bytes reaches the actual PARSE (loadUnifiedInto via fileOverrides) + the post-merge
+// version gate — not just the early version gate. The on-disk config has a stale `version:` the
+// bootstrap bumps to HEAD; WITHOUT the fix, loadUnifiedInto re-reads the stale disk bytes and the
+// post-merge gate rejects → LoadUnified errors. WITH the fix, LoadUnified succeeds + merged.Version
+// is HEAD.
+func TestBootstrapTransformReachesParse(t *testing.T) {
+	RegisterBuiltinProvider(zzWireTestBootstrapProvider{}) // global but marker-gated → no pollution
+	dir := t.TempDir()
+	cfg := "# CHARLY_F9_WIRE_TEST\nversion: 2026.001.0001\n"
+	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	uf, found, err := LoadUnified(dir)
+	if err != nil {
+		t.Fatalf("LoadUnified errored — the bootstrap version-bump did NOT reach the parse/post-merge gate (F9 wiring defect): %v", err)
+	}
+	if !found {
+		t.Fatal("LoadUnified did not find the config")
+	}
+	if uf.Version != LatestSchemaVersion().String() {
+		t.Errorf("merged.Version=%q, want HEAD %q — the bootstrap transform did not reach the parse", uf.Version, LatestSchemaVersion().String())
+	}
+}
 
 // TestBootstrapPhase_ExampleEnumeratedAndNoOp proves F9 (phase machinery + bootstrap set): the
 // compiled-in candy/plugin-example-bootstrap declares Phase=="bootstrap", so providersInPhase

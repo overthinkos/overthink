@@ -9,9 +9,11 @@ import (
 
 // runBootstrapPhase invokes every PhaseBootstrap provider's OpBootstrap on the raw project config
 // bytes (F9), BEFORE config validation/migration, threading each provider's returned (possibly
-// transformed) bytes to the next — the migrate (M15) + egress (M16) enabler: a bootstrap-phase
-// plugin runs before the schema gate accepts the config (migrate rewrites a stale config's raw
-// bytes here; the kernel never needs a validated config to migrate it). Bootstrap providers are
+// transformed) bytes to the next — the migrate (M15) enabler: a bootstrap-phase plugin runs before
+// the schema gate accepts the config (migrate rewrites a stale config's raw bytes here; the kernel
+// never needs a validated config to migrate it). LoadUnified seeds the returned bytes into
+// loadUnifiedInto via the `fileOverrides` map (keyed on the root's abs path), so the rewrite reaches
+// the actual PARSE + the post-merge gate — not just the early version gate. Bootstrap providers are
 // COMPILED-IN (in-proc — no validated config exists yet to discover an out-of-process source), so
 // this NEVER re-enters the validated-config load (the F4 connect-cycle hazard avoided by
 // construction). A no-op bootstrap plugin returns the bytes unchanged. Returns the bytes after all

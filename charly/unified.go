@@ -695,19 +695,22 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	// Field-singular cutover (2026-05): hard-reject any residual plural
 	// top-level keys (images:/layers:/distros:/... ) in charly.yml.
 	// `charly migrate` rewrites them in-place.
+	// F9 BOOTSTRAP PHASE: invoke bootstrap-phase plugins on the RAW root config bytes FIRST —
+	// before the reject + schema gates AND before the parse — so a bootstrap plugin (migrate) can
+	// rewrite a stale config's bytes, and that rewrite reaches the gates AND the actual PARSE
+	// (loadUnifiedInto reads the transformed bytes via fileOverrides, keyed on the root's abs path,
+	// instead of a stale disk re-read). A no-op bootstrap plugin (or none registered) returns the
+	// bytes unchanged → identity.
+	fileOverrides := map[string][]byte{}
 	if rootData, err := os.ReadFile(root); err == nil {
+		rootData = runBootstrapPhase(rootData)
 		if err := RejectLegacyPluralKeys(root, rootData); err != nil {
 			return nil, true, err
 		}
-		// F9 BOOTSTRAP PHASE: invoke bootstrap-phase plugins on the RAW config bytes BEFORE the
-		// schema gate below — so a bootstrap plugin (migrate, M15) can transform a stale config's
-		// bytes before validation rejects them. A no-op bootstrap plugin (or none registered)
-		// returns the bytes unchanged, so this is identity today.
-		rootData = runBootstrapPhase(rootData)
-		// EARLY schema-version gate: a non-HEAD root `version:` (a legacy config,
-		// e.g. `version: 4`) is rejected with the `charly migrate` hint BEFORE any
-		// shape parsing — so a legacy doc never reaches node-form CUE validation
-		// (which would surface a confusing type error instead of the migrate hint).
+		// EARLY schema-version gate: a non-HEAD root `version:` (a legacy config, e.g.
+		// `version: 4`) is rejected with the `charly migrate` hint BEFORE any shape parsing
+		// — so a legacy doc never reaches node-form CUE validation (a confusing type error
+		// instead of the migrate hint). Reads the bootstrap-transformed bytes.
 		var vdoc yaml.Node
 		if yaml.Unmarshal(rootData, &vdoc) == nil {
 			ver := ""
@@ -717,6 +720,11 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 			if err := gateSchemaVersion(root, ver); err != nil {
 				return nil, true, err
 			}
+		}
+		// Seed the transformed root so loadUnifiedInto PARSES it (the F9 wiring fix — the
+		// rewrite reaches the parse + the post-merge gate, not just the early version gate).
+		if absRoot, aerr := filepath.Abs(root); aerr == nil {
+			fileOverrides[absRoot] = rootData
 		}
 	}
 	merged := &UnifiedFile{}
@@ -731,7 +739,7 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	if rootID := rootRepoIdentity(dir); rootID != "" {
 		loadingRepos[rootID] = merged
 	}
-	if err := loadUnifiedInto(root, merged, visited, 0, nsCache, loadingRepos); err != nil {
+	if err := loadUnifiedInto(root, merged, visited, 0, nsCache, loadingRepos, fileOverrides); err != nil {
 		return nil, true, err
 	}
 	normalizeV4Aliases(merged)
@@ -946,7 +954,7 @@ func validateDeploymentName(name, parentPath string) error {
 // merged/visited (root namespace); namespaced imports mount an isolated child
 // UnifiedFile under merged.Namespaces via the shared nsCache (cycle-broken).
 // Cycle-safe within a namespace via the visited set; across namespaces via nsCache.
-func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, depth int, nsCache, loadingRepos map[string]*UnifiedFile) error {
+func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, depth int, nsCache, loadingRepos map[string]*UnifiedFile, fileOverrides map[string][]byte) error {
 	if depth > MaxIncludeDepth {
 		return fmt.Errorf("include depth exceeded %d at %s", MaxIncludeDepth, path)
 	}
@@ -959,9 +967,17 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 	}
 	visited[abs] = true
 
-	data, err := os.ReadFile(abs)
-	if err != nil {
-		return fmt.Errorf("reading %s: %w", abs, err)
+	// fileOverrides supplies pre-read bytes for a file. The F9 bootstrap phase seeds the
+	// ROOT here with its transformed config bytes, so a bootstrap plugin's rewrite (migrate)
+	// reaches the actual PARSE + the post-merge gates — not just the early version gate.
+	// Absent → read from disk (every imported/discovered file).
+	data, ok := fileOverrides[abs]
+	if !ok {
+		var rerr error
+		data, rerr = os.ReadFile(abs)
+		if rerr != nil {
+			return fmt.Errorf("reading %s: %w", abs, rerr)
+		}
 	}
 
 	// EXTERNAL-deploy-substrate parse pre-scan (plugin_prescan.go): at a project
@@ -1002,7 +1018,7 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 			if err != nil {
 				return fmt.Errorf("%s: import %q: %w", abs, imp.Ref, err)
 			}
-			if err := loadUnifiedInto(incPath, merged, visited, depth+1, nsCache, loadingRepos); err != nil {
+			if err := loadUnifiedInto(incPath, merged, visited, depth+1, nsCache, loadingRepos, fileOverrides); err != nil {
 				return err
 			}
 			continue
@@ -1195,7 +1211,9 @@ func loadNamespaceCached(ref, baseDir string, nsCache, loadingRepos map[string]*
 		loadingRepos[repoID] = sub
 		defer delete(loadingRepos, repoID)
 	}
-	if err := loadUnifiedInto(path, sub, map[string]bool{}, 0, nsCache, loadingRepos); err != nil {
+	// A namespaced import is a SEPARATE project root — it gets no root-bootstrap override
+	// (the F9 bootstrap transforms only the importing project's own root, nil here).
+	if err := loadUnifiedInto(path, sub, map[string]bool{}, 0, nsCache, loadingRepos, nil); err != nil {
 		return nil, err
 	}
 	return sub, nil

@@ -34,6 +34,7 @@ compiled_plugins:
     - plugin-example-external
     - plugin-example-command
     - plugin-example-bootstrap
+    - plugin-egress
     - plugin-port
     - plugin-process
     - plugin-interface

@@ -24,12 +24,12 @@
 // `vocab` mode reads the FULL schema (every schema/*.cue) — it needs #Node's
 // arms (node.cue) to derive KindWords, so its concatenation stays byte-identical
 // to the runtime `sharedCueSchema`. The `concat` mode (which feeds `cue exp
-// gengotypes` → the Go param structs) reads the schema MINUS node.cue and the
-// egress_*.cue files: those define the node-disjunction wrappers (#Node/#NodeDoc/
-// #*Arm/#*Value) and the egress validation schemas (#K8sObject/#CloudConfig/…),
-// which gengotypes degrades to `map[string]any` and which are NOT charly param
-// structs. The entity defs (#Box/#Deploy/#Op/#Vm/…) reference neither file, so
-// the exclusion is compile-clean. Both modes share the ONE concatSchema helper
+// gengotypes` → the Go param structs) reads the schema MINUS node.cue: it
+// defines the node-disjunction wrappers (#Node/#NodeDoc/#*Arm/#*Value), which
+// gengotypes degrades to `map[string]any` and which are NOT charly param structs.
+// (The egress validation schemas moved to candy/plugin-egress in M16, so they no
+// longer live here to exclude.) The entity defs (#Box/#Deploy/#Op/#Vm/…) do not
+// reference node.cue, so the exclusion is compile-clean. Both modes share the ONE concatSchema helper
 // (R3); only the file filter differs.
 package main
 
@@ -41,7 +41,6 @@ import (
 	"os"
 	"regexp"
 	"sort"
-	"strings"
 
 	"cuelang.org/go/cue"
 	"cuelang.org/go/cue/cuecontext"
@@ -85,12 +84,13 @@ func fatal(format string, a ...any) {
 
 // excludeParamGen reports whether a schema/*.cue file is EXCLUDED from the
 // param-gen concatenation (the gengotypes input). node.cue defines the
-// node-disjunction wrappers and egress_*.cue the egress validation schemas —
-// neither is a charly param struct, and gengotypes degrades both to
-// `map[string]any`. See the package doc PARAM-GEN SCOPE note. The vocab mode
-// passes `nil` (no exclusion) so #Node's arms are present for KindWords.
+// node-disjunction wrappers — not a charly param struct, and gengotypes degrades
+// it to `map[string]any`. See the package doc PARAM-GEN SCOPE note. The vocab
+// mode passes `nil` (no exclusion) so #Node's arms are present for KindWords.
+// (The egress validation schemas moved to candy/plugin-egress in M16, so there
+// are no egress_*.cue files here to exclude.)
 func excludeParamGen(name string) bool {
-	return name == "node.cue" || strings.HasPrefix(name, "egress_")
+	return name == "node.cue"
 }
 
 // concatSchema delegates to schemaconcat.ConcatSchema — the SINGLE schema-concatenation
@@ -155,7 +155,7 @@ func retagFile(path string) error {
 }
 
 // writeConcat emits the gengotypes input — the PARAM-GEN-scoped concatenation
-// (node.cue + egress_*.cue excluded; see excludeParamGen) headed with `package pkg`.
+// (node.cue excluded; see excludeParamGen) headed with `package pkg`.
 func writeConcat(dir, out, pkg string) error {
 	src, err := specSource(dir, pkg, excludeParamGen)
 	if err != nil {

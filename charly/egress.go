@@ -1,166 +1,82 @@
 package main
 
-// Egress validation — gate the config artifacts charly WRITES to a system
-// (cloud-init, k8s manifests, traefik routes, runtime config, ledger JSON,
-// systemd/quadlet units, ssh_config, …) against a CUE schema BEFORE the bytes
-// hit disk. The egress counterpart to the CUE INGRESS validation in
-// cue_schema.go: ingress proves the input config; egress proves the output.
+// egress.go — the in-core SHIM for egress validation (M16). The validation logic + the
+// CUE schemas (incl. the vendored cloud_config) live in the COMPILED-IN candy/plugin-egress;
+// these four public functions resolve verb:egress and Invoke its OpValidate, so every
+// existing caller (generate.go, k8s_generate.go, install_ledger.go, service_render.go,
+// vm_create_spec.go) AND the vmshared.ValidateEgress hook are unchanged. The egress gate
+// proves the config artifacts charly WRITES (cloud-init, k8s manifests, traefik routes,
+// ledger JSON, the Containerfile, systemd/supervisord units, libvirt domain XML) BEFORE the
+// bytes hit disk — the output counterpart to the CUE INGRESS validation in cue_schema.go.
 //
-// Two schema sources, one validator:
-//   - charly's OWN egress kinds live in the concatenated, package-less
-//     sharedCueSchema (cue_schema.go) and resolve via cueKindDef.
-//   - VENDORED schemas (an upstream JSON-Schema run through `cue import
-//     jsonschema:`) carry a `package` clause + CUE-stdlib `import (...)`, so they
-//     CANNOT be string-concatenated into sharedCueSchema's blob. Each compiles as
-//     its OWN cue.Value via CompileBytes (the CUE-stdlib imports resolve in the
-//     bare cueSchemaCtx with no module loader — proven on cloud-init's schema) and
-//     registers into egressKindDefs.
-//
-// This file is grown per cutover: ValidateEgress (validate serialized bytes) is
-// the foundation; GenerateEgress (Go value -> CUE generate+validate -> YAML) and
-// validateTextEgress (string-constraint check for non-data text) arrive with the
-// cutovers that first consume them (k8s; the text-format pre-images).
+// host→plugin dispatch (plain resolve+Invoke, NOT the F10 plugin→plugin reverse channel) —
+// the pattern of k8s_plugin.go / credential_plugin.go. Compiled-in placement keeps it
+// resolvable during build AND deploy (and the host-side *Via / VM validations) with no
+// connect step and no per-call gRPC cost.
 
 import (
-	"embed"
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
-	"strings"
-
-	"cuelang.org/go/cue"
-	"cuelang.org/go/cue/errors"
-	"cuelang.org/go/encoding/xml/koala"
-	cueyaml "cuelang.org/go/encoding/yaml"
 )
 
-//go:embed schema/vendor/*.cue
-var vendorSchemaFS embed.FS
-
-// egressKindDefs maps an egress kind to its def cue.Value, compiled from a
-// vendored (package+import) schema file as its own instance. charly's own kinds
-// are NOT here — they resolve through cueKindDef against sharedCueSchema.
-var egressKindDefs = map[string]cue.Value{}
-
-// registerVendoredEgressKind compiles a vendored schema file on its own (it has
-// a `package` clause + imports, so it can't join sharedCueSchema) and records
-// the kind -> def mapping. Panics on a read/compile/lookup failure — fail-fast
-// at process start, mirroring registerCueKind.
-func registerVendoredEgressKind(kind, file, defPath string) {
-	if _, dup := egressKindDefs[kind]; dup {
-		panic(fmt.Sprintf("duplicate vendored egress kind registration: %q", kind))
+// egressValidate resolves the egress plugin and runs one OpValidate. mode ∈
+// {bytes, text, xml}: "bytes" for serialized YAML/JSON (covers ValidateEgress + the
+// marshalled ValidateEgressValue), "text" for a rendered non-data string, "xml" for the
+// koala-decoded (best-effort) libvirt domain XML.
+func egressValidate(kind, label, mode, data string) error {
+	prov, ok := providerRegistry.resolve(ClassVerb, "egress")
+	if !ok {
+		return fmt.Errorf("%s: egress plugin (verb:egress) not registered — charly built without candy/plugin-egress", label)
 	}
-	data, err := vendorSchemaFS.ReadFile("schema/vendor/" + file)
+	params, err := marshalJSON(map[string]string{"kind": kind, "label": label, "mode": mode, "data": data})
 	if err != nil {
-		panic(fmt.Sprintf("read vendored schema %s: %v", file, err))
+		return fmt.Errorf("%s: egress marshal: %w", label, err)
 	}
-	v := cueSchemaCtx.CompileBytes(data)
-	if v.Err() != nil {
-		panic(fmt.Sprintf("vendored schema %s failed to compile: %v", file, errors.Details(v.Err(), nil)))
+	res, err := prov.Invoke(context.Background(), &Operation{Reserved: "egress", Op: OpValidate, Params: params})
+	if err != nil {
+		return fmt.Errorf("%s: egress invoke: %w", label, err)
 	}
-	def := v.LookupPath(cue.ParsePath(defPath))
-	if def.Err() != nil {
-		panic(fmt.Sprintf("vendored egress kind %q: definition %s not found in %s: %v", kind, defPath, file, def.Err()))
+	var reply struct {
+		Error string `json:"error"`
 	}
-	egressKindDefs[kind] = def
+	if res != nil && len(res.JSON) > 0 {
+		if err := json.Unmarshal(res.JSON, &reply); err != nil {
+			return fmt.Errorf("%s: egress decode reply: %w", label, err)
+		}
+	}
+	if reply.Error != "" {
+		return errors.New(reply.Error)
+	}
+	return nil
 }
 
-// egressDef returns the schema def for an egress kind: the vendored registry
-// first, then charly's own shared-scope kinds (so an egress kind may reuse an
-// already-registered ingress #Kind).
-func egressDef(kind string) (cue.Value, bool) {
-	if d, ok := egressKindDefs[kind]; ok {
-		return d, true
-	}
-	return cueKindDef(kind)
-}
-
-// ValidateEgress validates already-serialized YAML or JSON bytes against the
-// egress kind's schema before they are written. JSON is a YAML subset, so one
-// ingest path covers both. label identifies the artifact in errors.
+// ValidateEgress validates already-serialized YAML or JSON bytes against the egress kind's
+// schema before they are written. JSON is a YAML subset, so one ingest path covers both.
 func ValidateEgress(kind, label string, data []byte) error {
-	def, ok := egressDef(kind)
-	if !ok {
-		return fmt.Errorf("%s: no egress schema registered for kind %q", label, kind)
-	}
-	af, err := cueyaml.Extract(label, data)
-	if err != nil {
-		return fmt.Errorf("%s: egress ingest: %w", label, err)
-	}
-	v := cueSchemaCtx.BuildFile(af)
-	if v.Err() != nil {
-		return fmt.Errorf("%s: egress build: %w", label, v.Err())
-	}
-	if err := v.Unify(def).Validate(cue.Concrete(true)); err != nil {
-		return fmt.Errorf("%s: egress validation failed:\n%s", label, errors.Details(err, nil))
-	}
-	return nil
+	return egressValidate(kind, label, "bytes", string(data))
 }
 
-// ValidateEgressValue validates an in-memory Go value (a manifest map[string]any,
-// a record struct) against the egress kind's schema — no marshal roundtrip. Used
-// where the writer holds the artifact as a Go value just before serialization
-// (k8s manifests, ledger records). label identifies the artifact in errors.
+// ValidateEgressValue validates an in-memory Go value (a manifest map[string]any, a record
+// struct) by marshalling it to JSON and validating as bytes — faithful for the data values
+// egress gates (k8s manifests, ledger records).
 func ValidateEgressValue(kind, label string, v any) error {
-	def, ok := egressDef(kind)
-	if !ok {
-		return fmt.Errorf("%s: no egress schema registered for kind %q", label, kind)
-	}
-	val := cueSchemaCtx.Encode(v)
-	if val.Err() != nil {
-		return fmt.Errorf("%s: egress encode value: %w", label, val.Err())
-	}
-	if err := val.Unify(def).Validate(cue.Concrete(true)); err != nil {
-		return fmt.Errorf("%s: egress validation failed:\n%s", label, errors.Details(err, nil))
-	}
-	return nil
-}
-
-// validateTextEgress validates a rendered NON-DATA text artifact (Containerfile,
-// systemd/supervisord unit, …) by unifying it as a CUE string with the
-// rendered_text string-constraint def — #RenderedText rejects the Go text/template
-// nil-field marker "<no value>", catching a render failure before the text hits
-// disk. The def MUST be a string schema; no concreteness requirement.
-func validateTextEgress(label, text string) error {
-	def, ok := egressDef("rendered_text")
-	if !ok {
-		return fmt.Errorf("%s: no egress schema registered for kind \"rendered_text\"", label)
-	}
-	v := cueSchemaCtx.Encode(text)
-	if v.Err() != nil {
-		return fmt.Errorf("%s: text egress encode: %w", label, v.Err())
-	}
-	if err := v.Unify(def).Validate(); err != nil {
-		return fmt.Errorf("%s: text egress validation failed:\n%s", label, errors.Details(err, nil))
-	}
-	return nil
-}
-
-// ValidateXMLEgress validates a rendered XML artifact (the libvirt domain XML) by
-// koala-decoding it (cuelang.org/go/encoding/xml/koala — elements→structs,
-// attributes→`$`-fields, text→`$$`) and unifying with the kind's koala-shaped
-// schema. koala is EXPERIMENTAL and best-effort: if it cannot DECODE the XML (a
-// koala limitation, not a malformed domain), this returns nil and defers to the
-// authoritative downstream gate (libvirt's DomainDefineXML). A genuine schema
-// violation on a SUCCESSFULLY-decoded document IS returned as a hard error.
-func ValidateXMLEgress(kind, label, xmlStr string) error {
-	def, ok := egressDef(kind)
-	if !ok {
-		return fmt.Errorf("%s: no egress schema registered for kind %q", label, kind)
-	}
-	expr, err := koala.NewDecoder(label, strings.NewReader(xmlStr)).Decode()
+	data, err := json.Marshal(v)
 	if err != nil {
-		return nil // best-effort: experimental koala couldn't parse it; defer to libvirt
+		return fmt.Errorf("%s: egress marshal value: %w", label, err)
 	}
-	v := cueSchemaCtx.BuildExpr(expr)
-	if v.Err() != nil {
-		return nil // best-effort
-	}
-	// Concrete(true): koala maps an empty element (<name></name>) to an absent
-	// `$$` field, so a non-concrete check would pass it. Concreteness requires the
-	// schema-constrained fields ($type / name.$$ / memory.$$) to be present and
-	// non-empty — exactly the "malformed domain" signal. The decoded XML is all
-	// concrete strings, so a valid domain unifies concretely.
-	if err := v.Unify(def).Validate(cue.Concrete(true)); err != nil {
-		return fmt.Errorf("%s: XML egress validation failed:\n%s", label, errors.Details(err, nil))
-	}
-	return nil
+	return egressValidate(kind, label, "bytes", string(data))
+}
+
+// validateTextEgress validates a rendered NON-DATA text artifact (Containerfile, service
+// unit) against the rendered_text string constraint (rejects the "<no value>" template marker).
+func validateTextEgress(label, text string) error {
+	return egressValidate("rendered_text", label, "text", text)
+}
+
+// ValidateXMLEgress validates a rendered XML artifact (the libvirt domain XML); the plugin
+// koala-decodes it best-effort (a decode failure defers to libvirt's authoritative gate).
+func ValidateXMLEgress(kind, label, xmlStr string) error {
+	return egressValidate(kind, label, "xml", xmlStr)
 }

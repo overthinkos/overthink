@@ -66,11 +66,11 @@ classes in the `*.cue` source fix this — both are **inert for runtime validati
   `{} & string` can never collapse the validation; an all-struct disjunction takes
   a bare trailing `@go(-)`.
 
-## Egress schemas
+## Egress schemas (moved out — M16)
 
-`schema/*.cue` ALSO carries the package-less egress schemas charly validates the
-config it WRITES against (`schema/egress_*.cue`), and `schema/vendor/` holds the
-vendored upstream schemas (`package` + `import`, compiled separately). Those are a
-different subsystem — see `/charly-internals:egress` and `schema/vendor/README.md`.
-The gen pipeline concatenates the whole `schema/*.cue` set, so the egress + node
-grammar defs DO appear as (harmless) generated types in `cue_types_gen.go`.
+The egress schemas (the CUE charly validates the config it WRITES against) NO LONGER live here.
+They moved to the compiled-in `candy/plugin-egress/egress-schemas/` (+ `vendor/cloud_config.cue`) when
+egress was externalized into a plugin — `charly/egress.go` is now a thin shim. See
+`/charly-internals:egress`. So `schema/*.cue` here is purely the INGRESS schema; only the `node.cue`
+node-disjunction grammar defs appear as (harmless) generated types in `cue_types_gen.go` (excluded
+from param-gen by `excludeParamGen`).

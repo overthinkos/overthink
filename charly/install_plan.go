@@ -29,6 +29,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/overthinkos/overthink/charly/plugin/sdk"
 	"github.com/overthinkos/overthink/charly/spec"
 )
 
@@ -1085,6 +1086,24 @@ type structuralKindCarrier interface {
 // beyond the static CUE input-def gate); false (or not implemented) → only the static gate runs.
 type validatingKindCarrier interface {
 	isValidatingKind() bool
+}
+
+// phaseCarrier is implemented by a provider (grpcProvider out-of-proc, inprocProvider compiled-in)
+// that carries its declared lifecycle PHASE (F9). A provider not implementing it (e.g. a builtin
+// non-plugin provider) is treated as PhaseRuntime by phaseOfProvider.
+type phaseCarrier interface {
+	pluginPhase() string
+}
+
+// phaseOfProvider returns a provider's lifecycle phase (F9), defaulting to sdk.PhaseRuntime for a
+// provider that declares none / is not a phaseCarrier.
+func phaseOfProvider(p Provider) string {
+	if pc, ok := p.(phaseCarrier); ok {
+		if ph := pc.pluginPhase(); ph != "" {
+			return ph
+		}
+	}
+	return sdk.PhaseRuntime
 }
 
 // scopeFromName maps a declared scope NAME (the author-friendly form a class:step plugin ships

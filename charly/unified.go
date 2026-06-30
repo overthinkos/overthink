@@ -699,6 +699,11 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 		if err := RejectLegacyPluralKeys(root, rootData); err != nil {
 			return nil, true, err
 		}
+		// F9 BOOTSTRAP PHASE: invoke bootstrap-phase plugins on the RAW config bytes BEFORE the
+		// schema gate below — so a bootstrap plugin (migrate, M15) can transform a stale config's
+		// bytes before validation rejects them. A no-op bootstrap plugin (or none registered)
+		// returns the bytes unchanged, so this is identity today.
+		rootData = runBootstrapPhase(rootData)
 		// EARLY schema-version gate: a non-HEAD root `version:` (a legacy config,
 		// e.g. `version: 4`) is rejected with the `charly migrate` hint BEFORE any
 		// shape parsing — so a legacy doc never reaches node-form CUE validation

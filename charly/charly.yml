@@ -33,6 +33,7 @@ compiled_plugins:
     - plugin-example
     - plugin-example-external
     - plugin-example-command
+    - plugin-example-bootstrap
     - plugin-port
     - plugin-process
     - plugin-interface

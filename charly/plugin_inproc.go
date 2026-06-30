@@ -21,6 +21,7 @@ type inprocProvider struct {
 	contract   *stepContract // set ONLY for a compiled-in class:step capability declaring a StepContract (F3); nil otherwise
 	structural bool          // set ONLY for a compiled-in class:kind capability that decodes a STRUCTURAL entity (F5)
 	validates  bool          // set ONLY for a compiled-in class:kind capability serving a deep OpValidate check (F7/C8)
+	phase      string        // the plugin lifecycle phase (F9; sdk.Phase*, normalized — "" → runtime)
 }
 
 func (p *inprocProvider) Reserved() string     { return p.word }
@@ -44,6 +45,9 @@ func (p *inprocProvider) isStructuralKind() bool { return p.structural }
 // isValidatingKind implements validatingKindCarrier — the in-proc twin of
 // grpcProvider.isValidatingKind (R3 parity).
 func (p *inprocProvider) isValidatingKind() bool { return p.validates }
+
+// pluginPhase implements phaseCarrier — the in-proc twin of grpcProvider.pluginPhase (F9, R3 parity).
+func (p *inprocProvider) pluginPhase() string { return p.phase }
 
 func (p *inprocProvider) Invoke(ctx context.Context, op *Operation) (*Result, error) {
 	rep, err := p.srv.Invoke(ctx, &pb.InvokeRequest{
@@ -94,6 +98,8 @@ func buildUnitInProc(meta pb.PluginMetaServer, srv pb.ProviderServer) (*PluginUn
 		if class == ClassKind && c.GetValidates() {
 			ip.validates = true
 		}
+		// ...and its lifecycle PHASE (F9, R3 parity; normalized, default runtime).
+		ip.phase = sdk.NormalizePhase(c.GetPhase())
 		providers = append(providers, ip)
 		if c.GetInputDef() != "" {
 			inputDefs[provKey(class, c.GetWord())] = c.GetInputDef()

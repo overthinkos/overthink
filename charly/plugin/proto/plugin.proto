@@ -41,6 +41,7 @@ message ProvidedCapability {
   bool lifecycle = 6;                 // set ONLY for class="deploy" (F6): the substrate brings its OWN host-side venue lifecycle (PrepareVenue/Start/Stop/...) served over the lifecycle Ops; the host registers a wire-backed substrateLifecycle for it
   bool preresolve = 7;                // set ONLY for class="deploy" (F6): the substrate declares a host-side PRERESOLVE step (OpPreresolve) the host runs before apply, shipping the opaque result in DeployVenue.Substrate
   bool validates = 8;                 // set ONLY for class="kind" (F7/C8): the kind serves a deep OpValidate check (returns Diagnostics) BEYOND the static CUE input-def gate; the host dispatches OpValidate at load
+  string phase = 9;                   // F9: the plugin lifecycle PHASE (sdk.Phase*; "" => runtime default) — the ordered point at which the kernel loads/invokes the plugin; "bootstrap" runs BEFORE config validation/migration
 }
 
 // StepContract — a class="step" plugin's DECLARED install-step contract (F3): where the

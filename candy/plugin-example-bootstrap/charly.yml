@@ -1,0 +1,24 @@
+plugin-example-bootstrap:
+    candy:
+        version: 2026.181.0001
+        description: |-
+            Reference BOOTSTRAP-PHASE plugin (F9) — a compiled-in plugin declaring Phase=bootstrap,
+            so the kernel invokes its OpBootstrap on the RAW project config bytes BEFORE config
+            validation/migration (runBootstrapPhase, in LoadUnified before the schema gate). This
+            no-op returns the bytes UNCHANGED, proving the bootstrap hook fires at the right time;
+            the migrate (M15) bootstrap plugin transforms a stale config's bytes here. Bootstrap
+            plugins are compiled-in only (no validated config exists yet to discover an
+            out-of-process source); the phase machinery M15/M16 reuse.
+    plugin-example-bootstrap-decl:
+        plugin:
+            providers:
+                - verb:examplebootstrap
+            source: github.com/overthinkos/overthink/candy/plugin-example-bootstrap
+    examplebootstrap-module-present:
+        check: the bootstrap-phase plugin ships a buildable Go module the host can compile in
+        id: examplebootstrap-module-present
+        context:
+            - build
+        plugin: command
+        plugin_input:
+            command: "true"

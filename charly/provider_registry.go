@@ -207,6 +207,20 @@ func (r *Registry) allProviders() []Provider {
 	return out
 }
 
+// providersInPhase returns every registered provider whose lifecycle phase (F9) equals phase, in
+// the stable registration order of allProviders. The kernel uses it to load/invoke plugins phase
+// by phase — the bootstrap pre-pass enumerates PhaseBootstrap providers (compiled-in, registered
+// at init) before config validation.
+func (r *Registry) providersInPhase(phase string) []Provider {
+	var out []Provider
+	for _, p := range r.allProviders() {
+		if phaseOfProvider(p) == phase {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // Close shuts down every connected plugin (each go-plugin client.Kill sends the
 // gRPC Shutdown that stops the plugin server, then terminates the child — see
 // plugin_transport.go's clientCloser). The host MUST run this on exit and on a

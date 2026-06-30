@@ -128,6 +128,7 @@ type grpcProvider struct {
 	lifecycle  bool          // set ONLY for a class:deploy capability bringing its OWN host-side venue lifecycle (F6)
 	preresolve bool          // set ONLY for a class:deploy capability declaring a host-side preresolve step (F6)
 	validates  bool          // set ONLY for a class:kind capability serving a deep OpValidate check (F7/C8)
+	phase      string        // the plugin lifecycle phase (F9; sdk.Phase*, normalized — "" → runtime)
 }
 
 func (g *grpcProvider) Reserved() string     { return g.word }
@@ -149,6 +150,10 @@ func (g *grpcProvider) isStructuralKind() bool { return g.structural }
 // isValidatingKind implements validatingKindCarrier — a class:kind provider serving a deep
 // OpValidate check the host dispatches at load (F7/C8).
 func (g *grpcProvider) isValidatingKind() bool { return g.validates }
+
+// pluginPhase implements phaseCarrier — the plugin lifecycle phase the kernel loads/invokes this
+// provider in (F9; normalized, never empty).
+func (g *grpcProvider) pluginPhase() string { return g.phase }
 func (g *grpcProvider) Invoke(ctx context.Context, op *Operation) (*Result, error) {
 	rep, err := g.conn.Provider.Invoke(ctx, &pb.InvokeRequest{
 		Reserved: op.Reserved, Op: op.Op, ParamsJson: op.Params, EnvJson: op.Env, Class: string(g.class),
@@ -245,6 +250,8 @@ func buildUnit(conn *sdk.Conn, caps *pb.Capabilities) (*PluginUnit, error) {
 		if class == ClassKind && c.GetValidates() {
 			gp.validates = true
 		}
+		// Every capability declares a lifecycle PHASE (F9; normalized, default runtime).
+		gp.phase = sdk.NormalizePhase(c.GetPhase())
 		// A class:deploy capability may declare it brings its OWN venue lifecycle (F6): the host
 		// registers a wire-backed substrateLifecycle for it at plugin-load.
 		if class == ClassDeployTarget && c.GetLifecycle() {

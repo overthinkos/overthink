@@ -153,6 +153,7 @@ type ProvidedCapability struct {
 	Lifecycle     bool                   `protobuf:"varint,6,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"`                          // set ONLY for class="deploy" (F6): the substrate brings its OWN host-side venue lifecycle (PrepareVenue/Start/Stop/...) served over the lifecycle Ops; the host registers a wire-backed substrateLifecycle for it
 	Preresolve    bool                   `protobuf:"varint,7,opt,name=preresolve,proto3" json:"preresolve,omitempty"`                        // set ONLY for class="deploy" (F6): the substrate declares a host-side PRERESOLVE step (OpPreresolve) the host runs before apply, shipping the opaque result in DeployVenue.Substrate
 	Validates     bool                   `protobuf:"varint,8,opt,name=validates,proto3" json:"validates,omitempty"`                          // set ONLY for class="kind" (F7/C8): the kind serves a deep OpValidate check (returns Diagnostics) BEYOND the static CUE input-def gate; the host dispatches OpValidate at load
+	Phase         string                 `protobuf:"bytes,9,opt,name=phase,proto3" json:"phase,omitempty"`                                   // F9: the plugin lifecycle PHASE (sdk.Phase*; "" => runtime default) — the ordered point at which the kernel loads/invokes the plugin; "bootstrap" runs BEFORE config validation/migration
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -241,6 +242,13 @@ func (x *ProvidedCapability) GetValidates() bool {
 		return x.Validates
 	}
 	return false
+}
+
+func (x *ProvidedCapability) GetPhase() string {
+	if x != nil {
+		return x.Phase
+	}
+	return ""
 }
 
 // StepContract — a class="step" plugin's DECLARED install-step contract (F3): where the
@@ -1259,7 +1267,7 @@ const file_plugin_proto_rawDesc = "" +
 	"\x10protocol_version\x18\x02 \x01(\rR\x0fprotocolVersion\x12<\n" +
 	"\bprovided\x18\x03 \x03(\v2 .charlyplugin.ProvidedCapabilityR\bprovided\x12\x1d\n" +
 	"\n" +
-	"schema_cue\x18\x04 \x01(\tR\tschemaCue\"\x98\x02\n" +
+	"schema_cue\x18\x04 \x01(\tR\tschemaCue\"\xae\x02\n" +
 	"\x12ProvidedCapability\x12\x14\n" +
 	"\x05class\x18\x01 \x01(\tR\x05class\x12\x12\n" +
 	"\x04word\x18\x02 \x01(\tR\x04word\x12\x1b\n" +
@@ -1272,7 +1280,8 @@ const file_plugin_proto_rawDesc = "" +
 	"\n" +
 	"preresolve\x18\a \x01(\bR\n" +
 	"preresolve\x12\x1c\n" +
-	"\tvalidates\x18\b \x01(\bR\tvalidates\"N\n" +
+	"\tvalidates\x18\b \x01(\bR\tvalidates\x12\x14\n" +
+	"\x05phase\x18\t \x01(\tR\x05phase\"N\n" +
 	"\fStepContract\x12\x14\n" +
 	"\x05scope\x18\x01 \x01(\tR\x05scope\x12\x14\n" +
 	"\x05venue\x18\x02 \x01(\x05R\x05venue\x12\x12\n" +

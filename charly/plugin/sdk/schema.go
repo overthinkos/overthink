@@ -41,6 +41,11 @@ type ProvidedCapability struct {
 	// (returns spec.Diagnostics) the host dispatches at load, BEYOND the static CUE input-def
 	// gate. false → only the static gate runs (every other class/kind).
 	Validates bool
+	// Phase is the plugin lifecycle PHASE (F9): one of the sdk.Phase* constants. "" → the kernel
+	// treats it as PhaseRuntime (the default). PhaseBootstrap runs BEFORE config validation —
+	// declare it for a capability that must load/run early (migrate, egress). The kernel loads +
+	// invokes plugins in PhaseOrder.
+	Phase string
 }
 
 // StepContract is the SDK-facing form of the proto StepContract — a class="step" plugin's
@@ -77,7 +82,7 @@ func BuildCapabilities(calver string, provided []ProvidedCapability, schemaFS fs
 	}
 	out := make([]*pb.ProvidedCapability, 0, len(provided))
 	for _, c := range provided {
-		pc := &pb.ProvidedCapability{Class: c.Class, Word: c.Word, InputDef: c.InputDef, Structural: c.Structural, Lifecycle: c.Lifecycle, Preresolve: c.Preresolve, Validates: c.Validates}
+		pc := &pb.ProvidedCapability{Class: c.Class, Word: c.Word, InputDef: c.InputDef, Structural: c.Structural, Lifecycle: c.Lifecycle, Preresolve: c.Preresolve, Validates: c.Validates, Phase: c.Phase}
 		if c.StepContract != nil {
 			pc.StepContract = &pb.StepContract{Scope: c.StepContract.Scope, Venue: int32(c.StepContract.Venue), Gate: c.StepContract.Gate}
 		}

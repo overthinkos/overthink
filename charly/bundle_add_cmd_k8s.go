@@ -11,10 +11,11 @@ import (
 // (k8s_deploy_preresolve.go) calls the output-dir resolver below + GenerateK8sKustomize
 // to emit the egress-validated Kustomize tree, and candy/plugin-kube runs `kubectl
 // apply -k` / `kubectl delete -k` over the external-deploy reverse channel. K8s
-// doesn't consume the InstallPlan IR — the real work is GenerateK8sKustomize, which
-// reads (Capabilities, BundleNode, K8sSpec/cluster) and emits a Kustomize tree. The
-// source-less `charly bundle from-box --target k8s` path (k8s_deploy_from_box.go)
-// calls the SAME resolver + generator (R3).
+// doesn't consume the InstallPlan IR — GenerateK8sKustomize is an in-core shim that
+// lifts the image Capabilities to ports/uid/gid, Invokes the compiled-in
+// candy/plugin-k8sgen generator (verb:k8sgen, C8/M13), then does the host-side
+// egress gate + disk I/O. The source-less `charly bundle from-box --target k8s` path
+// (k8s_deploy_from_box.go) calls the SAME resolver + shim (R3).
 
 // defaultK8sOutputDir resolves the canonical output directory for
 // emitted kustomize trees. Mirrors DeployFromBox's default.

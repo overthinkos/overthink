@@ -56,7 +56,7 @@ var deployTargetWords = []string{"local", "vm", "pod", "k8s", "android"}
 // SSHExecutor the reverse channel serves, runs the nested pod-in-guest orchestration, and
 // owns Start/Stop/Status/Logs/Shell/Rebuild + the ssh-config / charly.yml-entry / ephemeral
 // teardown bookkeeping. The deploy WALK is still external; only the venue lifecycle stays
-// host-side (the host-owns-the-engine principle, like k8s keeping GenerateK8sKustomize in core).
+// host-side (the host-owns-the-engine principle).
 //
 // pod is served by candy/plugin-deploy-pod, but unlike vm its plugin WALKS NOTHING: pod bakes
 // its install steps INTO the image at build time, so its substrateLifecycle hook

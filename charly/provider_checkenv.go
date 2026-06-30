@@ -97,21 +97,6 @@ func decodePluginInput(input map[string]any, dst any) {
 	}
 }
 
-// pluginInputStr returns the string value of the named key in op.PluginInput when op is
-// the matching plugin verb (op.Plugin == verb), else "". Used by the NON-runner consumers
-// (k8s probe generation in k8s_generate.go, the report subject label in checkrun.go) that
-// read an extracted verb's discriminator (http / addr) from plugin_input after the verb
-// left the closed #Op (so op.HTTP / op.Addr no longer exist). The runner itself decodes
-// the full typed params via decodePluginInput in each verb's RunVerb.
-func pluginInputStr(op *Op, verb string) string {
-	if op == nil || op.Plugin != verb || op.PluginInput == nil {
-		return ""
-	}
-	if v, ok := op.PluginInput[verb].(string); ok {
-		return v
-	}
-	return ""
-}
 
 // runPluginVerb dispatches the generic `plugin:` verb to its registered Provider
 // (built-in OR out-of-tree, transport-invisible). This is the permanent plugin

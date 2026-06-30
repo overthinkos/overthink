@@ -6,15 +6,17 @@ package main
 // candy/plugin-kube (the same plugin that serves the `kube:` check verb + the
 // k3s kubeconfig-merge seam — one plugin owns ALL k8s cluster interaction, so the
 // client-go dep + the kubectl-apply path stay the single copy, R3). The plugin
-// drives the cluster (`kubectl apply -k`) but cannot GENERATE the Kustomize tree:
-// GenerateK8sKustomize consumes the package-main Capabilities/BoxMetadata type
-// (read from the image's OCI labels via ExtractMetadata) AND the CUE egress gate
-// (#K8sObject / #Kustomization) the plugin cannot reach, AND it has a SECOND
-// in-core consumer (`charly bundle from-box --target k8s`). So the GENERATOR stays
-// in core and this preresolver does the host half — resolve the cluster template +
-// image Capabilities, GENERATE the egress-validated Kustomize tree, and ship its
-// overlay path in DeployVenue.Substrate (a spec.K8sDeployVenue). The plugin then
-// runs `kubectl apply -k <overlay>` and returns the teardown ops the host records.
+// drives the cluster (`kubectl apply -k`) but cannot GENERATE the Kustomize tree.
+// The GENERATOR lives in the compiled-in candy/plugin-k8sgen (verb:k8sgen, C8/M13),
+// fronted by the in-core GenerateK8sKustomize shim: the shim lifts the image
+// Capabilities (read from the OCI labels via ExtractMetadata) to ports/uid/gid,
+// Invokes the generator's OpEmit, then applies the host-side egress gate (#K8sObject
+// / #Kustomization) + disk I/O. GenerateK8sKustomize has a SECOND consumer
+// (`charly bundle from-box --target k8s`). So this preresolver does the host half —
+// resolve the cluster template + image Capabilities, GENERATE the egress-validated
+// Kustomize tree, and ship its overlay path in DeployVenue.Substrate (a
+// spec.K8sDeployVenue). The plugin then runs `kubectl apply -k <overlay>` and
+// returns the teardown ops the host records.
 //
 // The plugin runs as a HOST subprocess (LocalTransport), so it reads the generated
 // tree on disk + runs the host's kubectl against the merged kubeconfig directly —

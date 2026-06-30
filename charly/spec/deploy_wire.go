@@ -395,14 +395,15 @@ type AndroidDeployVenue struct {
 // DeployVenue.Substrate and the candy/plugin-kube deploy:k8s provider decodes.
 //
 // Unlike deploy:android — where the plugin DRIVES the device and the host only
-// resolves the endpoint + apk specs — the k8s Kustomize GENERATOR
-// (GenerateK8sKustomize) stays in charly's core: it consumes the package-main
-// Capabilities/BoxMetadata type (read from the image's OCI labels via
-// ExtractMetadata) AND the CUE egress gate (#K8sObject / #Kustomization) the
-// out-of-process plugin cannot reach, AND it has a SECOND in-core consumer
-// (`charly bundle from-box --target k8s`, k8s_deploy_from_box.go). So the host
-// generates the egress-validated Kustomize tree under .opencharly/k8s/<name>/ and
-// ships only the resolved overlay path + tree root. The plugin owns the LIVE
+// resolves the endpoint + apk specs — the k8s Kustomize GENERATOR moved into the
+// compiled-in candy/plugin-k8sgen (verb:k8sgen, C8/M13), fronted by the in-core
+// GenerateK8sKustomize shim: the shim lifts the image Capabilities (read from the
+// OCI labels via ExtractMetadata) to ports/uid/gid, Invokes the generator's OpEmit,
+// then applies the host-side egress gate (#K8sObject / #Kustomization) + disk I/O.
+// It has a SECOND in-core consumer (`charly bundle from-box --target k8s`,
+// k8s_deploy_from_box.go). So the host generates the egress-validated Kustomize tree
+// under .opencharly/k8s/<name>/ and ships only the resolved overlay path + tree
+// root. The plugin owns the LIVE
 // cluster I/O — `kubectl apply -k <OverlayPath>` at deploy, and the recorded
 // teardown (`kubectl delete -k` + remove the tree) replayed at `charly bundle del`
 // — the k8s analogue of plugin-adb installing apps after the host resolves the

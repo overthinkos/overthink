@@ -35,6 +35,7 @@ compiled_plugins:
     - plugin-example-command
     - plugin-example-bootstrap
     - plugin-egress
+    - plugin-k8sgen
     - plugin-port
     - plugin-process
     - plugin-interface

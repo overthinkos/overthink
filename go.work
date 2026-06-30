@@ -10,6 +10,7 @@ use ./candy/plugin-example-external
 use ./candy/plugin-example-command
 use ./candy/plugin-example-bootstrap
 use ./candy/plugin-egress
+use ./candy/plugin-k8sgen
 use ./candy/plugin-port
 use ./candy/plugin-process
 use ./candy/plugin-interface

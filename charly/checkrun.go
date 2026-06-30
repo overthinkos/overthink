@@ -612,7 +612,7 @@ func FormatResultsText(w io.Writer, results []CheckResult) int {
 			skips++
 		}
 		verb := r.Verb
-		subject := firstNonEmpty(pluginInputStr(r.Op, "file"), pluginInputStr(r.Op, "http"), r.Op.Command, pluginInputStr(r.Op, "command"), pluginInputStr(r.Op, "addr"))
+		subject := firstNonEmpty(r.Op.PluginInputStr("file"), r.Op.PluginInputStr("http"), r.Op.Command, r.Op.PluginInputStr("command"), r.Op.PluginInputStr("addr"))
 		fmt.Fprintf(w, "%s %s %s — %s\n", glyph, verb, subject, r.Message)
 		if r.Op.Origin != "" && r.Status == TestFail {
 			fmt.Fprintf(w, "  from %s\n", r.Op.Origin)
@@ -644,7 +644,7 @@ func FormatResultsJSON(w io.Writer, results []CheckResult) int {
 	out := make([]entry, 0, len(results))
 	fails := 0
 	for _, r := range results {
-		subject := firstNonEmpty(pluginInputStr(r.Op, "file"), pluginInputStr(r.Op, "http"), r.Op.Command, pluginInputStr(r.Op, "command"), pluginInputStr(r.Op, "addr"))
+		subject := firstNonEmpty(r.Op.PluginInputStr("file"), r.Op.PluginInputStr("http"), r.Op.Command, r.Op.PluginInputStr("command"), r.Op.PluginInputStr("addr"))
 		if r.Status == TestFail {
 			fails++
 		}
@@ -667,7 +667,7 @@ func FormatResultsTAP(w io.Writer, results []CheckResult) int {
 	fails := 0
 	fmt.Fprintf(w, "TAP version 13\n1..%d\n", len(results))
 	for i, r := range results {
-		subject := firstNonEmpty(pluginInputStr(r.Op, "file"), pluginInputStr(r.Op, "http"), r.Op.Command, pluginInputStr(r.Op, "command"), pluginInputStr(r.Op, "addr"))
+		subject := firstNonEmpty(r.Op.PluginInputStr("file"), r.Op.PluginInputStr("http"), r.Op.Command, r.Op.PluginInputStr("command"), r.Op.PluginInputStr("addr"))
 		label := fmt.Sprintf("%s %s - %s", r.Verb, subject, r.Message)
 		switch r.Status {
 		case TestPass:

@@ -156,3 +156,29 @@ func (e *Executor) RunHostStep(ctx context.Context, step spec.InstallStepView, o
 	}
 	return ops, nil
 }
+
+// InvokeProvider asks the host to invoke ANOTHER provider (class, word, op) on this plugin's behalf
+// (F10 plugin↔plugin) — the host resolves it in the registry and Invokes it (threading the SAME
+// venue executor into an out-of-process target), returning the raw result JSON. params/env are the
+// op's plugin_input / env (nil for none).
+func (e *Executor) InvokeProvider(ctx context.Context, class, word, op string, params, env []byte) ([]byte, error) {
+	r, err := e.client.InvokeProvider(ctx, &pb.InvokeProviderRequest{Class: class, Reserved: word, Op: op, ParamsJson: params, EnvJson: env})
+	if err != nil {
+		return nil, err
+	}
+	return r.GetResultJson(), nil
+}
+
+// HostBuild asks the host to run the registered host-builder for kind (F10 host-build) with the
+// opaque spec, returning the builder's opaque result JSON. A non-empty reply error is a build
+// failure (the RPC itself succeeded).
+func (e *Executor) HostBuild(ctx context.Context, kind string, spec []byte) ([]byte, error) {
+	r, err := e.client.HostBuild(ctx, &pb.HostBuildRequest{Kind: kind, SpecJson: spec})
+	if err != nil {
+		return nil, err
+	}
+	if r.GetError() != "" {
+		return nil, errors.New(r.GetError())
+	}
+	return r.GetResultJson(), nil
+}

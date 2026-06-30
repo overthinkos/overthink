@@ -277,13 +277,15 @@ var Provider_ServiceDesc = grpc.ServiceDesc{
 }
 
 const (
-	ExecutorService_Venue_FullMethodName       = "/charlyplugin.ExecutorService/Venue"
-	ExecutorService_RunSystem_FullMethodName   = "/charlyplugin.ExecutorService/RunSystem"
-	ExecutorService_RunUser_FullMethodName     = "/charlyplugin.ExecutorService/RunUser"
-	ExecutorService_PutFile_FullMethodName     = "/charlyplugin.ExecutorService/PutFile"
-	ExecutorService_RunCapture_FullMethodName  = "/charlyplugin.ExecutorService/RunCapture"
-	ExecutorService_GetFile_FullMethodName     = "/charlyplugin.ExecutorService/GetFile"
-	ExecutorService_RunHostStep_FullMethodName = "/charlyplugin.ExecutorService/RunHostStep"
+	ExecutorService_Venue_FullMethodName          = "/charlyplugin.ExecutorService/Venue"
+	ExecutorService_RunSystem_FullMethodName      = "/charlyplugin.ExecutorService/RunSystem"
+	ExecutorService_RunUser_FullMethodName        = "/charlyplugin.ExecutorService/RunUser"
+	ExecutorService_PutFile_FullMethodName        = "/charlyplugin.ExecutorService/PutFile"
+	ExecutorService_RunCapture_FullMethodName     = "/charlyplugin.ExecutorService/RunCapture"
+	ExecutorService_GetFile_FullMethodName        = "/charlyplugin.ExecutorService/GetFile"
+	ExecutorService_RunHostStep_FullMethodName    = "/charlyplugin.ExecutorService/RunHostStep"
+	ExecutorService_InvokeProvider_FullMethodName = "/charlyplugin.ExecutorService/InvokeProvider"
+	ExecutorService_HostBuild_FullMethodName      = "/charlyplugin.ExecutorService/HostBuild"
 )
 
 // ExecutorServiceClient is the client API for ExecutorService service.
@@ -297,6 +299,8 @@ type ExecutorServiceClient interface {
 	RunCapture(ctx context.Context, in *RunRequest, opts ...grpc.CallOption) (*CaptureReply, error)
 	GetFile(ctx context.Context, in *GetFileRequest, opts ...grpc.CallOption) (*GetFileReply, error)
 	RunHostStep(ctx context.Context, in *HostStepRequest, opts ...grpc.CallOption) (*HostStepReply, error)
+	InvokeProvider(ctx context.Context, in *InvokeProviderRequest, opts ...grpc.CallOption) (*InvokeReply, error)
+	HostBuild(ctx context.Context, in *HostBuildRequest, opts ...grpc.CallOption) (*HostBuildReply, error)
 }
 
 type executorServiceClient struct {
@@ -370,6 +374,24 @@ func (c *executorServiceClient) RunHostStep(ctx context.Context, in *HostStepReq
 	return out, nil
 }
 
+func (c *executorServiceClient) InvokeProvider(ctx context.Context, in *InvokeProviderRequest, opts ...grpc.CallOption) (*InvokeReply, error) {
+	out := new(InvokeReply)
+	err := c.cc.Invoke(ctx, ExecutorService_InvokeProvider_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *executorServiceClient) HostBuild(ctx context.Context, in *HostBuildRequest, opts ...grpc.CallOption) (*HostBuildReply, error) {
+	out := new(HostBuildReply)
+	err := c.cc.Invoke(ctx, ExecutorService_HostBuild_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ExecutorServiceServer is the server API for ExecutorService service.
 // All implementations must embed UnimplementedExecutorServiceServer
 // for forward compatibility
@@ -381,6 +403,8 @@ type ExecutorServiceServer interface {
 	RunCapture(context.Context, *RunRequest) (*CaptureReply, error)
 	GetFile(context.Context, *GetFileRequest) (*GetFileReply, error)
 	RunHostStep(context.Context, *HostStepRequest) (*HostStepReply, error)
+	InvokeProvider(context.Context, *InvokeProviderRequest) (*InvokeReply, error)
+	HostBuild(context.Context, *HostBuildRequest) (*HostBuildReply, error)
 	mustEmbedUnimplementedExecutorServiceServer()
 }
 
@@ -408,6 +432,12 @@ func (UnimplementedExecutorServiceServer) GetFile(context.Context, *GetFileReque
 }
 func (UnimplementedExecutorServiceServer) RunHostStep(context.Context, *HostStepRequest) (*HostStepReply, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RunHostStep not implemented")
+}
+func (UnimplementedExecutorServiceServer) InvokeProvider(context.Context, *InvokeProviderRequest) (*InvokeReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method InvokeProvider not implemented")
+}
+func (UnimplementedExecutorServiceServer) HostBuild(context.Context, *HostBuildRequest) (*HostBuildReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HostBuild not implemented")
 }
 func (UnimplementedExecutorServiceServer) mustEmbedUnimplementedExecutorServiceServer() {}
 
@@ -548,6 +578,42 @@ func _ExecutorService_RunHostStep_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ExecutorService_InvokeProvider_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InvokeProviderRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServiceServer).InvokeProvider(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ExecutorService_InvokeProvider_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServiceServer).InvokeProvider(ctx, req.(*InvokeProviderRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _ExecutorService_HostBuild_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HostBuildRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExecutorServiceServer).HostBuild(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ExecutorService_HostBuild_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExecutorServiceServer).HostBuild(ctx, req.(*HostBuildRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ExecutorService_ServiceDesc is the grpc.ServiceDesc for ExecutorService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -582,6 +648,14 @@ var ExecutorService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RunHostStep",
 			Handler:    _ExecutorService_RunHostStep_Handler,
+		},
+		{
+			MethodName: "InvokeProvider",
+			Handler:    _ExecutorService_InvokeProvider_Handler,
+		},
+		{
+			MethodName: "HostBuild",
+			Handler:    _ExecutorService_HostBuild_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -120,7 +120,17 @@ service ExecutorService {
   rpc RunCapture(RunRequest) returns (CaptureReply);     // capture stdout/stderr/exit (no root escalation — callers add sudo)
   rpc GetFile(GetFileRequest) returns (GetFileReply);    // read a venue file (e.g. a record/screenshot artifact pulled back to the host)
   rpc RunHostStep(HostStepRequest) returns (HostStepReply); // run a HOST-ENGINE step (Builder/LocalPkgInstall/SystemPackages/act-OpStep/ExternalPlugin) on the host engine + apply onto the venue
+  rpc InvokeProvider(InvokeProviderRequest) returns (InvokeReply); // F10 plugin↔plugin: the host resolves another provider by (class,word) + Invokes it on the calling plugin's behalf (threading the SAME venue executor) — the generalization of the RunHostStep ExternalPlugin arm to ANY class/op
+  rpc HostBuild(HostBuildRequest) returns (HostBuildReply);        // F10 host-build: the calling plugin requests a HOST-side build (the build engine stays in core) — the host runs the registered host-builder for `kind` and returns its result
 }
+// InvokeProviderRequest mirrors InvokeRequest minus the broker id (the host already holds the
+// reverse context): dispatch op `op` on provider (class, reserved) with params/env (F10).
+message InvokeProviderRequest { string class = 1; string reserved = 2; string op = 3; bytes params_json = 4; bytes env_json = 5; }
+// HostBuildRequest names a registered host-builder `kind` (e.g. "plugin-binary", and — added by
+// M13/M14 — "kustomize"/"image") + an opaque `spec_json` it interprets (F10). HostBuildReply
+// carries the builder's opaque result (e.g. an artifact path/handle JSON) or an error.
+message HostBuildRequest { string kind = 1; bytes spec_json = 2; }
+message HostBuildReply { bytes result_json = 1; string error = 2; }
 message VenueReply { string venue = 1; }
 message RunRequest { string script = 1; bytes opts_json = 2; } // opts_json = EmitOpts, JSON
 message RunReply   { string error = 1; }                       // empty error = success

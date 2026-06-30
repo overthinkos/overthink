@@ -339,6 +339,32 @@ type VenueDescriptor struct {
 	ConnectTimeout int      `json:"connect_timeout,omitempty"`
 }
 
+// Diagnostic is one finding from a plugin kind's deep OpValidate check (F7/C8) — a message, an
+// optional dotted field PATH within the entity body, and a severity ("error" fails validation;
+// "warning" is surfaced but non-fatal; empty is treated as "error").
+type Diagnostic struct {
+	Severity string `json:"severity,omitempty"` // "error" | "warning" (empty → error)
+	Message  string `json:"message"`
+	Path     string `json:"path,omitempty"`
+}
+
+// Diagnostics is the OpValidate reply: the structured findings a plugin kind returns when the host
+// asks it to validate an authored entity body BEYOND the static CUE input-def gate. An empty
+// Diagnostics (no items) means the body is valid.
+type Diagnostics struct {
+	Items []Diagnostic `json:"items,omitempty"`
+}
+
+// HasErrors reports whether any item is error-severity (empty severity counts as error).
+func (d Diagnostics) HasErrors() bool {
+	for _, it := range d.Items {
+		if it.Severity != "warning" {
+			return true
+		}
+	}
+	return false
+}
+
 // AndroidDeployVenue is the preresolved deploy:android substrate payload the
 // host's android deploy preresolver produces (in DeployVenue.Substrate) and the
 // candy/plugin-adb deploy:android provider decodes. The host resolves the device

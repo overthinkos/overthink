@@ -14,7 +14,7 @@ package main
 // are external and WHICH candy serves each. Connection is PRECISELY SCOPED + on-demand: the build
 // pre-pass (builder_preresolve.go) detects exactly the builders the deploy's resolved closure
 // triggers (WITH the distro/build-format gate — a fedora deploy never connects aur) and connects
-// only those, by the canonical ref below (the same on-demand, scoped pattern as ensureVmPluginConnected,
+// only those, by the canonical ref below (the same on-demand, scoped pattern as connectPluginByWordRef,
 // R3). A plugin baked into the image is unaffected; nothing surfaces builder words across an entire
 // box scan.
 

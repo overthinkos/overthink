@@ -25,7 +25,10 @@ import (
 // unit-testable without a live plugin. Mirrors invokeVerbProvider's Operation
 // envelope + pluginCheckResult decode (R3).
 var invokeKubePlugin = func(op *Op) (string, error) {
-	prov, ok := providerRegistry.ResolveVerb("kube")
+	// connectPluginByWord (not a bare ResolveVerb): lazily build-connects candy/plugin-kube if the
+	// deploy path has not already (the generic host-adapter seam, F7) — strictly stronger than the
+	// prior resolve-only, which failed outside the deploy loader.
+	prov, ok := connectPluginByWord(ClassVerb, "kube")
 	if !ok {
 		return "", fmt.Errorf("kube plugin not loaded — the deploy must compose candy/plugin-kube (its provider serves the clientcmd-backed kubeconfig merge); k3s-server requires it")
 	}

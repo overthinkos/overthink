@@ -23,7 +23,7 @@ import (
 // candyNeedsBuilder applies, so a fedora deploy never connects aur (even when a multi-distro candy
 // carries an aur: section for its arch variant), and a pixi-only deploy connects ONLY pixi. It then
 // build-connects just those plugins by their canonical ref (the same on-demand, scoped pattern as
-// ensureVmPluginConnected, R3) — NOT a blanket "all four builder plugins" surfaced across an entire
+// connectPluginByWordRef, R3) — NOT a blanket "all four builder plugins" surfaced across an entire
 // box scan. A pure pod deploy (no add_candy) never reaches BuildDeployPlan, so it connects nothing.
 
 // builderPreresolved is one candy×builder's pre-resolved payload: the plugin's stage-context keys
@@ -123,7 +123,7 @@ func preresolveBuilderContexts(ctx context.Context, cfg *Config, dir string, ord
 }
 
 // ensureBuildersConnected build-connects ONLY the not-yet-connected externalized builder plugins in
-// `words`, scoped to those words — the same on-demand, scoped pattern as ensureVmPluginConnected
+// `words`, scoped to those words — the same on-demand, scoped pattern as connectPluginByWordRef
 // (R3). It scans the project's OWN candy closure first (main repo: candy/plugin-builder-<word> is a
 // local candy/ dir — network-free), falling back to pulling in the SPECIFIC builder plugins by
 // their canonical ref (a box/<distro> submodule deploy that triggers a builder but vendors the

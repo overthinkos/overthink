@@ -1079,6 +1079,14 @@ type structuralKindCarrier interface {
 	isStructuralKind() bool
 }
 
+// validatingKindCarrier is implemented by a provider (grpcProvider out-of-proc, inprocProvider
+// compiled-in) that carries a class:kind capability's VALIDATES flag (F7/C8). true → the host
+// dispatches OpValidate to the kind at load (a deep plugin-owned check returning spec.Diagnostics,
+// beyond the static CUE input-def gate); false (or not implemented) → only the static gate runs.
+type validatingKindCarrier interface {
+	isValidatingKind() bool
+}
+
 // scopeFromName maps a declared scope NAME (the author-friendly form a class:step plugin ships
 // in its StepContract) to the internal Scope. Unknown / "system" → ScopeSystem (the safe
 // default — an external step's scope is advisory for the self-exec'ing plugin, used for ledger

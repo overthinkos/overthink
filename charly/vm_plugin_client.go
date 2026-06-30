@@ -3,9 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"os"
-	"sync"
 )
 
 // vm_plugin_client.go is the HOST→plugin client for the internal VM-resolution ops. The go-libvirt
@@ -105,59 +102,11 @@ func vmPluginOpError(raw json.RawMessage) string {
 	return r.Error
 }
 
-// vmPluginLoadOnce caches the one-time on-demand build-connect of the external candy/plugin-vm, so
-// a host without libvirt (or a failed load) degrades cheaply — the early ResolveVerb short-circuit
-// covers every call after a successful load.
-var vmPluginLoadOnce sync.Once
-
-// ensureVmPluginConnected lazily build-connects the external candy/plugin-vm so verb:libvirt is
-// registered before the VM-subsystem consumers RPC it. verb:libvirt is served OUT-OF-PROCESS, so
-// its grpcProvider registers only at loadProjectPlugins time — but the `charly vm` lifecycle +
-// status/preempt/ssh/vnc/spice paths (unlike check/deploy/build) never call the loader. An
-// on-demand scoped loadProjectPlugins connect (like loadDeployPlugins), scoped to the IMPLICIT
-// "libvirt" word: core RPCs the verb directly, so it appears in no plan step and plan-derived
-// scoping (collectReferencedPluginWords) would miss it. Idempotent: a no-op once the provider
-// resolves (the in-check-runner process + every later RPC this process), and the scan + build is
-// attempted at most once per process.
-func ensureVmPluginConnected() {
-	if _, ok := providerRegistry.ResolveVerb("libvirt"); ok {
-		return // already connected (check-runner / deploy / a prior RPC this process)
-	}
-	vmPluginLoadOnce.Do(func() {
-		dir, err := os.Getwd()
-		if err != nil {
-			return
-		}
-		cfg, cerr := LoadConfig(dir)
-		if cerr != nil {
-			return
-		}
-		// Try the project's own candy closure first (the superproject: candy/plugin-vm is a local
-		// candy/ dir, picked up by ScanCandy — network-free); fall back to pulling plugin-vm in by
-		// its canonical host-side-plugin ref for a project whose closure references it nowhere (a
-		// box/<distro> submodule whose VM beds/entities RPC verb:libvirt but vendor no candy
-		// requiring the plugin). In a check bed CHARLY_REPO_OVERRIDE redirects the ref to the local
-		// superproject under development.
-		for _, opts := range []ResolveOpts{{}, {ExtraCandyRefs: []string{vmPluginCandyRef()}}} {
-			candyMap, scanErr := ScanAllCandyWithConfigOpts(dir, cfg, opts)
-			if scanErr != nil || candyMap == nil {
-				continue
-			}
-			if perr := loadProjectPlugins(context.Background(), candyMap, map[string]struct{}{"libvirt": {}}); perr != nil {
-				fmt.Fprintf(os.Stderr, "warning: vm plugin load: %v\n", perr)
-			}
-			if _, ok := providerRegistry.ResolveVerb("libvirt"); ok {
-				return
-			}
-		}
-	})
-}
-
 // vmPluginCandyRef is the canonical @github ref to the external VM plugin candy (candy/plugin-vm,
 // the verb:libvirt provider). Core RPCs verb:libvirt directly + unconditionally, but the plugin
 // candy is external (not in compiled_plugins, not in any box's image closure), so the VM-RPC load
-// paths — ensureVmPluginConnected here + the check runner (attachCheckRunnerContext) — must pull it
-// in by this ref via ResolveOpts.ExtraCandyRefs (its documented purpose: a host-side plugin candy
+// paths — the invokeVmPluginEnv out-call here (via connectPluginByWordRef) + the check runner
+// (attachCheckRunnerContext) — must pull it in via ResolveOpts.ExtraCandyRefs (its documented purpose: a host-side plugin candy
 // outside the image closure). In a check bed CHARLY_REPO_OVERRIDE redirects it to the local
 // superproject under development; outside a bed it fetches the published candy.
 func vmPluginCandyRef() string {
@@ -166,8 +115,7 @@ func vmPluginCandyRef() string {
 
 // invokeVmPluginEnv is the full-env variant (lifecycle ops carry Force/DeleteDisk).
 func invokeVmPluginEnv(env vmPluginEnv) (json.RawMessage, bool) {
-	ensureVmPluginConnected()
-	prov, ok := providerRegistry.ResolveVerb("libvirt")
+	prov, ok := connectPluginByWordRef(ClassVerb, "libvirt", vmPluginCandyRef())
 	if !ok {
 		return nil, false
 	}

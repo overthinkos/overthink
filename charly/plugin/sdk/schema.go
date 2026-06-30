@@ -37,6 +37,10 @@ type ProvidedCapability struct {
 	// DeployVenue.Substrate — the wire-backed generalization of the in-core k8s/android
 	// preresolvers. false for every other class/deploy.
 	Preresolve bool
+	// Validates is set ONLY for Class=="kind" (F7/C8): the kind serves a deep OpValidate check
+	// (returns spec.Diagnostics) the host dispatches at load, BEYOND the static CUE input-def
+	// gate. false → only the static gate runs (every other class/kind).
+	Validates bool
 }
 
 // StepContract is the SDK-facing form of the proto StepContract — a class="step" plugin's
@@ -73,7 +77,7 @@ func BuildCapabilities(calver string, provided []ProvidedCapability, schemaFS fs
 	}
 	out := make([]*pb.ProvidedCapability, 0, len(provided))
 	for _, c := range provided {
-		pc := &pb.ProvidedCapability{Class: c.Class, Word: c.Word, InputDef: c.InputDef, Structural: c.Structural, Lifecycle: c.Lifecycle, Preresolve: c.Preresolve}
+		pc := &pb.ProvidedCapability{Class: c.Class, Word: c.Word, InputDef: c.InputDef, Structural: c.Structural, Lifecycle: c.Lifecycle, Preresolve: c.Preresolve, Validates: c.Validates}
 		if c.StepContract != nil {
 			pc.StepContract = &pb.StepContract{Scope: c.StepContract.Scope, Venue: int32(c.StepContract.Venue), Gate: c.StepContract.Gate}
 		}

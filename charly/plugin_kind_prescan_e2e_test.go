@@ -69,6 +69,53 @@ my-example-kind:
 	}
 }
 
+// TestExternalKind_OpValidateRejectsInvalidBody proves F7/C8: a class:kind plugin declaring
+// Validates=true serves a deep OpValidate check the host dispatches at load, and error-severity
+// Diagnostics FAIL the load — beyond the static CUE input-def gate (which #ExamplekindInput's open
+// `marker?: string` would pass). The sentinel marker "INVALID" trips plugin-example-kind's
+// OpValidate. Builds the real plugin OOP, so -short-gated; reuses copyCandyFixReplace.
+func TestExternalKind_OpValidateRejectsInvalidBody(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds the external kind plugin binary (slow)")
+	}
+	charlyDir, err := filepath.Abs(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srcCandy, err := filepath.Abs("../candy/plugin-example-kind")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(srcCandy, "go.mod")); err != nil {
+		t.Fatalf("example kind plugin module not found at %s: %v", srcCandy, err)
+	}
+
+	dir := t.TempDir()
+	dstCandy := filepath.Join(dir, "candy", "plugin-example-kind")
+	if err := copyCandyFixReplace(srcCandy, dstCandy, charlyDir); err != nil {
+		t.Fatalf("stage candy: %v", err)
+	}
+	rootYAML := `version: ` + LatestSchemaVersion().String() + `
+discover:
+    - path: candy
+      recursive: true
+bad-kind:
+    examplekind:
+        marker: INVALID
+`
+	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(rootYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err = LoadUnified(dir)
+	if err == nil {
+		t.Fatal("LoadUnified must FAIL when the kind's OpValidate rejects the body (Diagnostics error)")
+	}
+	if !strings.Contains(err.Error(), "validation failed") || !strings.Contains(err.Error(), "INVALID") {
+		t.Fatalf("error %q must name the OpValidate failure + the rejected marker", err)
+	}
+}
+
 func pluginKindKeys(uf *UnifiedFile) []string {
 	out := []string{}
 	for k := range uf.PluginKinds {

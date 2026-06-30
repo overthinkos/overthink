@@ -20,6 +20,7 @@ type inprocProvider struct {
 	word       string
 	contract   *stepContract // set ONLY for a compiled-in class:step capability declaring a StepContract (F3); nil otherwise
 	structural bool          // set ONLY for a compiled-in class:kind capability that decodes a STRUCTURAL entity (F5)
+	validates  bool          // set ONLY for a compiled-in class:kind capability serving a deep OpValidate check (F7/C8)
 }
 
 func (p *inprocProvider) Reserved() string     { return p.word }
@@ -39,6 +40,10 @@ func (p *inprocProvider) declaredStepContract() (stepContract, bool) {
 // grpcProvider.isStructuralKind, so a COMPILED-IN class:kind plugin folds to uf.Bundle the
 // SAME way (R3: placement-invisible).
 func (p *inprocProvider) isStructuralKind() bool { return p.structural }
+
+// isValidatingKind implements validatingKindCarrier — the in-proc twin of
+// grpcProvider.isValidatingKind (R3 parity).
+func (p *inprocProvider) isValidatingKind() bool { return p.validates }
 
 func (p *inprocProvider) Invoke(ctx context.Context, op *Operation) (*Result, error) {
 	rep, err := p.srv.Invoke(ctx, &pb.InvokeRequest{
@@ -84,6 +89,10 @@ func buildUnitInProc(meta pb.PluginMetaServer, srv pb.ProviderServer) (*PluginUn
 		// A compiled-in class:kind capability carries its STRUCTURAL flag too (F5, R3 parity).
 		if class == ClassKind && c.GetStructural() {
 			ip.structural = true
+		}
+		// ...and its VALIDATES flag (F7/C8, R3 parity).
+		if class == ClassKind && c.GetValidates() {
+			ip.validates = true
 		}
 		providers = append(providers, ip)
 		if c.GetInputDef() != "" {

@@ -391,6 +391,18 @@ func connectBakedPlugin(class ProviderClass, word string) (Provider, bool) {
 // caller (the credential store adapter). The ONE on-demand plugin-connect entry point for a word
 // that appears in NO plan step (the credential VERB the core adapter drives directly).
 func connectPluginByWord(class ProviderClass, word string) (Provider, bool) {
+	return connectPluginByWordRef(class, word, "")
+}
+
+// connectPluginByWordRef is connectPluginByWord with an optional CANONICAL candy ref appended to
+// the source scan (ResolveOpts.ExtraCandyRefs) — for a host out-call to a plugin whose candy the
+// project's closure references NOWHERE (e.g. a box/<distro> project that RPCs verb:libvirt but
+// vendors no candy requiring candy/plugin-vm). connectBakedPlugin's registry-resolve-first check
+// makes it idempotent: after the first connect, every subsequent call returns the registered
+// provider without re-scanning (so it replaces the bespoke per-client sync.Once). extraRef "" is
+// the plain connectPluginByWord. The ONE on-demand plugin-connect entry point for a word that
+// appears in NO plan step (the credential/vm/kube host out-calls + any future host adapter).
+func connectPluginByWordRef(class ProviderClass, word, extraRef string) (Provider, bool) {
 	if p, ok := connectBakedPlugin(class, word); ok {
 		return p, true
 	}
@@ -402,12 +414,27 @@ func connectPluginByWord(class ProviderClass, word string) (Provider, bool) {
 	if cerr != nil {
 		return nil, false
 	}
-	candyMap, scanErr := ScanAllCandyWithConfigOpts(dir, cfg, ResolveOpts{})
-	if scanErr != nil || candyMap == nil {
-		return nil, false
+	// Pass 1: the project's OWN candy closure (local candy/ dir — network-free). Pass 2 (ONLY when
+	// a canonical ref is given AND pass 1 did not connect): pull the plugin candy in by its ref for
+	// a project whose closure references it nowhere (a box/<distro> VM bed). This local-first order
+	// keeps the common case network-free — adding the remote ref unconditionally would make a local
+	// op (e.g. `charly vm list` in the main repo) attempt a github fetch even when candy/plugin-vm
+	// is local. Mirrors the deleted ensureVmPluginConnected two-pass.
+	passes := []ResolveOpts{{}}
+	if extraRef != "" {
+		passes = append(passes, ResolveOpts{ExtraCandyRefs: []string{extraRef}})
 	}
-	if perr := loadProjectPlugins(context.Background(), candyMap, map[string]struct{}{word: {}}); perr != nil {
-		fmt.Fprintf(os.Stderr, "warning: plugin load (%s:%s): %v\n", class, word, perr)
+	for _, opts := range passes {
+		candyMap, scanErr := ScanAllCandyWithConfigOpts(dir, cfg, opts)
+		if scanErr != nil || candyMap == nil {
+			continue
+		}
+		if perr := loadProjectPlugins(context.Background(), candyMap, map[string]struct{}{word: {}}); perr != nil {
+			fmt.Fprintf(os.Stderr, "warning: plugin load (%s:%s): %v\n", class, word, perr)
+		}
+		if p, ok := providerRegistry.resolve(class, word); ok {
+			return p, true
+		}
 	}
 	return providerRegistry.resolve(class, word)
 }

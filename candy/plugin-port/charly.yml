@@ -5,10 +5,9 @@ plugin-port:
             The `port` check verb relocated into a candy: the in-container listening
             probe (ss/netstat) or a host-side TCP reachability dial. A HOST-COUPLED
             verb — its RunVerb runs against the live check engine
-            (charly/plugin/kit.CheckContext), so it is COMPILED-IN-ONLY (no
-            out-of-process placement; the live context cannot cross a process
-            boundary). The FIRST verb on the kit contract and the relocation template
-            for the other host-coupled check verbs/kinds.
+            (charly/plugin/kit.CheckContext), served in EITHER placement: compiled-in,
+            or OUT-OF-PROCESS via the CheckContextService reverse channel (F2). The
+            relocation template for the other host-coupled check verbs/kinds.
     plugin-port-decl:
         plugin:
             source: github.com/overthinkos/overthink/candy/plugin-port

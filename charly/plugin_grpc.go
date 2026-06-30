@@ -148,14 +148,23 @@ func (g *grpcProvider) Invoke(ctx context.Context, op *Operation) (*Result, erro
 // VM); false (the default) makes a RebootStep skip-and-note (a host venue is never rebooted).
 // Falls back to a plain Invoke (broker id 0) when the connection has no broker (an in-proc
 // transport) or no executor is given.
-func (g *grpcProvider) InvokeWithExecutor(ctx context.Context, op *Operation, exec DeployExecutor, build buildEngineContext, rebootable bool) (*Result, error) {
+func (g *grpcProvider) InvokeWithExecutor(ctx context.Context, op *Operation, exec DeployExecutor, build buildEngineContext, rebootable bool, cc *checkContextReverseServer) (*Result, error) {
 	var brokerID uint32
-	if g.conn.Broker != nil && exec != nil {
+	if g.conn.Broker != nil && (exec != nil || cc != nil) {
 		id := g.conn.Broker.NextId()
 		var srv *grpc.Server
 		go g.conn.Broker.AcceptAndServe(id, func(opts []grpc.ServerOption) *grpc.Server {
 			srv = grpc.NewServer(opts...)
-			pb.RegisterExecutorServiceServer(srv, &executorReverseServer{exec: exec, build: build, rebootable: rebootable})
+			// Both reverse services share ONE broker id, registered on ONE server: a
+			// deploy/step op supplies exec (ExecutorService); a host-coupled check verb
+			// supplies BOTH exec and cc (ExecutorService for the venue + CheckContextService
+			// for HTTPDo/AddBackground — F2).
+			if exec != nil {
+				pb.RegisterExecutorServiceServer(srv, &executorReverseServer{exec: exec, build: build, rebootable: rebootable})
+			}
+			if cc != nil {
+				pb.RegisterCheckContextServiceServer(srv, cc)
+			}
 			return srv
 		})
 		defer func() {

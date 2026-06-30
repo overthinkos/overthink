@@ -925,6 +925,223 @@ func (x *HostStepReply) GetError() string {
 	return ""
 }
 
+// HTTPDoRequest carries the FULL request + per-request policy the host needs to build the
+// client (httpClientFor) host-side: ca_pem is the resolved CA PEM bytes (the candy reads its
+// authored ca_file host-side and ships the bytes), timeout is a Go duration string ("" = base).
+type HTTPDoRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	Method            string                 `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
+	Url               string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
+	Body              []byte                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
+	Headers           map[string]string      `protobuf:"bytes,4,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Timeout           string                 `protobuf:"bytes,5,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	AllowInsecure     bool                   `protobuf:"varint,6,opt,name=allow_insecure,json=allowInsecure,proto3" json:"allow_insecure,omitempty"`
+	NoFollowRedirects bool                   `protobuf:"varint,7,opt,name=no_follow_redirects,json=noFollowRedirects,proto3" json:"no_follow_redirects,omitempty"`
+	CaPem             []byte                 `protobuf:"bytes,8,opt,name=ca_pem,json=caPem,proto3" json:"ca_pem,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *HTTPDoRequest) Reset() {
+	*x = HTTPDoRequest{}
+	mi := &file_plugin_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HTTPDoRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HTTPDoRequest) ProtoMessage() {}
+
+func (x *HTTPDoRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HTTPDoRequest.ProtoReflect.Descriptor instead.
+func (*HTTPDoRequest) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *HTTPDoRequest) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+func (x *HTTPDoRequest) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *HTTPDoRequest) GetBody() []byte {
+	if x != nil {
+		return x.Body
+	}
+	return nil
+}
+
+func (x *HTTPDoRequest) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+func (x *HTTPDoRequest) GetTimeout() string {
+	if x != nil {
+		return x.Timeout
+	}
+	return ""
+}
+
+func (x *HTTPDoRequest) GetAllowInsecure() bool {
+	if x != nil {
+		return x.AllowInsecure
+	}
+	return false
+}
+
+func (x *HTTPDoRequest) GetNoFollowRedirects() bool {
+	if x != nil {
+		return x.NoFollowRedirects
+	}
+	return false
+}
+
+func (x *HTTPDoRequest) GetCaPem() []byte {
+	if x != nil {
+		return x.CaPem
+	}
+	return nil
+}
+
+// HTTPDoReply: status + body + response headers, or a transport-level error (the RPC itself
+// succeeds — a failed request rides the error field, like RunReply/CaptureReply).
+type HTTPDoReply struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        int32                  `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
+	Body          []byte                 `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	HeaderBlob    string                 `protobuf:"bytes,3,opt,name=header_blob,json=headerBlob,proto3" json:"header_blob,omitempty"` // pre-formatted "Key: value\n" blob (multi-value preserved), matcher-ready
+	Error         string                 `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *HTTPDoReply) Reset() {
+	*x = HTTPDoReply{}
+	mi := &file_plugin_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *HTTPDoReply) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*HTTPDoReply) ProtoMessage() {}
+
+func (x *HTTPDoReply) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use HTTPDoReply.ProtoReflect.Descriptor instead.
+func (*HTTPDoReply) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *HTTPDoReply) GetStatus() int32 {
+	if x != nil {
+		return x.Status
+	}
+	return 0
+}
+
+func (x *HTTPDoReply) GetBody() []byte {
+	if x != nil {
+		return x.Body
+	}
+	return nil
+}
+
+func (x *HTTPDoReply) GetHeaderBlob() string {
+	if x != nil {
+		return x.HeaderBlob
+	}
+	return ""
+}
+
+func (x *HTTPDoReply) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type AddBackgroundRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Pid           int32                  `protobuf:"varint,1,opt,name=pid,proto3" json:"pid,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddBackgroundRequest) Reset() {
+	*x = AddBackgroundRequest{}
+	mi := &file_plugin_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddBackgroundRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddBackgroundRequest) ProtoMessage() {}
+
+func (x *AddBackgroundRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddBackgroundRequest.ProtoReflect.Descriptor instead.
+func (*AddBackgroundRequest) Descriptor() ([]byte, []int) {
+	return file_plugin_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *AddBackgroundRequest) GetPid() int32 {
+	if x != nil {
+		return x.Pid
+	}
+	return 0
+}
+
 var File_plugin_proto protoreflect.FileDescriptor
 
 const file_plugin_proto_rawDesc = "" +
@@ -990,7 +1207,27 @@ const file_plugin_proto_rawDesc = "" +
 	"\topts_json\x18\x02 \x01(\fR\boptsJson\"O\n" +
 	"\rHostStepReply\x12(\n" +
 	"\x10reverse_ops_json\x18\x01 \x01(\fR\x0ereverseOpsJson\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error2I\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\xd5\x02\n" +
+	"\rHTTPDoRequest\x12\x16\n" +
+	"\x06method\x18\x01 \x01(\tR\x06method\x12\x10\n" +
+	"\x03url\x18\x02 \x01(\tR\x03url\x12\x12\n" +
+	"\x04body\x18\x03 \x01(\fR\x04body\x12B\n" +
+	"\aheaders\x18\x04 \x03(\v2(.charlyplugin.HTTPDoRequest.HeadersEntryR\aheaders\x12\x18\n" +
+	"\atimeout\x18\x05 \x01(\tR\atimeout\x12%\n" +
+	"\x0eallow_insecure\x18\x06 \x01(\bR\rallowInsecure\x12.\n" +
+	"\x13no_follow_redirects\x18\a \x01(\bR\x11noFollowRedirects\x12\x15\n" +
+	"\x06ca_pem\x18\b \x01(\fR\x05caPem\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"p\n" +
+	"\vHTTPDoReply\x12\x16\n" +
+	"\x06status\x18\x01 \x01(\x05R\x06status\x12\x12\n" +
+	"\x04body\x18\x02 \x01(\fR\x04body\x12\x1f\n" +
+	"\vheader_blob\x18\x03 \x01(\tR\n" +
+	"headerBlob\x12\x14\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\"(\n" +
+	"\x14AddBackgroundRequest\x12\x10\n" +
+	"\x03pid\x18\x01 \x01(\x05R\x03pid2I\n" +
 	"\n" +
 	"PluginMeta\x12;\n" +
 	"\bDescribe\x12\x13.charlyplugin.Empty\x1a\x1a.charlyplugin.Capabilities2\x90\x01\n" +
@@ -1005,7 +1242,10 @@ const file_plugin_proto_rawDesc = "" +
 	"\n" +
 	"RunCapture\x12\x18.charlyplugin.RunRequest\x1a\x1a.charlyplugin.CaptureReply\x12C\n" +
 	"\aGetFile\x12\x1c.charlyplugin.GetFileRequest\x1a\x1a.charlyplugin.GetFileReply\x12I\n" +
-	"\vRunHostStep\x12\x1d.charlyplugin.HostStepRequest\x1a\x1b.charlyplugin.HostStepReplyB6Z4github.com/overthinkos/overthink/charly/plugin/protob\x06proto3"
+	"\vRunHostStep\x12\x1d.charlyplugin.HostStepRequest\x1a\x1b.charlyplugin.HostStepReply2\xa1\x01\n" +
+	"\x13CheckContextService\x12@\n" +
+	"\x06HTTPDo\x12\x1b.charlyplugin.HTTPDoRequest\x1a\x19.charlyplugin.HTTPDoReply\x12H\n" +
+	"\rAddBackground\x12\".charlyplugin.AddBackgroundRequest\x1a\x13.charlyplugin.EmptyB6Z4github.com/overthinkos/overthink/charly/plugin/protob\x06proto3"
 
 var (
 	file_plugin_proto_rawDescOnce sync.Once
@@ -1019,52 +1259,61 @@ func file_plugin_proto_rawDescGZIP() []byte {
 	return file_plugin_proto_rawDescData
 }
 
-var file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_plugin_proto_goTypes = []any{
-	(*Empty)(nil),              // 0: charlyplugin.Empty
-	(*Capabilities)(nil),       // 1: charlyplugin.Capabilities
-	(*ProvidedCapability)(nil), // 2: charlyplugin.ProvidedCapability
-	(*InvokeRequest)(nil),      // 3: charlyplugin.InvokeRequest
-	(*InvokeReply)(nil),        // 4: charlyplugin.InvokeReply
-	(*Frame)(nil),              // 5: charlyplugin.Frame
-	(*VenueReply)(nil),         // 6: charlyplugin.VenueReply
-	(*RunRequest)(nil),         // 7: charlyplugin.RunRequest
-	(*RunReply)(nil),           // 8: charlyplugin.RunReply
-	(*PutFileRequest)(nil),     // 9: charlyplugin.PutFileRequest
-	(*PutFileReply)(nil),       // 10: charlyplugin.PutFileReply
-	(*CaptureReply)(nil),       // 11: charlyplugin.CaptureReply
-	(*GetFileRequest)(nil),     // 12: charlyplugin.GetFileRequest
-	(*GetFileReply)(nil),       // 13: charlyplugin.GetFileReply
-	(*HostStepRequest)(nil),    // 14: charlyplugin.HostStepRequest
-	(*HostStepReply)(nil),      // 15: charlyplugin.HostStepReply
+	(*Empty)(nil),                // 0: charlyplugin.Empty
+	(*Capabilities)(nil),         // 1: charlyplugin.Capabilities
+	(*ProvidedCapability)(nil),   // 2: charlyplugin.ProvidedCapability
+	(*InvokeRequest)(nil),        // 3: charlyplugin.InvokeRequest
+	(*InvokeReply)(nil),          // 4: charlyplugin.InvokeReply
+	(*Frame)(nil),                // 5: charlyplugin.Frame
+	(*VenueReply)(nil),           // 6: charlyplugin.VenueReply
+	(*RunRequest)(nil),           // 7: charlyplugin.RunRequest
+	(*RunReply)(nil),             // 8: charlyplugin.RunReply
+	(*PutFileRequest)(nil),       // 9: charlyplugin.PutFileRequest
+	(*PutFileReply)(nil),         // 10: charlyplugin.PutFileReply
+	(*CaptureReply)(nil),         // 11: charlyplugin.CaptureReply
+	(*GetFileRequest)(nil),       // 12: charlyplugin.GetFileRequest
+	(*GetFileReply)(nil),         // 13: charlyplugin.GetFileReply
+	(*HostStepRequest)(nil),      // 14: charlyplugin.HostStepRequest
+	(*HostStepReply)(nil),        // 15: charlyplugin.HostStepReply
+	(*HTTPDoRequest)(nil),        // 16: charlyplugin.HTTPDoRequest
+	(*HTTPDoReply)(nil),          // 17: charlyplugin.HTTPDoReply
+	(*AddBackgroundRequest)(nil), // 18: charlyplugin.AddBackgroundRequest
+	nil,                          // 19: charlyplugin.HTTPDoRequest.HeadersEntry
 }
 var file_plugin_proto_depIdxs = []int32{
 	2,  // 0: charlyplugin.Capabilities.provided:type_name -> charlyplugin.ProvidedCapability
-	0,  // 1: charlyplugin.PluginMeta.Describe:input_type -> charlyplugin.Empty
-	3,  // 2: charlyplugin.Provider.Invoke:input_type -> charlyplugin.InvokeRequest
-	3,  // 3: charlyplugin.Provider.InvokeStream:input_type -> charlyplugin.InvokeRequest
-	0,  // 4: charlyplugin.ExecutorService.Venue:input_type -> charlyplugin.Empty
-	7,  // 5: charlyplugin.ExecutorService.RunSystem:input_type -> charlyplugin.RunRequest
-	7,  // 6: charlyplugin.ExecutorService.RunUser:input_type -> charlyplugin.RunRequest
-	9,  // 7: charlyplugin.ExecutorService.PutFile:input_type -> charlyplugin.PutFileRequest
-	7,  // 8: charlyplugin.ExecutorService.RunCapture:input_type -> charlyplugin.RunRequest
-	12, // 9: charlyplugin.ExecutorService.GetFile:input_type -> charlyplugin.GetFileRequest
-	14, // 10: charlyplugin.ExecutorService.RunHostStep:input_type -> charlyplugin.HostStepRequest
-	1,  // 11: charlyplugin.PluginMeta.Describe:output_type -> charlyplugin.Capabilities
-	4,  // 12: charlyplugin.Provider.Invoke:output_type -> charlyplugin.InvokeReply
-	5,  // 13: charlyplugin.Provider.InvokeStream:output_type -> charlyplugin.Frame
-	6,  // 14: charlyplugin.ExecutorService.Venue:output_type -> charlyplugin.VenueReply
-	8,  // 15: charlyplugin.ExecutorService.RunSystem:output_type -> charlyplugin.RunReply
-	8,  // 16: charlyplugin.ExecutorService.RunUser:output_type -> charlyplugin.RunReply
-	10, // 17: charlyplugin.ExecutorService.PutFile:output_type -> charlyplugin.PutFileReply
-	11, // 18: charlyplugin.ExecutorService.RunCapture:output_type -> charlyplugin.CaptureReply
-	13, // 19: charlyplugin.ExecutorService.GetFile:output_type -> charlyplugin.GetFileReply
-	15, // 20: charlyplugin.ExecutorService.RunHostStep:output_type -> charlyplugin.HostStepReply
-	11, // [11:21] is the sub-list for method output_type
-	1,  // [1:11] is the sub-list for method input_type
-	1,  // [1:1] is the sub-list for extension type_name
-	1,  // [1:1] is the sub-list for extension extendee
-	0,  // [0:1] is the sub-list for field type_name
+	19, // 1: charlyplugin.HTTPDoRequest.headers:type_name -> charlyplugin.HTTPDoRequest.HeadersEntry
+	0,  // 2: charlyplugin.PluginMeta.Describe:input_type -> charlyplugin.Empty
+	3,  // 3: charlyplugin.Provider.Invoke:input_type -> charlyplugin.InvokeRequest
+	3,  // 4: charlyplugin.Provider.InvokeStream:input_type -> charlyplugin.InvokeRequest
+	0,  // 5: charlyplugin.ExecutorService.Venue:input_type -> charlyplugin.Empty
+	7,  // 6: charlyplugin.ExecutorService.RunSystem:input_type -> charlyplugin.RunRequest
+	7,  // 7: charlyplugin.ExecutorService.RunUser:input_type -> charlyplugin.RunRequest
+	9,  // 8: charlyplugin.ExecutorService.PutFile:input_type -> charlyplugin.PutFileRequest
+	7,  // 9: charlyplugin.ExecutorService.RunCapture:input_type -> charlyplugin.RunRequest
+	12, // 10: charlyplugin.ExecutorService.GetFile:input_type -> charlyplugin.GetFileRequest
+	14, // 11: charlyplugin.ExecutorService.RunHostStep:input_type -> charlyplugin.HostStepRequest
+	16, // 12: charlyplugin.CheckContextService.HTTPDo:input_type -> charlyplugin.HTTPDoRequest
+	18, // 13: charlyplugin.CheckContextService.AddBackground:input_type -> charlyplugin.AddBackgroundRequest
+	1,  // 14: charlyplugin.PluginMeta.Describe:output_type -> charlyplugin.Capabilities
+	4,  // 15: charlyplugin.Provider.Invoke:output_type -> charlyplugin.InvokeReply
+	5,  // 16: charlyplugin.Provider.InvokeStream:output_type -> charlyplugin.Frame
+	6,  // 17: charlyplugin.ExecutorService.Venue:output_type -> charlyplugin.VenueReply
+	8,  // 18: charlyplugin.ExecutorService.RunSystem:output_type -> charlyplugin.RunReply
+	8,  // 19: charlyplugin.ExecutorService.RunUser:output_type -> charlyplugin.RunReply
+	10, // 20: charlyplugin.ExecutorService.PutFile:output_type -> charlyplugin.PutFileReply
+	11, // 21: charlyplugin.ExecutorService.RunCapture:output_type -> charlyplugin.CaptureReply
+	13, // 22: charlyplugin.ExecutorService.GetFile:output_type -> charlyplugin.GetFileReply
+	15, // 23: charlyplugin.ExecutorService.RunHostStep:output_type -> charlyplugin.HostStepReply
+	17, // 24: charlyplugin.CheckContextService.HTTPDo:output_type -> charlyplugin.HTTPDoReply
+	0,  // 25: charlyplugin.CheckContextService.AddBackground:output_type -> charlyplugin.Empty
+	14, // [14:26] is the sub-list for method output_type
+	2,  // [2:14] is the sub-list for method input_type
+	2,  // [2:2] is the sub-list for extension type_name
+	2,  // [2:2] is the sub-list for extension extendee
+	0,  // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_plugin_proto_init() }
@@ -1078,9 +1327,9 @@ func file_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_plugin_proto_rawDesc), len(file_plugin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   20,
 			NumExtensions: 0,
-			NumServices:   3,
+			NumServices:   4,
 		},
 		GoTypes:           file_plugin_proto_goTypes,
 		DependencyIndexes: file_plugin_proto_depIdxs,

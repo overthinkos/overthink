@@ -1,10 +1,10 @@
-// Package port is the importable, COMPILED-IN host-coupled `port` check verb: the
-// in-container listening probe (ss/netstat) or a host-side TCP dial for reachability.
-// It implements kit.CheckVerbProvider — RunVerb runs against the live kit.CheckContext
-// (the engine's executor, run mode, and dial timeout). Relocated out of charly's
-// module (formerly charly/plugin/builtins/port + charly/plugin_port.go) onto the
-// charly/plugin/kit contract; COMPILED-IN-ONLY (RunVerb needs the live context, which
-// cannot cross a process boundary).
+// Package port is the importable host-coupled `port` check verb: the in-container
+// listening probe (ss/netstat) or a host-side TCP dial for reachability. It implements
+// kit.CheckVerbProvider — RunVerb runs against the live kit.CheckContext (the engine's
+// executor, run mode, and dial timeout) and runs in EITHER placement (compiled-in OR
+// out-of-process via the CheckContextService reverse channel, F2 + cmd/serve) with ZERO
+// authoring change. Relocated out of charly's module (formerly charly/plugin/builtins/port
+// + charly/plugin_port.go) onto the charly/plugin/kit contract.
 package port
 
 import (

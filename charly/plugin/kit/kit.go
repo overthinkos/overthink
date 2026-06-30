@@ -1,22 +1,22 @@
 // Package kit is the importable contract a HOST-COUPLED plugin candy implements to
-// run IN-PROCESS against charly's live check engine — the seam that lets a check
-// verb whose logic needs the running *Runner (exec-in-container, host TCP dial, the
-// HTTP client) live in its own candy module instead of charly's module.
+// run against charly's live check engine — the seam that lets a check verb whose
+// logic needs the running deployment (exec-in-container, host TCP dial, host-vantage
+// HTTP) live in its own candy module instead of charly's module.
 //
-// A host-coupled verb candy implements CheckVerbProvider; charly wraps it in an
-// in-proc adapter that passes its *Runner as a CheckContext. These candies are
-// COMPILED-IN-ONLY for now — RunVerb takes a LIVE CheckContext that cannot cross a
-// process boundary (the out-of-process kit, serving CheckContext over a reverse
-// channel like the deploy executor, is a later cutover). This package imports only
-// the stdlib + charly/spec (the generated param/Op types), so a candy module can
-// import it without pulling charly's package main.
+// A host-coupled verb candy implements CheckVerbProvider; charly runs it in EITHER
+// placement, invisibly above the registry: IN-PROCESS (compiled-in — charly passes
+// the live *Runner as a CheckContext) OR OUT-OF-PROCESS (the CheckContext legs are
+// served back to the candy over the host's reverse channel — ExecutorService for
+// Exec + CheckContextService for HTTPDo/AddBackground, F2 — and the scalar legs ride
+// the env_json snapshot). RunVerb is identical in both. This package imports only the
+// stdlib + charly/spec (the generated param/Op types), so a candy module can import it
+// without pulling charly's package main.
 package kit
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
@@ -63,8 +63,14 @@ type CheckContext interface {
 	Exec() Executor
 	// Mode is the run mode (Live vs Box).
 	Mode() RunMode
-	// HTTPClient is the engine's shared HTTP client (timeouts, redirect policy).
-	HTTPClient() *http.Client
+	// HTTPDo issues an HTTP request from the CHARLY HOST's network namespace, applying
+	// the per-request TLS / redirect / CA policy in req, and returns the status, body, and
+	// response headers. It REPLACES the former HTTPClient() *http.Client leg: an
+	// *http.Client cannot cross a process boundary, so out-of-process the REQUEST crosses
+	// (CheckContextService.HTTPDo) and the host dials; in-process the host builds the client
+	// and dials directly. The transport-level error is returned as err (a non-2xx is NOT an
+	// error — the caller matches resp.Status).
+	HTTPDo(ctx context.Context, req HTTPRequest) (HTTPResponse, error)
 	// DialTimeout is the per-dial ceiling for host-side TCP reachability probes.
 	DialTimeout() time.Duration
 	// Box / Instance are the deployment's image + instance names (empty under ModeBox).
@@ -78,6 +84,33 @@ type CheckContext interface {
 	// (a bare-Op run) or pid<=0. Used by a verb that fire-and-forgets a host process
 	// (the `command` verb's background path).
 	AddBackground(pid int)
+}
+
+// HTTPRequest is the host-vantage HTTP request a check verb hands cc.HTTPDo. It carries
+// the FULL request plus the per-request policy the host needs to build the client: Timeout
+// is a Go duration string ("" = the engine's base timeout); CAPEM is the resolved CA PEM
+// bytes (a candy reads its authored ca_file host-side and ships the bytes, so the host
+// server needs no filesystem access). Both placements (in-proc + the CheckContextService
+// RPC) consume the SAME struct.
+type HTTPRequest struct {
+	Method            string
+	URL               string
+	Body              []byte
+	Headers           map[string]string
+	Timeout           string
+	AllowInsecure     bool
+	NoFollowRedirects bool
+	CAPEM             []byte
+}
+
+// HTTPResponse is the result of cc.HTTPDo: the status code, the response body, and the
+// response headers as a pre-formatted "Key: value\n" blob (the host formats once — R3 —
+// preserving multi-value headers the matcher pipeline consumes directly). A transport-level
+// failure is returned as the HTTPDo error, not here.
+type HTTPResponse struct {
+	Status     int
+	Body       []byte
+	HeaderBlob string
 }
 
 // Status is a check verdict (mirrors charly's CheckStatus ordering).

@@ -3,9 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -141,42 +138,9 @@ func TestRunner_FileVerb(t *testing.T) {
 // host-side dial skip under box-test mode. Now a dedicated built-in plugin unit
 // dispatched IN-PROCESS via the CheckVerbProvider RunVerb path (TestMain loads its
 // schema); authored as plugin: port + plugin_input.
-func TestRunner_PortPlugin_Listening(t *testing.T) {
-	r, fake := newFakeRunner(t, RunModeLive)
-	fake.responses = []fakeResponse{
-		{matchPrefix: "(ss -tlnH", exit: 0},
-	}
-	res := r.Run(context.Background(), []Op{
-		{Plugin: "port", PluginInput: map[string]any{"port": 6379, "listening": true}},
-	})
-	if res[0].Status != TestPass {
-		t.Errorf("expected pass, got %+v", res[0])
-	}
-}
-
-func TestRunner_PortPlugin_NotListening(t *testing.T) {
-	r, fake := newFakeRunner(t, RunModeLive)
-	fake.responses = []fakeResponse{
-		{matchPrefix: "(ss -tlnH", exit: 1},
-	}
-	res := r.Run(context.Background(), []Op{
-		{Plugin: "port", PluginInput: map[string]any{"port": 6379, "listening": true}},
-	})
-	if res[0].Status != TestFail {
-		t.Errorf("expected fail, got %+v", res[0])
-	}
-}
-
-func TestRunner_PortPlugin_ReachableSkipUnderImageTest(t *testing.T) {
-	r, _ := newFakeRunner(t, RunModeBox)
-	// Reachable attribute triggers host-side dial → skipped under box test.
-	res := r.Run(context.Background(), []Op{
-		{Plugin: "port", PluginInput: map[string]any{"port": 6379, "reachable": true}},
-	})
-	if res[0].Status != TestSkip {
-		t.Errorf("expected skip, got %+v", res[0])
-	}
-}
+// NOTE: the `port` verb's in-proc dispatch tests moved to candy/plugin-port/plugin_test.go
+// when port went OUT-OF-PROCESS (F2) — they now exercise RunVerb against a fake
+// kit.CheckContext. The `command` verb stays compiled-in, so its tests stay here.
 
 // command verb — exit/stdout/stderr matchers.
 func TestRunner_CommandVerb(t *testing.T) {
@@ -231,57 +195,12 @@ func TestRunner_CommandVerb(t *testing.T) {
 	})
 }
 
-// http verb — status match, body contains, insecure flag propagation.
-func TestRunner_HTTPVerb(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		switch req.URL.Path {
-		case "/ok":
-			w.WriteHeader(200)
-			fmt.Fprintln(w, "service is ready")
-		case "/boom":
-			w.WriteHeader(500)
-		}
-	}))
-	defer srv.Close()
-
-	// http is a builtin plugin verb (plugin: http + plugin_input); the http-exclusive
-	// status/body ride plugin_input while the GENERAL timeout stays a step-level #Op
-	// modifier (read off the step Op). TestMain loads the http unit's schema.
-	t.Run("status + body contains", func(t *testing.T) {
-		r, _ := newFakeRunner(t, RunModeLive)
-		res := r.Run(context.Background(), []Op{
-			{Plugin: "http", PluginInput: map[string]any{"http": srv.URL + "/ok", "status": 200, "body": []any{map[string]any{"contains": "ready"}}}},
-		})
-		if res[0].Status != TestPass {
-			t.Errorf("expected pass, got %+v", res[0])
-		}
-	})
-
-	t.Run("status mismatch", func(t *testing.T) {
-		r, _ := newFakeRunner(t, RunModeLive)
-		res := r.Run(context.Background(), []Op{
-			{Plugin: "http", PluginInput: map[string]any{"http": srv.URL + "/boom", "status": 200}},
-		})
-		if res[0].Status != TestFail {
-			t.Errorf("expected fail, got %+v", res[0])
-		}
-	})
-
-	t.Run("custom timeout", func(t *testing.T) {
-		slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			time.Sleep(100 * time.Millisecond)
-			w.WriteHeader(200)
-		}))
-		defer slow.Close()
-		r, _ := newFakeRunner(t, RunModeLive)
-		res := r.Run(context.Background(), []Op{
-			{Plugin: "http", PluginInput: map[string]any{"http": slow.URL, "status": 200}, Timeout: "10ms"},
-		})
-		if res[0].Status != TestFail {
-			t.Errorf("expected timeout failure, got %+v", res[0])
-		}
-	})
-}
+// NOTE: the `http` verb went OUT-OF-PROCESS (F2). Its HOST-SIDE request execution (status /
+// body / custom-timeout / allow-insecure against a real server) is now tested by
+// TestDoHTTPRequest in check_http_test.go (doHTTPRequest is the shared host path both the
+// in-proc and the reverse-channel HTTPDo legs use); the verb's request-building + matching
+// logic is tested in candy/plugin-http/plugin_test.go (RunVerb against a fake
+// kit.CheckContext). The full OUT-OF-PROCESS round trip is the check-pod R10 bed.
 
 // Verifies the runner performs ${VAR} expansion before executing, and
 // reports unresolved refs as skip.

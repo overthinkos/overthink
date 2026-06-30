@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"io/fs"
-	"net/http"
 	"time"
 
 	"github.com/overthinkos/overthink/charly/internal/schemaconcat"
@@ -19,8 +18,14 @@ import (
 type runnerCheckContext struct{ r *Runner }
 
 func (c runnerCheckContext) Exec() kit.Executor         { return c.r.Exec }
-func (c runnerCheckContext) HTTPClient() *http.Client   { return c.r.HTTPClient }
 func (c runnerCheckContext) DialTimeout() time.Duration { return c.r.DialTimeout }
+
+// HTTPDo issues the request from the host (in-process) via the SHARED host HTTP-do path
+// (doHTTPRequest — the SAME builder the out-of-process CheckContextService.HTTPDo uses, R3),
+// derived from the engine's base client r.HTTPClient.
+func (c runnerCheckContext) HTTPDo(ctx context.Context, req kit.HTTPRequest) (kit.HTTPResponse, error) {
+	return doHTTPRequest(ctx, c.r.HTTPClient, req)
+}
 func (c runnerCheckContext) Box() string                { return c.r.Box }
 func (c runnerCheckContext) Instance() string           { return c.r.Instance }
 func (c runnerCheckContext) Distros() []string          { return c.r.Distros }

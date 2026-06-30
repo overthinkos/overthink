@@ -1,26 +1,22 @@
-// Package httpverb is the importable, COMPILED-IN host-coupled `http` check verb: an
-// HTTP request matched against status / body / headers — issued from the charly process
-// (outside-in) under charly check live, or from inside the disposable container via
-// `curl` under charly check box. It implements kit.CheckVerbProvider — RunVerb runs the
-// request via the live kit.CheckContext (HTTPClient under live, Exec under box).
-// Relocated out of charly's module (formerly charly/plugin/builtins/http +
-// charly/plugin_http.go) onto the charly/plugin/kit contract; COMPILED-IN-ONLY. The
-// matcher evaluation reuses the importable sdk.MatchAll + spec.MatcherList (R3).
+// Package httpverb is the importable host-coupled `http` check verb: an HTTP request
+// matched against status / body / headers — issued from the charly host's network
+// namespace under charly check live (via cc.HTTPDo — in-process the engine dials, out of
+// process the request crosses the CheckContextService reverse channel and the host dials),
+// or from inside the disposable container via `curl` under charly check box (cc.Exec). It
+// implements kit.CheckVerbProvider and runs in EITHER placement (compiled-in OR
+// out-of-process, F2) with ZERO authoring change. Relocated out of charly's module
+// (formerly charly/plugin/builtins/http + charly/plugin_http.go) onto the charly/plugin/kit
+// contract. The matcher evaluation reuses the importable sdk.MatchAll + spec.MatcherList (R3).
 package httpverb
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"embed"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/overthinkos/overthink/candy/plugin-http/params"
 	"github.com/overthinkos/overthink/charly/plugin/kit"
@@ -80,47 +76,45 @@ type httpCheck struct {
 }
 
 func runHTTPFromHost(ctx context.Context, cc kit.CheckContext, op *spec.Op, h httpCheck) kit.Result {
-	client, err := httpClientFor(op, h, cc.HTTPClient())
-	if err != nil {
-		return kit.Failf("http client: %v", err)
+	// The host issues the request from its own network namespace via cc.HTTPDo — in-process
+	// the engine dials directly, out-of-process the request crosses the CheckContextService
+	// reverse channel and the host dials (an *http.Client cannot cross the wire). The candy
+	// resolves its authored ca_file to PEM bytes host-side so the request is self-contained.
+	req := kit.HTTPRequest{
+		Method:            op.Method,
+		URL:               h.URL,
+		AllowInsecure:     h.AllowInsecure,
+		NoFollowRedirects: h.NoFollowRedir,
+		Timeout:           op.Timeout,
 	}
-	method := op.Method
-	if method == "" {
-		method = "GET"
-	}
-	var body io.Reader
 	if op.RequestBody != "" {
-		body = strings.NewReader(op.RequestBody)
+		req.Body = []byte(op.RequestBody)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, h.URL, body)
-	if err != nil {
-		return kit.Failf("building request: %v", err)
+	if h.CAFile != "" {
+		pem, err := os.ReadFile(h.CAFile)
+		if err != nil {
+			return kit.Failf("reading CA file: %v", err)
+		}
+		req.CAPEM = pem
 	}
-	resp, err := client.Do(req)
+	resp, err := cc.HTTPDo(ctx, req)
 	if err != nil {
 		return kit.Failf("request: %v", err)
 	}
-	defer resp.Body.Close()
-
-	if h.Status != 0 && resp.StatusCode != h.Status {
-		return kit.Failf("status=%d, want %d", resp.StatusCode, h.Status)
+	if h.Status != 0 && resp.Status != h.Status {
+		return kit.Failf("status=%d, want %d", resp.Status, h.Status)
 	}
 	if len(h.Headers) > 0 {
-		headerBlob := formatHeaders(resp.Header)
-		if err := sdk.MatchAll(headerBlob, h.Headers); err != nil {
+		if err := sdk.MatchAll(resp.HeaderBlob, h.Headers); err != nil {
 			return kit.Failf("headers: %v", err)
 		}
 	}
 	if len(h.Body) > 0 {
-		bodyBytes, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return kit.Failf("reading body: %v", err)
-		}
-		if err := sdk.MatchAll(string(bodyBytes), h.Body); err != nil {
+		if err := sdk.MatchAll(string(resp.Body), h.Body); err != nil {
 			return kit.Failf("body: %v", err)
 		}
 	}
-	return kit.Passf("status=%d", resp.StatusCode)
+	return kit.Passf("status=%d", resp.Status)
 }
 
 func runHTTPInContainer(ctx context.Context, cc kit.CheckContext, _ *spec.Op, h httpCheck) kit.Result {
@@ -152,54 +146,6 @@ func runHTTPInContainer(ctx context.Context, cc kit.CheckContext, _ *spec.Op, h 
 		}
 	}
 	return kit.Passf("status=%d", code)
-}
-
-// httpClientFor builds a per-check http.Client honoring AllowInsecure, NoFollowRedir,
-// CAFile (from the plugin_input, h) and Timeout (the general #Op step modifier, off op).
-// Derives from the engine's base client so concurrent checks don't share TLS surprises.
-func httpClientFor(op *spec.Op, h httpCheck, base *http.Client) (*http.Client, error) {
-	client := &http.Client{Timeout: base.Timeout}
-	if op.Timeout != "" {
-		if d, err := time.ParseDuration(op.Timeout); err == nil {
-			client.Timeout = d
-		}
-	}
-	tr := &http.Transport{}
-	if h.AllowInsecure {
-		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
-	}
-	if h.CAFile != "" {
-		pem, err := os.ReadFile(h.CAFile)
-		if err != nil {
-			return nil, fmt.Errorf("reading CA file: %w", err)
-		}
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(pem) {
-			return nil, fmt.Errorf("no certs parsed from %s", h.CAFile)
-		}
-		if tr.TLSClientConfig == nil {
-			tr.TLSClientConfig = &tls.Config{}
-		}
-		tr.TLSClientConfig.RootCAs = pool
-	}
-	client.Transport = tr
-	if h.NoFollowRedir {
-		client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	}
-	return client, nil
-}
-
-func formatHeaders(h http.Header) string {
-	var b strings.Builder
-	for k, vs := range h {
-		for _, v := range vs {
-			b.WriteString(k)
-			b.WriteString(": ")
-			b.WriteString(v)
-			b.WriteString("\n")
-		}
-	}
-	return b.String()
 }
 
 // decodeMatcherList re-decodes a gengotypes-degraded matcher value (`any`) through the

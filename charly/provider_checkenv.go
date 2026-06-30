@@ -25,6 +25,10 @@ type CheckEnv struct {
 	Distros       []string `json:"distros"`
 	Venue         string   `json:"venue"`      // r.Exec.Venue()
 	VenueKind     string   `json:"venue_kind"` // r.Exec.Kind()
+	// DialTimeoutNs is the engine's per-dial ceiling (r.DialTimeout) in nanoseconds — the
+	// kit.CheckContext.DialTimeout() leg for an out-of-process host-coupled check verb (a
+	// plain scalar, so it rides the snapshot rather than the CheckContextService channel).
+	DialTimeoutNs int64 `json:"dial_timeout_ns,omitempty"`
 	// Substrate carries the host-resolved, OPAQUE preresolution payload for a verb
 	// whose plugin needs a host-computed input it cannot derive across the process
 	// boundary — a cdp/vnc/mcp/spice dialable endpoint (resolved from podman / venue /
@@ -55,7 +59,7 @@ func snapshotCheckEnv(r *Runner, _ *Op) *CheckEnv {
 	// prefix charly- onto it to address the live domain and cannot LoadUnified to remap a
 	// deploy/bed name themselves (the go-libvirt shed dropped that in-core remap). A
 	// pod/k8s/android deployment leaves VmName empty, so vmTargetName() == Box (unchanged).
-	ce := &CheckEnv{Box: r.vmTargetName(), Instance: r.Instance, Distros: r.Distros, Mode: runModeName(r.Mode)}
+	ce := &CheckEnv{Box: r.vmTargetName(), Instance: r.Instance, Distros: r.Distros, Mode: runModeName(r.Mode), DialTimeoutNs: int64(r.DialTimeout)}
 	// The container name is meaningful only for a live (non-box) run with a real box —
 	// the same condition under which a live-container verb runs at all.
 	if r.Mode != RunModeBox && r.Box != "" && r.Box != "." {
@@ -238,8 +242,15 @@ func (r *Runner) invokeVerbProvider(ctx context.Context, prov Provider, word str
 	if ei, ok := prov.(executorInvoker); ok && r.Exec != nil {
 		// A check verb never drives the RunHostStep host-engine channel, so the host-engine
 		// context is the zero value (no project Config needed for RunCapture/GetFile) and the
-		// venue is never rebootable (a check verb never reboots the target).
-		out, err = ei.InvokeWithExecutor(ctx, op, r.Exec, buildEngineContext{}, false)
+		// venue is never rebootable (a check verb never reboots the target). Alongside the
+		// ExecutorService (the venue), serve the CheckContextService (F2) so a HOST-COUPLED
+		// out-of-process kit verb reaches the host-vantage HTTPDo + AddBackground legs.
+		var addBg func(int)
+		if r.Scenario != nil {
+			addBg = r.Scenario.AddBackground
+		}
+		cc := &checkContextReverseServer{httpBase: r.HTTPClient, addBg: addBg}
+		out, err = ei.InvokeWithExecutor(ctx, op, r.Exec, buildEngineContext{}, false, cc)
 	} else {
 		out, err = prov.Invoke(ctx, op)
 	}

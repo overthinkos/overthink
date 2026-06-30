@@ -587,3 +587,130 @@ var ExecutorService_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "plugin.proto",
 }
+
+const (
+	CheckContextService_HTTPDo_FullMethodName        = "/charlyplugin.CheckContextService/HTTPDo"
+	CheckContextService_AddBackground_FullMethodName = "/charlyplugin.CheckContextService/AddBackground"
+)
+
+// CheckContextServiceClient is the client API for CheckContextService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type CheckContextServiceClient interface {
+	HTTPDo(ctx context.Context, in *HTTPDoRequest, opts ...grpc.CallOption) (*HTTPDoReply, error)
+	AddBackground(ctx context.Context, in *AddBackgroundRequest, opts ...grpc.CallOption) (*Empty, error)
+}
+
+type checkContextServiceClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewCheckContextServiceClient(cc grpc.ClientConnInterface) CheckContextServiceClient {
+	return &checkContextServiceClient{cc}
+}
+
+func (c *checkContextServiceClient) HTTPDo(ctx context.Context, in *HTTPDoRequest, opts ...grpc.CallOption) (*HTTPDoReply, error) {
+	out := new(HTTPDoReply)
+	err := c.cc.Invoke(ctx, CheckContextService_HTTPDo_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *checkContextServiceClient) AddBackground(ctx context.Context, in *AddBackgroundRequest, opts ...grpc.CallOption) (*Empty, error) {
+	out := new(Empty)
+	err := c.cc.Invoke(ctx, CheckContextService_AddBackground_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// CheckContextServiceServer is the server API for CheckContextService service.
+// All implementations must embed UnimplementedCheckContextServiceServer
+// for forward compatibility
+type CheckContextServiceServer interface {
+	HTTPDo(context.Context, *HTTPDoRequest) (*HTTPDoReply, error)
+	AddBackground(context.Context, *AddBackgroundRequest) (*Empty, error)
+	mustEmbedUnimplementedCheckContextServiceServer()
+}
+
+// UnimplementedCheckContextServiceServer must be embedded to have forward compatible implementations.
+type UnimplementedCheckContextServiceServer struct {
+}
+
+func (UnimplementedCheckContextServiceServer) HTTPDo(context.Context, *HTTPDoRequest) (*HTTPDoReply, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method HTTPDo not implemented")
+}
+func (UnimplementedCheckContextServiceServer) AddBackground(context.Context, *AddBackgroundRequest) (*Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddBackground not implemented")
+}
+func (UnimplementedCheckContextServiceServer) mustEmbedUnimplementedCheckContextServiceServer() {}
+
+// UnsafeCheckContextServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to CheckContextServiceServer will
+// result in compilation errors.
+type UnsafeCheckContextServiceServer interface {
+	mustEmbedUnimplementedCheckContextServiceServer()
+}
+
+func RegisterCheckContextServiceServer(s grpc.ServiceRegistrar, srv CheckContextServiceServer) {
+	s.RegisterService(&CheckContextService_ServiceDesc, srv)
+}
+
+func _CheckContextService_HTTPDo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HTTPDoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CheckContextServiceServer).HTTPDo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CheckContextService_HTTPDo_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CheckContextServiceServer).HTTPDo(ctx, req.(*HTTPDoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CheckContextService_AddBackground_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddBackgroundRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CheckContextServiceServer).AddBackground(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CheckContextService_AddBackground_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CheckContextServiceServer).AddBackground(ctx, req.(*AddBackgroundRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// CheckContextService_ServiceDesc is the grpc.ServiceDesc for CheckContextService service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var CheckContextService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "charlyplugin.CheckContextService",
+	HandlerType: (*CheckContextServiceServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "HTTPDo",
+			Handler:    _CheckContextService_HTTPDo_Handler,
+		},
+		{
+			MethodName: "AddBackground",
+			Handler:    _CheckContextService_AddBackground_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "plugin.proto",
+}

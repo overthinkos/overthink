@@ -119,3 +119,44 @@ message GetFileReply { bytes content = 1; string error = 2; }
 // RunReply/CaptureReply).
 message HostStepRequest { bytes step_json = 1; bytes opts_json = 2; }
 message HostStepReply { bytes reverse_ops_json = 1; string error = 2; }
+
+// CheckContextService is the host-served reverse channel (F2) for the HOST-COUPLED
+// check-verb kit (charly/plugin/kit): the legs kit.CheckContext exposes that cannot ride
+// the env_json snapshot because they hold a live host resource. It is served on the SAME
+// go-plugin broker as ExecutorService (the broker id in InvokeRequest.executor_broker_id),
+// so a kit verb served OUT-OF-PROCESS reaches BOTH the venue (Exec, via ExecutorService)
+// AND these host-vantage legs. Two RPCs, both class-generic (any kit verb may use either —
+// never a per-verb RPC, the Uniform API Invariant):
+//   - HTTPDo: the host issues an HTTP request from the CHARLY HOST's network namespace with
+//     the per-request TLS/redirect/CA policy applied (the http verb's cc.HTTPClient() leg —
+//     an *http.Client cannot cross the wire, so the REQUEST crosses and the host dials).
+//   - AddBackground: register a host-side background PID with the active plan run for teardown
+//     reap (the command verb's fire-and-forget leg).
+// Mode/Box/Instance/Distros/DialTimeout are plain scalars and ride the env_json CheckEnv
+// snapshot, NOT this service.
+service CheckContextService {
+  rpc HTTPDo(HTTPDoRequest) returns (HTTPDoReply);
+  rpc AddBackground(AddBackgroundRequest) returns (Empty);
+}
+// HTTPDoRequest carries the FULL request + per-request policy the host needs to build the
+// client (httpClientFor) host-side: ca_pem is the resolved CA PEM bytes (the candy reads its
+// authored ca_file host-side and ships the bytes), timeout is a Go duration string ("" = base).
+message HTTPDoRequest {
+  string method = 1;
+  string url = 2;
+  bytes body = 3;
+  map<string, string> headers = 4;
+  string timeout = 5;
+  bool allow_insecure = 6;
+  bool no_follow_redirects = 7;
+  bytes ca_pem = 8;
+}
+// HTTPDoReply: status + body + response headers, or a transport-level error (the RPC itself
+// succeeds — a failed request rides the error field, like RunReply/CaptureReply).
+message HTTPDoReply {
+  int32 status = 1;
+  bytes body = 2;
+  string header_blob = 3; // pre-formatted "Key: value\n" blob (multi-value preserved), matcher-ready
+  string error = 4;
+}
+message AddBackgroundRequest { int32 pid = 1; }

@@ -25,7 +25,7 @@ import (
 // builtin (command + the ProvisionActor verbs) stays on the OpStep path. Mirrors the
 // build-context BuildEmitter marker interface (provider_verb.go).
 type executorInvoker interface {
-	InvokeWithExecutor(ctx context.Context, op *Operation, exec DeployExecutor, build buildEngineContext, rebootable bool) (*Result, error)
+	InvokeWithExecutor(ctx context.Context, op *Operation, exec DeployExecutor, build buildEngineContext, rebootable bool, cc *checkContextReverseServer) (*Result, error)
 }
 
 // externalPluginStepProvider is the StepKindExternalPlugin StepProvider. Each Emit*
@@ -93,7 +93,7 @@ func executeExternalPluginStep(ctx context.Context, s *ExternalPluginStep, plan 
 		return zero, fmt.Errorf("external plugin step %q: marshal venue: %w", s.Op.Plugin, err)
 	}
 	res, err := inv.InvokeWithExecutor(ctx,
-		&Operation{Reserved: s.Op.Plugin, Op: OpExecute, Params: params, Env: env}, exec, build, false)
+		&Operation{Reserved: s.Op.Plugin, Op: OpExecute, Params: params, Env: env}, exec, build, false, nil)
 	if err != nil {
 		return zero, err
 	}

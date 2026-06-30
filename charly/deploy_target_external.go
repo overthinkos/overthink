@@ -308,7 +308,7 @@ func (t *externalDeployTarget) apply(ctx context.Context, node *BundleNode, dir 
 		return nil
 	}
 	res, err := t.prov.InvokeWithExecutor(ctx,
-		&Operation{Reserved: t.prov.word, Op: OpExecute, Params: params, Env: envJSON}, t.exec, t.build, t.rebootable)
+		&Operation{Reserved: t.prov.word, Op: OpExecute, Params: params, Env: envJSON}, t.exec, t.build, t.rebootable, nil)
 	if err != nil {
 		return err
 	}

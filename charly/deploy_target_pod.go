@@ -294,6 +294,27 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayCandies []st
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("overlay build dir: %w", err)
 	}
+	// Stage REMOTE add_candy candies' source trees into .build/_candy/<name>.<version>/
+	// — the SAME staging the full build runs (generate.go Generate → createRemoteCandyCopies,
+	// R3: ONE staging implementation, shared). Each overlay candy gets a `FROM scratch AS
+	// <name>` context stage (emitted below) whose `COPY <candyCopySource>/ /` resolves, for a
+	// REMOTE candy, to `.build/_candy/<name>.<version>/` (candyCopySource). A copy:/cmd: step
+	// references that stage via `--from=<name>` / `--mount=type=bind,from=<name>`, so buildah
+	// actually BUILDS the stage and its COPY source MUST exist on disk; without this staging
+	// the overlay build fails at `COPY .build/_candy/<name>.<version>/: no such file or
+	// directory`. (A write:-only candy never references the stage — emitWrite's inline COPY
+	// reads the staged _inline file from the build context directly — which is why the
+	// write:-only marker did not surface this; the per-candy scratch stage was emitted but
+	// unreferenced, so buildah never built it.) createRemoteCandyCopies only stages
+	// layer.Remote candies, so a LOCAL add_candy candy (candyCopySource → candy/<name>/,
+	// already under the project root) is a no-op. The overlay Generator's BuildDir == g.Dir +
+	// "/.build" (NewGenerator default), so the staged path matches candyCopySource's literal
+	// ".build/_candy/…" prefix relative to the project-root build context.
+	if t.Generator != nil {
+		if err := t.Generator.createRemoteCandyCopies(); err != nil {
+			return fmt.Errorf("staging remote overlay candies: %w", err)
+		}
+	}
 	// Render overlay Containerfile via OCITarget. Generator + Box are
 	// required for task emission to produce RUN directives (without them
 	// the emitter emits "no Generator context" comments — the overlay

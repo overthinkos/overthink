@@ -1,6 +1,7 @@
 package main
 
 import (
+	migrate "github.com/overthinkos/overthink/candy/plugin-migrate"
 	"os"
 	"path/filepath"
 	"strings"
@@ -92,14 +93,14 @@ func TestMigrateUnified_Monolithic(t *testing.T) {
   x:
     base: alpine
 `)
-	written, err := MigrateUnified(MigrateUnifiedOpts{Dir: root, Monolithic: true})
+	written, err := migrate.MigrateUnified(migrate.MigrateUnifiedOpts{Dir: root, Monolithic: true})
 	if err != nil {
-		t.Fatalf("MigrateUnified: %v", err)
+		t.Fatalf("migrate.MigrateUnified: %v", err)
 	}
 	if len(written) != 1 {
 		t.Errorf("written = %v, want 1 file in monolithic mode", written)
 	}
-	// MigrateUnified (a historical step) writes the legacy overthink.yml in
+	// migrate.MigrateUnified (a historical step) writes the legacy overthink.yml in
 	// isolation; charly-rebrand renames it to charly.yml later in the chain.
 	data, _ := os.ReadFile(filepath.Join(root, "overthink.yml"))
 	s := string(data)
@@ -120,7 +121,7 @@ func TestMigrateUnified_CandyRewriteIdempotent(t *testing.T) {
   package: [chromium]
 `)
 	// First pass: rewrites flat → kind-keyed.
-	if _, err := MigrateUnified(MigrateUnifiedOpts{Dir: root, RewriteCandies: true}); err != nil {
+	if _, err := migrate.MigrateUnified(migrate.MigrateUnifiedOpts{Dir: root, RewriteCandies: true}); err != nil {
 		t.Fatalf("migrate 1: %v", err)
 	}
 	data1, _ := os.ReadFile(filepath.Join(root, "layers", "chrome", "layer.yml"))
@@ -131,7 +132,7 @@ func TestMigrateUnified_CandyRewriteIdempotent(t *testing.T) {
 		t.Error("rewritten file missing name: chrome")
 	}
 	// Second pass: should be a no-op (idempotent).
-	if _, err := MigrateUnified(MigrateUnifiedOpts{Dir: root, RewriteCandies: true}); err != nil {
+	if _, err := migrate.MigrateUnified(migrate.MigrateUnifiedOpts{Dir: root, RewriteCandies: true}); err != nil {
 		t.Fatalf("migrate 2: %v", err)
 	}
 	data2, _ := os.ReadFile(filepath.Join(root, "layers", "chrome", "layer.yml"))

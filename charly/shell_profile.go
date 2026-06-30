@@ -76,11 +76,6 @@ func getShellFromPasswd(_ string) string { return "" }
 // env.d file writing.
 // ---------------------------------------------------------------------------
 
-// EnvdDir returns the directory where per-candy env files live.
-func EnvdDir(hostHome string) string {
-	return filepath.Join(hostHome, ".config", "opencharly", "env.d")
-}
-
 // EnvdFilePath returns the env file path for a given candy.
 func EnvdFilePath(hostHome, candyName string) string {
 	return filepath.Join(EnvdDir(hostHome), candyName+".env")
@@ -238,41 +233,6 @@ func markersForTag(marker string) (begin, end string) {
 		fmt.Sprintf("# opencharly:end %s", marker)
 }
 
-// stripLegacyOverthinkBlocks removes every managed block left by the
-// pre-rebrand binary — any region fenced by a `# overthink:begin` line
-// through the next `# overthink:end` line (global OR per-candy tagged).
-// charly maintains its own `# opencharly:` block, so a surviving
-// `# overthink:` block is dead weight: it also sources the relocated
-// ~/.config/overthink/env.d path, which no longer exists, so it errors on
-// every shell startup. Stripping it on every managed-block write makes
-// charly self-heal hosts carried over from the old binary, without the
-// operator running `charly migrate` first. No-op when no legacy block is
-// present (exact-string early return preserves the caller's idempotency).
-func stripLegacyOverthinkBlocks(existing string) string {
-	const legacyBegin, legacyEnd = "# overthink:begin", "# overthink:end"
-	if !strings.Contains(existing, legacyBegin) {
-		return existing
-	}
-	var out strings.Builder
-	inBlock := false
-	for line := range strings.SplitSeq(existing, "\n") {
-		if strings.Contains(line, legacyBegin) {
-			inBlock = true
-			continue
-		}
-		if inBlock && strings.Contains(line, legacyEnd) {
-			inBlock = false
-			continue
-		}
-		if !inBlock {
-			out.WriteString(line + "\n")
-		}
-	}
-	// Trim leading/trailing blank lines a removed top/bottom block leaves
-	// behind, then guarantee a single trailing newline.
-	return strings.Trim(out.String(), "\n") + "\n"
-}
-
 // replaceOrAppendManagedBlock finds the begin/end fence pair (tagged
 // with `marker` — empty for the global block) in `existing` and replaces
 // its body; if the markers are absent, appends a fresh block at end-of-
@@ -380,7 +340,6 @@ func stripManagedBlock(existing, marker string) string {
 	}
 	return strings.TrimRight(out.String(), "\n") + "\n"
 }
-
 
 // RemoveManagedBlockAt strips the managed block (tagged with `marker`)
 // from the file at `path`. If `path` doesn't exist, no-op. If `path`

@@ -1,6 +1,7 @@
 package main
 
 import (
+	migrate "github.com/overthinkos/overthink/candy/plugin-migrate"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,7 +33,7 @@ func TestMigrateLedgerCandyKeys(t *testing.T) {
 	}
 
 	ctx := &MigrateContext{LedgerRoot: root}
-	changed, err := MigrateLedgerCandyKeys(ctx)
+	changed, err := migrate.MigrateLedgerCandyKeys(ctx)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -63,7 +64,7 @@ func TestMigrateLedgerCandyKeys(t *testing.T) {
 	}
 
 	// Idempotency: a second run is a no-op.
-	changed2, err := MigrateLedgerCandyKeys(ctx)
+	changed2, err := migrate.MigrateLedgerCandyKeys(ctx)
 	if err != nil {
 		t.Fatalf("migrate (2nd): %v", err)
 	}

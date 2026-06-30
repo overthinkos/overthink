@@ -416,16 +416,6 @@ func cacheBehindHead(path string) bool {
 	return cv.Less(LatestSchemaVersion())
 }
 
-// firstYAMLVersionLine extracts the value of the first top-level `version:` line.
-func firstYAMLVersionLine(data []byte) string {
-	for line := range strings.SplitSeq(string(data), "\n") {
-		if after, ok := strings.CutPrefix(line, "version:"); ok {
-			return strings.TrimSpace(after)
-		}
-	}
-	return ""
-}
-
 // RemoteDownload represents a unique (repo, version) pair to download,
 // along with the specific bare refs needed from it.
 type RemoteDownload struct {

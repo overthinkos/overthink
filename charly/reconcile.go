@@ -65,20 +65,6 @@ func reconcileCandidateFiles(dir string) []string {
 	return out
 }
 
-// isGitSubmoduleDir reports whether p (a directory OTHER than the walk root) is
-// a git submodule — it carries a `.git` entry. Project-file walks (reconcile,
-// `charly migrate`) use it to STOP recursing into submodules: after the box
-// inversion main/box/ is the submodule mount parent, so a recursive walk in main
-// would otherwise reach into box/<distro>/{box,candy}/<name>/charly.yml. Each
-// charly-project repo is scanned on its own (run the verb with `-C box/<distro>`).
-func isGitSubmoduleDir(p, root string) bool {
-	if p == root {
-		return false
-	}
-	_, err := os.Stat(filepath.Join(p, ".git"))
-	return err == nil
-}
-
 // walkScalars visits every scalar node in a YAML node tree.
 func walkScalars(n *yaml.Node, fn func(*yaml.Node)) {
 	if n == nil {

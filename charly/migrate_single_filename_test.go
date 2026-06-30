@@ -1,6 +1,7 @@
 package main
 
 import (
+	migrate "github.com/overthinkos/overthink/candy/plugin-migrate"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,25 +63,29 @@ vm:
 		t.Fatal(err)
 	}
 
-	if _, err := MigrateSingleFilename(dir, "", false); err != nil {
-		t.Fatalf("MigrateSingleFilename: %v", err)
+	// The build.yml-matches-embedded-vocab verdict is HOST-PRELIFTED by core (the
+	// migrator no longer parses it); compute it here exactly as the in-core shim's
+	// prelift does, then drive the prelift-aware migrator.
+	matchesEmbed := localBuildMatchesEmbeddedVocab(legacyVocab)
+	if _, err := migrate.MigrateSingleFilenameWithEmbed(dir, "", false, matchesEmbed); err != nil {
+		t.Fatalf("migrate.MigrateSingleFilenameWithEmbed: %v", err)
 	}
 	// unified-node is the next forward chain step: it rewrites every kind-keyed
 	// entity (the split box: docs + the folded root vm:) into the name-first
 	// node-form the loader requires.
-	if _, err := MigrateUnifiedNode(dir, false); err != nil {
+	if _, err := migrate.MigrateUnifiedNode(dir, false); err != nil {
 		t.Fatalf("unified-node: %v", err)
 	}
 	// box-to-candy (EDGE-INHERIT cutover D): the `box:` KIND merged INTO `candy:`,
 	// so every node-form `<name>: {box: …}` IMAGE becomes `<name>: {candy: …}` (the
 	// base:/from: marker keeps it an image). Without this step the migrated boxes
 	// carry the removed `box:` discriminator and the loader rejects them.
-	if _, err := MigrateBoxToCandy(&MigrateContext{Dir: dir}); err != nil {
+	if _, err := migrate.MigrateBoxToCandy(&MigrateContext{Dir: dir}); err != nil {
 		t.Fatalf("box-to-candy: %v", err)
 	}
 	// calver-schema is the chain's final step; it re-stamps the root to HEAD so the
 	// migrated tree loads (single-filename itself does no version bump).
-	if _, err := MigrateCalverSchema(dir, "", LatestSchemaVersion(), false); err != nil {
+	if _, err := migrate.MigrateCalverSchema(dir, "", LatestSchemaVersion(), false); err != nil {
 		t.Fatalf("calver-schema: %v", err)
 	}
 
@@ -142,9 +147,9 @@ vm:
 	}
 
 	// Idempotency: a second run changes nothing.
-	changed, err := MigrateSingleFilename(dir, "", false)
+	changed, err := migrate.MigrateSingleFilename(dir, "", false)
 	if err != nil {
-		t.Fatalf("second MigrateSingleFilename: %v", err)
+		t.Fatalf("second migrate.MigrateSingleFilename: %v", err)
 	}
 	if len(changed) != 0 {
 		t.Errorf("second run not idempotent: %v", changed)
@@ -169,9 +174,9 @@ defaults:
   version: 2026.144.1443
 `)
 
-	changed, err := MigrateSingleFilename(dir, "", false)
+	changed, err := migrate.MigrateSingleFilename(dir, "", false)
 	if err != nil {
-		t.Fatalf("MigrateSingleFilename: %v", err)
+		t.Fatalf("migrate.MigrateSingleFilename: %v", err)
 	}
 	if len(changed) != 0 {
 		t.Errorf("candy-only project is not a no-op (rewriteDiscover clobbered the discover?): %v", changed)
@@ -199,8 +204,8 @@ box:
     base: quay.io/fedora/fedora:43
     distro: [fedora:43, fedora]
 `)
-	if _, err := MigrateSingleFilename(dir, "", false); err != nil {
-		t.Fatalf("MigrateSingleFilename: %v", err)
+	if _, err := migrate.MigrateSingleFilename(dir, "", false); err != nil {
+		t.Fatalf("migrate.MigrateSingleFilename: %v", err)
 	}
 	if !fileExists(filepath.Join(dir, "box", "inlinebox", "charly.yml")) {
 		t.Error("box/inlinebox/charly.yml missing (inline split failed)")
@@ -225,13 +230,16 @@ discover:
   - path: candy
     manifest: candy.yml
 `)
-	writeFixture(t, dir, "build.yml", `distro:
+	customVocab := `distro:
   mydistro:
     bootstrap:
       install_cmd: custom install
-`)
-	if _, err := MigrateSingleFilename(dir, "", false); err != nil {
-		t.Fatalf("MigrateSingleFilename: %v", err)
+`
+	writeFixture(t, dir, "build.yml", customVocab)
+	// Host-prelift the verdict (a customized vocab → false → kept), as the shim does.
+	matchesEmbed := localBuildMatchesEmbeddedVocab([]byte(customVocab))
+	if _, err := migrate.MigrateSingleFilenameWithEmbed(dir, "", false, matchesEmbed); err != nil {
+		t.Fatalf("migrate.MigrateSingleFilenameWithEmbed: %v", err)
 	}
 	if !fileExists(filepath.Join(dir, "build.yml")) {
 		t.Error("customized build.yml was wrongly deleted")

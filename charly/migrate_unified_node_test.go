@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	migrate "github.com/overthinkos/overthink/candy/plugin-migrate"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -52,7 +53,7 @@ func TestMigrateUnifiedNode_CandyRoundTrip(t *testing.T) {
 	if err := yaml.Unmarshal([]byte(legacyCandyDoc), &mig); err != nil {
 		t.Fatal(err)
 	}
-	if !migrateUnifiedNodeDoc(&mig) {
+	if !migrate.MigrateUnifiedNodeDoc(&mig) {
 		t.Fatal("migration reported no change on a legacy candy doc")
 	}
 
@@ -73,7 +74,7 @@ func TestMigrateUnifiedNode_CandyRoundTrip(t *testing.T) {
 	}
 
 	// Idempotency: migrating the already-node-form doc is a no-op.
-	if migrateUnifiedNodeDoc(&mig) {
+	if migrate.MigrateUnifiedNodeDoc(&mig) {
 		t.Error("migration not idempotent — changed an already-node-form doc")
 	}
 }
@@ -87,8 +88,8 @@ func migrateEdgeInheritDir(t *testing.T, dir string) {
 	if err != nil {
 		t.Fatalf("NewMigrateContext: %v", err)
 	}
-	if _, err := MigrateEdgeInherit(ctx); err != nil {
-		t.Fatalf("MigrateEdgeInherit: %v", err)
+	if _, err := migrate.MigrateEdgeInherit(ctx); err != nil {
+		t.Fatalf("migrate.MigrateEdgeInherit: %v", err)
 	}
 }
 
@@ -123,8 +124,8 @@ vm:
 	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(legacy), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := MigrateUnifiedNode(dir, false); err != nil {
-		t.Fatalf("MigrateUnifiedNode: %v", err)
+	if _, err := migrate.MigrateUnifiedNode(dir, false); err != nil {
+		t.Fatalf("migrate.MigrateUnifiedNode: %v", err)
 	}
 	migrateEdgeInheritDir(t, dir)
 	uf, _, err := LoadUnified(dir)
@@ -181,8 +182,8 @@ vm:
 	if err := os.WriteFile(path, []byte(legacy), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := MigrateUnifiedNode(dir, false); err != nil {
-		t.Fatalf("MigrateUnifiedNode: %v", err)
+	if _, err := migrate.MigrateUnifiedNode(dir, false); err != nil {
+		t.Fatalf("migrate.MigrateUnifiedNode: %v", err)
 	}
 	migrateEdgeInheritDir(t, dir)
 
@@ -248,8 +249,8 @@ vm:
 	}
 
 	// 3) Re-migrating the already-node-form project is a no-op (idempotent).
-	if _, err := MigrateUnifiedNode(dir, false); err != nil {
-		t.Fatalf("second MigrateUnifiedNode: %v", err)
+	if _, err := migrate.MigrateUnifiedNode(dir, false); err != nil {
+		t.Fatalf("second migrate.MigrateUnifiedNode: %v", err)
 	}
 	again, err := os.ReadFile(path)
 	if err != nil {
@@ -299,10 +300,10 @@ check:
 	if err := yaml.Unmarshal([]byte(legacy), &doc); err != nil {
 		t.Fatalf("unmarshal legacy: %v", err)
 	}
-	if !migrateUnifiedNodeDoc(&doc) {
-		t.Fatal("migrateUnifiedNodeDoc reported no change")
+	if !migrate.MigrateUnifiedNodeDoc(&doc) {
+		t.Fatal("migrate.MigrateUnifiedNodeDoc reported no change")
 	}
-	root := rootMappingNode(&doc)
+	root := migrate.RootMappingNode(&doc)
 	if root == nil {
 		t.Fatal("migrated doc has no mapping root")
 	}
@@ -331,7 +332,7 @@ check:
 // node-form entity literally NAMED after a kind word (`vm: {vm: …}` — a VM entity
 // whose top-level key happens to be `vm`, as the repo-root charly.yml carries)
 // must be left VERBATIM, because it is already node-form. Before the fix
-// migrateUnifiedNodeDoc matched legacyKindMapKeys["vm"], entered the legacy
+// migrate.MigrateUnifiedNodeDoc matched legacyKindMapKeys["vm"], entered the legacy
 // kind-map path, rebuilt the entry byte-identically, and returned changed=true —
 // so `charly migrate --dry-run` from the repo root perpetually (wrongly) reported
 // `would apply unified-node`. The fix skips a top-level legacy-kind key whose
@@ -357,7 +358,7 @@ vm-libvirt:
 	if err := yaml.Unmarshal([]byte(doc), &mig); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if migrateUnifiedNodeDoc(&mig) {
+	if migrate.MigrateUnifiedNodeDoc(&mig) {
 		t.Fatal("a node-form entity NAMED `vm` was re-migrated (changed=true) — perpetual dirty `charly migrate --dry-run`")
 	}
 	// Byte-identical: migrating produces output identical to a plain passthrough
@@ -399,10 +400,10 @@ vm:
 	if err := yaml.Unmarshal([]byte(legacy), &doc); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if !migrateUnifiedNodeDoc(&doc) {
+	if !migrate.MigrateUnifiedNodeDoc(&doc) {
 		t.Fatal("a genuine legacy `vm:` collection was NOT converted (changed=false)")
 	}
-	root := rootMappingNode(&doc)
+	root := migrate.RootMappingNode(&doc)
 	if root == nil {
 		t.Fatal("migrated doc has no mapping root")
 	}

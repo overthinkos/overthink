@@ -1,6 +1,7 @@
 package main
 
 import (
+	migrate "github.com/overthinkos/overthink/candy/plugin-migrate"
 	"os"
 	"path/filepath"
 	"strings"
@@ -100,15 +101,15 @@ func TestMigrateLocalDeploy_FullExample(t *testing.T) {
 		t.Fatalf("writing legacy fixture: %v", err)
 	}
 
-	changed, summary, err := MigrateLocalDeploy(path, false)
+	changed, summary, err := migrate.MigrateLocalDeploy(path, false)
 	if err != nil {
-		t.Fatalf("MigrateLocalDeploy: %v", err)
+		t.Fatalf("migrate.MigrateLocalDeploy: %v", err)
 	}
 	// The full chain also runs candy-box-rename (a later step), which renames
 	// the `image:` pod selectors to `box:`; apply it so the rewritten file
 	// loads under the current schema.
-	if _, err := rewriteBoxCandyFile(path, false); err != nil {
-		t.Fatalf("rewriteBoxCandyFile: %v", err)
+	if _, err := migrate.RewriteBoxCandyFile(path, false); err != nil {
+		t.Fatalf("migrate.RewriteBoxCandyFile: %v", err)
 	}
 	if !changed {
 		t.Fatal("changed=false on legacy file")
@@ -240,15 +241,15 @@ func TestMigrateLocalDeploy_FullExample(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "xdg", "charly"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// Simulate the rest of the migrate chain that runs after MigrateLocalDeploy
+	// Simulate the rest of the migrate chain that runs after migrate.MigrateLocalDeploy
 	// before the per-host file LOADS through the unified node-form loader:
 	//   - field-singular: the v4 plural `volumes:` (asserted above) → singular
 	//     `volume:` (a distinct backup suffix avoids colliding with the
-	//     MigrateLocalDeploy backup minted in the same wall-clock second; the
+	//     migrate.MigrateLocalDeploy backup minted in the same wall-clock second; the
 	//     discover list keys on the pre-rename `deploy.yml` filename);
 	//   - calver-schema + host-charly-yml: stamp HEAD + rename deploy.yml → charly.yml;
 	//   - unified-node: the kind-keyed `deploy:` map → name-first node-form.
-	if _, err := MigrateFieldSingular(MigrateFieldSingularOpts{Dir: dir, BackupSuffix: ".bak.fieldsingular"}); err != nil {
+	if _, err := migrate.MigrateFieldSingular(migrate.MigrateFieldSingularOpts{Dir: dir, BackupSuffix: ".bak.fieldsingular"}); err != nil {
 		t.Fatalf("field-singular: %v", err)
 	}
 	migrated, _ := os.ReadFile(path)
@@ -257,7 +258,7 @@ func TestMigrateLocalDeploy_FullExample(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(hostDir, "charly.yml"), migrated, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := MigrateUnifiedNode(hostDir, false); err != nil {
+	if _, err := migrate.MigrateUnifiedNode(hostDir, false); err != nil {
 		t.Fatalf("unified-node: %v", err)
 	}
 	migrateEdgeInheritDir(t, hostDir)
@@ -286,9 +287,9 @@ deploy:
 	if err := os.WriteFile(path, []byte(modern), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	changed, _, err := MigrateLocalDeploy(path, false)
+	changed, _, err := migrate.MigrateLocalDeploy(path, false)
 	if err != nil {
-		t.Fatalf("MigrateLocalDeploy on v4 file: %v", err)
+		t.Fatalf("migrate.MigrateLocalDeploy on v4 file: %v", err)
 	}
 	if changed {
 		t.Error("changed=true on v4 file; want false")
@@ -310,7 +311,7 @@ func TestMigrateLocalDeploy_DryRun(t *testing.T) {
 	}
 	before, _ := os.ReadFile(path)
 
-	changed, summary, err := MigrateLocalDeploy(path, true)
+	changed, summary, err := migrate.MigrateLocalDeploy(path, true)
 	if err != nil {
 		t.Fatalf("dry-run: %v", err)
 	}

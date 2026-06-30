@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 	"gopkg.in/yaml.v3"
 )
 
@@ -378,12 +379,14 @@ type Candy struct {
 // holds candy definitions. The discover: block overrides it per project
 // for discovery; write/resolve paths fall back to this default. Renaming the
 // candy directory project-wide is a one-line change here.
-const DefaultCandyDir = "candy"
+// The value lives in kit (shared with candy/plugin-migrate, a separate module);
+// these are the in-core aliases.
+const DefaultCandyDir = kit.DefaultCandyDir
 
 // DefaultBoxDir is the on-disk directory that holds box definitions,
 // discovered per-box as <DefaultBoxDir>/<name>/<UnifiedFileName>. Symmetric with
 // DefaultCandyDir; the discover: block overrides it per project.
-const DefaultBoxDir = "box"
+const DefaultBoxDir = kit.DefaultBoxDir
 
 // The per-directory discovery manifest filename is the ONE filename the code
 // knows — UnifiedFileName ("charly.yml", defined in unified.go). There is no
@@ -1437,22 +1440,4 @@ func pickCandyVersion(bareRef string, cands []candyCandidate) candyCandidate {
 		}
 	}
 	return best
-}
-
-// fileExists checks if a file exists
-func fileExists(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	return !info.IsDir()
-}
-
-// dirExists checks if a directory exists
-func dirExists(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	return info.IsDir()
 }

@@ -17,6 +17,7 @@ package main
 // the candy directory.
 
 import (
+	migrate "github.com/overthinkos/overthink/candy/plugin-migrate"
 	"os"
 	"path/filepath"
 	"testing"
@@ -189,7 +190,7 @@ deploy:
 	if err := os.WriteFile(path, []byte(deployYml), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := MigrateCharlyCachyos(dir, false); err != nil {
+	if _, err := migrate.MigrateCharlyCachyos(dir, false); err != nil {
 		t.Fatalf("first run: %v", err)
 	}
 	got, err := os.ReadFile(path)
@@ -211,7 +212,7 @@ deploy:
 	first := string(got)
 
 	// Second run — should be byte-identical (idempotent).
-	if _, err := MigrateCharlyCachyos(dir, false); err != nil {
+	if _, err := migrate.MigrateCharlyCachyos(dir, false); err != nil {
 		t.Fatalf("second run: %v", err)
 	}
 	got2, _ := os.ReadFile(path)

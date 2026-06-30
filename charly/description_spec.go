@@ -18,14 +18,19 @@ package main
 import (
 	"fmt"
 	"strings"
+
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 )
 
+// The keyword constant VALUES live in kit (shared with candy/plugin-migrate, a
+// separate module — R3); these are the in-core aliases. The StepKeyword TYPE is a
+// spec type (aliased via vmshared.StepKeyword).
 const (
-	KwRun        StepKeyword = "run"
-	KwCheck      StepKeyword = "check"
-	KwAgentRun   StepKeyword = "agent-run"
-	KwAgentCheck StepKeyword = "agent-check"
-	KwInclude    StepKeyword = "include"
+	KwRun        = kit.KwRun
+	KwCheck      = kit.KwCheck
+	KwAgentRun   = kit.KwAgentRun
+	KwAgentCheck = kit.KwAgentCheck
+	KwInclude    = kit.KwInclude
 )
 
 // StepKind / keywordsSet / KeywordText / IsAgent / IsInclude / Mutates are now

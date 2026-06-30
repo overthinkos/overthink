@@ -622,15 +622,6 @@ func FormatResultsText(w io.Writer, results []CheckResult) int {
 	return fails
 }
 
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
 // FormatResultsJSON emits a structured report suitable for CI consumption.
 // Returns the number of failures.
 func FormatResultsJSON(w io.Writer, results []CheckResult) int {

@@ -1,0 +1,28 @@
+plugin-migrate:
+    candy:
+        version: 2026.181.0001
+        description: |-
+            MIGRATION CHAIN plugin (C13a) — the single ordered `charly migrate` chain (the
+            MigrationStep registry + every schema transformer + drivers, ~44 migrators) carved
+            out of charly core. The plugin serves ONE full-chain op via Invoke: OpRun decodes a
+            kit.MigrateContext (project dir, per-host paths, flags, plus the HOST-PRELIFTED
+            loader inputs core resolves before invoking — image names, local templates, act
+            verbs, the build.yml-matches-embed verdict, and the bundle-volume summary), runs
+            the whole chain to HEAD, and returns {changed, files, error}. charly's in-core
+            charly/migrate.go shim (RunMigrations / RunProjectMigrations) resolves verb:migrate,
+            host-prelifts the package-main loader lookups the candy cannot import, and Invokes.
+            Compiled-in (the `charly migrate` command + the remote-cache auto-migration call the
+            shim, which Invokes this plugin in-proc).
+    plugin-migrate-decl:
+        plugin:
+            providers:
+                - verb:migrate
+            source: github.com/overthinkos/overthink/candy/plugin-migrate
+    migrate-module-present:
+        check: the migration-chain plugin ships a buildable Go module the host compiles in
+        id: migrate-module-present
+        context:
+            - build
+        plugin: command
+        plugin_input:
+            command: "true"

@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	migrate "github.com/overthinkos/overthink/candy/plugin-migrate"
 	"os"
 	"path/filepath"
 	"strings"
@@ -195,9 +196,9 @@ score:
 		t.Fatalf("write: %v", err)
 	}
 
-	rewritten, err := MigratePlanUnify(dir, false)
+	rewritten, err := migrate.MigratePlanUnify(dir, false)
 	if err != nil {
-		t.Fatalf("MigratePlanUnify: %v", err)
+		t.Fatalf("migrate.MigratePlanUnify: %v", err)
 	}
 	if len(rewritten) != 1 {
 		t.Fatalf("expected the charly.yml to be rewritten, got %v", rewritten)
@@ -223,9 +224,9 @@ score:
 	}
 
 	// Idempotent: a second pass rewrites nothing.
-	rewritten2, err := MigratePlanUnify(dir, false)
+	rewritten2, err := migrate.MigratePlanUnify(dir, false)
 	if err != nil {
-		t.Fatalf("second MigratePlanUnify: %v", err)
+		t.Fatalf("second migrate.MigratePlanUnify: %v", err)
 	}
 	if len(rewritten2) != 0 {
 		t.Errorf("migration is not idempotent — second pass rewrote %v", rewritten2)

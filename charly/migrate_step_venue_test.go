@@ -1,6 +1,7 @@
 package main
 
 import (
+	migrate "github.com/overthinkos/overthink/candy/plugin-migrate"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +12,7 @@ import (
 
 // node-form fixture: a group iterate bed with flat pod: steps (bare + dotted) and
 // a workload cross bed with on:-driver steps + PEER_* address vars — the exact
-// pre-cutover shapes MigrateStepVenue rewrites.
+// pre-cutover shapes migrate.MigrateStepVenue rewrites.
 const stepVenueFixture = `version: 2026.169.0002
 default:
     bundle:
@@ -74,8 +75,8 @@ func marshalDoc(t *testing.T, n *yaml.Node) string {
 
 func TestMigrateStepVenue_FlatToTree(t *testing.T) {
 	doc := parseDoc(t, stepVenueFixture)
-	if !stepVenueDoc(doc) {
-		t.Fatalf("stepVenueDoc reported no change on a config with pod:/on: steps")
+	if !migrate.StepVenueDoc(doc) {
+		t.Fatalf("migrate.StepVenueDoc reported no change on a config with pod:/on: steps")
 	}
 	out := marshalDoc(t, doc)
 
@@ -107,11 +108,11 @@ func TestMigrateStepVenue_FlatToTree(t *testing.T) {
 	// step-venue runs BEFORE edge-inherit in the chain; apply edge-inherit in-memory
 	// so the intermediate bundle:-form deploys become loadable substrate-kind nodes
 	// (EDGE-INHERIT cutover B).
-	edgeInheritDoc(doc)
+	migrate.EdgeInheritDoc(doc)
 
 	// Structural: the migrated tree parses node-form AND passes flattenBundleVenues
 	// (no "group has direct steps"), with venues stamped from position.
-	root := rootMappingNode(doc)
+	root := migrate.RootMappingNode(doc)
 	uf := &UnifiedFile{Bundle: map[string]BundleNode{}}
 	for _, name := range []string{"default", "cross"} {
 		entityVal := findMappingValue(root, name)
@@ -152,13 +153,13 @@ func TestMigrateStepVenue_FlatToTree(t *testing.T) {
 
 func TestMigrateStepVenue_Idempotent(t *testing.T) {
 	doc := parseDoc(t, stepVenueFixture)
-	if !stepVenueDoc(doc) {
+	if !migrate.StepVenueDoc(doc) {
 		t.Fatalf("first run reported no change")
 	}
 	first := marshalDoc(t, doc)
 
 	// Second run: no change, byte-identical.
-	if stepVenueDoc(doc) {
+	if migrate.StepVenueDoc(doc) {
 		t.Errorf("second run reported a change — not idempotent")
 	}
 	second := marshalDoc(t, doc)
@@ -169,7 +170,7 @@ func TestMigrateStepVenue_Idempotent(t *testing.T) {
 	// A freshly-parsed already-migrated doc is also a no-op (the persisted form
 	// is stable across a parse→migrate cycle).
 	doc2 := parseDoc(t, first)
-	if stepVenueDoc(doc2) {
+	if migrate.StepVenueDoc(doc2) {
 		t.Errorf("migrating an already-migrated doc reported a change")
 	}
 }
@@ -193,7 +194,7 @@ mybed:
 	if err := os.WriteFile(filepath.Join(dir, "charly.yml"), []byte(doc), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := MigrateStepVenue(dir, true)
+	_, err := migrate.MigrateStepVenue(dir, true)
 	if err == nil {
 		t.Fatalf("expected a hard error for the reserved-keyword venue %q, got nil", "k8s")
 	}

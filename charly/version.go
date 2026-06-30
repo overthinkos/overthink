@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
+
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 )
 
 // BuildCalVer is the CalVer build identity of THIS binary, injected at compile
@@ -91,64 +92,23 @@ func ComputeCalVerAt(t time.Time) string {
 	return fmt.Sprintf("%04d.%03d.%04d", year, dayOfYear, hhmm)
 }
 
-// CalVer is a parsed YYYY.DDD.HHMM calendar version. The same format that
-// ComputeCalVer emits for image tags is, since the 2026-05 schema-versioning
-// cutover, the schema-version stamp carried by every versioned YAML config.
-// The migration chain (migrate_registry.go) is ordered by CalVer, and the
-// load-time gate compares a file's CalVer against LatestSchemaVersion.
-type CalVer struct {
-	Year int // calendar year (e.g. 2026)
-	Day  int // day of year, 1-366
-	HHMM int // hour*100 + minute, 0-2359
-}
+// CalVer is the parsed YYYY.DDD.HHMM calendar version. Since the 2026-06 C13a
+// cutover that externalized the migrate chain into candy/plugin-migrate, the
+// parsed type + its parser live in charly/plugin/kit so BOTH core (the loader
+// version gate) and the candy (the migration chain) import the ONE copy; these
+// zero-churn aliases keep every core call site unchanged. (The struct is kept out
+// of spec because spec already binds `CalVer = string`, the CUE wire scalar.)
+type CalVer = kit.CalVer
 
-// ParseCalVer parses the CANONICAL CalVer string "YYYY.DDD.HHMM" — exactly a
-// 4-digit year, a 3-digit zero-padded day-of-year, and a 4-digit zero-padded
-// HHMM, separated by dots. It is EXTREMELY STRICT and has NO backward
-// compatibility: every component must be the exact width, pure ASCII digits
-// (no sign, no inner whitespace), within range (day 1-366, hour 0-23, minute
-// 0-59). Anything else — the legacy integer "4", a non-padded "2026.45.830",
-// an empty string, junk — returns ok=false. (Surrounding whitespace, a
-// transport artifact of e.g. a `charly version` trailing newline, is trimmed
-// before the format check.)
-//
-// A false result is exactly what the schema gate and migration runner treat as
-// "older than every real CalVer", so a non-canonical config flows into
-// `charly migrate` and is re-stamped canonical — one clean migration forward.
-//
-// Because the canonical form is fixed-width zero-padded, a plain alphanumeric
-// (lexicographic) sort of CalVer strings is chronological (see CalVer.Less).
-func ParseCalVer(s string) (CalVer, bool) {
-	parts := strings.Split(strings.TrimSpace(s), ".")
-	if len(parts) != 3 {
-		return CalVer{}, false
-	}
-	if len(parts[0]) != 4 || len(parts[1]) != 3 || len(parts[2]) != 4 {
-		return CalVer{}, false
-	}
-	if !allDigits(parts[0]) || !allDigits(parts[1]) || !allDigits(parts[2]) {
-		return CalVer{}, false
-	}
-	year, _ := strconv.Atoi(parts[0])
-	day, _ := strconv.Atoi(parts[1])
-	hhmm, _ := strconv.Atoi(parts[2])
-	if year < 1970 || day < 1 || day > 366 || hhmm/100 > 23 || hhmm%100 > 59 {
-		return CalVer{}, false
-	}
-	return CalVer{Year: year, Day: day, HHMM: hhmm}, true
-}
+// ParseCalVer is the strict canonical "YYYY.DDD.HHMM" parser (see kit.ParseCalVer):
+// a non-canonical value parses as ok=false, which the schema gate and migration
+// runner treat as "older than every real CalVer".
+var ParseCalVer = kit.ParseCalVer
 
-// String renders the canonical CalVer "YYYY.DDD.HHMM" — 4-digit year, 3-digit
-// zero-padded day, 4-digit zero-padded HHMM. This is the ONLY form ParseCalVer
-// accepts, so String∘Parse is the identity and a plain alphanumeric sort of
-// these strings is chronological.
-func (c CalVer) String() string {
-	return fmt.Sprintf("%04d.%03d.%04d", c.Year, c.Day, c.HHMM)
-}
-
-// Less reports whether c is chronologically before o. Because the canonical
-// string form is fixed-width zero-padded, chronological order IS lexicographic
-// order, so this is a plain string comparison.
-func (c CalVer) Less(o CalVer) bool {
-	return c.String() < o.String()
+// LatestSchemaVersion is the HEAD schema CalVer — the curated constant every
+// versioned file is stamped to and the value the load-time gate requires. The
+// authoritative value lives in kit (shared with the candy's migration registry,
+// whose calver-schema step stamps to it); this is the in-core shim.
+func LatestSchemaVersion() CalVer {
+	return kit.LatestSchemaVersion()
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	migrate "github.com/overthinkos/overthink/candy/plugin-migrate"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -23,7 +24,7 @@ func TestInstallStrategyKey_MatchesStructTag(t *testing.T) {
 	}
 }
 
-// MigrateInstallStrategyKey renames the legacy per-host overlay vm_state key
+// migrate.MigrateInstallStrategyKey renames the legacy per-host overlay vm_state key
 // ov_install_strategy → charly_install_strategy and is idempotent. The overlay
 // (node-form by this point in the chain) carries the key under <name>.vm_state.
 func TestMigrateInstallStrategyKey_HostOverlay(t *testing.T) {
@@ -42,7 +43,7 @@ vm:arch:
 	}
 	ctx := &MigrateContext{Dir: dir, HostDeployPath: overlay}
 
-	changed, err := MigrateInstallStrategyKey(ctx)
+	changed, err := migrate.MigrateInstallStrategyKey(ctx)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -58,7 +59,7 @@ vm:arch:
 	}
 
 	// Idempotent: a second run is a no-op.
-	changed, err = MigrateInstallStrategyKey(ctx)
+	changed, err = migrate.MigrateInstallStrategyKey(ctx)
 	if err != nil {
 		t.Fatalf("second run: %v", err)
 	}
@@ -78,7 +79,7 @@ func TestMigrateInstallStrategyKey_HostSelfGate(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := &MigrateContext{Dir: dir, HostDeployPath: ""} // project-only mode
-	changed, err := MigrateInstallStrategyKey(ctx)
+	changed, err := migrate.MigrateInstallStrategyKey(ctx)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

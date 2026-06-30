@@ -30,6 +30,8 @@ import (
 	"time"
 
 	"context"
+
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 )
 
 // LedgerPaths describes where ledger files live on disk. Extracted so
@@ -160,7 +162,9 @@ type StepRecord struct {
 // project HEAD must NOT invalidate the ledger gate. Every record written
 // carries it; the read path rejects a record without it (a pre-cutover record
 // whose json:"layer" key would silently unmarshal to an empty Candy).
-const ledgerSchemaVersion = "2026.161.1649"
+// The value lives in kit (shared with candy/plugin-migrate's ledger-candy-keys
+// migrator, a separate module); this is the in-core alias.
+const ledgerSchemaVersion = kit.LedgerSchemaVersion
 
 func WriteDeployRecord(paths *LedgerPaths, rec *DeployRecord) error {
 	if err := paths.Ensure(); err != nil {

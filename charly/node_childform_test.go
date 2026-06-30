@@ -1,6 +1,7 @@
 package main
 
 import (
+	migrate "github.com/overthinkos/overthink/candy/plugin-migrate"
 	"strings"
 	"testing"
 
@@ -21,7 +22,7 @@ func parseDocNodes(t *testing.T, legacy string) []*genericNode {
 	if err := yaml.Unmarshal([]byte(legacy), &doc); err != nil {
 		t.Fatalf("yaml: %v", err)
 	}
-	migrateUnifiedNodeDoc(&doc)
+	migrate.MigrateUnifiedNodeDoc(&doc)
 	_, nodes, err := parseNodeTree(&doc)
 	if err != nil {
 		t.Fatalf("parseNodeTree: %v", err)
@@ -89,11 +90,11 @@ func TestChildForm_UniqueChildName(t *testing.T) {
 	if err := yaml.Unmarshal([]byte(legacy), &doc); err != nil {
 		t.Fatal(err)
 	}
-	migrateUnifiedNodeDoc(&doc)
+	migrate.MigrateUnifiedNodeDoc(&doc)
 	// The migrated node must have NO duplicate top-level child key, AND must parse
 	// + assemble cleanly (a collision merged the list `package` with the scalar
 	// probe `package` → a decode conflict).
-	root := rootMappingNode(&doc)
+	root := migrate.RootMappingNode(&doc)
 	nodeContent := root.Content[1] // redis/nodejs node value
 	seen := map[string]bool{}
 	for i := 0; i+1 < len(nodeContent.Content); i += 2 {

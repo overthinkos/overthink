@@ -523,40 +523,6 @@ func LoadBundleConfig() (*BundleConfig, error) {
 	return &BundleConfig{}, nil
 }
 
-// hasLegacyImagesKey reports whether the raw YAML body has a top-level
-// `images:` key — the legacy pre-2026-04 root shape — instead of the modern
-// `deploy:` map. The detection is structural (yaml.v3 Node walk on root-
-// level mapping nodes) rather than line-oriented to avoid false positives on
-// nested `images:` fields inside test fixtures or comment text.
-func hasLegacyImagesKey(data []byte) bool {
-	var root yaml.Node
-	if err := yaml.Unmarshal(data, &root); err != nil {
-		return false
-	}
-	if root.Kind != yaml.DocumentNode || len(root.Content) == 0 {
-		return false
-	}
-	mapping := root.Content[0]
-	if mapping.Kind != yaml.MappingNode {
-		return false
-	}
-	hasImages := false
-	hasDeploy := false
-	for i := 0; i+1 < len(mapping.Content); i += 2 {
-		key := mapping.Content[i]
-		if key.Kind != yaml.ScalarNode {
-			continue
-		}
-		switch key.Value {
-		case "images":
-			hasImages = true
-		case "deploy":
-			hasDeploy = true
-		}
-	}
-	return hasImages && !hasDeploy
-}
-
 // OccupiedHostPorts returns the set of host ports already published by
 // any deployment in dc except the named one (`excludeKey` is typically
 // the deploy key for the entry currently being expanded — we want to

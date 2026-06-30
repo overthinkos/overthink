@@ -1,6 +1,7 @@
 package main
 
 import (
+	migrate "github.com/overthinkos/overthink/candy/plugin-migrate"
 	"strings"
 	"testing"
 )
@@ -126,17 +127,17 @@ include:
   - build.yml
   - image.yml
 `)
-	changed, err := MigrateImportNamespace(dir, false)
+	changed, err := migrate.MigrateImportNamespace(dir, false)
 	if err != nil {
-		t.Fatalf("MigrateImportNamespace: %v", err)
+		t.Fatalf("migrate.MigrateImportNamespace: %v", err)
 	}
 	if len(changed) != 1 || changed[0] != "overthink.yml" {
 		t.Errorf("changed = %v, want [overthink.yml]", changed)
 	}
 	// Idempotent: a second run is a no-op.
-	changed2, err := MigrateImportNamespace(dir, false)
+	changed2, err := migrate.MigrateImportNamespace(dir, false)
 	if err != nil {
-		t.Fatalf("MigrateImportNamespace (2nd): %v", err)
+		t.Fatalf("migrate.MigrateImportNamespace (2nd): %v", err)
 	}
 	if len(changed2) != 0 {
 		t.Errorf("second run changed %v, want no-op", changed2)

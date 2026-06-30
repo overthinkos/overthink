@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	migrate "github.com/overthinkos/overthink/candy/plugin-migrate"
 	"os"
 	"path/filepath"
 	"sort"
@@ -25,7 +26,7 @@ func TestMigrateHostCharlyYml(t *testing.T) {
 	}
 	ctx := &MigrateContext{HostDeployPath: old}
 
-	changed, err := MigrateHostCharlyYml(ctx)
+	changed, err := migrate.MigrateHostCharlyYml(ctx)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -52,7 +53,7 @@ func TestMigrateHostCharlyYml(t *testing.T) {
 	}
 
 	// Idempotency: a second run (now targeting charly.yml) is a no-op.
-	changed2, err := MigrateHostCharlyYml(ctx)
+	changed2, err := migrate.MigrateHostCharlyYml(ctx)
 	if err != nil {
 		t.Fatalf("migrate (2nd): %v", err)
 	}
@@ -61,7 +62,7 @@ func TestMigrateHostCharlyYml(t *testing.T) {
 	}
 
 	// Project-only mode (empty HostDeployPath, remote-cache auto-migration) is a no-op.
-	changed3, err := MigrateHostCharlyYml(&MigrateContext{HostDeployPath: ""})
+	changed3, err := migrate.MigrateHostCharlyYml(&MigrateContext{HostDeployPath: ""})
 	if err != nil || changed3 {
 		t.Errorf("project-only mode should be a no-op, got changed=%v err=%v", changed3, err)
 	}
@@ -71,15 +72,15 @@ func TestMigrateHostCharlyYml(t *testing.T) {
 // so a test can exercise a SPECIFIC slice of the chain — host-affecting steps
 // only — without running steps like charly-rebrand that touch the REAL
 // ~/.config dirs).
-func migrateStepByName(t *testing.T, name string) MigrationStep {
+func migrateStepByName(t *testing.T, name string) migrate.MigrationStep {
 	t.Helper()
-	for _, s := range migrationSteps() {
+	for _, s := range migrate.MigrationSteps() {
 		if s.Name == name {
 			return s
 		}
 	}
 	t.Fatalf("no migration step named %q", name)
-	return MigrationStep{}
+	return migrate.MigrationStep{}
 }
 
 // TestMigrate_HostOverlayConvertsToNodeForm is the regression guard for the

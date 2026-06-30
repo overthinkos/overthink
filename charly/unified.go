@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 	"gopkg.in/yaml.v3"
 )
 
@@ -42,8 +43,10 @@ var namespaceAliasRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 //     (`---` separated) node-form documents work naturally.
 // -----------------------------------------------------------------------------
 
-// UnifiedFileName is the canonical root file of the unified format.
-const UnifiedFileName = "charly.yml"
+// UnifiedFileName is the canonical root file of the unified format. The value
+// lives in kit (shared with candy/plugin-migrate, a separate module); this is the
+// in-core alias so every core call site is unchanged.
+const UnifiedFileName = kit.UnifiedFileName
 
 // The on-disk charly.yml schema version is a CalVer string (e.g.
 // 2026.141.1530) — the same scheme as image tags. LatestSchemaVersion()
@@ -1249,23 +1252,6 @@ const (
 // CUE-single-source cutover. rootShapeKeySet = doc directives ∪ every kind word ∪
 // the legacy {deploy, check} collection-map aliases.
 
-// nodeShapedValue reports whether a top-level entry's VALUE is a unified node-form
-// node body — a mapping carrying a reserved kind discriminator (`<name>: {<kind>:
-// …}`). Used by classifyDoc so a node legitimately NAMED after a kind keyword
-// (`k8s: {box: …}` — a box named `k8s`) classifies as node-form rather than that
-// kind's legacy collection map.
-func nodeShapedValue(val *yaml.Node) bool {
-	if val == nil || val.Kind != yaml.MappingNode {
-		return false
-	}
-	for i := 0; i+1 < len(val.Content); i += 2 {
-		if kindWordSet[val.Content[i].Value] {
-			return true
-		}
-	}
-	return false
-}
-
 // classifyDoc inspects a document's top-level keys and returns its shape. A
 // doc with any root key + any kind key is ambiguous and errors out. Empty
 // documents (scalar null, empty mapping) return docShapeEmpty.
@@ -1365,21 +1351,6 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 // -----------------------------------------------------------------------------
 // Merge helpers.
 // -----------------------------------------------------------------------------
-
-// mapHasKey reports whether a yaml mapping node contains a top-level key.
-// Used by the raw-yaml node-form migrator (migrate_unified_node.go) to detect a
-// legacy single-entity body's `name:` key while rewriting it.
-func mapHasKey(node *yaml.Node, key string) bool {
-	if node == nil || node.Kind != yaml.MappingNode {
-		return false
-	}
-	for i := 0; i < len(node.Content)-1; i += 2 {
-		if node.Content[i].Kind == yaml.ScalarNode && node.Content[i].Value == key {
-			return true
-		}
-	}
-	return false
-}
 
 // normalizeV4Aliases — RETIRED by the field-singular cutover (2026-05).
 // Dual `Images`/`ImageSingular` and `Deploys`/`DeploySingular` fields

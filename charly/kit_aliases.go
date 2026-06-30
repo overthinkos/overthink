@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	migratecandy "github.com/overthinkos/overthink/candy/plugin-migrate"
 	"github.com/overthinkos/overthink/charly/plugin/kit"
 )
 
@@ -21,6 +22,44 @@ var (
 	trimPreview          = kit.TrimPreview
 	wrapContainerCommand = kit.WrapContainerCommand
 )
+
+// --- C13a: helpers shared with the compiled-in candy/plugin-migrate (the migrate
+// chain moved out of core; these helpers stayed shared, so they live ONCE in kit). ---
+var (
+	fileExists                 = kit.FileExists
+	dirExists                  = kit.DirExists
+	sortStrings                = kit.SortStrings
+	firstNonEmpty              = kit.FirstNonEmpty
+	mapHasKey                  = kit.MapHasKey
+	mapValue                   = kit.MapValue
+	nodeShapedValue            = kit.NodeShapedValue
+	firstYAMLVersionLine       = kit.FirstYAMLVersionLine
+	isGitSubmoduleDir          = kit.IsGitSubmoduleDir
+	hasLegacyImagesKey         = kit.HasLegacyImagesKey
+	stripLegacyOverthinkBlocks = kit.StripLegacyOverthinkBlocks
+	// migrateSkipDir / isNestedGitRepo lived in migrate_walk.go (moved to the candy);
+	// the core legacy-images validator still needs migrateSkipDir, so alias kit's copy.
+	migrateSkipDir  = kit.MigrateSkipDir
+	isNestedGitRepo = kit.IsNestedGitRepo
+
+	scanLegacyLocalImagesInFile    = kit.ScanLegacyLocalImagesInFile
+	rewriteLegacyLocalImagesInFile = kit.RewriteLegacyLocalImagesInFile
+	scalarNode                     = kit.ScalarNode
+	findMappingValue               = kit.FindMappingValue
+	opUnifyCandidateFiles          = kit.OpUnifyCandidateFiles
+)
+
+// migrateDeployEntity is the legacy-body → node-form transform shared by the
+// migrate chain AND core's per-host deploy-state writer (saveDeployState). It lives
+// in the compiled-in candy (alongside its node-form cluster); core reuses the
+// exported entry so the writer can never drift from the migration (C13a).
+var migrateDeployEntity = migratecandy.MigrateDeployEntity
+
+// EnvdDir is exported (used across deploy code); alias the kit copy.
+func EnvdDir(hostHome string) string { return kit.EnvdDir(hostHome) }
+
+// LegacyImagesBlock is the legacy-images scan result type (now in kit).
+type LegacyImagesBlock = kit.LegacyImagesBlock
 
 // --- op→shell render helpers (moved into kit when the local deploy target externalized) ---
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	migrate "github.com/overthinkos/overthink/candy/plugin-migrate"
 	"os"
 	"path/filepath"
 	"strings"
@@ -94,7 +95,7 @@ func TestMigrateSingularLabel(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rewritten, err := MigrateSingularLabel(dir, false)
+	rewritten, err := migrate.MigrateSingularLabel(dir, false)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -110,7 +111,7 @@ func TestMigrateSingularLabel(t *testing.T) {
 	}
 
 	// Idempotency: a second run rewrites nothing.
-	rewritten2, err := MigrateSingularLabel(dir, false)
+	rewritten2, err := migrate.MigrateSingularLabel(dir, false)
 	if err != nil {
 		t.Fatalf("migrate (2nd): %v", err)
 	}

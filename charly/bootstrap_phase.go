@@ -9,9 +9,14 @@ import (
 
 // runBootstrapPhase invokes every PhaseBootstrap provider's OpBootstrap on the raw project config
 // bytes (F9), BEFORE config validation/migration, threading each provider's returned (possibly
-// transformed) bytes to the next — the migrate (M15) enabler: a bootstrap-phase plugin runs before
-// the schema gate accepts the config (migrate rewrites a stale config's raw bytes here; the kernel
-// never needs a validated config to migrate it). LoadUnified seeds the returned bytes into
+// transformed) bytes to the next: a bootstrap-phase plugin runs before the schema gate accepts the
+// config and MAY rewrite the raw root bytes (the kernel never needs a validated config to run a
+// bootstrap transform). Today only the no-op candy/plugin-example-bootstrap registers in this phase
+// (it demonstrates the hook). The migrate chain is NOT a bootstrap plugin: it is verb:migrate over
+// OpRun, invoked explicitly by `charly migrate` + remote-cache auto-migration, and the load gate
+// keeps the `Run: charly migrate` reject for a stale config — the chain is whole-project file-based
+// + host-coupled (it needs host-prelifted inputs from a completed LoadUnified) and so cannot run on
+// the root bytes alone inside this phase. LoadUnified seeds the returned bytes into
 // loadUnifiedInto via the `fileOverrides` map (keyed on the root's abs path), so the rewrite reaches
 // the actual PARSE + the post-merge gate — not just the early version gate. Bootstrap providers are
 // COMPILED-IN (in-proc — no validated config exists yet to discover an out-of-process source), so

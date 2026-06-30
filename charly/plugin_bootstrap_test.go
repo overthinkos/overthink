@@ -82,8 +82,8 @@ func TestBootstrapPhase_ExampleEnumeratedAndNoOp(t *testing.T) {
 }
 
 // zzFakeBootstrapProvider is a test bootstrap provider that TRANSFORMS the config — proving
-// runBootstrapPhase APPLIES a bootstrap plugin's returned bytes (the migrate M15 path), not just
-// the no-op. Unique word so it never collides with a real provider.
+// runBootstrapPhase APPLIES a transforming bootstrap plugin's returned bytes, not just the
+// no-op. Unique word so it never collides with a real provider.
 type zzFakeBootstrapProvider struct{}
 
 func (zzFakeBootstrapProvider) Reserved() string     { return "zzfakebootstrap" }
@@ -98,7 +98,7 @@ func (zzFakeBootstrapProvider) Invoke(_ context.Context, op *Operation) (*Result
 }
 
 // TestBootstrapPhase_TransformApplied proves the bootstrap pre-pass APPLIES a bootstrap plugin's
-// returned (transformed) bytes — the migrate enabler. Uses runBootstrapPhaseWith with a fixed
+// returned (transformed) bytes. Uses runBootstrapPhaseWith with a fixed
 // provider list (NOT the global registry), so the transforming fake cannot pollute the hot-path
 // runBootstrapPhase that every other test's LoadUnified runs.
 func TestBootstrapPhase_TransformApplied(t *testing.T) {

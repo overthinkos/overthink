@@ -6,9 +6,10 @@ plugin-example-bootstrap:
             so the kernel invokes its OpBootstrap on the RAW project config bytes BEFORE config
             validation/migration (runBootstrapPhase, in LoadUnified before the schema gate). This
             no-op returns the bytes UNCHANGED, proving the bootstrap hook fires at the right time;
-            the migrate (M15) bootstrap plugin transforms a stale config's bytes here. Bootstrap
+            a real bootstrap-phase plugin would transform a stale config's bytes here. Bootstrap
             plugins are compiled-in only (no validated config exists yet to discover an
-            out-of-process source); the phase machinery M15/M16 reuse.
+            out-of-process source). This candy is the phase machinery's only consumer today: neither
+            migrate nor egress became a bootstrap plugin (both are verb plugins).
     plugin-example-bootstrap-decl:
         plugin:
             providers:

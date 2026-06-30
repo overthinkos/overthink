@@ -699,11 +699,12 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	// top-level keys (images:/layers:/distros:/... ) in charly.yml.
 	// `charly migrate` rewrites them in-place.
 	// F9 BOOTSTRAP PHASE: invoke bootstrap-phase plugins on the RAW root config bytes FIRST —
-	// before the reject + schema gates AND before the parse — so a bootstrap plugin (migrate) can
-	// rewrite a stale config's bytes, and that rewrite reaches the gates AND the actual PARSE
+	// before the reject + schema gates AND before the parse — so a bootstrap plugin can
+	// rewrite the root bytes, and that rewrite reaches the gates AND the actual PARSE
 	// (loadUnifiedInto reads the transformed bytes via fileOverrides, keyed on the root's abs path,
-	// instead of a stale disk re-read). A no-op bootstrap plugin (or none registered) returns the
-	// bytes unchanged → identity.
+	// instead of a stale disk re-read). Today only the no-op candy/plugin-example-bootstrap registers
+	// here (migrate is NOT a bootstrap plugin — see bootstrap_phase.go); a no-op bootstrap plugin
+	// (or none registered) returns the bytes unchanged → identity.
 	fileOverrides := map[string][]byte{}
 	if rootData, err := os.ReadFile(root); err == nil {
 		rootData = runBootstrapPhase(rootData)
@@ -971,7 +972,7 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 	visited[abs] = true
 
 	// fileOverrides supplies pre-read bytes for a file. The F9 bootstrap phase seeds the
-	// ROOT here with its transformed config bytes, so a bootstrap plugin's rewrite (migrate)
+	// ROOT here with its transformed config bytes, so a bootstrap plugin's rewrite
 	// reaches the actual PARSE + the post-merge gates — not just the early version gate.
 	// Absent → read from disk (every imported/discovered file).
 	data, ok := fileOverrides[abs]

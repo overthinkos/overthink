@@ -2,7 +2,7 @@
 // plugin declaring Phase=="bootstrap", so the kernel invokes its OpBootstrap on the RAW project
 // config bytes BEFORE config validation/migration (runBootstrapPhase, called in LoadUnified before
 // the schema gate). This no-op returns the bytes UNCHANGED — it proves the bootstrap hook fires at
-// the right time without mutating anything; the migrate (M15) bootstrap plugin would transform a
+// the right time without mutating anything; a real bootstrap-phase plugin would transform a
 // stale config's bytes here. Bootstrap plugins are COMPILED-IN only (no validated config exists yet
 // to discover an out-of-process source), so this connects in-proc with no LoadUnified re-entry. The
 // bootstrap-phase analogue of the verb-class candy/plugin-example-external.
@@ -32,7 +32,7 @@ func NewMeta() pb.PluginMetaServer { return &meta{} }
 type provider struct{ pb.UnimplementedProviderServer }
 
 // Invoke handles OpBootstrap: the kernel passes the raw project config bytes ({"config": …}); this
-// NO-OP returns them UNCHANGED ({"config": <same>}). A real bootstrap plugin (migrate) would return
+// NO-OP returns them UNCHANGED ({"config": <same>}). A real bootstrap plugin would return
 // transformed bytes the kernel applies before the schema gate.
 func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeReply, error) {
 	if req.GetOp() != sdk.OpBootstrap {

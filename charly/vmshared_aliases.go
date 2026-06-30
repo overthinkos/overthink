@@ -123,9 +123,6 @@ var readinessResolve = vmshared.ResolveReadiness
 var (
 	allDigits                   = vmshared.AllDigits
 	CompareGlibc                = vmshared.CompareGlibc
-	composePackages             = vmshared.ComposePackages
-	composeRunCmd               = vmshared.ComposeRunCmd
-	composeUsers                = vmshared.ComposeUsers
 	CreateSnapshot              = vmshared.CreateSnapshot
 	currentUsername             = vmshared.CurrentUsername
 	DecrementSnapshotRefcount   = vmshared.DecrementSnapshotRefcount
@@ -139,8 +136,6 @@ var (
 	formatForDistroID           = vmshared.FormatForDistroID
 	IncrementSnapshotRefcount   = vmshared.IncrementSnapshotRefcount
 	InstallSignalHandler        = vmshared.InstallSignalHandler
-	KeyToRootTmpfilesD          = vmshared.KeyToRootTmpfilesD
-	KeyToUserTmpfilesD          = vmshared.KeyToUserTmpfilesD
 	ListSnapshots               = vmshared.ListSnapshots
 	loadRegistry                = vmshared.LoadRegistry
 	LookupSnapshot              = vmshared.LookupSnapshot
@@ -162,7 +157,6 @@ var (
 	ResolveOvmfPaths            = vmshared.ResolveOvmfPaths
 	RevertSnapshot              = vmshared.RevertSnapshot
 	saveRegistry                = vmshared.SaveRegistry
-	SmbiosCredForRootSSH        = vmshared.SmbiosCredForRootSSH
 	SmbiosCredForSSH            = vmshared.SmbiosCredForSSH
 	snapshotsDir                = vmshared.SnapshotsDir
 	splitOsReleaseLine          = vmshared.SplitOsReleaseLine

@@ -2,6 +2,11 @@ package main
 
 import "testing"
 
+// testPubKey is the SSH test pubkey for the cloud-init egress render test
+// (TestRenderCloudInit_OutputValidatesAgainstSchema). Formerly shared from
+// cloud_init_render_test.go, which relocated to charly/vmshared/.
+const testPubKey = "ssh-ed25519 AAAATESTKEY user@host"
+
 // Egress-validation coverage. The teeth tests (the *BadFails cases) are the ones
 // that would PASS — wrongly — if the egress gate did not exist: they assert that
 // a malformed artifact is REJECTED before it could ever be written.

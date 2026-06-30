@@ -25,32 +25,17 @@ type CheckEnv struct {
 	Distros       []string `json:"distros"`
 	Venue         string   `json:"venue"`      // r.Exec.Venue()
 	VenueKind     string   `json:"venue_kind"` // r.Exec.Kind()
-	// Spice carries the host-resolved, dialable SPICE endpoint for a `spice:` verb
-	// (the out-of-process candy/plugin-spice provider owns no go-libvirt). nil for
-	// every non-spice verb and for a spice op with no resolved VM endpoint. Set by
-	// invokeVerbProvider from preresolveSpiceEndpoint (spice_preresolve.go).
-	Spice *SpiceEnv `json:"spice,omitempty"`
-	// Mcp carries the host-resolved MCP context for a `mcp:` verb (the out-of-process
-	// candy/plugin-mcp provider owns no podman / OCI-label machinery): the declared-server
-	// list (for `servers`) plus the single picked, host-routable dial endpoint (for every
-	// other method). nil for every non-mcp verb. Set by invokeVerbProvider from
-	// preresolveMcpEndpoint (mcp_preresolve.go).
-	Mcp *McpEnv `json:"mcp,omitempty"`
-	// Cdp carries the host-resolved, dialable Chrome DevTools endpoint for a `cdp:` verb
-	// (the out-of-process candy/plugin-cdp provider owns no podman / venue-resolution
-	// machinery): the host-reachable DevTools base URL the plugin dials for the HTTP
-	// (/json) + WebSocket (CDP) surface. nil for every non-cdp verb and for a cdp op with
-	// no resolved endpoint. Set by invokeVerbProvider from preresolveCdpEndpoint
-	// (cdp_preresolve.go).
-	Cdp *CdpEnv `json:"cdp,omitempty"`
-	// Vnc carries the host-resolved, dialable RFB endpoint for a `vnc:` verb (the
-	// out-of-process candy/plugin-vnc provider owns no podman / venue / go-libvirt
-	// machinery): the host-reachable "host:port" the plugin dials over TCP (a container's
-	// published port 5900, or a VM's libvirt-discovered <graphics type='vnc'> listener
-	// bridged/tunneled to a local address) plus the resolved VNC password. nil for every
-	// non-vnc verb and for a vnc op with no resolved endpoint. Set by invokeVerbProvider
-	// from preresolveVncEndpoint (vnc_preresolve.go).
-	Vnc *VncEnv `json:"vnc,omitempty"`
+	// Substrate carries the host-resolved, OPAQUE preresolution payload for a verb
+	// whose plugin needs a host-computed input it cannot derive across the process
+	// boundary — a cdp/vnc/mcp/spice dialable endpoint (resolved from podman / venue /
+	// go-libvirt machinery the out-of-process plugin owns none of). It is filled by the
+	// verb's registered preresolver (verb_preresolve.go) keyed on the verb word, and
+	// decoded by the matching plugin into its own endpoint type. nil for any verb with no
+	// registered preresolver (wl/dbus/record/adb/appium/…) and for an op whose preresolver
+	// resolved nothing. This is the check-verb analogue of DeployVenue.Substrate — ONE
+	// generic, opaque, per-plugin channel, never a per-verb typed field (the Uniform API
+	// Invariant): adding a host-resolved verb adds a preresolver, not a CheckEnv field.
+	Substrate json.RawMessage `json:"substrate,omitempty"`
 }
 
 func runModeName(m RunMode) string {
@@ -206,48 +191,27 @@ func (r *Runner) invokeVerbProvider(ctx context.Context, prov Provider, word str
 			c = &cc
 		}
 	}
-	// Pre-resolve a `kube:` op's `cluster: <profile>` to a concrete kubeconfig context
-	// host-side — an out-of-process kube verb cannot reach core's project loader
-	// (findK8sSpec) to map a ClusterProfile name to a context. Copy-on-write, like the
-	// apk path above; a no-op for every non-kube verb.
-	c = preresolveKubeCluster(c)
-	// Pre-resolve a `spice:` op's VM (r.Box) to a dialable SPICE endpoint host-side — an
-	// out-of-process spice verb owns no go-libvirt. A no-op for every non-spice verb;
-	// for a spice op it may short-circuit with a SKIP (no SPICE device) / FAIL
-	// (resolution error). The cleanup tears down any opened SSH tunnel AFTER Invoke.
-	spiceEnv, spiceCleanup, spiceEarly := r.preresolveSpiceEndpoint(c)
-	defer spiceCleanup()
-	if spiceEarly != nil {
-		return *spiceEarly
-	}
-	// Pre-resolve a `mcp:` op's deployment (r.Box) to the declared-server list + the
-	// picked, host-routable dial endpoint — an out-of-process mcp verb owns no podman /
-	// OCI-label machinery. A no-op for every non-mcp verb; for a mcp op it may
-	// short-circuit with a FAIL (no mcp_provides / resolution error).
-	mcpEnv, mcpEarly := r.preresolveMcpEndpoint(c)
-	if mcpEarly != nil {
-		return *mcpEarly
-	}
-	// Pre-resolve a `cdp:` op's deployment (r.Box) to the host-reachable Chrome DevTools
-	// base URL — an out-of-process cdp verb owns no venue/port-mapping machinery. A no-op
-	// for every non-cdp verb; for a cdp op it may short-circuit with a FAIL (endpoint
-	// resolution error). The cleanup tears down any opened SSH forward AFTER Invoke (the
-	// forward carries the live CDP HTTP/WebSocket connection), so defer it across Invoke.
-	cdpEnv, cdpCleanup, cdpEarly := r.preresolveCdpEndpoint(c)
-	defer cdpCleanup()
-	if cdpEarly != nil {
-		return *cdpEarly
-	}
-	// Pre-resolve a `vnc:` op's deployment (r.Box) to the host-reachable RFB address — an
-	// out-of-process vnc verb owns no venue/port-mapping/libvirt machinery. A no-op for
-	// every non-vnc verb; for a vnc op it may short-circuit with a SKIP (VM declares no
-	// VNC display device) / FAIL (endpoint resolution error). The cleanup tears down any
-	// opened ssh forward / bridge listener / SSH tunnel AFTER Invoke (it carries the live
-	// RFB connection), so defer it across Invoke.
-	vncEnv, vncCleanup, vncEarly := r.preresolveVncEndpoint(c)
-	defer vncCleanup()
-	if vncEarly != nil {
-		return *vncEarly
+	// Host-side per-verb preresolution via the GENERIC registry — no per-verb
+	// special-casing in this dispatch (the Uniform API Invariant). The preresolver
+	// registered under this verb word runs: cdp/vnc/mcp/spice fill an opaque endpoint
+	// Substrate (→ CheckEnv.Substrate, decoded by the matching plugin); kube rewrites the
+	// op's KubeContext (carried in params). A verb with no registered preresolver
+	// (wl/dbus/record/adb/appium/…) is a no-op. The preresolver may short-circuit (early
+	// SKIP/FAIL) or open a tunnel/forward whose cleanup defers across Invoke (it carries
+	// the live connection).
+	var substrate json.RawMessage
+	if pre, ok := verbPreresolverFor(word); ok {
+		sub, opOut, cleanup, early := pre(r, c)
+		if cleanup != nil {
+			defer cleanup()
+		}
+		if early != nil {
+			return *early
+		}
+		if opOut != nil {
+			c = opOut
+		}
+		substrate = sub
 	}
 	params, err := marshalJSON(c)
 	if err != nil {
@@ -256,10 +220,7 @@ func (r *Runner) invokeVerbProvider(ctx context.Context, prov Provider, word str
 		return res
 	}
 	ce := snapshotCheckEnv(r, c)
-	ce.Spice = spiceEnv
-	ce.Mcp = mcpEnv
-	ce.Cdp = cdpEnv
-	ce.Vnc = vncEnv
+	ce.Substrate = substrate
 	env, err := marshalJSON(ce)
 	if err != nil {
 		res.Status = TestFail

@@ -50,7 +50,7 @@ type cdpEndpoint struct {
 type cdpEnv struct {
 	Box  string       `json:"box"`
 	Mode string       `json:"mode"` // "live" | "box"
-	Cdp  *cdpEndpoint `json:"cdp"`
+	Substrate json.RawMessage `json:"substrate"`
 }
 
 type provider struct{ pb.UnimplementedProviderServer }
@@ -70,6 +70,16 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	if len(req.GetEnvJson()) > 0 {
 		_ = json.Unmarshal(req.GetEnvJson(), &env)
 	}
+	// The host's verb preresolver ships the dialable DevTools endpoint in the opaque
+	// CheckEnv.Substrate (the generic per-verb channel that replaced the typed
+	// CheckEnv.Cdp field); decode it into the plugin's own endpoint type.
+	var ep *cdpEndpoint
+	if len(env.Substrate) > 0 {
+		var e cdpEndpoint
+		if err := json.Unmarshal(env.Substrate, &e); err == nil {
+			ep = &e
+		}
+	}
 	method := string(op.Cdp)
 
 	// Live-deployment verb: skip under `charly check box` (no running Chrome DevTools
@@ -80,11 +90,11 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	// No endpoint resolved → skip. The host already FAILs the resolution-error case before
 	// dispatch, so a nil endpoint here means no live deployment context at all (the
 	// analogue of the host's empty-box skip).
-	if env.Cdp == nil {
+	if ep == nil {
 		return resultJSON("skip", fmt.Sprintf("cdp: %s has no resolved DevTools endpoint (box=%q)", method, env.Box))
 	}
 
-	out, runErr := dispatch(env.Cdp, &op)
+	out, runErr := dispatch(ep, &op)
 
 	// Exit semantics: the in-tree CLI mapped a Run() error → exit 1, success → exit 0; the
 	// host compared that against the authored exit_status (default 0).

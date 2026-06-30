@@ -382,7 +382,15 @@ func checkLocalTarget(uf *UnifiedFile, name string) (BundleNode, bool) {
 	if idx := strings.Index(name, "."); idx > 0 {
 		root = name[:idx]
 	}
-	if entry, present := uf.Bundle[root]; present && (entry.Target == "local" || isExternalDeploySubstrate(entry.Target)) {
+	// `pod` is an external deploy substrate, but UNLIKE local/android/k8s its check
+	// venue is the running CONTAINER (published ports), not the host — a cdp/vnc/spice
+	// endpoint or a command/file probe against a pod must resolve the container venue
+	// (the default path in resolveCheckVenue), never the host venue (which would dial the
+	// raw container port on host loopback). So pod is NOT host-routed here, regardless of
+	// being a recognized external substrate. (Masked while pod beds used fixed ports
+	// H:C==9222:9222; surfaced once they moved to auto-allocated host ports.)
+	if entry, present := uf.Bundle[root]; present && entry.Target != "pod" &&
+		(entry.Target == "local" || isExternalDeploySubstrate(entry.Target)) {
 		return entry, true
 	}
 	return BundleNode{}, false

@@ -18,7 +18,7 @@ package main
 // endpoint-resolution helpers remain host-side (no WebSocket, just HTTP-port resolution).
 
 // CdpEnv is the host-resolved, DIALABLE Chrome DevTools endpoint shipped to the
-// out-of-process candy/plugin-cdp provider via CheckEnv.Cdp. URL is the host-reachable
+// out-of-process candy/plugin-cdp provider via CheckEnv.Substrate. URL is the host-reachable
 // DevTools base URL ("http://127.0.0.1:NNNN") that maps to the in-venue CDP port 9222 —
 // a container published-port mapping, or a forwarded local address for a VM/ssh venue.
 // The plugin just dials it (the /json HTTP surface + the per-tab CDP WebSocket); it

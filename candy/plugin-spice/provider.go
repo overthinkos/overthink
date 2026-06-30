@@ -52,7 +52,7 @@ type spiceEndpoint struct {
 type spiceEnv struct {
 	Box   string         `json:"box"`
 	Mode  string         `json:"mode"` // "live" | "box"
-	Spice *spiceEndpoint `json:"spice"`
+	Substrate json.RawMessage `json:"substrate"`
 }
 
 type provider struct{ pb.UnimplementedProviderServer }
@@ -72,6 +72,16 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	if len(req.GetEnvJson()) > 0 {
 		_ = json.Unmarshal(req.GetEnvJson(), &env)
 	}
+	// The host's verb preresolver ships the dialable SPICE endpoint in the opaque
+	// CheckEnv.Substrate (the generic per-verb channel that replaced the typed
+	// CheckEnv.Spice field); decode it into the plugin's own endpoint type.
+	var ep *spiceEndpoint
+	if len(env.Substrate) > 0 {
+		var e spiceEndpoint
+		if err := json.Unmarshal(env.Substrate, &e); err == nil {
+			ep = &e
+		}
+	}
 	method := string(op.Spice)
 
 	// Live-VM verb: skip under `charly check box` (no running VM SPICE endpoint on a
@@ -83,11 +93,11 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	// declares no SPICE device" case (returning the N/A result before dispatch), so a
 	// nil endpoint here means no VM context at all (the analogue of the host's
 	// empty-box skip).
-	if env.Spice == nil {
+	if ep == nil {
 		return resultJSON("skip", fmt.Sprintf("spice: %s has no VM SPICE endpoint (box=%q)", method, env.Box))
 	}
 
-	s, dialErr := dialEndpoint(env.Spice)
+	s, dialErr := dialEndpoint(ep)
 	if dialErr != nil {
 		return resultJSON("fail", fmt.Sprintf("spice: %s: %v", method, dialErr))
 	}

@@ -19,7 +19,7 @@ import (
 // core's podman engine / project loader, so the host pre-resolves before marshaling.
 
 // McpEnv is the host-resolved MCP check context shipped to the out-of-process
-// candy/plugin-mcp provider via CheckEnv.Mcp. It carries BOTH halves the verb needs:
+// candy/plugin-mcp provider via CheckEnv.Substrate. It carries BOTH halves the verb needs:
 //
 //   - Entries: every resolved mcp_provides entry, for the metadata-only `servers`
 //     method (it lists declared servers and never dials).

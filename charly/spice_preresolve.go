@@ -18,7 +18,7 @@ import (
 // core's project loader / libvirt, so the host pre-resolves before marshaling.
 
 // SpiceEnv is the host-resolved, DIALABLE SPICE endpoint shipped to the
-// out-of-process candy/plugin-spice provider via CheckEnv.Spice. Exactly one of
+// out-of-process candy/plugin-spice provider via CheckEnv.Substrate. Exactly one of
 // Socket / Address is set — the host prefers the UNIX socket (the charly-managed-VM
 // default after the socket-listen cutover); for a remote qemu+ssh:// VM it opens the
 // side tunnel and fills the FORWARDED local address. The plugin just dials this.

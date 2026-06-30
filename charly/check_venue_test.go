@@ -81,6 +81,31 @@ func TestCheckLocalTargetNilUF(t *testing.T) {
 	}
 }
 
+// TestCheckLocalTarget_PodNotHostRoutedWhenExternal proves a `pod` deploy is NEVER
+// host-routed for check-verb venue resolution even once pod is a RECOGNIZED external
+// deploy substrate at runtime (the unit test above doesn't register it, so it can't
+// catch this). Regression from commit 7a38cc3a: isExternalDeploySubstrate("pod")
+// became true when pod externalized, so checkLocalTarget classified a pod as a HOST
+// venue → resolveCheckVenue returned Kind=host → resolveCheckEndpoint returned the raw
+// container port (e.g. 127.0.0.1:9222), so cdp/vnc/spice dialed the container port on
+// host loopback instead of the published host port. Masked while pod beds used fixed
+// H:C==9222:9222 ports; surfaced with auto-allocated host ports. Without the
+// `entry.Target != "pod"` guard in checkLocalTarget this FAILS.
+func TestCheckLocalTarget_PodNotHostRoutedWhenExternal(t *testing.T) {
+	registerDeclaredDeploySubstrate("pod")
+	t.Cleanup(func() {
+		declaredDeployMu.Lock()
+		delete(declaredDeploySubstrate, "pod")
+		declaredDeployMu.Unlock()
+	})
+	if !isExternalDeploySubstrate("pod") {
+		t.Fatal("setup: pod should be a recognized external substrate after registration")
+	}
+	if _, ok := checkLocalTarget(newVenueTestUF(), "web-pod"); ok {
+		t.Fatal("checkLocalTarget(web-pod) = true; a pod has a CONTAINER venue (published ports) and must NOT be host-routed")
+	}
+}
+
 // TestParsePublishedPort covers parsePublishedPort, the shared host "ip:port"
 // normalizer behind containerPublishedAddr (the port-protocol verbs' venue
 // resolution). It moved here from vnc_test.go when the vnc verb externalized.

@@ -29,7 +29,7 @@ import (
 // container path + `charly check vnc vm` path did.
 
 // VncEnv is the host-resolved, DIALABLE RFB endpoint shipped to the out-of-process
-// candy/plugin-vnc provider via CheckEnv.Vnc. Addr is the host-reachable "host:port"
+// candy/plugin-vnc provider via CheckEnv.Substrate. Addr is the host-reachable "host:port"
 // the plugin dials over TCP (a container's published 5900, or a VM's bridged/forwarded
 // RFB address); Password is the resolved VNC ticket ("" = no auth / VeNCrypt-None). The
 // plugin just dials this; it needs no podman, no venue resolution, no libvirt.

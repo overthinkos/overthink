@@ -148,10 +148,12 @@ func syncCredentialsToVM(ctx context.Context, vmName string, mounts []Credential
 			}
 			return fmt.Errorf("credential src %q unreadable: %w", srcAbs, err)
 		}
-		dst := m.Dst
-		cpCmd := exec.CommandContext(ctx, "charly", "vm", "scp", vmName, srcAbs, dst)
-		if out, err := cpCmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("charly vm scp %q -> %s:%q: %w\n%s", m.Src, vmName, dst, err, string(out))
+		// scpToVm (vm_scp.go) — the same host→guest single-file copy primitive
+		// the `charly vm scp` subcommand uses (R3): resolves the managed
+		// charly-<name> ssh alias, the guest $HOME for a leading ~ in dst, and
+		// delivers the file USER-owned via SSHExecutor.PutFile.
+		if err := scpToVm(ctx, vmName, srcAbs, m.Dst, m.Mode); err != nil {
+			return fmt.Errorf("credential %q: %w", m.Src, err)
 		}
 	}
 	return nil

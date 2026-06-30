@@ -33,6 +33,7 @@ type VmCmd struct {
 	Gpu      VmGpuCmd      `cmd:"" help:"Inspect host VFIO/GPU-passthrough readiness (status, list)"`
 	Import   VmImportCmd   `cmd:"" help:"Adopt an existing libvirt-managed VM into charly configuration"`
 	List     VmListCmd     `cmd:"" help:"List VMs and their status"`
+	Scp      VmScpCmd      `cmd:"" help:"Copy a local file into a running VM guest over SSH"`
 	Snapshot VmSnapshotCmd `cmd:"" help:"Manage VM snapshots (create, list, delete, revert, promote)"`
 	Ssh      VmSshCmd      `cmd:"" help:"SSH into a VM"`
 	Start    VmStartCmd    `cmd:"" help:"Start a VM"`

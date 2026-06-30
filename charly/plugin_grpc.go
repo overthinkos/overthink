@@ -120,13 +120,23 @@ func describe(ctx context.Context, conn *sdk.Conn) (*pb.Capabilities, error) {
 // grpcProvider is a Provider backed by a remote plugin over gRPC — the
 // out-of-process peer of a built-in. Call sites never distinguish the two.
 type grpcProvider struct {
-	conn  *sdk.Conn
-	class ProviderClass
-	word  string
+	conn     *sdk.Conn
+	class    ProviderClass
+	word     string
+	contract *stepContract // set ONLY for a class:step capability declaring a StepContract (F3); nil otherwise
 }
 
 func (g *grpcProvider) Reserved() string     { return g.word }
 func (g *grpcProvider) Class() ProviderClass { return g.class }
+
+// declaredStepContract implements stepContractCarrier — a class:step provider's plugin-declared
+// Scope/Venue/Gate (F3), nil/false for every other capability.
+func (g *grpcProvider) declaredStepContract() (stepContract, bool) {
+	if g.contract == nil {
+		return stepContract{}, false
+	}
+	return *g.contract, true
+}
 func (g *grpcProvider) Invoke(ctx context.Context, op *Operation) (*Result, error) {
 	rep, err := g.conn.Provider.Invoke(ctx, &pb.InvokeRequest{
 		Reserved: op.Reserved, Op: op.Op, ParamsJson: op.Params, EnvJson: op.Env, Class: string(g.class),
@@ -208,7 +218,13 @@ func buildUnit(conn *sdk.Conn, caps *pb.Capabilities) (*PluginUnit, error) {
 		if !providerClasses[class] || c.GetWord() == "" {
 			return nil, fmt.Errorf("plugin advertised malformed capability %q:%q", c.GetClass(), c.GetWord())
 		}
-		providers = append(providers, &grpcProvider{conn: conn, class: class, word: c.GetWord()})
+		gp := &grpcProvider{conn: conn, class: class, word: c.GetWord()}
+		// A class:step capability may DECLARE its install-step contract (F3): the host carries
+		// the plugin-declared Scope/Venue/Gate so compileActOp builds an externalStep with it.
+		if sc := c.GetStepContract(); class == ClassStep && sc != nil {
+			gp.contract = &stepContract{Scope: scopeFromName(sc.GetScope()), Venue: Venue(sc.GetVenue()), Gate: Gate(sc.GetGate())}
+		}
+		providers = append(providers, gp)
 		if c.GetInputDef() != "" {
 			inputDefs[provKey(class, c.GetWord())] = c.GetInputDef()
 		}

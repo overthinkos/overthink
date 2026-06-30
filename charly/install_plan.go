@@ -25,6 +25,7 @@ package main
 // in build_target_oci.go / deploy_target_pod.go / deploy_host_helpers.go.
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 
@@ -1017,6 +1018,73 @@ func (s *ExternalPluginStep) RequiresGate() Gate { return GateNone }
 // OpExecute DeployReply at emit time (EmitLocal/EmitVM append reply.ReverseOps to the
 // CandyRecord), exactly like the external deploy target — never recomputed.
 func (s *ExternalPluginStep) Reverse() []ReverseOp { return nil }
+
+// externalStep is an EXTERNAL, plugin-CONTRIBUTED install-step KIND (F3, closes C1): a step
+// whose Kind() is "external:<word>", carried OPAQUELY (Payload) and whose Scope/Venue/Gate
+// come from the serving class:step plugin's DECLARED StepContract (Describe), NOT from a
+// compiled-in Go case. It is the generalization ExternalPluginStep is NOT: ExternalPluginStep
+// wraps a VERB Op in the ONE fixed "ExternalPlugin" kind with a Go-fixed (advisory) contract;
+// externalStep is a first-class per-word kind whose contract the PLUGIN declares — the carrier
+// M2 needs to externalize the builtin step kinds (the compiler emits e.g. external:system-packages
+// with a package-list Payload). Its host EXECUTION funnels through the SAME OpExecute-to-the-
+// serving-plugin path ExternalPluginStep uses (dispatchExternalStepOp — R3); teardown ops are
+// DYNAMIC (recorded from the OpExecute reply), so Reverse() returns the recorded slice.
+type externalStep struct {
+	Word       string          // the reserved step word; Kind() = "external:" + Word
+	ScopeV     Scope           // plugin-declared (StepContract.scope)
+	VenueV     Venue           // plugin-declared (StepContract.venue)
+	GateV      Gate            // plugin-declared (StepContract.gate) — the step SKIPs if the gate is not enabled
+	Payload    json.RawMessage // opaque per-kind input — the OpExecute params (plugin_input for an authored step; compiler-built for M2)
+	CandyName  string          // owning candy (provenance + the ledger CandyRecord key)
+	reverseOps []ReverseOp     // set DYNAMICALLY from the plugin's OpExecute reply (record-and-replay)
+}
+
+func (s *externalStep) Kind() StepKind      { return StepKind(externalStepKindPrefix + s.Word) }
+func (s *externalStep) Scope() Scope        { return s.ScopeV }
+func (s *externalStep) Venue() Venue        { return s.VenueV }
+func (s *externalStep) RequiresGate() Gate  { return s.GateV }
+func (s *externalStep) Reverse() []ReverseOp { return s.reverseOps }
+
+// externalStepKindPrefix marks a StepKind string as an external (plugin-contributed) kind:
+// "external:<word>". isExternalStepKind tests it. The open default arms in the walk
+// (kit.WalkPlans) + the host RunHostStep dispatch route by this prefix with NO per-word case.
+const externalStepKindPrefix = "external:"
+
+// isExternalStepKind reports whether k is an external (plugin-contributed) step kind.
+func isExternalStepKind(k StepKind) bool { return strings.HasPrefix(string(k), externalStepKindPrefix) }
+
+// stepContract is a class:step plugin's DECLARED install-step contract (F3), decoded from its
+// Describe capability (pb.StepContract / sdk.StepContract). compileActOp reads it (via the
+// stepContractCarrier a provider implements) to build an externalStep carrying the
+// plugin-declared Scope/Venue/Gate — the contract the host applies via the open default arm
+// with NO compiled-in case.
+type stepContract struct {
+	Scope Scope
+	Venue Venue
+	Gate  Gate
+}
+
+// stepContractCarrier is implemented by a provider (grpcProvider out-of-proc, inprocProvider
+// compiled-in) that carries a class:step capability's declared StepContract. A nil/false
+// return means the provider declares no step contract (every non-step capability).
+type stepContractCarrier interface {
+	declaredStepContract() (stepContract, bool)
+}
+
+// scopeFromName maps a declared scope NAME (the author-friendly form a class:step plugin ships
+// in its StepContract) to the internal Scope. Unknown / "system" → ScopeSystem (the safe
+// default — an external step's scope is advisory for the self-exec'ing plugin, used for ledger
+// + batching provenance, not host sudo-wrapping).
+func scopeFromName(name string) Scope {
+	switch name {
+	case "user":
+		return ScopeUser
+	case "user-profile":
+		return ScopeUserProfile
+	default:
+		return ScopeSystem
+	}
+}
 
 // ---------------------------------------------------------------------------
 // InstallPlan — the top-level IR container.

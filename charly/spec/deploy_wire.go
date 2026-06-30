@@ -185,6 +185,15 @@ type InstallStepView struct {
 	Venue int    `json:"venue,omitempty"`
 	Gate  string `json:"gate,omitempty"`
 
+	// Payload is the OPAQUE per-kind input for an EXTERNAL (plugin-contributed) step kind
+	// (F3 — Kind == "external:<word>"): the bytes the host forwards verbatim as the serving
+	// class:step plugin's OpExecute params. For an external kind the Scope/Venue/Gate fields
+	// above are AUTHORITATIVE, not advisory — the host carries the plugin-DECLARED contract
+	// (it cannot recompute it from a concrete step, there being no compiled-in case), so
+	// stepFromView rebuilds the external step from these carried values + this Payload. nil
+	// for every builtin (compiled-in) step kind.
+	Payload json.RawMessage `json:"payload,omitempty"`
+
 	// ReverseOps is the step's host-computed teardown ops — step.Reverse() called ONCE
 	// host-side in stepToView. An OUT-OF-PROCESS plugin that EXECUTES a plugin-renderable
 	// step itself (via RunSystem/RunUser/PutFile) cannot call the package-main Reverse()

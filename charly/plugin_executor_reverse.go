@@ -197,6 +197,18 @@ func (s *executorReverseServer) RunHostStep(ctx context.Context, req *pb.HostSte
 			return &pb.HostStepReply{Error: rerr.Error()}, nil
 		}
 		reverseOps = st.Reverse()
+	case *externalStep:
+		// An EXTERNAL (plugin-contributed) step kind (F3): "external:<word>". The host
+		// dispatches it to its serving class:step plugin's OpExecute over a nested reverse
+		// channel (delegating to the SAME venue executor s.exec) — the generalization of the
+		// ExternalPlugin arm above, but the provider is resolved by ClassStep and the params
+		// are the opaque Payload (executeExternalStep → invokeStepExecute, R3). The plugin's
+		// dynamic teardown ReverseOps ride the reply (record-and-replay).
+		reply, rerr := executeExternalStep(ctx, st, nil, s.exec, s.build)
+		if rerr != nil {
+			return &pb.HostStepReply{Error: rerr.Error()}, nil
+		}
+		reverseOps = reply.ReverseOps
 	default:
 		// Only the six host-engine step kinds route here. Every other (plugin-renderable)
 		// kind the plugin EXECUTES itself via the RunSystem/RunUser/PutFile legs — reaching

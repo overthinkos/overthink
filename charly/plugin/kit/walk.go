@@ -133,6 +133,14 @@ func walkStep(ctx context.Context, exec DeployExecutor, step spec.InstallStepVie
 		// (the in-proc targets record a skip). No teardown.
 		return nil, nil
 	default:
+		// An EXTERNAL (plugin-contributed) step kind (F3): "external:<word>". Like every other
+		// host-engine kind it routes to RunHostStep — the host reconstructs the opaque step from
+		// the view (its declared Scope/Venue/Gate + Payload) and dispatches it to the serving
+		// class:step plugin over the reverse channel (the leaf plugin cannot run another plugin).
+		// ONE open arm for EVERY external word — no per-kind case (the open default arm).
+		if strings.HasPrefix(step.Kind, "external:") {
+			return exec.RunHostStep(ctx, step, nil)
+		}
 		return nil, fmt.Errorf("WalkPlans: unsupported step kind %q", step.Kind)
 	}
 }

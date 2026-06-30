@@ -15,13 +15,24 @@ import (
 // registry. A plugin candy serves ONE provider that works in BOTH placements; this
 // type is how the in-proc placement reaches it without a socket.
 type inprocProvider struct {
-	srv   pb.ProviderServer
-	class ProviderClass
-	word  string
+	srv      pb.ProviderServer
+	class    ProviderClass
+	word     string
+	contract *stepContract // set ONLY for a compiled-in class:step capability declaring a StepContract (F3); nil otherwise
 }
 
 func (p *inprocProvider) Reserved() string     { return p.word }
 func (p *inprocProvider) Class() ProviderClass { return p.class }
+
+// declaredStepContract implements stepContractCarrier — the in-proc twin of
+// grpcProvider.declaredStepContract, so a COMPILED-IN class:step plugin carries the SAME
+// declared Scope/Venue/Gate (R3: placement-invisible above the registry).
+func (p *inprocProvider) declaredStepContract() (stepContract, bool) {
+	if p.contract == nil {
+		return stepContract{}, false
+	}
+	return *p.contract, true
+}
 
 func (p *inprocProvider) Invoke(ctx context.Context, op *Operation) (*Result, error) {
 	rep, err := p.srv.Invoke(ctx, &pb.InvokeRequest{
@@ -58,7 +69,13 @@ func buildUnitInProc(meta pb.PluginMetaServer, srv pb.ProviderServer) (*PluginUn
 		if !providerClasses[class] || c.GetWord() == "" {
 			return nil, fmt.Errorf("compiled-in plugin advertised malformed capability %q:%q", c.GetClass(), c.GetWord())
 		}
-		providers = append(providers, &inprocProvider{srv: srv, class: class, word: c.GetWord()})
+		ip := &inprocProvider{srv: srv, class: class, word: c.GetWord()}
+		// A compiled-in class:step capability carries its declared StepContract too (F3) —
+		// the in-proc twin of buildUnit's grpcProvider population (R3, placement parity).
+		if sc := c.GetStepContract(); class == ClassStep && sc != nil {
+			ip.contract = &stepContract{Scope: scopeFromName(sc.GetScope()), Venue: Venue(sc.GetVenue()), Gate: Gate(sc.GetGate())}
+		}
+		providers = append(providers, ip)
 		if c.GetInputDef() != "" {
 			inputDefs[provKey(class, c.GetWord())] = c.GetInputDef()
 		}

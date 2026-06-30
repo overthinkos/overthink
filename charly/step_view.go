@@ -15,6 +15,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/overthinkos/overthink/charly/spec"
 )
@@ -131,6 +132,12 @@ func stepToView(step InstallStep) spec.InstallStepView {
 		v.CandyName = s.CandyName
 		v.ResolvedUser = s.ResolvedUser
 		v.Distros = s.Distros
+	case *externalStep:
+		// EXTERNAL (plugin-contributed) kind: the opaque Payload is the only typed data; the
+		// Scope/Venue/Gate set above are NOT advisory here — they are the plugin-DECLARED
+		// contract stepFromView reconstructs from (the authoritative flip). ReverseOps set
+		// above carry the dynamically-recorded teardown ops.
+		v.Payload = s.Payload
 	}
 	return v
 }
@@ -261,6 +268,21 @@ func stepFromView(v spec.InstallStepView) (InstallStep, error) {
 			CandyName:    v.CandyName,
 			ResolvedUser: v.ResolvedUser,
 			Distros:      v.Distros,
+		}, nil
+	}
+	// EXTERNAL (plugin-contributed) step kind (F3): "external:<word>" — no compiled-in case.
+	// Rebuild from the AUTHORITATIVE carried Scope/Venue/Gate (the plugin-DECLARED contract,
+	// which the host cannot recompute, there being no concrete Go step) + the opaque Payload.
+	// This is the advisory→authoritative flip: for builtin kinds Scope/Venue/Gate are ignored
+	// here (recomputed by the concrete step), for an external kind they ARE the contract.
+	if isExternalStepKind(StepKind(v.Kind)) {
+		return &externalStep{
+			Word:      strings.TrimPrefix(v.Kind, externalStepKindPrefix),
+			ScopeV:    v.Scope,
+			VenueV:    Venue(v.Venue),
+			GateV:     Gate(v.Gate),
+			Payload:   v.Payload,
+			CandyName: v.CandyName,
 		}, nil
 	}
 	return nil, fmt.Errorf("stepFromView: unknown step kind %q", v.Kind)

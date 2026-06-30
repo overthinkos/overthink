@@ -19,6 +19,19 @@ type ProvidedCapability struct {
 	Class    string // "verb" / "kind" / "deploy" / "step" / "builder"
 	Word     string // the reserved word, e.g. "externalprobe"
 	InputDef string // the CUE def for this word's plugin_input, e.g. "#ExternalprobeInput"
+	// StepContract is set ONLY for Class=="step" (F3): the plugin-declared install-step
+	// contract (Scope/Venue/Gate) the host applies to the external step via the open default
+	// arm — no compiled-in case. nil for every other class.
+	StepContract *StepContract
+}
+
+// StepContract is the SDK-facing form of the proto StepContract — a class="step" plugin's
+// declared install-step Scope/Venue/Gate. Reverse is NOT declared (an external step's
+// teardown ops are recorded dynamically from its OpExecute reply).
+type StepContract struct {
+	Scope string // "system" | "user" | "user-profile"
+	Venue int    // 0=host-native, 1=container-builder, 2=skip
+	Gate  string // "" | "allow-repo-changes" | "allow-root-tasks" | "with-services"
 }
 
 // BuildCapabilities is the serve-side half of the "every plugin ships its own CUE
@@ -46,7 +59,11 @@ func BuildCapabilities(calver string, provided []ProvidedCapability, schemaFS fs
 	}
 	out := make([]*pb.ProvidedCapability, 0, len(provided))
 	for _, c := range provided {
-		out = append(out, &pb.ProvidedCapability{Class: c.Class, Word: c.Word, InputDef: c.InputDef})
+		pc := &pb.ProvidedCapability{Class: c.Class, Word: c.Word, InputDef: c.InputDef}
+		if c.StepContract != nil {
+			pc.StepContract = &pb.StepContract{Scope: c.StepContract.Scope, Venue: int32(c.StepContract.Venue), Gate: c.StepContract.Gate}
+		}
+		out = append(out, pc)
 	}
 	return &pb.Capabilities{
 		Calver:          calver,

@@ -727,6 +727,28 @@ func compileActOp(op *Op, layer *Candy, img *ResolvedBox) InstallStep {
 				}
 			}
 		}
+		// A `run: plugin: <word>` whose word resolves to a class:step provider DECLARING a
+		// StepContract (F3) → an EXTERNAL step kind: the opaque Payload is the op's plugin_input,
+		// and Scope/Venue/Gate come from the plugin's declared contract (not a Go-fixed rule).
+		// Distinct from the ClassVerb plugin above (ExternalPluginStep, Go-fixed advisory
+		// contract). The host walks it via the open default arm + dispatches OpExecute to the
+		// serving plugin (executeExternalStep). This is the carrier M2 reuses to externalize the
+		// builtin step kinds (the compiler emits external:<word> with a built payload).
+		if sp, ok := providerRegistry.resolve(ClassStep, op.Plugin); ok {
+			if carrier, ok := sp.(stepContractCarrier); ok {
+				if sc, ok := carrier.declaredStepContract(); ok {
+					payload, _ := marshalJSON(op.PluginInput)
+					return &externalStep{
+						Word:      op.Plugin,
+						ScopeV:    sc.Scope,
+						VenueV:    sc.Venue,
+						GateV:     sc.Gate,
+						Payload:   payload,
+						CandyName: layer.Name,
+					}
+				}
+			}
+		}
 	}
 	// Install verbs (mkdir/copy/write/link/download/setcap/build) + command →
 	// a generic OpStep (existing emit + Reverse). Snapshot layer.vars so the

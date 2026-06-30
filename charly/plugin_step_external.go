@@ -88,19 +88,48 @@ func executeExternalPluginStep(ctx context.Context, s *ExternalPluginStep, plan 
 	if err != nil {
 		return zero, fmt.Errorf("external plugin step %q: marshal plugin_input: %w", s.Op.Plugin, err)
 	}
-	env, err := marshalJSON(spec.DeployVenue{DeployName: externalStepVenueName(plan)})
+	return invokeStepExecute(ctx, s.Op.Plugin, inv, params, externalStepVenueName(plan), exec, build)
+}
+
+// executeExternalStep dispatches an EXTERNAL (plugin-contributed) step kind (F3) to its
+// serving class:step provider's OpExecute over the reverse channel. Unlike
+// executeExternalPluginStep (a ClassVerb wrapped in the fixed ExternalPlugin kind, params =
+// plugin_input), the provider is resolved by ClassStep and the OpExecute params are the step's
+// OPAQUE Payload verbatim. Shares invokeStepExecute (R3); the reply's ReverseOps are recorded
+// by the caller (dynamic teardown).
+func executeExternalStep(ctx context.Context, s *externalStep, plan *InstallPlan, exec DeployExecutor, build buildEngineContext) (spec.DeployReply, error) {
+	var zero spec.DeployReply
+	prov, ok := providerRegistry.resolve(ClassStep, s.Word)
+	if !ok {
+		return zero, fmt.Errorf("external step %q: class:step provider not connected at deploy time", s.Word)
+	}
+	inv, ok := prov.(executorInvoker)
+	if !ok {
+		return zero, fmt.Errorf("external step %q: provider has no deploy-context execute (not an out-of-process plugin)", s.Word)
+	}
+	return invokeStepExecute(ctx, s.Word, inv, s.Payload, externalStepVenueName(plan), exec, build)
+}
+
+// invokeStepExecute is the shared OpExecute dispatch for an external step (R3): it stands up
+// the live executor on the provider's go-plugin broker (InvokeWithExecutor), Invokes OpExecute
+// with the opaque params + a venue descriptor, and decodes the DeployReply (its ReverseOps the
+// caller records). Used by executeExternalPluginStep (verb-step) AND executeExternalStep
+// (plugin-contributed step kind).
+func invokeStepExecute(ctx context.Context, word string, inv executorInvoker, params []byte, venueName string, exec DeployExecutor, build buildEngineContext) (spec.DeployReply, error) {
+	var zero spec.DeployReply
+	env, err := marshalJSON(spec.DeployVenue{DeployName: venueName})
 	if err != nil {
-		return zero, fmt.Errorf("external plugin step %q: marshal venue: %w", s.Op.Plugin, err)
+		return zero, fmt.Errorf("external step %q: marshal venue: %w", word, err)
 	}
 	res, err := inv.InvokeWithExecutor(ctx,
-		&Operation{Reserved: s.Op.Plugin, Op: OpExecute, Params: params, Env: env}, exec, build, false, nil)
+		&Operation{Reserved: word, Op: OpExecute, Params: params, Env: env}, exec, build, false, nil)
 	if err != nil {
 		return zero, err
 	}
 	var reply spec.DeployReply
 	if res != nil && len(res.JSON) > 0 {
 		if err := json.Unmarshal(res.JSON, &reply); err != nil {
-			return zero, fmt.Errorf("external plugin step %q: decode reply: %w", s.Op.Plugin, err)
+			return zero, fmt.Errorf("external step %q: decode reply: %w", word, err)
 		}
 	}
 	return reply, nil

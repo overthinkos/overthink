@@ -71,7 +71,12 @@ func classifyDisc(k string, asChild bool) string {
 	// (when `distro` was a kindWord → "entity") and keeps the loader's "a non-deployable
 	// kind rejects a sub-entity child" gate live for the build-vocab kinds. Only reached
 	// for non-core discriminators, so the hot path is untouched.
-	if _, ok := providerRegistry.ResolveKind(k); ok {
+	// recognizedKind (not a bare ResolveKind) so a PRE-SCANNED external kind word (F4) — one
+	// declared by a project plugin candy whose out-of-process provider has not yet connected —
+	// also classifies as an entity, exactly as recognizedDeploySubstrate does for a deploy
+	// substrate below. The depth-0 connect pre-pass (connectDeclaredKindPlugins) registers the
+	// provider before normalizeNodeInto decodes the body.
+	if recognizedKind(k) {
 		return "entity"
 	}
 	// An external DEPLOY substrate word (e.g. `exampledeploy`): a registered or

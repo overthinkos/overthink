@@ -968,6 +968,11 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 	// best-effort: a no-external-substrate project is unaffected.
 	if depth == 0 {
 		prescanDeclaredPluginWords(data, filepath.Dir(abs))
+		// F4: connect the out-of-process plugins serving any declared external KIND words BEFORE
+		// mergeUnifiedDocs decodes the entity nodes, so a `kind: <plugin-word>` entity decodes via
+		// runPluginKind. Re-entrancy-guarded (the connect re-loads the project to resolve + fetch
+		// the kind candy); a no-op when no external kind is declared or all are already connected.
+		connectDeclaredKindPlugins(filepath.Dir(abs))
 	}
 
 	// Parse + merge every document in the file via the SHARED routing core

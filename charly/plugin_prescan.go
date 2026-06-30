@@ -26,6 +26,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"sync"
@@ -61,7 +62,108 @@ var (
 	// with no command plugins registers nothing, so the grammar is byte-for-byte unchanged.
 	// Shares declaredDeployMu (the one lock).
 	declaredExternalCommand = map[string]bool{}
+	// declaredKind holds the external (out-of-tree) KIND words a project's candy plugin
+	// declarations name — learned by the SAME byte-gated prescan (F4). It lets the loader
+	// RECOGNIZE a `kind: <plugin-word>` discriminator at PARSE time (classifyDisc) before the
+	// serving plugin connects — the kind analogue of declaredDeploySubstrate. The serving
+	// plugin is connected by a depth-0 pre-pass (connectDeclaredKindPlugins) so
+	// normalizeNodeInto's runPluginKind can decode the body. Shares declaredDeployMu (the one
+	// lock); empty for a project with no external kind plugins.
+	declaredKind = map[string]bool{}
 )
+
+// recognizedKind reports whether word names a kind the loader may treat as an entity
+// discriminator: EITHER a connected kind provider (built-in / compiled-in / already-loaded
+// external) OR a pre-scanned external declaration (F4). The kind analogue of
+// recognizedDeploySubstrate (R3) — used by classifyDisc + normalizeNodeInto so a
+// declared-but-not-yet-connected external kind classifies + decodes.
+func recognizedKind(word string) bool {
+	if _, ok := providerRegistry.ResolveKind(word); ok {
+		return true
+	}
+	declaredDeployMu.RLock()
+	defer declaredDeployMu.RUnlock()
+	return declaredKind[word]
+}
+
+// registerDeclaredKind records one declared external kind word (F4).
+func registerDeclaredKind(word string) {
+	if word == "" {
+		return
+	}
+	declaredDeployMu.Lock()
+	declaredKind[word] = true
+	declaredDeployMu.Unlock()
+}
+
+// declaredKindWords returns a snapshot of the pre-scanned external kind words — the set the
+// depth-0 connect pre-pass (connectDeclaredKindPlugins) builds + connects so a flat external
+// kind body decodes via runPluginKind. A copy under the shared lock.
+func declaredKindWords() []string {
+	declaredDeployMu.RLock()
+	defer declaredDeployMu.RUnlock()
+	out := make([]string, 0, len(declaredKind))
+	for w := range declaredKind {
+		out = append(out, w)
+	}
+	return out
+}
+
+// inKindConnectPassFlag guards connectDeclaredKindPlugins against re-entrancy: connecting an
+// external kind plugin must load the project (LoadConfig / ScanAllCandy → LoadUnified), which
+// re-loads the SAME root that CONTAINS the `kind: <plugin-word>` node. When set, the nested load's
+// connect pre-pass is a no-op AND normalizeNodeInto DEFERS (skips) an unconnected kind node, so the
+// nested load succeeds and the OUTER pass then has the providers registered. The loader is
+// single-threaded per load; the flag rides declaredDeployMu for safety.
+var inKindConnectPassFlag bool
+
+func inKindConnectPass() bool {
+	declaredDeployMu.RLock()
+	defer declaredDeployMu.RUnlock()
+	return inKindConnectPassFlag
+}
+
+func setKindConnectPass(v bool) {
+	declaredDeployMu.Lock()
+	inKindConnectPassFlag = v
+	declaredDeployMu.Unlock()
+}
+
+// connectDeclaredKindPlugins host-builds + connects the out-of-process plugins serving the
+// project's declared external KIND words (F4), so a `kind: <plugin-word>` entity decodes via
+// runPluginKind during load. Called at the depth-0 loader hook AFTER the prescan and BEFORE
+// mergeUnifiedDocs decodes the entity nodes. The connect re-loads the project (LoadConfig +
+// ScanAllCandyWithConfigOpts → LoadUnified, which fetches @github kind candies too), so it is
+// GUARDED by inKindConnectPass — the nested load skips this pre-pass and DEFERS its kind nodes
+// (normalizeNodeInto), so the scan succeeds; this OUTER pass then has the providers registered.
+// Best-effort + idempotent: a project with no external kind plugins (or one whose kinds are
+// already connected — compiled-in / prior-loaded) does zero work; a connect FAILURE leaves the
+// kind unregistered, surfaced LOUDLY by normalizeNodeInto (never silently dropped).
+func connectDeclaredKindPlugins(dir string) {
+	if inKindConnectPass() {
+		return // nested load inside an outer connect — the outer pass owns the connect
+	}
+	need := map[string]struct{}{}
+	for _, w := range declaredKindWords() {
+		if _, ok := providerRegistry.ResolveKind(w); !ok {
+			need[w] = struct{}{}
+		}
+	}
+	if len(need) == 0 {
+		return
+	}
+	setKindConnectPass(true)
+	defer setKindConnectPass(false)
+	cfg, err := LoadConfig(dir)
+	if err != nil {
+		return // config load failure → kinds stay unconnected → normalizeNodeInto errors loudly
+	}
+	candyMap, err := ScanAllCandyWithConfigOpts(dir, cfg, ResolveOpts{})
+	if err != nil {
+		return
+	}
+	_ = loadProjectPlugins(context.Background(), candyMap, need)
+}
 
 // recognizedDeploySubstrate reports whether word names a deploy substrate the
 // loader may treat as an entity discriminator: EITHER a connected deploy provider
@@ -248,6 +350,8 @@ func prescanPluginManifest(path string) {
 			registerDeclaredDeploySubstrate(word)
 		case ClassCommand:
 			registerDeclaredExternalCommand(word)
+		case ClassKind:
+			registerDeclaredKind(word)
 		}
 	}
 }

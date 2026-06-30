@@ -32,6 +32,19 @@ func normalizeNodeInto(gn *genericNode, uf *UnifiedFile) error {
 		if recognizedDeploySubstrate(gn.disc) {
 			return buildBundleNodeInto(gn, uf)
 		}
+		// An external KIND (F4): declared by a project plugin candy whose out-of-process
+		// provider has not registered. During the connect pre-pass's nested scan
+		// (inKindConnectPass) the provider is not connected YET — DEFER (skip, no error) so the
+		// nested ScanCandy/LoadUnified succeeds; the OUTER load decodes it after
+		// connectDeclaredKindPlugins runs (depth-0, before this). OUTSIDE the pre-pass the
+		// connect already ran, so a still-missing provider means the plugin FAILED to connect —
+		// a hard error (a declared kind is never silently dropped).
+		if recognizedKind(gn.disc) {
+			if inKindConnectPass() {
+				return nil
+			}
+			return fmt.Errorf("node %q: kind %q is declared by a plugin but its provider did not connect (build/connect failed)", gn.name, gn.disc)
+		}
 		return fmt.Errorf("node %q: unsupported discriminator %q", gn.name, gn.disc)
 	}
 	// Built-in kind: the typed DecodeNode fast path (no JSON). External plugin kind:

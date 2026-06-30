@@ -20,6 +20,8 @@ plugin-example-stepkind:
     plugin-example-stepkind-run:
         run: run the plugin-contributed step kind on the venue — composed into a target local or vm deploy, the host routes this run-step to an external step (external.examplestepkind), walks it via the open default arm, and dispatches its OpExecute so the plugin writes the marker (proves a plugin-contributed step kind travels author through compile, wire, host, to plugin)
         run_as: ${USER}
+        context:
+            - deploy
         plugin: examplestepkind
         plugin_input:
             marker: EXAMPLE-STEPKIND-OK

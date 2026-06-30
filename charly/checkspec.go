@@ -440,6 +440,16 @@ func opActsInBuildDeploy(c *Op, verb string) bool {
 		if c.Plugin == "command" {
 			return true
 		}
+		// A class:STEP plugin word (F3's external step KIND) lowers to an externalStep that ACTS
+		// at DEPLOY (compileActOp resolve(ClassStep) → externalStep → OpExecute). Recognized via a
+		// connected ClassStep provider OR a post-scan declaration (standalone `charly box validate`,
+		// where the step plugin is not connected) — the step analogue of the verb handling below.
+		if _, ok := providerRegistry.ResolveStep(c.Plugin); ok {
+			return true
+		}
+		if isDeclaredExternalStep(c.Plugin) {
+			return true
+		}
 		prov, ok := providerRegistry.ResolveVerb(c.Plugin)
 		if !ok {
 			// Not connected — the standalone `charly box validate` path, where external

@@ -52,6 +52,13 @@ var (
 	// harmless — a verb that turns out non-build-emit-capable fails loudly at build via
 	// emitPluginFragment's empty-fragment guard. Shares declaredDeployMu (the one lock).
 	declaredExternalVerb = map[string]bool{}
+	// declaredExternalStep holds the external (out-of-tree) STEP words a project's candy plugin
+	// declarations name — learned POST-SCAN alongside the verbs (registerExternalVerbsFromCandies),
+	// so a `run: plugin: <step-word>` step (a class:step plugin — F3's external step KIND) validates
+	// as a DEPLOY-capable act in standalone `charly box validate` WITHOUT connecting the plugin
+	// (compileActOp lowers it to an externalStep at deploy). Same additive/best-effort contract as
+	// declaredExternalVerb; shares declaredDeployMu.
+	declaredExternalStep = map[string]bool{}
 	// declaredExternalCommand holds the external (out-of-tree) COMMAND words a project's candy
 	// plugin declarations name — learned by the SAME byte-gated prescan, but consumed EARLY
 	// (in main, before kong.Parse) so an external command plugin's CLI word reaches the Kong
@@ -237,6 +244,26 @@ func registerDeclaredExternalVerb(word string) {
 	declaredDeployMu.Unlock()
 }
 
+// isDeclaredExternalStep reports whether word was registered as an external STEP a plugin candy
+// declares — used by opActsInBuildDeploy when the step word does NOT resolve in the registry
+// (standalone `charly box validate`, plugins not connected). A `run: plugin: <step-word>` lowers
+// to an externalStep at deploy (F3), so it is a real DEPLOY act.
+func isDeclaredExternalStep(word string) bool {
+	declaredDeployMu.RLock()
+	defer declaredDeployMu.RUnlock()
+	return declaredExternalStep[word]
+}
+
+// registerDeclaredExternalStep records one declared external step word.
+func registerDeclaredExternalStep(word string) {
+	if word == "" {
+		return
+	}
+	declaredDeployMu.Lock()
+	declaredExternalStep[word] = true
+	declaredDeployMu.Unlock()
+}
+
 // registerDeclaredExternalCommand records one declared external command word.
 func registerDeclaredExternalCommand(word string) {
 	if word == "" {
@@ -260,10 +287,10 @@ func declaredExternalCommandWords() []string {
 	return words
 }
 
-// registerExternalVerbsFromCandies registers the external (out-of-tree) VERB words every
-// scanned plugin candy declares, so a build-context `run:` plugin verb step validates as
-// build-emit-capable in standalone `charly box validate` (where the provider is not
-// connected). It runs over the SCANNED candy map — which includes @github-composed plugin
+// registerExternalVerbsFromCandies registers the external (out-of-tree) VERB and STEP words every
+// scanned plugin candy declares, so a `run:` plugin verb/step validates as build/deploy-act-capable
+// in standalone `charly box validate` (where the provider is not connected): a verb is build-emit-
+// capable, a class:step lowers to an externalStep at deploy (F3). It runs over the SCANNED candy map — which includes @github-composed plugin
 // candies fetched DURING the scan — so it recognizes a verb whether the plugin candy is
 // locally vendored OR pulled via @github (the gap the parse-time prescan, which sees only
 // locally-discovered dirs, cannot close). Builtins are skipped: they register their verbs
@@ -277,8 +304,13 @@ func registerExternalVerbsFromCandies(candies map[string]*Candy) {
 			continue
 		}
 		for _, capability := range candy.Plugin.Providers {
-			if class, word, ok := splitCapability(string(capability)); ok && class == ClassVerb {
-				registerDeclaredExternalVerb(word)
+			if class, word, ok := splitCapability(string(capability)); ok {
+				switch class {
+				case ClassVerb:
+					registerDeclaredExternalVerb(word)
+				case ClassStep:
+					registerDeclaredExternalStep(word)
+				}
 			}
 		}
 	}

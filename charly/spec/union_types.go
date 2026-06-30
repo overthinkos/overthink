@@ -245,7 +245,7 @@ type PackageItem struct {
 }
 
 // ---------------------------------------------------------------------------
-// VmSource / VmSSH — #VmSource / #VmSSH (vm_spec.go). VmSource is the flat
+// VmSource / VmSSH — #VmSource / #VmSSH. VmSource is the flat
 // discriminated-union source; VmSSH references the generated VmKeyInjection.
 // ---------------------------------------------------------------------------
 

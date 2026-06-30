@@ -135,8 +135,8 @@ var pluralToSingularYAMLKeys = map[string]string{
 	// external schema's own plural keys (`users:`, `labels:`, `resources:`,
 	// `<devices>`, `<topology sockets= cores= threads=>`, …), so authoring those
 	// fields in the SAME plural spelling keeps a 1:1 mapping. The kept-plural set
-	// (defined by the keys living in cloud_init_types.go / k8s_spec.go /
-	// k8s_config.go / libvirt_yaml.go) includes: users, groups, mirrors,
+	// (defined by the kept-plural keys in the generated spec/ types, k8s_config.go,
+	// and the charly/vmshared/ libvirt + cloud-init types) includes: users, groups, mirrors,
 	// write_files, ethernets, hostnames, labels, annotations, tolerations,
 	// pull_secrets, resources, limits, requests, devices, channels, cores,
 	// sockets, threads, dies, disks, cpus, filesystems, interfaces, inputs,

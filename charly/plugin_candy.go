@@ -2,8 +2,8 @@ package main
 
 // candyKind is the `candy` KIND — the box⊻layer factory arm — extracted into its OWN
 // file as a dedicated-builtin KindProvider, COMPLETING Phase 2 (every kind is now a
-// dedicated provider; kind_builtins.go ends as the navigation-only completion marker).
-// It mirrors the deploy-shape extraction (plugin_group.go / plugin_substrate.go).
+// dedicated provider). It mirrors the deploy-shape extraction (plugin_group.go /
+// plugin_substrate.go).
 //
 // Unlike the tier-1 kinds (distro/builder/init/resource/target/agent/module/sidecar/
 // package-group), which became schema-carrying RegisterBuiltinPluginUnit plugins routed

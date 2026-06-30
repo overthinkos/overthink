@@ -1,7 +1,7 @@
 // CUE schema for the `vm` kind. #Vm validates ONE value of the `vm:` map
 // (VmSpec). FULLY MODELED + CLOSED: every VmSpec field, the 5-arm #VmSource
-// union, the structured #VmCloudInit (cloud_init_types.go) and the ~54-subtype
-// #LibvirtDomain tree (libvirt_yaml.go) are modeled and CLOSED — an unknown
+// union, the structured #VmCloudInit and the ~54-subtype
+// #LibvirtDomain tree are modeled and CLOSED — an unknown
 // key is a typo. Genuine passthroughs stay typed-open: libvirt.snippets /
 // libvirt.xml_passthrough (raw XML), cloud_init.extra (raw cloud-config),
 // cloud_init.network.ethernets (cloud-init network-config v2), and every
@@ -159,7 +159,7 @@
 }
 
 // ---------------------------------------------------------------------------
-// cloud_init: VmCloudInit (cloud_init_types.go). CLOSED. Genuine passthroughs:
+// cloud_init: VmCloudInit. CLOSED. Genuine passthroughs:
 // extra (raw cloud-config string) and network.ethernets (network-config v2,
 // map[string]map[string]any → {[string]: {[string]: _}}).
 // ---------------------------------------------------------------------------

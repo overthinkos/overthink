@@ -2038,7 +2038,7 @@ type VmNetwork struct {
 }
 
 // ---------------------------------------------------------------------------
-// cloud_init: VmCloudInit (cloud_init_types.go). CLOSED. Genuine passthroughs:
+// cloud_init: VmCloudInit. CLOSED. Genuine passthroughs:
 // extra (raw cloud-config string) and network.ethernets (network-config v2,
 // map[string]map[string]any → {[string]: {[string]: _}}).
 // ---------------------------------------------------------------------------

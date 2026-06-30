@@ -21,4 +21,26 @@ const (
 	// BuildDeployPlan compile reads the result), never inside the pure compiler.
 	OpCollectContext = "collect-context" // builder: per-candy stage-context keys → BuilderCollectReply
 	OpReverse        = "reverse"         // builder: teardown ops for a resolved stage context → BuilderReverseReply
+
+	// F6 — the SUBSTRATE LIFECYCLE selectors (host→plugin on Provider.Invoke): a deploy
+	// substrate plugin brings its OWN host-side venue lifecycle. PrepareVenue/TeardownExecutor
+	// return a VenueDescriptor the HOST re-materializes into a real DeployExecutor (the live
+	// executor never crosses the wire); the rest carry name/node/opts in, error/StatusInfo out.
+	OpPrepareVenue     = "prepare-venue"     // lifecycle: build the venue → VenueDescriptor (re-materialized host-side)
+	OpArtifactKey      = "artifact-key"      // lifecycle: the per-deploy artifact ledger key
+	OpPostApply        = "post-apply"        // lifecycle: post-walk finalize on the venue
+	OpTeardownExecutor = "teardown-executor" // lifecycle: the executor for Del → VenueDescriptor
+	OpPostTeardown     = "post-teardown"     // lifecycle: drop venue artifacts (image/domain)
+	OpStart            = "start"             // lifecycle: start the venue
+	OpStop             = "stop"              // lifecycle: stop the venue
+	OpStatus           = "status"            // lifecycle: venue status → StatusInfo
+	OpLogs             = "logs"              // lifecycle: stream venue logs
+	OpShell            = "shell"             // lifecycle: open a venue shell
+	OpRebuild          = "rebuild"           // lifecycle: rebuild the venue (charly update)
+
+	// OpPreresolve is the generalized host-side deploy preresolver (F6): a substrate plugin
+	// declares a preresolve step the host runs BEFORE apply, returning the opaque JSON the host
+	// ships in DeployVenue.Substrate (the wire-backed generalization of the in-core k8s/android
+	// preresolvers).
+	OpPreresolve = "preresolve"
 )

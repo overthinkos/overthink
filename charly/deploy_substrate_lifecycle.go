@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"sync"
 )
 
 // deploy_substrate_lifecycle.go — the per-substrate HOST-SIDE lifecycle hook for an
@@ -78,16 +79,40 @@ type substrateLifecycle interface {
 // substrateLifecycles maps an external deploy SUBSTRATE word → its host-side lifecycle
 // hook. Populated at package-var init time (before any init(), like registerDeployPreresolver
 // + registerDedicatedBuiltin), so the lookup is race-free.
-var substrateLifecycles = map[string]substrateLifecycle{}
+var (
+	substrateLifecyclesMu sync.RWMutex
+	substrateLifecycles   = map[string]substrateLifecycle{}
+)
 
-// registerSubstrateLifecycle records one substrate's lifecycle hook. Panics on a duplicate
-// word (a startup invariant, like the preresolver + registry duplicate panics).
+// registerSubstrateLifecycle records one COMPILED-IN substrate's lifecycle hook (pod/vm). Panics
+// on a duplicate word (a startup invariant, like the preresolver + registry duplicate panics).
 func registerSubstrateLifecycle(word string, l substrateLifecycle) {
 	if word == "" || l == nil {
 		panic("registerSubstrateLifecycle: empty word or nil lifecycle")
 	}
+	substrateLifecyclesMu.Lock()
+	defer substrateLifecyclesMu.Unlock()
 	if _, dup := substrateLifecycles[word]; dup {
 		panic(fmt.Sprintf("registerSubstrateLifecycle: duplicate lifecycle for %q", word))
+	}
+	substrateLifecycles[word] = l
+}
+
+// registerPluginSubstrateLifecycle records a WIRE-BACKED lifecycle for an external deploy substrate
+// at plugin-load (F6), idempotently: a plugin reconnect REPLACES the prior wire-backed hook (the new
+// grpcProvider carries the live conn), but it never SHADOWS a compiled-in lifecycle (pod/vm) — those
+// are DELETED, not shadowed, when M4 moves them to plugins. Unlike registerSubstrateLifecycle (the
+// package-init, panic-on-dup path for compiled-in singletons), this runs at runtime.
+func registerPluginSubstrateLifecycle(word string, l substrateLifecycle) {
+	if word == "" || l == nil {
+		return
+	}
+	substrateLifecyclesMu.Lock()
+	defer substrateLifecyclesMu.Unlock()
+	if existing, ok := substrateLifecycles[word]; ok {
+		if _, isWire := existing.(grpcSubstrateLifecycle); !isWire {
+			return // a compiled-in lifecycle owns this word — never shadow it
+		}
 	}
 	substrateLifecycles[word] = l
 }
@@ -96,6 +121,8 @@ func registerSubstrateLifecycle(word string, l substrateLifecycle) {
 // word, if any. externalDeployTarget consults it; a substrate with no hook (local, android,
 // k8s) keeps the generic host-venue behaviour.
 func substrateLifecycleFor(word string) (substrateLifecycle, bool) {
+	substrateLifecyclesMu.RLock()
+	defer substrateLifecyclesMu.RUnlock()
 	l, ok := substrateLifecycles[word]
 	return l, ok
 }

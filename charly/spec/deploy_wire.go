@@ -323,6 +323,22 @@ type DeployVenue struct {
 	Substrate  json.RawMessage   `json:"substrate,omitempty"`
 }
 
+// VenueDescriptor is the SELF-CONTAINED, serializable description of a deploy venue's executor
+// that a substrate LIFECYCLE plugin's OpPrepareVenue / OpTeardownExecutor returns (F6). A live
+// DeployExecutor (ShellExecutor / *SSHExecutor) cannot cross the wire, so the plugin returns this
+// descriptor and the HOST re-materializes the real executor from it — independently, AFTER the
+// lifecycle Invoke returns — then serves THAT over the existing ExecutorService to the deploy-walk
+// plugin. Kind "shell" → a host-local ShellExecutor (the SSH fields are ignored); Kind "ssh" → an
+// *SSHExecutor built from User/Host/Port/Args/ConnectTimeout (the guest venue). Empty → no venue.
+type VenueDescriptor struct {
+	Kind           string   `json:"kind"` // "shell" | "ssh"
+	User           string   `json:"user,omitempty"`
+	Host           string   `json:"host,omitempty"`
+	Port           int      `json:"port,omitempty"`
+	Args           []string `json:"args,omitempty"`
+	ConnectTimeout int      `json:"connect_timeout,omitempty"`
+}
+
 // AndroidDeployVenue is the preresolved deploy:android substrate payload the
 // host's android deploy preresolver produces (in DeployVenue.Substrate) and the
 // candy/plugin-adb deploy:android provider decodes. The host resolves the device

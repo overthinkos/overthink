@@ -124,6 +124,17 @@ func (r *Registry) RegisterPluginProviders(ps []Provider, origin string, conn io
 		if err := r.register(p, origin); err != nil {
 			return err
 		}
+		// F6: a class:deploy provider declaring a venue lifecycle gets a wire-backed
+		// substrateLifecycle registered for its word, so externalDeployTarget (which calls only
+		// through the substrateLifecycle interface) drives the plugin's lifecycle transparently.
+		if gp, ok := p.(*grpcProvider); ok && gp.class == ClassDeployTarget {
+			if gp.lifecycle {
+				registerPluginSubstrateLifecycle(gp.word, grpcSubstrateLifecycle{prov: gp})
+			}
+			if gp.preresolve {
+				registerPluginDeployPreresolver(gp.word, wireDeployPreresolver(gp))
+			}
+		}
 	}
 	if conn != nil {
 		r.mu.Lock()

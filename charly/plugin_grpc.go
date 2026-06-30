@@ -125,6 +125,8 @@ type grpcProvider struct {
 	word       string
 	contract   *stepContract // set ONLY for a class:step capability declaring a StepContract (F3); nil otherwise
 	structural bool          // set ONLY for a class:kind capability that decodes a STRUCTURAL entity (F5)
+	lifecycle  bool          // set ONLY for a class:deploy capability bringing its OWN host-side venue lifecycle (F6)
+	preresolve bool          // set ONLY for a class:deploy capability declaring a host-side preresolve step (F6)
 }
 
 func (g *grpcProvider) Reserved() string     { return g.word }
@@ -233,6 +235,15 @@ func buildUnit(conn *sdk.Conn, caps *pb.Capabilities) (*PluginUnit, error) {
 		// folds its spec.Deploy reply into uf.Bundle instead of landing a flat body opaquely.
 		if class == ClassKind && c.GetStructural() {
 			gp.structural = true
+		}
+		// A class:deploy capability may declare it brings its OWN venue lifecycle (F6): the host
+		// registers a wire-backed substrateLifecycle for it at plugin-load.
+		if class == ClassDeployTarget && c.GetLifecycle() {
+			gp.lifecycle = true
+		}
+		// A class:deploy capability may declare a host-side preresolve step (F6).
+		if class == ClassDeployTarget && c.GetPreresolve() {
+			gp.preresolve = true
 		}
 		providers = append(providers, gp)
 		if c.GetInputDef() != "" {

@@ -27,6 +27,16 @@ type ProvidedCapability struct {
 	// its OpLoad returns a spec.Deploy member tree the host folds into uf.Bundle — rather than
 	// a FLAT body landed opaquely in uf.PluginKinds (F4). false for every other class/kind.
 	Structural bool
+	// Lifecycle is set ONLY for Class=="deploy" (F6): the substrate brings its OWN host-side
+	// venue lifecycle (PrepareVenue/Start/Stop/Status/Rebuild/...) served over the lifecycle Ops,
+	// so the host registers a wire-backed substrateLifecycle for it. false for every other
+	// class/deploy (local/android/k8s keep the generic host-venue behaviour).
+	Lifecycle bool
+	// Preresolve is set ONLY for Class=="deploy" (F6): the substrate declares a host-side
+	// PRERESOLVE step (OpPreresolve) the host runs before apply, shipping the opaque result in
+	// DeployVenue.Substrate — the wire-backed generalization of the in-core k8s/android
+	// preresolvers. false for every other class/deploy.
+	Preresolve bool
 }
 
 // StepContract is the SDK-facing form of the proto StepContract — a class="step" plugin's
@@ -63,7 +73,7 @@ func BuildCapabilities(calver string, provided []ProvidedCapability, schemaFS fs
 	}
 	out := make([]*pb.ProvidedCapability, 0, len(provided))
 	for _, c := range provided {
-		pc := &pb.ProvidedCapability{Class: c.Class, Word: c.Word, InputDef: c.InputDef, Structural: c.Structural}
+		pc := &pb.ProvidedCapability{Class: c.Class, Word: c.Word, InputDef: c.InputDef, Structural: c.Structural, Lifecycle: c.Lifecycle, Preresolve: c.Preresolve}
 		if c.StepContract != nil {
 			pc.StepContract = &pb.StepContract{Scope: c.StepContract.Scope, Venue: int32(c.StepContract.Venue), Gate: c.StepContract.Gate}
 		}

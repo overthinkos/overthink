@@ -7,9 +7,10 @@ import "os"
 //
 // Schema v4: deploy-side K8s knobs (namespace, workload kind override,
 // patches, raw manifests) stay here. Cluster-wide policy (kubeconfig
-// context, admission policy, storage, ingress defaults, etc.) MOVED to
-// K8sSpec (kind:k8s template, generated in spec/cue_types_gen.go). The Cluster
-// string field below is deprecated — use BundleNode.K8s (template ref) instead.
+// context, admission policy, storage, ingress defaults, etc.) lives on the
+// K8sSpec (kind:k8s template, generated in spec/cue_types_gen.go), referenced
+// via BundleNode.K8s — the legacy per-deploy `cluster` string field was removed
+// in that v4 cutover.
 // -----------------------------------------------------------------------------
 
 // K8sPatchTarget identifies which generated resource a patch applies to.

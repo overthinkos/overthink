@@ -39,7 +39,7 @@ func (c runnerCheckContext) Mode() kit.RunMode {
 
 // kitVerbAdapter wraps a COMPILED-IN host-coupled verb candy's kit.CheckVerbProvider
 // as a package-main CheckVerbProvider, so runOne dispatches it through the SAME
-// providerRegistry path as an in-charly-module verb. It passes the live *Runner as a
+// providerRegistry path as an typed builtin verb. It passes the live *Runner as a
 // kit.CheckContext and converts the returned kit.Result back to a CheckResult
 // (stamping Op + Verb). It embeds builtinVerbBase for Class()=ClassVerb + the
 // in-proc-only Invoke stub — a kit verb is in-process only (RunVerb needs the live
@@ -83,7 +83,7 @@ func (a kitVerbActAdapter) RenderProvisionScript(op *Op, distros []string) (stri
 // build/deploy act lowers into a typed InstallStep, not a shell. It adds the package-main
 // TypedStepProvider role (LowersTo + ConstructStep), materializing the candy's
 // kit.StepDescriptor into the real ServicePackagedStep / SystemPackagesStep — so
-// compileActOp lowers it exactly as the in-charly-module verb did, and the load-bearing
+// compileActOp lowers it exactly as the typed builtin verb did, and the load-bearing
 // Reverse() stays in package main. Embeds kitVerbActAdapter (service/package are also
 // ProvisionActors — the runtime act-shell half).
 type kitVerbActStepAdapter struct {
@@ -113,7 +113,7 @@ func kitStepKindToCharly(k kit.StepKindName) StepKind {
 // materializeStep rebuilds the real package-main InstallStep from a candy's
 // kit.StepDescriptor, computing the package-main-only inputs (the run-as-resolved scope,
 // the candy name) that the candy cannot. The load-bearing Reverse() lives on the built
-// step (package main), unchanged from the in-charly-module verb's ConstructStep.
+// step (package main), unchanged from the typed builtin verb's ConstructStep.
 func materializeStep(desc kit.StepDescriptor, op *Op, layer *Candy, img *ResolvedBox) InstallStep {
 	userDir, _ := resolveUserSpec(op.RunAs, img)
 	switch {
@@ -152,7 +152,7 @@ func kitStatusToCheck(s kit.Status) CheckStatus {
 // registerCompiledCheckVerb registers a COMPILED-IN host-coupled verb candy: it wraps
 // the candy's kit.CheckVerbProvider in a kitVerbAdapter and registers it (with the
 // candy's CUE schema) through the SAME RegisterBuiltinPluginUnit gate an
-// in-charly-module verb uses (schema gated at process start, origin "builtin", so the
+// typed builtin verb uses (schema gated at process start, origin "builtin", so the
 // coexist switch treats it like any compiled-in plugin). Called from the generated
 // plugins_generated.go for a kit-shape candy named in charly.yml compiled_plugins.
 // Distinct from registerCompiledPlugin (the pb/dual-placement path) because a kit verb

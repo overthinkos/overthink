@@ -7,7 +7,7 @@ import (
 
 // TestRelocatedProcessVerb_DispatchesViaKit proves the `process` check verb — relocated
 // to candy/plugin-process (a compiled-in kit candy) — dispatches through the SAME
-// providerRegistry path as an in-charly-module verb: it resolves as a CheckVerbProvider
+// providerRegistry path as an typed builtin verb: it resolves as a CheckVerbProvider
 // (the kitVerbAdapter), which passes the live *Runner as a kit.CheckContext and runs the
 // relocated pgrep logic against the executor. Deterministic via fakeExecutor (no live
 // process/pgrep), exercising both the found (pass) and absent (fail) paths — proving the

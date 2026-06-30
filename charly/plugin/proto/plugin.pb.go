@@ -149,6 +149,7 @@ type ProvidedCapability struct {
 	Word          string                 `protobuf:"bytes,2,opt,name=word,proto3" json:"word,omitempty"`                                     // the reserved word, e.g. "externalprobe"
 	InputDef      string                 `protobuf:"bytes,3,opt,name=input_def,json=inputDef,proto3" json:"input_def,omitempty"`             // the CUE def for this word's plugin_input, e.g. "#ExternalprobeInput"
 	StepContract  *StepContract          `protobuf:"bytes,4,opt,name=step_contract,json=stepContract,proto3" json:"step_contract,omitempty"` // set ONLY for class="step" (F3): the plugin-declared install-step contract
+	Structural    bool                   `protobuf:"varint,5,opt,name=structural,proto3" json:"structural,omitempty"`                        // set ONLY for class="kind" (F5): the kind decodes a STRUCTURAL entity (a spec.Deploy member tree -> uf.Bundle) rather than a FLAT body (-> uf.PluginKinds)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -209,6 +210,13 @@ func (x *ProvidedCapability) GetStepContract() *StepContract {
 		return x.StepContract
 	}
 	return nil
+}
+
+func (x *ProvidedCapability) GetStructural() bool {
+	if x != nil {
+		return x.Structural
+	}
+	return false
 }
 
 // StepContract — a class="step" plugin's DECLARED install-step contract (F3): where the
@@ -1227,12 +1235,15 @@ const file_plugin_proto_rawDesc = "" +
 	"\x10protocol_version\x18\x02 \x01(\rR\x0fprotocolVersion\x12<\n" +
 	"\bprovided\x18\x03 \x03(\v2 .charlyplugin.ProvidedCapabilityR\bprovided\x12\x1d\n" +
 	"\n" +
-	"schema_cue\x18\x04 \x01(\tR\tschemaCue\"\x9c\x01\n" +
+	"schema_cue\x18\x04 \x01(\tR\tschemaCue\"\xbc\x01\n" +
 	"\x12ProvidedCapability\x12\x14\n" +
 	"\x05class\x18\x01 \x01(\tR\x05class\x12\x12\n" +
 	"\x04word\x18\x02 \x01(\tR\x04word\x12\x1b\n" +
 	"\tinput_def\x18\x03 \x01(\tR\binputDef\x12?\n" +
-	"\rstep_contract\x18\x04 \x01(\v2\x1a.charlyplugin.StepContractR\fstepContract\"N\n" +
+	"\rstep_contract\x18\x04 \x01(\v2\x1a.charlyplugin.StepContractR\fstepContract\x12\x1e\n" +
+	"\n" +
+	"structural\x18\x05 \x01(\bR\n" +
+	"structural\"N\n" +
 	"\fStepContract\x12\x14\n" +
 	"\x05scope\x18\x01 \x01(\tR\x05scope\x12\x14\n" +
 	"\x05venue\x18\x02 \x01(\x05R\x05venue\x12\x12\n" +

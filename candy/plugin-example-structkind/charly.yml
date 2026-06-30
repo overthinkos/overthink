@@ -1,0 +1,25 @@
+plugin-example-structkind:
+    candy:
+        version: 2026.181.0001
+        description: |-
+            Reference OUT-OF-TREE charly STRUCTURAL class:kind plugin (F5) — a standalone Go
+            module serving the `examplestructkind` entity KIND over go-plugin gRPC. Unlike the
+            FLAT kind (candy/plugin-example-kind, F4, body -> opaque uf.PluginKinds), a STRUCTURAL
+            kind declares Structural:true and its OpLoad returns a spec.Deploy (BundleNode) MEMBER
+            TREE the host folds into uf.Bundle — the SAME map a builtin pod/group/candy decoder
+            populates in-proc — so the entity participates in deploy/check like a builtin. NOT in
+            compiled_plugins (out-of-process only); the channel M3 reuses to externalize the seven
+            builtin structural kind decoders.
+    plugin-example-structkind-decl:
+        plugin:
+            providers:
+                - kind:examplestructkind
+            source: github.com/overthinkos/overthink/candy/plugin-example-structkind
+    examplestructkind-module-present:
+        check: the out-of-tree structural class:kind plugin ships a buildable Go module the host can build + serve out-of-process
+        id: examplestructkind-module-present
+        context:
+            - build
+        plugin: command
+        plugin_input:
+            command: "true"

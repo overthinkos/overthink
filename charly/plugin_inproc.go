@@ -15,10 +15,11 @@ import (
 // registry. A plugin candy serves ONE provider that works in BOTH placements; this
 // type is how the in-proc placement reaches it without a socket.
 type inprocProvider struct {
-	srv      pb.ProviderServer
-	class    ProviderClass
-	word     string
-	contract *stepContract // set ONLY for a compiled-in class:step capability declaring a StepContract (F3); nil otherwise
+	srv        pb.ProviderServer
+	class      ProviderClass
+	word       string
+	contract   *stepContract // set ONLY for a compiled-in class:step capability declaring a StepContract (F3); nil otherwise
+	structural bool          // set ONLY for a compiled-in class:kind capability that decodes a STRUCTURAL entity (F5)
 }
 
 func (p *inprocProvider) Reserved() string     { return p.word }
@@ -33,6 +34,11 @@ func (p *inprocProvider) declaredStepContract() (stepContract, bool) {
 	}
 	return *p.contract, true
 }
+
+// isStructuralKind implements structuralKindCarrier — the in-proc twin of
+// grpcProvider.isStructuralKind, so a COMPILED-IN class:kind plugin folds to uf.Bundle the
+// SAME way (R3: placement-invisible).
+func (p *inprocProvider) isStructuralKind() bool { return p.structural }
 
 func (p *inprocProvider) Invoke(ctx context.Context, op *Operation) (*Result, error) {
 	rep, err := p.srv.Invoke(ctx, &pb.InvokeRequest{
@@ -74,6 +80,10 @@ func buildUnitInProc(meta pb.PluginMetaServer, srv pb.ProviderServer) (*PluginUn
 		// the in-proc twin of buildUnit's grpcProvider population (R3, placement parity).
 		if sc := c.GetStepContract(); class == ClassStep && sc != nil {
 			ip.contract = &stepContract{Scope: scopeFromName(sc.GetScope()), Venue: Venue(sc.GetVenue()), Gate: Gate(sc.GetGate())}
+		}
+		// A compiled-in class:kind capability carries its STRUCTURAL flag too (F5, R3 parity).
+		if class == ClassKind && c.GetStructural() {
+			ip.structural = true
 		}
 		providers = append(providers, ip)
 		if c.GetInputDef() != "" {

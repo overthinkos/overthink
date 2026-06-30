@@ -1071,6 +1071,14 @@ type stepContractCarrier interface {
 	declaredStepContract() (stepContract, bool)
 }
 
+// structuralKindCarrier is implemented by a provider (grpcProvider out-of-proc, inprocProvider
+// compiled-in) that carries a class:kind capability's STRUCTURAL flag (F5). true → the kind's
+// OpLoad returns a spec.Deploy member tree the host folds into uf.Bundle; false (or not
+// implemented) → the flat F4 path (opaque body → uf.PluginKinds).
+type structuralKindCarrier interface {
+	isStructuralKind() bool
+}
+
 // scopeFromName maps a declared scope NAME (the author-friendly form a class:step plugin ships
 // in its StepContract) to the internal Scope. Unknown / "system" → ScopeSystem (the safe
 // default — an external step's scope is advisory for the self-exec'ing plugin, used for ledger

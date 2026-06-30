@@ -55,6 +55,21 @@ func runPluginKind(prov Provider, gn *genericNode, uf *UnifiedFile) error {
 	if err != nil {
 		return fmt.Errorf("node %q: plugin kind %q: %w", gn.name, gn.disc, err)
 	}
+	// F5: a STRUCTURAL kind's OpLoad returns a spec.Deploy (BundleNode) member tree the host
+	// folds into uf.Bundle — the SAME map a builtin structural kind's DecodeNode populates
+	// (buildBundleNodeInto), so the entity participates in deploy/check exactly like a builtin
+	// pod/group/candy. A FLAT kind (F4) lands its opaque body in uf.PluginKinds, unchanged.
+	if sc, ok := prov.(structuralKindCarrier); ok && sc.isStructuralKind() {
+		var dn BundleNode
+		if err := json.Unmarshal(out.JSON, &dn); err != nil {
+			return fmt.Errorf("node %q: structural kind %q reply decode: %w", gn.name, gn.disc, err)
+		}
+		if uf.Bundle == nil {
+			uf.Bundle = map[string]BundleNode{}
+		}
+		uf.Bundle[gn.name] = dn
+		return nil
+	}
 	if uf.PluginKinds == nil {
 		uf.PluginKinds = map[string]map[string]json.RawMessage{}
 	}

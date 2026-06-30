@@ -37,6 +37,7 @@ message ProvidedCapability {
   string word = 2;                    // the reserved word, e.g. "externalprobe"
   string input_def = 3;               // the CUE def for this word's plugin_input, e.g. "#ExternalprobeInput"
   StepContract step_contract = 4;     // set ONLY for class="step" (F3): the plugin-declared install-step contract
+  bool structural = 5;                // set ONLY for class="kind" (F5): the kind decodes a STRUCTURAL entity (a spec.Deploy member tree -> uf.Bundle) rather than a FLAT body (-> uf.PluginKinds)
 }
 
 // StepContract — a class="step" plugin's DECLARED install-step contract (F3): where the

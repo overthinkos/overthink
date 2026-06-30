@@ -23,6 +23,10 @@ type ProvidedCapability struct {
 	// contract (Scope/Venue/Gate) the host applies to the external step via the open default
 	// arm — no compiled-in case. nil for every other class.
 	StepContract *StepContract
+	// Structural is set ONLY for Class=="kind" (F5): the kind decodes a STRUCTURAL entity —
+	// its OpLoad returns a spec.Deploy member tree the host folds into uf.Bundle — rather than
+	// a FLAT body landed opaquely in uf.PluginKinds (F4). false for every other class/kind.
+	Structural bool
 }
 
 // StepContract is the SDK-facing form of the proto StepContract — a class="step" plugin's
@@ -59,7 +63,7 @@ func BuildCapabilities(calver string, provided []ProvidedCapability, schemaFS fs
 	}
 	out := make([]*pb.ProvidedCapability, 0, len(provided))
 	for _, c := range provided {
-		pc := &pb.ProvidedCapability{Class: c.Class, Word: c.Word, InputDef: c.InputDef}
+		pc := &pb.ProvidedCapability{Class: c.Class, Word: c.Word, InputDef: c.InputDef, Structural: c.Structural}
 		if c.StepContract != nil {
 			pc.StepContract = &pb.StepContract{Scope: c.StepContract.Scope, Venue: int32(c.StepContract.Venue), Gate: c.StepContract.Gate}
 		}

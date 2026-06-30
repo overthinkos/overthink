@@ -120,10 +120,11 @@ func describe(ctx context.Context, conn *sdk.Conn) (*pb.Capabilities, error) {
 // grpcProvider is a Provider backed by a remote plugin over gRPC — the
 // out-of-process peer of a built-in. Call sites never distinguish the two.
 type grpcProvider struct {
-	conn     *sdk.Conn
-	class    ProviderClass
-	word     string
-	contract *stepContract // set ONLY for a class:step capability declaring a StepContract (F3); nil otherwise
+	conn       *sdk.Conn
+	class      ProviderClass
+	word       string
+	contract   *stepContract // set ONLY for a class:step capability declaring a StepContract (F3); nil otherwise
+	structural bool          // set ONLY for a class:kind capability that decodes a STRUCTURAL entity (F5)
 }
 
 func (g *grpcProvider) Reserved() string     { return g.word }
@@ -137,6 +138,10 @@ func (g *grpcProvider) declaredStepContract() (stepContract, bool) {
 	}
 	return *g.contract, true
 }
+
+// isStructuralKind implements structuralKindCarrier — a class:kind provider whose decode
+// returns a spec.Deploy member tree (-> uf.Bundle) rather than a flat body (F5).
+func (g *grpcProvider) isStructuralKind() bool { return g.structural }
 func (g *grpcProvider) Invoke(ctx context.Context, op *Operation) (*Result, error) {
 	rep, err := g.conn.Provider.Invoke(ctx, &pb.InvokeRequest{
 		Reserved: op.Reserved, Op: op.Op, ParamsJson: op.Params, EnvJson: op.Env, Class: string(g.class),
@@ -223,6 +228,11 @@ func buildUnit(conn *sdk.Conn, caps *pb.Capabilities) (*PluginUnit, error) {
 		// the plugin-declared Scope/Venue/Gate so compileActOp builds an externalStep with it.
 		if sc := c.GetStepContract(); class == ClassStep && sc != nil {
 			gp.contract = &stepContract{Scope: scopeFromName(sc.GetScope()), Venue: Venue(sc.GetVenue()), Gate: Gate(sc.GetGate())}
+		}
+		// A class:kind capability may declare it decodes a STRUCTURAL entity (F5): runPluginKind
+		// folds its spec.Deploy reply into uf.Bundle instead of landing a flat body opaquely.
+		if class == ClassKind && c.GetStructural() {
+			gp.structural = true
 		}
 		providers = append(providers, gp)
 		if c.GetInputDef() != "" {

@@ -205,7 +205,9 @@ func (p *provider) validate(in validateInput) string {
 	return ""
 }
 
-type meta struct{ pb.UnimplementedPluginMetaServer }
+type meta struct {
+	pb.UnimplementedPluginMetaServer
+}
 
 // Describe advertises verb:egress serving OpValidate. The egress SCHEMAS are internal
 // (compiled in newProvider) — Describe ships only the trivial #EgressInput so the host's

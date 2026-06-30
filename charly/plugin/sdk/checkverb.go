@@ -145,7 +145,9 @@ type sdkCheckContext struct {
 	env  checkEnvWire
 }
 
-func (c *sdkCheckContext) Exec() kit.Executor { return &sdkKitExecutor{e: c.exec, kind: c.env.VenueKind} }
+func (c *sdkCheckContext) Exec() kit.Executor {
+	return &sdkKitExecutor{e: c.exec, kind: c.env.VenueKind}
+}
 
 func (c *sdkCheckContext) Mode() kit.RunMode {
 	if c.env.Mode == "box" {

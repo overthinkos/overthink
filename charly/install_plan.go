@@ -1040,10 +1040,10 @@ type externalStep struct {
 	reverseOps []ReverseOp     // set DYNAMICALLY from the plugin's OpExecute reply (record-and-replay)
 }
 
-func (s *externalStep) Kind() StepKind      { return StepKind(externalStepKindPrefix + s.Word) }
-func (s *externalStep) Scope() Scope        { return s.ScopeV }
-func (s *externalStep) Venue() Venue        { return s.VenueV }
-func (s *externalStep) RequiresGate() Gate  { return s.GateV }
+func (s *externalStep) Kind() StepKind       { return StepKind(externalStepKindPrefix + s.Word) }
+func (s *externalStep) Scope() Scope         { return s.ScopeV }
+func (s *externalStep) Venue() Venue         { return s.VenueV }
+func (s *externalStep) RequiresGate() Gate   { return s.GateV }
 func (s *externalStep) Reverse() []ReverseOp { return s.reverseOps }
 
 // externalStepKindPrefix marks a StepKind string as an external (plugin-contributed) kind:

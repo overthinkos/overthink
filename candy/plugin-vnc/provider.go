@@ -50,8 +50,8 @@ type vncEndpoint struct {
 // carries the host-resolved endpoint (nil when the host could not resolve one — e.g. no
 // vnc op, no live deployment, a VM with no VNC display device).
 type vncEnv struct {
-	Box  string       `json:"box"`
-	Mode string       `json:"mode"` // "live" | "box"
+	Box       string          `json:"box"`
+	Mode      string          `json:"mode"` // "live" | "box"
 	Substrate json.RawMessage `json:"substrate"`
 }
 

@@ -66,7 +66,9 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	return nil, fmt.Errorf("builder %q: unsupported op %q (serves only %q + %q)", builderWord, req.GetOp(), sdk.OpCollectContext, sdk.OpReverse)
 }
 
-type meta struct{ pb.UnimplementedPluginMetaServer }
+type meta struct {
+	pb.UnimplementedPluginMetaServer
+}
 
 // Describe advertises the builder:npm capability + its self-contained CUE schema over the same
 // channel a builtin uses; BuildCapabilities compiles the schema standalone, failing loudly if broken.

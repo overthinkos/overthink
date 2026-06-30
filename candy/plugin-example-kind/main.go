@@ -67,7 +67,9 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	}
 }
 
-type meta struct{ pb.UnimplementedPluginMetaServer }
+type meta struct {
+	pb.UnimplementedPluginMetaServer
+}
 
 // Describe ships the kind's capability (Class "kind", word "examplekind") + its self-contained
 // CUE schema over the SAME Describe channel a compiled-in kind uses.

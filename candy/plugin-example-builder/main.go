@@ -58,7 +58,9 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	return &pb.InvokeReply{ResultJson: j}, nil
 }
 
-type meta struct{ pb.UnimplementedPluginMetaServer }
+type meta struct {
+	pb.UnimplementedPluginMetaServer
+}
 
 // Describe advertises the builder:examplebuilder capability + its self-contained CUE
 // schema over the same channel a builtin uses; BuildCapabilities compiles the schema

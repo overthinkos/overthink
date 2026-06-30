@@ -53,7 +53,9 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	return &pb.InvokeReply{ResultJson: out}, nil
 }
 
-type meta struct{ pb.UnimplementedPluginMetaServer }
+type meta struct {
+	pb.UnimplementedPluginMetaServer
+}
 
 // Describe ships the kind's capability (Class "kind", word "init") + its self-contained
 // CUE schema via sdk.BuildCapabilities.

@@ -67,7 +67,9 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	}
 }
 
-type meta struct{ pb.UnimplementedPluginMetaServer }
+type meta struct {
+	pb.UnimplementedPluginMetaServer
+}
 
 // Describe advertises the examplelifecycle deploy substrate. (The F6 lifecycle Ops are dispatched
 // on the SAME Provider.Invoke — no separate capability surface; the host registers a wire-backed

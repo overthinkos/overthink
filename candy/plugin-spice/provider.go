@@ -50,8 +50,8 @@ type spiceEndpoint struct {
 // CheckEnv; Spice carries the host-resolved endpoint (nil when the host could not
 // resolve one — e.g. no spice op, no VM context).
 type spiceEnv struct {
-	Box   string         `json:"box"`
-	Mode  string         `json:"mode"` // "live" | "box"
+	Box       string          `json:"box"`
+	Mode      string          `json:"mode"` // "live" | "box"
 	Substrate json.RawMessage `json:"substrate"`
 }
 

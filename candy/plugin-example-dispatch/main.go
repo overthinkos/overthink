@@ -85,7 +85,9 @@ func (provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeRe
 	return &pb.InvokeReply{ResultJson: res}, nil
 }
 
-type meta struct{ pb.UnimplementedPluginMetaServer }
+type meta struct {
+	pb.UnimplementedPluginMetaServer
+}
 
 // Describe advertises verb:exampledispatch. (The F10 reverse legs are the SDK Executor's
 // InvokeProvider/HostBuild — no extra capability surface; the verb is driven WITH an executor.)

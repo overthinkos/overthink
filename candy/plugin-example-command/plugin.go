@@ -66,7 +66,9 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	return &pb.InvokeReply{}, nil
 }
 
-type meta struct{ pb.UnimplementedPluginMetaServer }
+type meta struct {
+	pb.UnimplementedPluginMetaServer
+}
 
 // Describe advertises command:examplecommand so the COMPILED-IN path registers it as a command
 // provider (buildUnitInProc → inprocProvider Class=command; the host builds its dynamic Kong

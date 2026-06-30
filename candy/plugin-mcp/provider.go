@@ -60,8 +60,8 @@ type mcpEndpoint struct {
 // carries the host-resolved context (nil when the host could not resolve one — e.g. no
 // mcp op, no live deployment).
 type mcpEnv struct {
-	Box  string       `json:"box"`
-	Mode string       `json:"mode"` // "live" | "box"
+	Box       string          `json:"box"`
+	Mode      string          `json:"mode"` // "live" | "box"
 	Substrate json.RawMessage `json:"substrate"`
 }
 

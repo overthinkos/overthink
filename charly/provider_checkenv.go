@@ -97,7 +97,6 @@ func decodePluginInput(input map[string]any, dst any) {
 	}
 }
 
-
 // runPluginVerb dispatches the generic `plugin:` verb to its registered Provider
 // (built-in OR out-of-tree, transport-invisible). This is the permanent plugin
 // fall-through the foundation cutover (C0) adds; the built-in verb switch above is

@@ -52,7 +52,9 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	return &pb.InvokeReply{ResultJson: j}, nil
 }
 
-type meta struct{ pb.UnimplementedPluginMetaServer }
+type meta struct {
+	pb.UnimplementedPluginMetaServer
+}
 
 // Describe ships the plugin's capabilities + its self-contained CUE schema via
 // sdk.BuildCapabilities (compiled standalone here, failing loudly if broken/empty).

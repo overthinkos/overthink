@@ -10,8 +10,8 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"embed"
+	"encoding/json"
 	"fmt"
 
 	"github.com/overthinkos/overthink/charly/plugin/kit"
@@ -64,7 +64,9 @@ func (provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeRe
 	return sdk.BuildDeployReply(reverseOps, "plugin-example-stepkind", calver)
 }
 
-type meta struct{ pb.UnimplementedPluginMetaServer }
+type meta struct {
+	pb.UnimplementedPluginMetaServer
+}
 
 // Describe advertises the step:examplestepkind capability WITH its DECLARED StepContract
 // (Scope user, Venue host-native (0), no gate) — the F3 plugin-declared install-step contract

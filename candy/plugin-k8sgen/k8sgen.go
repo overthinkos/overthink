@@ -837,7 +837,6 @@ func checkToProbe(c *spec.Op) map[string]any {
 	return nil
 }
 
-
 // parseHTTPForProbe extracts (path, port, host) from a check's HTTP URL.
 // Defaults: path "/", port 80 for http / 443 for https, host empty (k8s
 // uses the pod IP). Best-effort — on parse failure returns the URL as

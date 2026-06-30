@@ -48,8 +48,8 @@ type cdpEndpoint struct {
 // carries the host-resolved DevTools endpoint (nil when the host could not resolve one —
 // e.g. no cdp op, no live deployment).
 type cdpEnv struct {
-	Box  string       `json:"box"`
-	Mode string       `json:"mode"` // "live" | "box"
+	Box       string          `json:"box"`
+	Mode      string          `json:"mode"` // "live" | "box"
 	Substrate json.RawMessage `json:"substrate"`
 }
 

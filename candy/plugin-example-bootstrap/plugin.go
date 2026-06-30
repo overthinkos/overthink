@@ -53,7 +53,9 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	return &pb.InvokeReply{ResultJson: out}, nil
 }
 
-type meta struct{ pb.UnimplementedPluginMetaServer }
+type meta struct {
+	pb.UnimplementedPluginMetaServer
+}
 
 // Describe advertises the capability with Phase "bootstrap" (F9) — the host enumerates it in the
 // bootstrap phase (providersInPhase) and invokes OpBootstrap before config validation. No InputDef:

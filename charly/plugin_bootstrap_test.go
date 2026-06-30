@@ -86,9 +86,9 @@ func TestBootstrapPhase_ExampleEnumeratedAndNoOp(t *testing.T) {
 // the no-op. Unique word so it never collides with a real provider.
 type zzFakeBootstrapProvider struct{}
 
-func (zzFakeBootstrapProvider) Reserved() string         { return "zzfakebootstrap" }
-func (zzFakeBootstrapProvider) Class() ProviderClass     { return ClassVerb }
-func (zzFakeBootstrapProvider) pluginPhase() string      { return sdk.PhaseBootstrap }
+func (zzFakeBootstrapProvider) Reserved() string     { return "zzfakebootstrap" }
+func (zzFakeBootstrapProvider) Class() ProviderClass { return ClassVerb }
+func (zzFakeBootstrapProvider) pluginPhase() string  { return sdk.PhaseBootstrap }
 func (zzFakeBootstrapProvider) Invoke(_ context.Context, op *Operation) (*Result, error) {
 	out, err := marshalJSON(map[string]string{"config": "TRANSFORMED-BY-BOOTSTRAP"})
 	if err != nil {

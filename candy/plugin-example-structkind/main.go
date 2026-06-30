@@ -66,7 +66,9 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 	return &pb.InvokeReply{ResultJson: out}, nil
 }
 
-type meta struct{ pb.UnimplementedPluginMetaServer }
+type meta struct {
+	pb.UnimplementedPluginMetaServer
+}
 
 // Describe advertises the STRUCTURAL kind capability (Class "kind", word "examplestructkind",
 // Structural:true) — the F5 flag that makes the host fold its OpLoad reply into uf.Bundle.

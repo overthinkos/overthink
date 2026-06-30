@@ -156,7 +156,18 @@ func (c *BoxConfigSetupCmd) resolveDeployRef() (deployBoxName, imageRef string) 
 		if deployBoxName != c.Box {
 			fmt.Fprintf(os.Stderr, "config: deploy %q declares box: %q\n", c.Box, deployBoxName)
 		}
-		imageRef = resolveShellImageRef("", deployBoxName, c.Tag)
+		// Prefer the persisted overlay ref: PrepareVenue records the EXACT
+		// <deploy-key>-overlay:<hash> an add_candy: build produced, so config
+		// deploys the OVERLAY (carrying the add_candy: layers) instead of the
+		// base image: short-name re-resolved by a CalVer sort the overlay alias
+		// can lose to the base on a same-minute build (the add_candy-on-pod
+		// deploy-resolution quirk). Empty for a plain pod, or when the recorded
+		// overlay is gone (post-`bundle del`) → fall back to base-name resolution.
+		if ov := resolveDeployResolvedImage(c.Box, c.Instance); ov != "" && LocalImageExists("podman", ov) {
+			imageRef = ov
+		} else {
+			imageRef = resolveShellImageRef("", deployBoxName, c.Tag)
+		}
 	}
 	return deployBoxName, imageRef
 }
@@ -394,7 +405,13 @@ func (c *BoxConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// (e.g. `ghcr.io/overthinkos/versa:2026.131.2134`) — pinning
 	// to that exact tag is the whole point, so don't substitute
 	// the deploy-key into a freshly-composed ref.
-	if meta.Registry != "" && !looksLikeFullRef(imageRef) && c.ExplicitRef == "" {
+	// Skip the registry re-resolution when imageRef is the persisted overlay ref
+	// (an add_candy: pod): re-composing meta.Registry/<base>:<tag> here would
+	// throw away the overlay and deploy the BASE (the overlay ref is a local,
+	// non-registry tag, so looksLikeFullRef can't protect it). R3: the same
+	// resolveDeployResolvedImage gate guards both consume sites.
+	usingResolvedOverlay := resolveDeployResolvedImage(c.Box, c.Instance) == imageRef && imageRef != ""
+	if meta.Registry != "" && !looksLikeFullRef(imageRef) && c.ExplicitRef == "" && !usingResolvedOverlay {
 		imageRef = resolveShellImageRef(meta.Registry, deployBoxName, c.Tag)
 	}
 

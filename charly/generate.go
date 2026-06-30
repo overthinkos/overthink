@@ -2744,6 +2744,31 @@ func candyMapKey(layer *Candy) string {
 	return layer.Name
 }
 
+// candyByName resolves a candy by its INTRINSIC bare name against g.Candies.
+// It is the FORWARD counterpart of candyMapKey (which maps a *Candy back to its
+// store key): a LOCAL candy is keyed bare == Name, so the direct lookup hits; a
+// REMOTE candy (e.g. a deploy's add_candy: pulled via ResolveOpts.ExtraCandyRefs)
+// is keyed under its fully-qualified ref (candyMapKey), so the direct bare lookup
+// MISSES and we fall back to matching the Candy's own Name. Every call site that
+// holds a bare candy name (a plan step's CandyName; an overlay-candy name from
+// collectOverlayCandies / p.AddCandies) and needs the *Candy goes through here, so
+// a remote add_candy overlay layer resolves instead of being silently skipped
+// (the add_candy-on-pod-overlay "candy not found" / skipped-stage class).
+func (g *Generator) candyByName(name string) *Candy {
+	if g == nil {
+		return nil
+	}
+	if c := g.Candies[name]; c != nil {
+		return c
+	}
+	for _, c := range g.Candies {
+		if c != nil && c.Name == name {
+			return c
+		}
+	}
+	return nil
+}
+
 // candyStageDirName is the versioned staging subdir for a remote candy under
 // .build/_candy/ — "<name>.<version>". Keying by the candy's CalVer keeps
 // DIFFERENT versions of the same candy in DISTINCT dirs, so concurrent builds

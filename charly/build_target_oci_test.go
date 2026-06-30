@@ -149,3 +149,31 @@ func (f *fakeSkipStep) Scope() Scope         { return ScopeUser }
 func (f *fakeSkipStep) Venue() Venue         { return VenueSkip }
 func (f *fakeSkipStep) RequiresGate() Gate   { return GateNone }
 func (f *fakeSkipStep) Reverse() []ReverseOp { return nil }
+
+// TestOCITargetLookupCandyRemoteQualifiedKey guards the add_candy-on-pod overlay
+// build: a REMOTE add_candy candy (fetched via ResolveOpts.ExtraCandyRefs) is keyed
+// in Generator.Candies under its fully-qualified ref, while the compiled plan step's
+// CandyName is the candy's bare intrinsic name. lookupCandy must resolve the bare
+// name to the qualified-key candy, or OCITarget.Emit fails with
+// `task emit: candy "<name>" not found`. Regression for the add_candy-on-pod-overlay
+// "candy not found" build failure.
+func TestOCITargetLookupCandyRemoteQualifiedKey(t *testing.T) {
+	gen := &Generator{Candies: map[string]*Candy{
+		"github.com/org/repo/candy/marker": {Name: "marker"},
+		"local-layer":                      {Name: "local-layer"},
+	}}
+	tgt := &OCITarget{Generator: gen}
+
+	// Exact (local) key — bare == .Name — still resolves directly.
+	if c := tgt.lookupCandy("local-layer"); c == nil || c.Name != "local-layer" {
+		t.Fatalf("local-layer: got %v, want .Name=local-layer", c)
+	}
+	// Bare name resolves the qualified-key remote candy (the regression this fix closes).
+	if c := tgt.lookupCandy("marker"); c == nil || c.Name != "marker" {
+		t.Fatalf("marker bare-name lookup returned %v; qualified-key .Name fallback is broken", c)
+	}
+	// An unknown name is still nil (no accidental match).
+	if c := tgt.lookupCandy("nonexistent"); c != nil {
+		t.Fatalf("nonexistent: want nil, got %v", c)
+	}
+}

@@ -107,7 +107,7 @@ func (t *PodDeployTarget) renderOverlayServices(overlayCandies []string) (string
 	}
 	var anySvc bool
 	for _, n := range overlayCandies {
-		l := t.Generator.Candies[n]
+		l := t.Generator.candyByName(n)
 		if l != nil && l.HasInit(initName) {
 			anySvc = true
 			break
@@ -136,7 +136,7 @@ func (t *PodDeployTarget) renderOverlayServices(overlayCandies []string) (string
 	stageName := initDef.StageName + "-overlay"
 	fmt.Fprintf(&stage, "FROM scratch AS %s\n", stageName)
 	for i, candyName := range overlayCandies {
-		l := t.Generator.Candies[candyName]
+		l := t.Generator.candyByName(candyName)
 		if l == nil || !l.HasInit(initName) {
 			continue
 		}
@@ -261,6 +261,30 @@ func collectOverlayCandies(plans []*InstallPlan) []string {
 	return out
 }
 
+// overlayOCITarget builds the OCITarget that renders the overlay Containerfile.
+//
+// ContextRelPrefix MUST equal BuildDir (both the overlay build dir, relative to
+// the build-context root = the project dir): emitWrite stages a write: step's
+// inline content to `<BuildDir>/_inline/<candy>/<hash>` and the matching COPY in
+// the Containerfile references it by `<ContextRelPrefix>/_inline/<candy>/<hash>`.
+// When ContextRelPrefix is empty the COPY drops the build-dir prefix and resolves
+// to `<context>/_inline/...` — a path that does not exist — so the overlay build
+// fails at `COPY … _inline/<candy>/<hash>: stat: no such file or directory`. This
+// mirrors the full build, which sets contextRelPrefix = .build/<boxName> to match
+// its buildDir (generate.go writeCandySteps). buildDir is already relative to the
+// build-context root (PrepareVenue / OverlayBuildDir convention), so it serves as
+// both the on-disk write root and the context-relative COPY prefix.
+func (t *PodDeployTarget) overlayOCITarget(buildDir string) *OCITarget {
+	return &OCITarget{
+		DistroDef:        t.DistroDef,
+		BuilderConfig:    t.BuilderConfig,
+		Generator:        t.Generator,
+		Box:              t.Box,
+		BuildDir:         buildDir,
+		ContextRelPrefix: buildDir,
+	}
+}
+
 // buildOverlay synthesizes an overlay Containerfile and builds the image.
 func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayCandies []string, opts EmitOpts) error {
 	dir := t.OverlayBuildDir
@@ -274,13 +298,7 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayCandies []st
 	// required for task emission to produce RUN directives (without them
 	// the emitter emits "no Generator context" comments — the overlay
 	// then contains no install logic).
-	oci := &OCITarget{
-		DistroDef:     t.DistroDef,
-		BuilderConfig: t.BuilderConfig,
-		Generator:     t.Generator,
-		Box:           t.Box,
-		BuildDir:      dir,
-	}
+	oci := t.overlayOCITarget(dir)
 	// Only emit for the overlay candies.
 	filtered := filterPlansByCandies(plans, overlayCandies)
 	if err := oci.Emit(filtered, opts); err != nil {
@@ -297,12 +315,15 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayCandies []st
 	// "no stage or image found with that name."
 	if t.Generator != nil {
 		for _, candyName := range overlayCandies {
-			layer := t.Generator.Candies[candyName]
+			layer := t.Generator.candyByName(candyName)
 			if layer == nil {
 				continue
 			}
+			// candyCopySource is keyed by the candy's STORE key (candyMapKey),
+			// not its bare name — a remote add_candy candy's COPY source lives at
+			// .build/_candy/<name>.<version>, reachable only via the qualified key.
 			fmt.Fprintf(&cf, "FROM scratch AS %s\n", layer.Name)
-			fmt.Fprintf(&cf, "COPY %s/ /\n\n", t.Generator.candyCopySource(candyName))
+			fmt.Fprintf(&cf, "COPY %s/ /\n\n", t.Generator.candyCopySource(candyMapKey(layer)))
 		}
 	}
 	// Render service: entries from overlay candies — emits a scratch
@@ -440,7 +461,7 @@ func (t *PodDeployTarget) renderOverlaySecurityLabel(overlayCandies []string) st
 	// OR privileged, last-writer for cgroupns, shm/memory tightest-wins.
 	added := false
 	for _, candyName := range overlayCandies {
-		layer := t.Generator.Candies[candyName]
+		layer := t.Generator.candyByName(candyName)
 		if layer == nil {
 			continue
 		}

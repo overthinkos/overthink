@@ -306,11 +306,21 @@ func (t *OCITarget) emitOp(s *OpStep) error {
 
 // lookupCandy pulls the Candy struct by name from the Generator's
 // scanned candy set. Returns nil when the Generator is nil.
+//
+// A plan step's CandyName is the candy's INTRINSIC bare name (e.g.
+// "pod-addcandy-marker"), but a REMOTE add_candy candy fetched via
+// ResolveOpts.ExtraCandyRefs is keyed in Generator.Candies under its
+// fully-qualified ref (e.g. "github.com/org/repo/candy/pod-addcandy-marker").
+// A local candy keys bare == .Name, so the direct lookup covers it; for a
+// remote add_candy overlay layer the direct lookup misses, so fall back to
+// matching the Candy's own Name. Without this fallback an add_candy overlay
+// that pulls a remote layer with a run:/task step fails the overlay build with
+// `task emit: candy "<name>" not found` even though the candy WAS scanned in.
 func (t *OCITarget) lookupCandy(name string) *Candy {
 	if t.Generator == nil {
 		return nil
 	}
-	return t.Generator.Candies[name]
+	return t.Generator.candyByName(name)
 }
 
 // emitFile renders a file placement. Uses COPY --chmod/--chown with

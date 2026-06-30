@@ -339,6 +339,29 @@ func resolveDeployKeyToBox(key, instance string) string {
 	return ""
 }
 
+// resolveDeployResolvedImage returns the concrete overlay image ref a pod
+// deploy's add_candy: overlay build persisted (BundleNode.ResolvedImage), or ""
+// when none is recorded. This is charly-written PER-HOST runtime state (written
+// by PrepareVenue via saveDeployState, like resolved_port), so it is read ONLY
+// from the per-host charly.yml — never the project config, which carries no
+// resolved_image. When set, resolveDeployRef deploys THIS exact overlay (with
+// the add_candy: layers) instead of re-resolving the base image: short-name by
+// a CalVer sort the overlay alias can lose to the base on a same-minute build.
+func resolveDeployResolvedImage(key, instance string) string {
+	if key == "" {
+		return ""
+	}
+	if dc := loadDeployConfigForRead("resolveDeployResolvedImage"); dc != nil {
+		if entry, ok := dc.Bundle[deployKey(key, instance)]; ok && entry.ResolvedImage != "" {
+			return entry.ResolvedImage
+		}
+		if entry, ok := dc.Bundle[key]; ok && entry.ResolvedImage != "" {
+			return entry.ResolvedImage
+		}
+	}
+	return ""
+}
+
 // findVmDeployNode finds the BundleNode for a vm-target deploy. It is
 // THE shared "which deploy entry backs this VM" lookup used by both
 // `charly bundle add` (artifact-env collection) and `charly check live` (tests
@@ -1371,6 +1394,16 @@ type SaveDeployStateInput struct {
 	// hard-failing every subsequent `charly` invocation.
 	Box    string
 	Target string
+
+	// ResolvedImage is the concrete overlay image ref produced by a pod
+	// deploy's add_candy: overlay build (`<deploy-key>-overlay:<hash>`),
+	// persisted by PrepareVenue so config/start deploy EXACTLY that overlay
+	// (carrying the add_candy layers) rather than re-resolving the base
+	// image: short-name by a CalVer sort the overlay alias can lose to the
+	// base on a same-minute build. Written when non-empty (the latest overlay
+	// build wins); other callers (charly config/start) leave it "" so they
+	// never clobber a persisted overlay ref.
+	ResolvedImage string
 }
 
 // saveDeployState persists deployment parameters to charly.yml (best-effort).
@@ -1405,6 +1438,11 @@ func saveDeployState(boxName, instance string, input SaveDeployStateInput) {
 	}
 	if input.Target != "" && entry.Target == "" {
 		entry.Target = input.Target
+	}
+	// ResolvedImage: the latest overlay build wins (clobber). Only PrepareVenue
+	// sets it (non-empty); charly config/start pass "" and never clobber it.
+	if input.ResolvedImage != "" {
+		entry.ResolvedImage = input.ResolvedImage
 	}
 	if input.Volume != nil {
 		entry.Volume = input.Volume

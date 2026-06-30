@@ -1261,6 +1261,14 @@ type Deploy struct {
 
 	ResolvedPort []PortPin `yaml:"resolved_port,omitempty" json:"resolved_port,omitempty"`
 
+	// resolved_image: the concrete image ref the pod deploy's add_candy: overlay
+	// build produced (`<deploy-key>-overlay:<hash>`), persisted by PrepareVenue so
+	// config/start deploy EXACTLY that overlay (carrying the add_candy layers)
+	// instead of re-resolving the base image: short-name by a CalVer sort that the
+	// overlay alias can lose to the base on a same-minute build. charly-written
+	// state (like resolved_port), never authored; empty for a plain pod.
+	ResolvedImage string `yaml:"resolved_image,omitempty" json:"resolved_image,omitempty"`
+
 	Env []EnvVar `yaml:"env,omitempty" json:"env,omitempty"`
 
 	EnvFile string `yaml:"env_file,omitempty" json:"env_file,omitempty"`

@@ -49,6 +49,13 @@
 	acme_email?: string & !="" @go(AcmeEmail)
 	port?: [...#PortPin]
 	resolved_port?: [...#PortPin] @go(ResolvedPort)
+	// resolved_image: the concrete image ref the pod deploy's add_candy: overlay
+	// build produced (`<deploy-key>-overlay:<hash>`), persisted by PrepareVenue so
+	// config/start deploy EXACTLY that overlay (carrying the add_candy layers)
+	// instead of re-resolving the base image: short-name by a CalVer sort that the
+	// overlay alias can lose to the base on a same-minute build. charly-written
+	// state (like resolved_port), never authored; empty for a plain pod.
+	resolved_image?: string & !="" @go(ResolvedImage)
 	env?: [...#EnvVar]
 	env_file?: string & !="" @go(EnvFile)
 	network?:  string & !=""

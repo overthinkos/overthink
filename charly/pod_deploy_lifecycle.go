@@ -92,8 +92,19 @@ func (podSubstrateLifecycle) PrepareVenue(_ context.Context, name, dir string, n
 	tag := node.Version
 
 	// Build a Generator + ResolvedBox so the overlay's OCITarget renders task steps as
-	// actual RUN directives (not "no Generator context" comments).
-	gen, _ := NewGenerator(dir, tag, ResolveOpts{})
+	// actual RUN directives (not "no Generator context" comments). Thread the deploy's
+	// add_candy: refs into the candy scan (ExtraCandyRefs) — the SAME merged set the
+	// compile (compileNodePlans) resolved, carried on the plans' AddCandies provenance
+	// (R3) — so OCITarget.lookupCandy can resolve each add_candy candy BY NAME. Without
+	// this the overlay Generator scanned only the project + box candies, so an add_candy
+	// candy carrying a run:/task step (e.g. a remote @github marker layer) failed the
+	// overlay build with `task emit: candy "<name>" not found`, baking the add_candy
+	// layer into NOTHING. A bare local ref is a no-op in ExtraCandyRefs (addRef gates on
+	// IsRemoteCandyRef; the project scan already has it); a remote @github ref joins the
+	// fetch (honoring CHARLY_REPO_OVERRIDE), exactly as in compileNodePlans. Empty for a
+	// no-add_candy pod (collectOverlayCandies returns nil), so prior behavior is
+	// unchanged for base-only deploys.
+	gen, _ := NewGenerator(dir, tag, ResolveOpts{ExtraCandyRefs: collectOverlayCandies(plans)})
 	var resolvedImg *ResolvedBox
 	if gen != nil && gen.Boxes != nil {
 		resolvedImg = gen.Boxes[base]
@@ -154,8 +165,21 @@ func (podSubstrateLifecycle) PrepareVenue(_ context.Context, name, dir string, n
 		return nil, fmt.Errorf("pod deploy %q: overlay build: %w", name, err)
 	}
 	if !opts.DryRun {
-		fmt.Printf("Overlay image ready: %s\n", tgt.OverlayImageRef())
+		overlayRef := tgt.OverlayImageRef()
+		fmt.Printf("Overlay image ready: %s\n", overlayRef)
 		fmt.Println("To start the container, run: charly start " + deployName)
+		// Persist the concrete overlay ref so config/start deploy EXACTLY this
+		// overlay (carrying the add_candy: layers), instead of re-resolving the
+		// base image: short-name by a CalVer sort the overlay alias can lose to
+		// the base on a same-minute build (the add_candy-on-pod deploy-resolution
+		// quirk). Only when an overlay was actually built — add_candy present, so
+		// OverlayImageRef differs from the base; a plain pod persists nothing and
+		// config falls back to the base-name resolution. Keyed exactly as config
+		// reads it (parseDeployKey → the same box/instance split).
+		if overlayRef != "" && overlayRef != tgt.BaseImage {
+			boxKey, instKey := parseDeployKey(name)
+			saveDeployState(boxKey, instKey, SaveDeployStateInput{ResolvedImage: overlayRef})
+		}
 	}
 
 	// Host-local venue: the overlay is baked host-side; the plugin walks nothing, and

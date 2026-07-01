@@ -48,12 +48,17 @@ const (
 	ClassStep         ProviderClass = "step"
 	ClassBuilder      ProviderClass = "builder"
 	ClassCommand      ProviderClass = "command"
+	// ClassBuild serves the BUILD-ENGINE DISPATCH words (build:box, build:generate): a
+	// compiled-in plugin whose Invoke calls back the F10 HostBuild seam so the image-build /
+	// generate engine runs host-side in-proc (the engine is I/O-bound with unexported state +
+	// a huge blast radius, so it STAYS core — only a wire envelope crosses). See candy/plugin-build.
+	ClassBuild ProviderClass = "build"
 )
 
 // providerClasses is the closed set, used by the loader to validate a plugin's
 // `provides:` entries and by the bijection gate.
 var providerClasses = map[ProviderClass]bool{
-	ClassKind: true, ClassVerb: true, ClassDeployTarget: true, ClassStep: true, ClassBuilder: true, ClassCommand: true,
+	ClassKind: true, ClassVerb: true, ClassDeployTarget: true, ClassStep: true, ClassBuilder: true, ClassCommand: true, ClassBuild: true,
 }
 
 // splitCapability parses a "<class>:<word>" capability string as authored in a
@@ -117,6 +122,7 @@ const (
 	OpEmit     = sdk.OpEmit
 	OpExecute  = sdk.OpExecute
 	OpResolve  = sdk.OpResolve
+	OpBuild    = sdk.OpBuild
 
 	// Deploy-time builder-IR legs of an externalized detection-builder (cargo/npm/pixi/aur);
 	// invoked host-side in the build PRE-PASS, never inside the pure BuildDeployPlan compile.

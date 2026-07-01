@@ -20,6 +20,9 @@ import (
 
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v3"
+
+	"github.com/overthinkos/overthink/charly/plugin/sdk"
+	"github.com/overthinkos/overthink/charly/spec"
 )
 
 // BuildCmd builds container images
@@ -57,8 +60,10 @@ func ensureBuilderImageBuilt(engine, builderRef string) (string, error) {
 		return resolved, nil
 	}
 	fmt.Fprintf(os.Stderr, "Builder image %q not in local storage — building it automatically...\n", builderRef)
-	bc := &BuildCmd{Boxes: []string{builderRef}, IncludeDisabled: true}
-	if err := bc.Run(); err != nil {
+	// Call the host-side build engine DIRECTLY (not through the build:box plugin dispatch): this
+	// is the engine recursing on a dependency image, not the `charly box build` CLI command
+	// re-entering, so it needs no reverse-channel round-trip.
+	if _, err := runBoxBuild(spec.BuildRequest{Boxes: []string{builderRef}, IncludeDisabled: true}); err != nil {
 		return "", fmt.Errorf("auto-building builder image %q: %w", builderRef, err)
 	}
 	resolved, err := resolveLocalImageRef(engine, builderRef)
@@ -117,58 +122,105 @@ func (c *BuildCmd) Run() error {
 		return err
 	}
 
-	// Generate Containerfiles via the shared box-selection rule. An empty
-	// selection builds every enabled box; a named selection scopes the
-	// resolved set (RequestedBoxes) and, with --include-disabled, relaxes the
-	// enabled: false gate for exactly those names — so the override never
-	// widens the working set globally and surfaces unrelated disabled-image dep
-	// errors. Explicit targets are also how a qualified name (e.g.
-	// `charly box build charly.arch-builder`) is pulled into the resolved set even
-	// when it isn't a base/builder of any root image. Remote (`@github…`) refs
-	// were already dispatched to buildRemote above, so these are local names.
+	// Route the build through the compiled-in build:box plugin over the F10 HostBuild seam:
+	// the heavy engine (Generator / buildImages / merge / push / retention) STAYS host-side
+	// in-proc — only this small BuildRequest envelope crosses. The plugin calls back
+	// HostBuild("image"), which runs runBoxBuild host-side. See dispatchBuild + hostBuildImage.
+	return dispatchBoxBuild(spec.BuildRequest{
+		Boxes:           c.Boxes,
+		Tag:             c.Tag,
+		Dir:             dir,
+		IncludeDisabled: c.IncludeDisabled,
+		DevLocalPkg:     c.DevLocalPkg,
+		Push:            c.Push,
+		Platform:        c.Platform,
+		Cache:           c.Cache,
+		NoCache:         c.NoCache,
+		Jobs:            c.Jobs,
+		PodmanJobs:      c.PodmanJobs,
+	})
+}
+
+// runBoxBuild is the HOST-SIDE image-build engine behind the build:box plugin (F10 HostBuild
+// seam). It reconstructs everything from req.Dir — Config / ResolvedBox / Candy via NewGenerator,
+// exactly as pod_deploy_lifecycle re-runs NewGenerator(dir,…) — then generates Containerfiles,
+// builds every selected image (with inline merge), pushes (podman --push), and prunes old tags.
+// Returns the built image refs. The engine never crosses the plugin boundary; only the
+// BuildRequest in and the BuildReply out do. Also called DIRECTLY (not through the plugin
+// dispatch) by ensureBuilderImageBuilt — that is the host engine recursing on a dependency, not
+// the `charly box build` CLI command re-entering.
+func runBoxBuild(req spec.BuildRequest) ([]string, error) {
+	dir := req.Dir
+	if dir == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return nil, err
+		}
+		dir = cwd
+	}
+	c := &BuildCmd{
+		Boxes:           req.Boxes,
+		Tag:             req.Tag,
+		Push:            req.Push,
+		Platform:        req.Platform,
+		Cache:           req.Cache,
+		NoCache:         req.NoCache,
+		Jobs:            req.Jobs,
+		PodmanJobs:      req.PodmanJobs,
+		IncludeDisabled: req.IncludeDisabled,
+		DevLocalPkg:     req.DevLocalPkg,
+	}
+
+	// Generate Containerfiles via the shared box-selection rule. An empty selection builds
+	// every enabled box; a named selection scopes the resolved set (RequestedBoxes) and, with
+	// --include-disabled, relaxes the enabled: false gate for exactly those names — so the
+	// override never widens the working set globally and surfaces unrelated disabled-image dep
+	// errors. Explicit targets are also how a qualified name (e.g. `charly box build
+	// charly.arch-builder`) is pulled into the resolved set even when it isn't a base/builder of
+	// any root image. Remote (`@github…`) refs were already dispatched to buildRemote by
+	// BuildCmd.Run, so these are local names.
 	resolveOpts := boxResolveOpts(c.Boxes, c.IncludeDisabled)
 	gen, err := NewGenerator(dir, c.Tag, resolveOpts)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	// No per-dir build lock here: generate writes the shared .build/ tree
-	// race-free via atomic staging (build_stage_atomic.go), and buildImage takes a
-	// PER-IMAGE lock so shared intermediates build once while leaves fan out in
-	// parallel (acquireImageBuildLock). Serializing the whole build phase would
-	// stall parallel cold builds — the long pole — which we must not do.
-	// Disposable check beds build the charly toolchain (any localpkg candy) from
-	// LOCAL in-development source; production boxes download the published
-	// release. The check-bed runner passes --dev-local-pkg (see check_bed_run.go).
+	// No per-dir build lock here: generate writes the shared .build/ tree race-free via atomic
+	// staging (build_stage_atomic.go), and buildImage takes a PER-IMAGE lock so shared
+	// intermediates build once while leaves fan out in parallel (acquireImageBuildLock).
+	// Serializing the whole build phase would stall parallel cold builds — the long pole — which
+	// we must not do. Disposable check beds build the charly toolchain (any localpkg candy) from
+	// LOCAL in-development source; production boxes download the published release. The check-bed
+	// runner passes --dev-local-pkg (see check_bed_run.go).
 	gen.DevLocalPkg = c.DevLocalPkg
 	if err := gen.Generate(); err != nil {
-		return fmt.Errorf("generating build files: %w", err)
+		return nil, fmt.Errorf("generating build files: %w", err)
 	}
 
-	// Resolve build-speed tunables from defaults: (the CLI flag / env layer
-	// already populated these BuildCmd fields when set; fill the gaps from
-	// project config — a named fallback applies later if config is silent too).
+	// Resolve build-speed tunables from defaults: (the CLI flag / env layer already populated
+	// these BuildCmd fields when set; fill the gaps from project config — a named fallback
+	// applies later if config is silent too).
 	def := gen.Config.Defaults
 	c.resolveBuildTunables(def)
 
 	if err := ensureCharlyBinaryFresh(dir, gen.Boxes, c.Boxes); err != nil {
-		return fmt.Errorf("refreshing charly binary: %w", err)
+		return nil, fmt.Errorf("refreshing charly binary: %w", err)
 	}
 
-	engine, buildEngine, err := c.buildImages(dir, gen)
+	engine, buildEngine, built, err := c.buildImages(dir, gen)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Push after merge (Podman only; Docker buildx pushes during build)
 	if c.Push && buildEngine == "podman" {
 		order, err := ResolveBoxOrder(gen.Boxes, gen.Candies)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if len(c.Boxes) > 0 {
 			order, err = filterBox(order, c.Boxes, gen.Boxes)
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
 		fmt.Fprintf(os.Stderr, "\n=== Pushing images ===\n")
@@ -176,14 +228,14 @@ func (c *BuildCmd) Run() error {
 			img := gen.Boxes[name]
 			tags := imageTags(name, img, gen.Config)
 			if err := c.pushImage(dir, tags); err != nil {
-				return err
+				return nil, err
 			}
 		}
 	}
 
-	// Reusable-artifact retention: prune old CalVer tags per image down to
-	// defaults.keep_images (in-use images skipped; rmi without -f). Skipped for
-	// push runs. keep_images: 0 / absent disables. See `charly clean`.
+	// Reusable-artifact retention: prune old CalVer tags per image down to defaults.keep_images
+	// (in-use images skipped; rmi without -f). Skipped for push runs. keep_images: 0 / absent
+	// disables. See `charly clean`.
 	if !c.Push {
 		keep := resolveIntPtr(def.KeepImages, nil, keepImagesFallback)
 		if keep > 0 {
@@ -200,6 +252,115 @@ func (c *BuildCmd) Run() error {
 		}
 	}
 
+	return built, nil
+}
+
+// runBoxGenerate is the HOST-SIDE Containerfile-generation engine behind the build:generate
+// plugin word (F10 HostBuild seam): the `charly box generate` path. It reconstructs config from
+// req.Dir via NewGenerator and writes the .build/ tree; it does NOT build images. Returns the
+// emitted Containerfile paths.
+func runBoxGenerate(req spec.BuildRequest) ([]string, error) {
+	dir := req.Dir
+	if dir == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return nil, err
+		}
+		dir = cwd
+	}
+	// Share the box-selection rule with the build path: the `all` sentinel collapses to "every
+	// enabled box" (idempotent — BuildCmd/GenerateCmd already normalized), and a named selection
+	// scopes the resolved set (and, with --include-disabled, relaxes the gate for those names).
+	boxes := normalizeBoxArgs(req.Boxes)
+	gen, err := NewGenerator(dir, req.Tag, boxResolveOpts(boxes, req.IncludeDisabled))
+	if err != nil {
+		return nil, err
+	}
+	// No lock: Generate() writes the shared .build/ tree race-free via atomic staging
+	// (build_stage_atomic.go), so concurrent generates in one dir are safe.
+	if err := gen.Generate(); err != nil {
+		return nil, err
+	}
+	written := make([]string, 0, len(gen.Containerfiles))
+	for name := range gen.Containerfiles {
+		written = append(written, filepath.Join(dir, ".build", name, "Containerfile"))
+	}
+	sort.Strings(written)
+	return written, nil
+}
+
+// hostBuildImage / hostBuildGenerate are the F10 host-builders behind the build:box /
+// build:generate plugin words: the plugin calls back HostBuild(kind, BuildRequest) and these run
+// the engine HOST-SIDE in-proc, returning the opaque BuildReply. A build FAILURE rides
+// BuildReply.Error (the plugin echoes it; the RPC itself succeeds) so dispatchBuild surfaces it as
+// the command error. The buildEngineContext arg is unused: the engine reconstructs everything
+// from BuildRequest.Dir (like pod_deploy_lifecycle re-runs NewGenerator(dir,…)).
+func hostBuildImage(_ context.Context, specJSON []byte, _ buildEngineContext) ([]byte, error) {
+	var req spec.BuildRequest
+	if err := json.Unmarshal(specJSON, &req); err != nil {
+		return nil, fmt.Errorf("build:box host-build: decode request: %w", err)
+	}
+	written, err := runBoxBuild(req)
+	return marshalJSON(spec.BuildReply{Written: written, Error: errString(err)})
+}
+
+func hostBuildGenerate(_ context.Context, specJSON []byte, _ buildEngineContext) ([]byte, error) {
+	var req spec.BuildRequest
+	if err := json.Unmarshal(specJSON, &req); err != nil {
+		return nil, fmt.Errorf("build:generate host-build: decode request: %w", err)
+	}
+	written, err := runBoxGenerate(req)
+	return marshalJSON(spec.BuildReply{Written: written, Error: errString(err)})
+}
+
+// Register the image + containerfiles host-builders on the F10 HostBuild seam at package-var init
+// (before any init(), like the substrate/preresolver registries + the plugin-binary builder). The
+// kinds are class-generic ACTION nouns ("image" builds an image, "containerfiles" generates the
+// .build/ Containerfile tree), deliberately NOT the build:box / build:generate provider WORDS —
+// the F11 uniform-API gate (TestNoSinglePluginAPISurface) forbids a provider word on this surface.
+var _ = func() bool {
+	registerHostBuilder("image", hostBuildImage)
+	registerHostBuilder("containerfiles", hostBuildGenerate)
+	return true
+}()
+
+// dispatchBoxBuild / dispatchBoxGenerate route `charly box build` / `charly box generate`
+// through their compiled-in plugin word (build:box / build:generate) over the F10 HostBuild seam.
+func dispatchBoxBuild(req spec.BuildRequest) error    { return dispatchBuild("box", req) }
+func dispatchBoxGenerate(req spec.BuildRequest) error { return dispatchBuild("generate", req) }
+
+// dispatchBuild invokes the compiled-in build:<word> plugin, threading the IN-PROC reverse
+// channel onto the ctx (sdk.ContextWithExecutor) so the plugin's Invoke reaches HostBuild without
+// a go-plugin broker — the compiled-in placement of the reverse channel. The plugin echoes a
+// spec.BuildReply; a non-empty reply.Error is surfaced as the command error. build:<word> is
+// compiled in (candy/plugin-build in compiled_plugins:), so the provider is always in-proc here.
+func dispatchBuild(word string, req spec.BuildRequest) error {
+	prov, ok := providerRegistry.resolve(ClassBuild, word)
+	if !ok {
+		return fmt.Errorf("build dispatch: no build:%s provider registered (candy/plugin-build must be compiled in via compiled_plugins:)", word)
+	}
+	params, err := marshalJSON(req)
+	if err != nil {
+		return err
+	}
+	// The reverse server carries no venue executor (HostBuild needs only the host build-engine,
+	// reconstructed from req.Dir) and an empty build context (the host-builder rebuilds it from
+	// Dir), so a bare executorReverseServer{} is enough for the HostBuild leg.
+	ctx := sdk.ContextWithExecutor(context.Background(),
+		sdk.NewInProcExecutor(&inprocExecutorClient{srv: &executorReverseServer{}}))
+	res, err := prov.Invoke(ctx, &Operation{Reserved: word, Op: OpBuild, Params: params})
+	if err != nil {
+		return err
+	}
+	var reply spec.BuildReply
+	if res != nil && len(res.JSON) > 0 {
+		if err := json.Unmarshal(res.JSON, &reply); err != nil {
+			return fmt.Errorf("build dispatch: decode reply: %w", err)
+		}
+	}
+	if reply.Error != "" {
+		return fmt.Errorf("%s", reply.Error)
+	}
 	return nil
 }
 
@@ -251,13 +412,14 @@ func (c *BuildCmd) resolveBuildTunables(def BoxConfig) {
 // every selected image. A filtered (named) selection builds sequentially in
 // dependency order; a full build uses level-based parallelism bounded by c.Jobs,
 // merging each level before the next so children start from a merged
-// (fewer-layer) base image. Returns the engine binary and the runtime
-// build-engine name for the caller's push + retention steps.
-func (c *BuildCmd) buildImages(dir string, gen *Generator) (string, string, error) {
+// (fewer-layer) base image. Returns the engine binary, the runtime build-engine
+// name (for the caller's push + retention steps), and the built image refs (the
+// BuildReply.Written provenance).
+func (c *BuildCmd) buildImages(dir string, gen *Generator) (string, string, []string, error) {
 	// Resolve runtime config for build engine
 	rt, err := ResolveRuntime()
 	if err != nil {
-		return "", "", err
+		return "", "", nil, err
 	}
 
 	engine := EngineBinary(rt.BuildEngine)
@@ -268,29 +430,32 @@ func (c *BuildCmd) buildImages(dir string, gen *Generator) (string, string, erro
 		platform = hostPlatform()
 	}
 
+	var built []string
+
 	if len(c.Boxes) > 0 {
 		// Filtered build: use sequential order
 		order, err := ResolveBoxOrder(gen.Boxes, gen.Candies)
 		if err != nil {
-			return "", "", err
+			return "", "", nil, err
 		}
 		order, err = filterBox(order, c.Boxes, gen.Boxes)
 		if err != nil {
-			return "", "", err
+			return "", "", nil, err
 		}
 		for _, name := range order {
 			img := gen.Boxes[name]
 			content := gen.Containerfiles[name]
 			if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
-				return "", "", fmt.Errorf("building %s: %w", name, err)
+				return "", "", nil, fmt.Errorf("building %s: %w", name, err)
 			}
+			built = append(built, img.FullTag)
 			mergeAfterBuild(name, img)
 		}
 	} else {
 		// Full build: use level-based parallelism
 		levels, err := ResolveBoxLevels(gen.Boxes, gen.Candies)
 		if err != nil {
-			return "", "", err
+			return "", "", nil, err
 		}
 
 		jobs := c.Jobs
@@ -307,7 +472,7 @@ func (c *BuildCmd) buildImages(dir string, gen *Generator) (string, string, erro
 				img := gen.Boxes[name]
 				content := gen.Containerfiles[name]
 				if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
-					return "", "", fmt.Errorf("building %s: %w", name, err)
+					return "", "", nil, fmt.Errorf("building %s: %w", name, err)
 				}
 			} else {
 				g, _ := errgroup.WithContext(context.Background())
@@ -325,7 +490,7 @@ func (c *BuildCmd) buildImages(dir string, gen *Generator) (string, string, erro
 				}
 
 				if err := g.Wait(); err != nil {
-					return "", "", err
+					return "", "", nil, err
 				}
 			}
 
@@ -333,10 +498,11 @@ func (c *BuildCmd) buildImages(dir string, gen *Generator) (string, string, erro
 			// start from a merged (fewer-layer) base image.
 			for _, name := range level {
 				mergeAfterBuild(name, gen.Boxes[name])
+				built = append(built, gen.Boxes[name].FullTag)
 			}
 		}
 	}
-	return engine, rt.BuildEngine, nil
+	return engine, rt.BuildEngine, built, nil
 }
 
 // imageTags computes the tags for an image. charly is CalVer-only — it never

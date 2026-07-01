@@ -44,6 +44,45 @@ func ExecutorFromInvoke(brokerID uint32) (*Executor, error) {
 	return &Executor{client: pb.NewExecutorServiceClient(conn)}, nil
 }
 
+// NewInProcExecutor wraps an in-proc pb.ExecutorServiceClient (an adapter delegating
+// DIRECTLY to the host's executorReverseServer, no socket) as an *Executor — the
+// IN-PROCESS twin of the go-plugin broker path in ExecutorFromInvoke. It is what lets a
+// COMPILED-IN plugin reach the SAME reverse-channel seam (HostBuild / RunHostStep / …) an
+// out-of-process plugin dials over gRPC: the host threads the resulting *Executor onto the
+// Invoke context (ContextWithExecutor), and the plugin picks it up via ExecutorForInvoke —
+// so the plugin's Invoke code is byte-identical in both placements (placement-invisible
+// above the registry, the whole point of the plugin abstraction).
+func NewInProcExecutor(client pb.ExecutorServiceClient) *Executor { return &Executor{client: client} }
+
+// executorCtxKey keys the in-proc *Executor carried on the Invoke context (the compiled-in
+// placement's reverse channel — an out-of-process plugin gets its executor via the broker id
+// in the request instead). Private so only ContextWithExecutor / executorFromContext touch it.
+type executorCtxKey struct{}
+
+// ContextWithExecutor returns ctx carrying an in-proc *Executor. The host's in-proc dispatch
+// (inprocProvider.InvokeWithExecutor) calls this before invoking a compiled-in plugin so the
+// plugin's ExecutorForInvoke can reach the reverse channel without a broker.
+func ContextWithExecutor(ctx context.Context, e *Executor) context.Context {
+	return context.WithValue(ctx, executorCtxKey{}, e)
+}
+
+// executorFromContext returns the in-proc *Executor carried on ctx, if any.
+func executorFromContext(ctx context.Context) (*Executor, bool) {
+	e, ok := ctx.Value(executorCtxKey{}).(*Executor)
+	return e, ok && e != nil
+}
+
+// ExecutorForInvoke resolves the host executor for a plugin's Invoke, transport-invisibly:
+// an IN-PROC compiled-in plugin gets it from the context (ContextWithExecutor); an
+// OUT-OF-PROCESS plugin falls back to the go-plugin broker id in its InvokeRequest. Plugin
+// Invoke code calls this ONE accessor and works in either placement unchanged.
+func ExecutorForInvoke(ctx context.Context, brokerID uint32) (*Executor, error) {
+	if e, ok := executorFromContext(ctx); ok {
+		return e, nil
+	}
+	return ExecutorFromInvoke(brokerID)
+}
+
 // Venue returns the host executor's stable venue identifier.
 func (e *Executor) Venue(ctx context.Context) (string, error) {
 	r, err := e.client.Venue(ctx, &pb.Empty{})

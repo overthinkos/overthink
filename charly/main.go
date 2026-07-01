@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/alecthomas/kong"
+
+	"github.com/overthinkos/overthink/charly/spec"
 )
 
 // CLI defines the command-line interface structure
@@ -155,19 +157,17 @@ func (c *GenerateCmd) Run() error {
 		return err
 	}
 
-	// Share the box-selection rule with `charly box build`: the `all` sentinel
-	// collapses to "every enabled box", and a named selection scopes the
-	// resolved set (and, with --include-disabled, relaxes the gate for exactly
-	// those names).
-	boxes := normalizeBoxArgs(c.Boxes)
-	gen, err := NewGenerator(dir, c.Tag, boxResolveOpts(boxes, c.IncludeDisabled))
-	if err != nil {
-		return err
-	}
-
-	// No lock: Generate() writes the shared .build/ tree race-free via atomic
-	// staging (build_stage_atomic.go), so concurrent generates in one dir are safe.
-	return gen.Generate()
+	// Route generation through the compiled-in build:generate plugin over the F10 HostBuild
+	// seam: the heavy Generator engine STAYS host-side in-proc (runBoxGenerate) — only this
+	// BuildRequest envelope crosses. The `all` sentinel collapses to "every enabled box", and a
+	// named selection scopes the resolved set (and, with --include-disabled, relaxes the gate
+	// for exactly those names). See dispatchBuild + hostBuildGenerate.
+	return dispatchBoxGenerate(spec.BuildRequest{
+		Boxes:           normalizeBoxArgs(c.Boxes),
+		Tag:             c.Tag,
+		Dir:             dir,
+		IncludeDisabled: c.IncludeDisabled,
+	})
 }
 
 // ValidateCmd validates charly.yml and candies

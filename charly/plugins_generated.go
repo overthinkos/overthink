@@ -9,6 +9,7 @@ package main
 import (
 	cp_plugin_addr "github.com/overthinkos/overthink/candy/plugin-addr"
 	cp_plugin_agent "github.com/overthinkos/overthink/candy/plugin-agent"
+	cp_plugin_build "github.com/overthinkos/overthink/candy/plugin-build"
 	cp_plugin_builder "github.com/overthinkos/overthink/candy/plugin-builder"
 	cp_plugin_candy_kind "github.com/overthinkos/overthink/candy/plugin-candy-kind"
 	cp_plugin_command "github.com/overthinkos/overthink/candy/plugin-command"
@@ -82,4 +83,5 @@ func init() {
 	registerCompiledPlugin(cp_plugin_group.NewProvider(), cp_plugin_group.NewMeta())
 	registerCompiledPlugin(cp_plugin_substrate.NewProvider(), cp_plugin_substrate.NewMeta())
 	registerCompiledPlugin(cp_plugin_candy_kind.NewProvider(), cp_plugin_candy_kind.NewMeta())
+	registerCompiledPlugin(cp_plugin_build.NewProvider(), cp_plugin_build.NewMeta())
 }

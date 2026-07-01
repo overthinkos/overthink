@@ -12,6 +12,7 @@ const (
 	OpEmit     = "emit"     // deploy/step: emit an InstallPlan / Containerfile fragment
 	OpExecute  = "execute"  // deploy/step: execute against a venue (streamed)
 	OpResolve  = "resolve"  // builder: resolve a builder image + steps (build-time multi-stage)
+	OpBuild    = "build"    // build: dispatch the image-build / generate engine host-side (F10 HostBuild seam)
 
 	// OpCollectContext + OpReverse are the DEPLOY-TIME builder-IR legs of an externalized
 	// detection-builder plugin (cargo/npm/pixi/aur). A builder's build-time multi-stage stays

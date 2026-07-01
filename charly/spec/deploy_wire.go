@@ -530,6 +530,39 @@ type BuilderResolveReply struct {
 	CopyArtifacts []string `json:"copy_artifacts,omitempty"`
 }
 
+// BuildRequest is the BUILD-ENGINE DISPATCH envelope (F10 HostBuild seam): what `charly box
+// build` / `charly box generate` marshal into a build:box / build:generate plugin's Invoke
+// (op.Params), which the plugin forwards VERBATIM to the host via Executor.HostBuild. The heavy
+// engine (Generator / OCITarget / the runtime Candy graph) STAYS host-side in-proc — only this
+// small envelope crosses the seam. Everything the engine reads (Config / ResolvedBox / Candy) is
+// reconstructed HOST-SIDE from Dir inside the registered host-builder (exactly as
+// pod_deploy_lifecycle re-runs NewGenerator(dir,…)); the fields here are the CLI-supplied inputs
+// that are NOT reconstructable from Dir alone. The generate path reads only Boxes/Tag/Dir/
+// IncludeDisabled; the build path additionally reads DevLocalPkg + the buildImages knobs
+// (Push/Platform/Cache/NoCache/Jobs/PodmanJobs).
+type BuildRequest struct {
+	Boxes           []string `json:"boxes,omitempty"`            // positional box selection ("" → all enabled)
+	Tag             string   `json:"tag,omitempty"`              // --tag override (empty → CalVer)
+	Dir             string   `json:"dir,omitempty"`              // project dir the host reconstructs config from
+	IncludeDisabled bool     `json:"include_disabled,omitempty"` // --include-disabled
+	DevLocalPkg     bool     `json:"dev_local_pkg,omitempty"`    // --dev-local-pkg (localpkg from local source; build only)
+	Push            bool     `json:"push,omitempty"`             // --push (build only)
+	Platform        string   `json:"platform,omitempty"`         // --platform (build only)
+	Cache           string   `json:"cache,omitempty"`            // --cache mode (build only)
+	NoCache         bool     `json:"no_cache,omitempty"`         // --no-cache (build only)
+	Jobs            int      `json:"jobs,omitempty"`             // --jobs outer concurrency (build only)
+	PodmanJobs      int      `json:"podman_jobs,omitempty"`      // --podman-jobs inner concurrency (build only)
+}
+
+// BuildReply is what a build:box / build:generate plugin echoes back from its HostBuild call:
+// the opaque list of artifacts the engine wrote (image refs for build, Containerfile paths for
+// generate) plus a build error string (empty on success). A build FAILURE rides Error (the RPC
+// itself succeeds — the reply-error convention), so the dispatcher surfaces it to the CLI.
+type BuildReply struct {
+	Written []string `json:"written,omitempty"`
+	Error   string   `json:"error,omitempty"`
+}
+
 // ---------------------------------------------------------------------------
 // Deploy-time builder-IR wire — what an externalized DETECTION-builder plugin
 // (cargo/npm/pixi/aur) exchanges with the host on the OpCollectContext +

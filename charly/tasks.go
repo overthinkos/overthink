@@ -762,6 +762,17 @@ func emitPluginFragment(prov Provider, op *Op, img *ResolvedBox) (string, error)
 // in-proc reverse channel (sdk.ContextWithExecutor) so a HOST-COUPLED plugin can call back
 // HostBuild during its OpEmit; a PURE plugin ignores it and returns the fragment directly.
 func invokeOpEmitFragment(ctx context.Context, prov Provider, word string, params []byte, distros []string) (string, error) {
+	return invokeOpEmitFragmentOpt(ctx, prov, word, params, distros, false)
+}
+
+// invokeOpEmitFragmentOpt is the OpEmit → EmitReply → Fragment core shared by the guarding
+// invokeOpEmitFragment and the pod-overlay OCITarget's compiler-emitted-step build-emit (R3).
+// allowEmpty controls the empty-fragment guard: false (the default) fails LOUDLY on an empty
+// fragment — a runtime-/deploy-only capability wrongly asked to build-emit; true permits an empty
+// fragment, used by OCITarget for a COMPILER-EMITTED typed step whose render is legitimately empty
+// for a given instance (an empty shell snippet, a packaged service with no overrides + enable=false,
+// a custom service with no unit text — exactly the cases the former OCITarget.emit* returned nothing).
+func invokeOpEmitFragmentOpt(ctx context.Context, prov Provider, word string, params []byte, distros []string, allowEmpty bool) (string, error) {
 	env, err := marshalJSON(spec.BuildEnv{Distros: distros})
 	if err != nil {
 		return "", fmt.Errorf("marshal build env: %w", err)
@@ -776,7 +787,7 @@ func invokeOpEmitFragment(ctx context.Context, prov Provider, word string, param
 			return "", fmt.Errorf("decode OpEmit reply: %w", err)
 		}
 	}
-	if strings.TrimSpace(reply.Fragment) == "" {
+	if !allowEmpty && strings.TrimSpace(reply.Fragment) == "" {
 		return "", fmt.Errorf("plugin %q returned an empty OpEmit fragment — it has no build-context act (a runtime-only verb in a build run: step, or a deploy-only step declaring emits without an OpEmit fragment? use context: [runtime] / set emits=false)", word)
 	}
 	return reply.Fragment, nil

@@ -41,7 +41,10 @@ func stepProviderFor(kind StepKind) (StepProvider, bool) {
 }
 
 // allStepKinds is the fixed InstallStep IR vocabulary (Go-internal; steps are not a
-// user-authored CUE vocab). The bijection asserts each has a StepProvider.
+// user-authored CUE vocab). EVERY kind here round-trips through stepToView/stepFromView (the
+// deploy view, exercised by step_view_test); the bijection below asserts each kind is SERVED —
+// either by a compiled-in in-proc StepProvider, or (for the pluginEmitStepWords set) by a
+// compiled-in class:step plugin's build-emit.
 var allStepKinds = []StepKind{
 	StepKindSystemPackages, StepKindBuilder, StepKindOp, StepKindFile,
 	StepKindServicePackaged, StepKindServiceCustom, StepKindShellHook,
@@ -49,11 +52,42 @@ var allStepKinds = []StepKind{
 	StepKindLocalPkgInstall, StepKindReboot, StepKindExternalPlugin,
 }
 
-// checkStepProviderBijection asserts every InstallStep kind has a registered
-// StepProvider. Run in the same init() that registers, after registration.
+// pluginEmitStepWords maps the seven PURE builtin InstallStep kinds whose BUILD-emit externalized
+// (C1.1) to the lowercase-hyphenated class:step plugin word that serves their pod-overlay OpEmit
+// (candy/plugin-installstep). These kinds have NO in-proc StepProvider — OCITarget.emitStep routes
+// them here, serializing the step VIEW as the OpEmit payload. Their DEPLOY leg is unchanged
+// (charly/plugin/kit.WalkPlans renders them from the same view). apk-install's plugin declares
+// Emits=false (no build fragment); every other word Emits=true.
+var pluginEmitStepWords = map[StepKind]string{
+	StepKindFile:            "file",
+	StepKindShellHook:       "shell-hook",
+	StepKindShellSnippet:    "shell-snippet",
+	StepKindServicePackaged: "service-packaged",
+	StepKindServiceCustom:   "service-custom",
+	StepKindRepoChange:      "repo-change",
+	StepKindApkInstall:      "apk-install",
+}
+
+// checkStepProviderBijection asserts every InstallStep kind is SERVED. A kind in
+// pluginEmitStepWords must resolve to a compiled-in class:step plugin declaring a StepContract
+// (its build-emit); every other kind must resolve to an in-proc StepProvider (its EmitOCI). Run in
+// the same init() that registers, after registration (the compiled-in plugins register first —
+// plugins_generated.go's init precedes registry_bootstrap.go's alphabetically, the SAME ordering
+// checkVerbProviderBijection relies on).
 func checkStepProviderBijection() error {
 	var missing []string
 	for _, k := range allStepKinds {
+		if word, isPlugin := pluginEmitStepWords[k]; isPlugin {
+			p, ok := providerRegistry.resolve(ClassStep, word)
+			if !ok {
+				missing = append(missing, fmt.Sprintf("%s (externalized build-emit; class:step plugin %q not registered)", k, word))
+				continue
+			}
+			if _, ok := p.(stepContractCarrier); !ok {
+				missing = append(missing, fmt.Sprintf("%s (class:step provider %q declares no StepContract)", k, word))
+			}
+			continue
+		}
 		p, ok := providerRegistry.resolve(ClassStep, string(k))
 		if !ok {
 			missing = append(missing, string(k))
@@ -64,7 +98,7 @@ func checkStepProviderBijection() error {
 		}
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("reserved-word registry: InstallStep kinds with no StepProvider: %v", missing)
+		return fmt.Errorf("reserved-word registry: unserved InstallStep kinds: %v", missing)
 	}
 	return nil
 }

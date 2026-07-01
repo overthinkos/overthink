@@ -130,7 +130,8 @@ func TestCompileRunStep_ServicePluginLowersToServicePackagedWithReversals(t *tes
 // The service act renders into the box build: a build-context run: {plugin: service}
 // step compiles to a ServicePackagedStep (via the TypedStepProvider) AND emits the enable
 // directive into the OCI Containerfile — proving the full box-build path the extraction
-// preserves end-to-end (compileActOp → ServicePackagedStep → emitServicePackaged).
+// preserves end-to-end (compileActOp → ServicePackagedStep → candy/plugin-installstep
+// service-packaged OpEmit, the C1.1-externalized build-emit).
 func TestServicePluginActEmitsIntoBoxBuild(t *testing.T) {
 	layer := &Candy{Name: "x", plan: []Step{{Run: "enable sshd", Op: Op{
 		Plugin:      "service",
@@ -146,6 +147,36 @@ func TestServicePluginActEmitsIntoBoxBuild(t *testing.T) {
 	got := tgt.String()
 	if !strings.Contains(got, "enable packaged unit sshd") {
 		t.Errorf("service act did not render the enable directive into the box build:\n%s", got)
+	}
+}
+
+// TestCompileActOp_VerbWordWinsOverCollidingStepWord guards the C1.1 deploy regression: the word
+// `file` is BOTH `verb:file` (candy/plugin-file, an in-proc ProvisionActor that drops a file) AND
+// `step:file` (candy/plugin-installstep's build-emit-only class:step, C1.1). A `run: plugin: file`
+// op (e.g. check-local-layer's marker drop) MUST lower to a generic OpStep — the verb act, whose
+// deploy renders via resolveProvisionScript — NEVER to an externalStep (kind `external:file`), which
+// the deploy walk would route to an OpExecute the build-emit-only step plugin cannot serve. Proves
+// verb-first precedence in compileActOp.
+func TestCompileActOp_VerbWordWinsOverCollidingStepWord(t *testing.T) {
+	layer := &Candy{Name: "check-local-layer", plan: []Step{{Run: "drop the marker", Op: Op{
+		Plugin:      "file",
+		PluginInput: map[string]any{"file": "/etc/check-local-marker", "exists": true},
+		Context:     []string{"deploy"},
+	}}}}
+	steps := compileOpSteps(layer, testResolvedBox())
+	if len(steps) != 1 {
+		t.Fatalf("want exactly 1 compiled step, got %d (%#v)", len(steps), steps)
+	}
+	if es, isExternal := steps[0].(*externalStep); isExternal {
+		t.Fatalf("run: plugin: file lowered to an externalStep (kind %q) — verb-first precedence regressed; "+
+			"the deploy walk would route it to OpExecute, which the build-emit-only step plugin cannot serve", es.Kind())
+	}
+	op, ok := steps[0].(*OpStep)
+	if !ok {
+		t.Fatalf("run: plugin: file must lower to an OpStep (the file verb act), got %T", steps[0])
+	}
+	if op.Op.Plugin != "file" {
+		t.Fatalf("OpStep.Op.Plugin = %q, want %q", op.Op.Plugin, "file")
 	}
 }
 

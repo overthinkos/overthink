@@ -1810,11 +1810,12 @@ func (g *Generator) writeCandySteps(b *strings.Builder, candyName string, img *R
 	}
 
 	// 5. Shell-init snippets from the candy manifest `shell:` block.
-	// Reuses the InstallPlan compiler so the legacy generator and the
-	// new OCITarget path share one source of truth for selection-rule +
+	// Reuses the InstallPlan compiler so the box-build generator and the
+	// pod-overlay path share one source of truth for selection-rule +
 	// destination resolution. We emit the resulting steps inline as
-	// RUN-heredoc directives (parallel to how OCITarget.emitShellSnippet
-	// renders them — same sha256-derived end-marker).
+	// RUN-heredoc directives (parallel to how candy/plugin-installstep's
+	// shell-snippet OpEmit renders the pod-overlay fragment — same
+	// sha256-derived end-marker).
 	if shellSteps := compileShellSnippetSteps(layer, img, HostContext{}); len(shellSteps) > 0 {
 		// Shell snippets are root-owned system drop-ins; reset to root
 		// before emission so RUN runs as root.

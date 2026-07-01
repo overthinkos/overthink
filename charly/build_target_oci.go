@@ -20,9 +20,7 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/overthinkos/overthink/charly/plugin/sdk"
@@ -113,6 +111,19 @@ func (t *OCITarget) emitStep(step InstallStep, plan *InstallPlan) error {
 	if isExternalStepKind(step.Kind()) {
 		return t.emitExternalStep(step.(*externalStep), plan)
 	}
+	// C1.1: the seven PURE builtin step kinds' BUILD-emit is served by the compiled-in class:step
+	// plugin candy/plugin-installstep (its OpEmit). Route them by kind→word, passing the compiler's
+	// step VIEW as the opaque payload — the SAME serialization the deploy walk consumes (R3). Their
+	// DEPLOY leg is unchanged: charly/plugin/kit.WalkPlans renders them from that same view. A
+	// legitimately-empty render (empty snippet / no-op service) is allowed (allowEmpty), matching
+	// what the former OCITarget.emit* returned for those instances.
+	if word, ok := pluginEmitStepWords[step.Kind()]; ok {
+		payload, err := marshalJSON(stepToView(step))
+		if err != nil {
+			return fmt.Errorf("OCITarget: marshal %s step view: %w", step.Kind(), err)
+		}
+		return t.spliceClassStepEmit(word, payload, true)
+	}
 	prov, ok := stepProviderFor(step.Kind())
 	if !ok {
 		return fmt.Errorf("OCITarget: unknown step kind %q", step.Kind())
@@ -120,22 +131,31 @@ func (t *OCITarget) emitStep(step InstallStep, plan *InstallPlan) error {
 	return prov.EmitOCI(t, step, plan)
 }
 
-// emitExternalStep bakes an EXTERNAL step kind's build-context Containerfile fragment
-// (F-STEP-EMIT). It resolves the serving class:step provider by the trimmed word, consults
-// its DECLARED StepContract.Emits, and — when the step emits — Invokes OpEmit through the
-// SHARED invokeOpEmitFragment seam (R3, the SAME path the verb build-emit takes), splicing
-// the returned fragment verbatim. A step declaring Emits=false is a DEPLOY-ONLY external step
-// (no build fragment) and is a no-op on the image build, exactly like ApkInstall/Reboot skip.
+// emitExternalStep bakes an EXTERNAL (plugin-contributed) step kind's build-context Containerfile
+// fragment (F-STEP-EMIT). An authored external step declaring Emits=true must produce a fragment
+// (allowEmpty=false), unlike the compiler-emitted typed steps above.
+func (t *OCITarget) emitExternalStep(s *externalStep, _ *InstallPlan) error {
+	return t.spliceClassStepEmit(s.Word, s.Payload, false)
+}
+
+// spliceClassStepEmit resolves the class:step provider serving `word`, consults its DECLARED
+// StepContract.Emits, and — when the step emits — Invokes OpEmit with the opaque payload and
+// splices the returned Containerfile fragment verbatim (R3). Shared by the AUTHORED external step
+// (emitExternalStep, F3) and the seven COMPILER-EMITTED typed step kinds whose build-emit
+// externalized to candy/plugin-installstep (emitStep's pluginEmitStepWords route, C1.1). A provider
+// declaring Emits=false is a DEPLOY-ONLY step (no build fragment) and is a no-op on the image build,
+// exactly like ApkInstall/Reboot skip. allowEmpty permits a legitimately-empty fragment from a
+// compiler-emitted step (an authored external step must not return empty).
 //
 // The Invoke ctx carries an IN-PROC reverse channel (the SAME sdk.ContextWithExecutor +
-// executorReverseServer that dispatchBuild threads for the compiled-in build:box plugin, R3),
-// so a HOST-COUPLED external step can call back HostBuild("step-emit", …) during its OpEmit —
-// the host build ENGINE stays in core (the step-emit seam), the plugin only REQUESTS it. A
-// PURE step ignores the channel and returns its fragment directly.
-func (t *OCITarget) emitExternalStep(s *externalStep, plan *InstallPlan) error {
-	prov, ok := providerRegistry.resolve(ClassStep, s.Word)
+// executorReverseServer that dispatchBuild threads for the compiled-in build:box plugin, R3), so a
+// HOST-COUPLED external step can call back HostBuild("step-emit", …) during its OpEmit — the host
+// build ENGINE stays in core (the step-emit seam), the plugin only REQUESTS it. A PURE step ignores
+// the channel and returns its fragment directly.
+func (t *OCITarget) spliceClassStepEmit(word string, payload []byte, allowEmpty bool) error {
+	prov, ok := providerRegistry.resolve(ClassStep, word)
 	if !ok {
-		return fmt.Errorf("OCITarget: external step %q: class:step provider not connected at build time", s.Word)
+		return fmt.Errorf("OCITarget: class:step provider %q not connected at build time", word)
 	}
 	emits := false
 	if carrier, ok := prov.(stepContractCarrier); ok {
@@ -144,7 +164,7 @@ func (t *OCITarget) emitExternalStep(s *externalStep, plan *InstallPlan) error {
 		}
 	}
 	if !emits {
-		// A deploy-only external step (like apk on an image build): recorded, not baked.
+		// A deploy-only step (like apk on an image build): recorded, not baked.
 		return nil
 	}
 	var distros []string
@@ -153,60 +173,16 @@ func (t *OCITarget) emitExternalStep(s *externalStep, plan *InstallPlan) error {
 	}
 	ctx := sdk.ContextWithExecutor(context.Background(),
 		sdk.NewInProcExecutor(&inprocExecutorClient{srv: &executorReverseServer{}}))
-	frag, err := invokeOpEmitFragment(ctx, prov, s.Word, s.Payload, distros)
+	frag, err := invokeOpEmitFragmentOpt(ctx, prov, word, payload, distros, allowEmpty)
 	if err != nil {
-		return fmt.Errorf("external step %q build-emit: %w", s.Word, err)
+		return fmt.Errorf("class:step %q build-emit: %w", word, err)
+	}
+	if frag == "" {
+		return nil
 	}
 	t.buf.WriteString(frag)
 	if !strings.HasSuffix(frag, "\n") {
 		t.buf.WriteString("\n")
-	}
-	return nil
-}
-
-// emitShellSnippet renders a candy's per-shell init snippet into the
-// container's system-wide drop-in directory. bash/zsh/sh land in
-// /etc/profile.d/charly-<candy>-<shell>.sh; fish lands in
-// /etc/fish/conf.d/charly-<candy>.fish (paths are computed by
-// compileShellSnippetSteps based on hostCtx.Target).
-//
-// Uses a heredoc with a randomized end-marker to avoid collision with
-// snippet bodies that contain literal `CHARLY_SNIPPET` on their own line.
-// The container drop-in is always root-owned + 0644 — sourced by the
-// shell at user login, no need for execute bit.
-func (t *OCITarget) emitShellSnippet(s *ShellSnippetStep) error {
-	if s.Snippet == "" {
-		return nil
-	}
-	// Pick an end-marker derived from the snippet hash so a malicious or
-	// pathological body containing the literal marker can't break out.
-	h := sha256.Sum256([]byte(s.Snippet))
-	marker := fmt.Sprintf("CHARLY_SHELL_%s_%x", strings.ToUpper(s.Shell), h[:4])
-	fmt.Fprintf(&t.buf,
-		"RUN mkdir -p %s && cat > %s <<'%s'\n%s\n%s\n",
-		shellQuote(filepath.Dir(s.Destination)),
-		shellQuote(s.Destination),
-		marker,
-		s.Snippet,
-		marker,
-	)
-	return nil
-}
-
-// emitShellHook renders `env:` and `path_append:` as ENV directives.
-func (t *OCITarget) emitShellHook(s *ShellHookStep) error {
-	// Emit ENV for each var.
-	for k, v := range s.EnvVars {
-		fmt.Fprintf(&t.buf, "ENV %s=%q\n", k, v)
-	}
-	// PATH additions as a single ENV line prepending to existing $PATH.
-	if len(s.PathAdd) > 0 {
-		// Reverse-order join so earlier-listed entries take precedence
-		// (they end up leftmost on the final PATH).
-		parts := make([]string, 0, len(s.PathAdd)+1)
-		parts = append(parts, s.PathAdd...)
-		parts = append(parts, "$PATH")
-		fmt.Fprintf(&t.buf, "ENV PATH=%s\n", strings.Join(parts, ":"))
 	}
 	return nil
 }
@@ -377,62 +353,6 @@ func (t *OCITarget) lookupCandy(name string) *Candy {
 		return nil
 	}
 	return t.Generator.candyByName(name)
-}
-
-// emitFile renders a file placement. Uses COPY --chmod/--chown with
-// the file's scratch-stage alias.
-func (t *OCITarget) emitFile(s *FileStep) error {
-	chmod := fmt.Sprintf("%04o", s.Mode.Perm())
-	chown := ""
-	if s.Owner != "" && s.Owner != "root" && s.Owner != "0" {
-		chown = fmt.Sprintf(" --chown=%s", s.Owner)
-	}
-	fmt.Fprintf(&t.buf, "COPY --chmod=%s%s %s %s\n", chmod, chown, s.Source, s.Dest)
-	return nil
-}
-
-// emitServicePackaged renders a "enable packaged systemd unit" step.
-// For OCI build, a packaged unit was installed via its rpm/deb/pac
-// package; we emit a marker so downstream supervisord/systemd pipelines
-// can enable the unit at image boot time. Drop-in overrides emit as
-// file writes.
-func (t *OCITarget) emitServicePackaged(s *ServicePackagedStep) error {
-	if s.OverridesText != "" && s.OverridesPath != "" {
-		fmt.Fprintf(&t.buf, "RUN mkdir -p $(dirname %s) && cat > %s <<'CHARLY_DROPIN'\n%s\nCHARLY_DROPIN\n",
-			s.OverridesPath, s.OverridesPath, s.OverridesText)
-	}
-	if s.Enable {
-		scope := "system"
-		if s.TargetScope == ScopeUser {
-			scope = "user"
-		}
-		fmt.Fprintf(&t.buf, "# Service: enable packaged unit %s (scope=%s, layer=%s)\n",
-			s.Unit, scope, s.CandyName)
-	}
-	return nil
-}
-
-// emitServiceCustom renders a custom service unit. Today's generator
-// assembles supervisord INI fragments into /etc/supervisord.conf at
-// build time; after the services: refactor this will emit a rendered
-// unit file.
-func (t *OCITarget) emitServiceCustom(s *ServiceCustomStep) error {
-	if s.UnitText == "" {
-		return nil
-	}
-	fmt.Fprintf(&t.buf, "# Service: custom %s (layer=%s)\n# -- unit content follows in the init fragment pipeline --\n",
-		s.Name, s.CandyName)
-	return nil
-}
-
-// emitRepoChange renders a structured repo file write. This path is
-// rarely used by today's generator (which renders repo setup inline in
-// the format install_template); it exists for candies that declare
-// explicit repo files via the structured schema.
-func (t *OCITarget) emitRepoChange(s *RepoChangeStep) error {
-	fmt.Fprintf(&t.buf, "RUN mkdir -p $(dirname %s) && cat > %s <<'CHARLY_REPO'\n%s\nCHARLY_REPO\n",
-		s.File, s.File, s.Content)
-	return nil
 }
 
 // formatDefCacheMountDefs returns the cache mounts as the type

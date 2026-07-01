@@ -42,3 +42,4 @@ use ./candy/plugin-group
 use ./candy/plugin-substrate
 use ./candy/plugin-candy-kind
 use ./candy/plugin-build
+use ./candy/plugin-installstep

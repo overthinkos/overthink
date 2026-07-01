@@ -704,6 +704,15 @@ func compileActOp(op *Op, layer *Candy, img *ResolvedBox) InstallStep {
 	// TypedStepProvider (command, the RenderProvisionScript verbs) falls through to OpStep,
 	// unchanged.
 	if verb == "plugin" {
+		// VERB-FIRST PRECEDENCE. A `run: plugin: <word>` whose word resolves as a VERB is a
+		// verb act — resolved here BEFORE the class:step authored-external-step branch below.
+		// This matters because a class:step WORD can COLLIDE with a verb word: `file` is both
+		// `verb:file` (an in-proc ProvisionActor that drops a file) AND `step:file` (the C1.1
+		// build-emit-only class:step plugin candy/plugin-installstep). The author's
+		// `run: plugin: file` means the VERB; it must NOT be hijacked into an `external:file`
+		// step (which the deploy walk would route to OpExecute — a leg the build-emit-only
+		// plugin cannot serve). So the class:step branch is reached ONLY when the word is NOT a
+		// verb (an authored external step KIND like examplestepkind).
 		if prov, ok := providerRegistry.ResolveVerb(op.Plugin); ok {
 			if stepprov, ok := prov.(TypedStepProvider); ok {
 				return stepprov.ConstructStep(op, layer, img)
@@ -726,15 +735,19 @@ func compileActOp(op *Op, layer *Candy, img *ResolvedBox) InstallStep {
 					Distros:      img.Tags,
 				}
 			}
-		}
-		// A `run: plugin: <word>` whose word resolves to a class:step provider DECLARING a
-		// StepContract (F3) → an EXTERNAL step kind: the opaque Payload is the op's plugin_input,
-		// and Scope/Venue/Gate come from the plugin's declared contract (not a Go-fixed rule).
-		// Distinct from the ClassVerb plugin above (ExternalPluginStep, Go-fixed advisory
-		// contract). The host walks it via the open default arm + dispatches OpExecute to the
-		// serving plugin (executeExternalStep). This is the carrier M2 reuses to externalize the
-		// builtin step kinds (the compiler emits external:<word> with a built payload).
-		if sp, ok := providerRegistry.resolve(ClassStep, op.Plugin); ok {
+			// An in-proc verb (a ProvisionActor like `file`, or `command`) that is neither a
+			// TypedStepProvider nor an out-of-process executorInvoker → the generic OpStep below
+			// (its deploy act renders via resolveProvisionScript; its build-emit via emitTasks
+			// `case "plugin"`). Deliberately NOT the class:step branch (verb-first, above).
+		} else if sp, ok := providerRegistry.resolve(ClassStep, op.Plugin); ok {
+			// The word is NOT a verb → an authored external step KIND: a class:step provider
+			// DECLARING a StepContract (F3, e.g. examplestepkind). The opaque Payload is the op's
+			// plugin_input, and Scope/Venue/Gate come from the plugin's declared contract. The
+			// host walks it via the open default arm + dispatches OpExecute to the serving plugin
+			// (executeExternalStep). The C1.1 build-emit-only class:step words never reach here —
+			// `file` is a verb (handled above), and the other six (shell-hook/shell-snippet/
+			// service-packaged/service-custom/repo-change/apk-install) are compiler-emitted NATIVE
+			// step kinds, never authored as a `run: plugin:` op.
 			if carrier, ok := sp.(stepContractCarrier); ok {
 				if sc, ok := carrier.declaredStepContract(); ok {
 					payload, _ := marshalJSON(op.PluginInput)

@@ -23,7 +23,7 @@ import (
 // ShellAllowlist enumerates valid per-shell sub-block keys inside `shell:`.
 // Adding a new shell here is a renderer change (new managed-block / drop-in
 // destination); keep in sync with deploy_host_helpers.go shell-detection
-// probe and OCITarget.emitShellSnippet destination table.
+// probe and the shell-snippet destination table (compileShellSnippetSteps).
 var ShellAllowlist = map[string]bool{"bash": true, "zsh": true, "fish": true, "sh": true}
 
 // sortedEnvDeps returns a deterministic slice from a name-keyed map, sorted by Name.

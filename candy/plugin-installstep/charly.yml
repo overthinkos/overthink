@@ -1,0 +1,36 @@
+plugin-installstep:
+    candy:
+        version: 2026.182.1000
+        description: |-
+            Compiled-in DUAL-PLACEMENT charly class:step plugin serving the BUILD-context OpEmit
+            leg for the seven PURE builtin InstallStep kinds — file, shell-hook, shell-snippet,
+            service-packaged, service-custom, repo-change, and apk-install. Each render is pure
+            string formatting from the compiler-produced spec.InstallStepView (the SAME view the
+            deploy walk consumes), so the plugin returns the pod-overlay Containerfile fragment
+            directly from OpEmit — no host build engine needed. The DEPLOY leg for these kinds
+            STAYS in charly/plugin/kit.WalkPlans (walkFile / walkShellHook / …), which renders them
+            from the same view over the executor reverse channel; this plugin serves ONLY OpEmit.
+            apk-install declares Emits=false (no build fragment — the android deploy preresolver
+            reads the step at deploy). The C1.1 externalization of the pure InstallStep build-emit:
+            the build leg moves out of charly's OCITarget.emit* methods into this plugin, the deploy
+            leg is unchanged. Its Go lives in this candy's own module (NewProvider/NewMeta + a
+            cmd/serve out-of-process shim), compiled INTO charly via charly.yml compiled_plugins:.
+    plugin-installstep-decl:
+        plugin:
+            providers:
+                - step:file
+                - step:shell-hook
+                - step:shell-snippet
+                - step:service-packaged
+                - step:service-custom
+                - step:repo-change
+                - step:apk-install
+            source: github.com/overthinkos/overthink/candy/plugin-installstep
+    installstep-module-present:
+        check: the compiled-in class:step build-emit plugin ships a buildable Go module the host can build + serve (in-proc in the default binary, out-of-process via cmd/serve when not compiled in)
+        id: installstep-module-present
+        context:
+            - build
+        plugin: command
+        plugin_input:
+            command: "true"

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/overthinkos/overthink/charly/plugin/sdk"
 	"github.com/overthinkos/overthink/charly/spec"
 )
 
@@ -38,7 +39,7 @@ func TestCheckRequiredModifiers(t *testing.T) {
 		{"overlay-show", spec.Op{Wl: "overlay-show", Text: "hello"}, ""},
 	}
 	for _, tc := range cases {
-		err := checkRequiredModifiers(tc.method, &tc.op)
+		err := sdk.CheckRequiredModifiers(tc.method, &tc.op, requiredModifiers, modifierZero)
 		if tc.wantErr == "" {
 			if err != nil {
 				t.Errorf("%s: unexpected error: %v", tc.method, err)

@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/overthinkos/overthink/charly/plugin/kit"
+	"github.com/overthinkos/overthink/charly/plugin/sdk"
 	"github.com/overthinkos/overthink/charly/spec"
 )
 
@@ -48,7 +50,7 @@ func TestGvariantArg(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error for %q: %v", tc.input, err)
 			}
-			if want := shellQuote(tc.want); got != want {
+			if want := kit.ShellQuote(tc.want); got != want {
 				t.Errorf("gvariantArg(%q) = %q, want %q", tc.input, got, want)
 			}
 		})
@@ -62,7 +64,7 @@ func TestGvariantArgsMultiple(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := []string{shellQuote(`"charly"`), shellQuote("@u 0"), shellQuote(`"title"`), shellQuote("@i -1")}
+	want := []string{kit.ShellQuote(`"charly"`), kit.ShellQuote("@u 0"), kit.ShellQuote(`"title"`), kit.ShellQuote("@i -1")}
 	if len(got) != len(want) {
 		t.Fatalf("expected %d tokens, got %d", len(want), len(got))
 	}
@@ -100,7 +102,7 @@ func TestCheckRequiredModifiers(t *testing.T) {
 		{"notify", spec.Op{Dbus: "notify", Text: "title"}, ""},
 	}
 	for _, tc := range cases {
-		err := checkRequiredModifiers(tc.method, &tc.op)
+		err := sdk.CheckRequiredModifiers(tc.method, &tc.op, requiredModifiers, modifierZero)
 		if tc.wantErr == "" {
 			if err != nil {
 				t.Errorf("%s: unexpected error: %v", tc.method, err)

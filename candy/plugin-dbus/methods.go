@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 	"github.com/overthinkos/overthink/charly/plugin/sdk"
 	"github.com/overthinkos/overthink/charly/spec"
 )
@@ -47,26 +48,13 @@ func modifierZero(op *spec.Op, name string) bool {
 	return false
 }
 
-func checkRequiredModifiers(method string, op *spec.Op) error {
-	var missing []string
-	for _, f := range requiredModifiers[method] {
-		if modifierZero(op, f) {
-			missing = append(missing, f)
-		}
-	}
-	if len(missing) == 0 {
-		return nil
-	}
-	return fmt.Errorf("missing required modifier(s): %s", strings.Join(missing, ", "))
-}
-
 // dispatch runs one dbus method against the venue's session bus (over the host executor
 // reverse channel) and returns its captured output. A returned error is the verb FAILING
 // (the in-tree CLI Run() returning an error → exit 1); provider.go maps it through the
 // exit_status / stderr matchers.
 func dispatch(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, error) {
 	method := string(op.Dbus)
-	if err := checkRequiredModifiers(method, op); err != nil {
+	if err := sdk.CheckRequiredModifiers(method, op, requiredModifiers, modifierZero); err != nil {
 		return "", err
 	}
 	if err := ensureGdbus(ctx, ex); err != nil {
@@ -94,7 +82,7 @@ func dispatch(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, error
 // substring, so a `contains:` matcher on a name still matches (the in-tree godbus path
 // printed one name per line).
 func dbusList(ctx context.Context, ex *sdk.Executor) (string, error) {
-	return venueCapture(ctx, ex, sessionBusExport+
+	return ex.VenueCapture(ctx, sessionBusExport+
 		"gdbus call --session "+
 		"--dest org.freedesktop.DBus "+
 		"--object-path /org/freedesktop/DBus "+
@@ -110,34 +98,34 @@ func dbusCall(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, error
 		return "", err
 	}
 	cmd := sessionBusExport + "gdbus call --session " +
-		"--dest " + shellQuote(op.Dest) + " " +
-		"--object-path " + shellQuote(op.Path) + " " +
-		"--method " + shellQuote(op.Method)
+		"--dest " + kit.ShellQuote(op.Dest) + " " +
+		"--object-path " + kit.ShellQuote(op.Path) + " " +
+		"--method " + kit.ShellQuote(op.Method)
 	for _, a := range args {
 		cmd += " " + a
 	}
-	return venueCapture(ctx, ex, cmd)
+	return ex.VenueCapture(ctx, cmd)
 }
 
 // dbusIntrospect introspects a service object, returning the introspection XML
 // (org.freedesktop.DBus.Introspectable.Introspect, surfaced by `gdbus introspect --xml`).
 func dbusIntrospect(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, error) {
-	return venueCapture(ctx, ex, sessionBusExport+
+	return ex.VenueCapture(ctx, sessionBusExport+
 		"gdbus introspect --session "+
-		"--dest "+shellQuote(op.Dest)+" "+
-		"--object-path "+shellQuote(op.Path)+" --xml")
+		"--dest "+kit.ShellQuote(op.Dest)+" "+
+		"--object-path "+kit.ShellQuote(op.Path)+" --xml")
 }
 
 // dbusNotify sends a desktop notification via org.freedesktop.Notifications.Notify. text is
 // the title (required), description the body — the in-tree gdbus-fallback argv, promoted to
 // the sole path.
 func dbusNotify(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, error) {
-	return venueCapture(ctx, ex, sessionBusExport+
+	return ex.VenueCapture(ctx, sessionBusExport+
 		"gdbus call --session "+
 		"--dest=org.freedesktop.Notifications "+
 		"--object-path=/org/freedesktop/Notifications "+
 		"--method=org.freedesktop.Notifications.Notify "+
-		`"charly" 0 "" `+shellQuote(op.Text)+" "+shellQuote(op.Description)+` "[]" "{}" -- -1`)
+		`"charly" 0 "" `+kit.ShellQuote(op.Text)+" "+kit.ShellQuote(op.Description)+` "[]" "{}" -- -1`)
 }
 
 // ---------------------------------------------------------------------------
@@ -203,7 +191,7 @@ func gvariantArg(arg string) (string, error) {
 	default:
 		return "", fmt.Errorf("argument %q: unsupported type %q (supported: string, uint32, int32, int64, uint64, boolean, double)", arg, typ)
 	}
-	return shellQuote(gv), nil
+	return kit.ShellQuote(gv), nil
 }
 
 // gvariantString renders a GVariant double-quoted string literal with backslash escaping.
@@ -219,36 +207,8 @@ func gvariantString(s string) string {
 // ensureGdbus fails the verb with a clear message when gdbus (glib2) is absent on the venue —
 // dbus drives the bus through gdbus, with no in-container charly self-delegation to fall back on.
 func ensureGdbus(ctx context.Context, ex *sdk.Executor) error {
-	if !venueHasTool(ctx, ex, "gdbus") {
+	if !ex.VenueHasTool(ctx, "gdbus") {
 		return fmt.Errorf("'gdbus' is not installed on the target — ensure glib2 is present (the 'dbus' layer's desktops carry it)")
 	}
 	return nil
-}
-
-// venueHasTool reports whether `tool` is on PATH on the venue.
-func venueHasTool(ctx context.Context, ex *sdk.Executor, tool string) bool {
-	_, _, exit, err := ex.RunCapture(ctx, "command -v "+tool+" >/dev/null 2>&1")
-	return err == nil && exit == 0
-}
-
-// venueCapture runs a command on the venue and returns stdout, surfacing stderr on a
-// non-zero exit.
-func venueCapture(ctx context.Context, ex *sdk.Executor, script string) (string, error) {
-	stdout, stderr, exit, err := ex.RunCapture(ctx, script)
-	if err != nil {
-		return "", err
-	}
-	if exit != 0 {
-		if s := strings.TrimSpace(stderr); s != "" {
-			return "", fmt.Errorf("%s", s)
-		}
-		return "", fmt.Errorf("command exited %d", exit)
-	}
-	return stdout, nil
-}
-
-// shellQuote wraps s in single quotes for safe shell interpolation — the local analogue of
-// charly's shellSingleQuote / kit.ShellQuote (kept local so this module imports only the SDK).
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

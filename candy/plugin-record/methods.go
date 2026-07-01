@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 	"github.com/overthinkos/overthink/charly/plugin/sdk"
 	"github.com/overthinkos/overthink/charly/spec"
 )
@@ -43,26 +44,13 @@ func modifierZero(op *spec.Op, name string) bool {
 	return false
 }
 
-func checkRequiredModifiers(method string, op *spec.Op) error {
-	var missing []string
-	for _, f := range requiredModifiers[method] {
-		if modifierZero(op, f) {
-			missing = append(missing, f)
-		}
-	}
-	if len(missing) == 0 {
-		return nil
-	}
-	return fmt.Errorf("missing required modifier(s): %s", strings.Join(missing, ", "))
-}
-
 // dispatch runs one record method against the venue (over the host executor reverse
 // channel) and returns its captured output. A returned error is the verb FAILING (the
 // in-tree CLI Run() returning an error → exit 1); provider.go maps it through the
 // exit_status / stderr matchers.
 func dispatch(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, error) {
 	method := string(op.Record)
-	if err := checkRequiredModifiers(method, op); err != nil {
+	if err := sdk.CheckRequiredModifiers(method, op, requiredModifiers, modifierZero); err != nil {
 		return "", err
 	}
 	switch method {
@@ -98,23 +86,23 @@ func recordStart(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, er
 	if err != nil {
 		return "", err
 	}
-	if err := venueRunSilent(ctx, ex, "mkdir -p "+recordingDir); err != nil {
+	if err := ex.VenueRunSilent(ctx, "mkdir -p "+recordingDir); err != nil {
 		return "", fmt.Errorf("creating recording directory: %w", err)
 	}
 	outFile := recordingFilePath(name, mode)
 	var recorderCmd string
 	switch tool {
 	case "asciinema":
-		recorderCmd = fmt.Sprintf("asciinema rec %s", shellQuote(outFile))
+		recorderCmd = fmt.Sprintf("asciinema rec %s", kit.ShellQuote(outFile))
 	case "pixelflux-record":
-		recorderCmd = fmt.Sprintf("pixelflux-record %s --fps %d", shellQuote(outFile), recordFps(op))
+		recorderCmd = fmt.Sprintf("pixelflux-record %s --fps %d", kit.ShellQuote(outFile), recordFps(op))
 		if op.RecordAudio {
 			recorderCmd += " --audio"
 		}
 	case "wf-recorder":
 		recorderCmd = fmt.Sprintf(
 			"env XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp} WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-0} wf-recorder -f %s",
-			shellQuote(outFile))
+			kit.ShellQuote(outFile))
 		if op.RecordAudio {
 			recorderCmd += " --audio"
 		}
@@ -125,7 +113,7 @@ func recordStart(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, er
 	}
 	// Write mode metadata for stop (best-effort).
 	modeFile := recordingDir + "/" + name + ".mode"
-	_ = venueRunSilent(ctx, ex, fmt.Sprintf("printf '%%s' %s > %s", shellQuote(mode), shellQuote(modeFile)))
+	_ = ex.VenueRunSilent(ctx, fmt.Sprintf("printf '%%s' %s > %s", kit.ShellQuote(mode), kit.ShellQuote(modeFile)))
 	return fmt.Sprintf("Recording started (mode: %s, tool: %s, session: %s); output: %s", mode, tool, session, outFile), nil
 }
 
@@ -227,7 +215,7 @@ func recordCmd(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, erro
 func resolveMode(ctx context.Context, ex *sdk.Executor, modeFlag string) (tool, mode string, err error) {
 	switch modeFlag {
 	case "terminal":
-		if !venueHasTool(ctx, ex, "asciinema") {
+		if !ex.VenueHasTool(ctx, "asciinema") {
 			return "", "", fmt.Errorf("terminal recording requires asciinema (add the asciinema candy)")
 		}
 		return "asciinema", "terminal", nil
@@ -244,10 +232,10 @@ func resolveMode(ctx context.Context, ex *sdk.Executor, modeFlag string) (tool, 
 
 // detectDesktopRecorder finds the best available desktop recording tool on the venue.
 func detectDesktopRecorder(ctx context.Context, ex *sdk.Executor) (string, error) {
-	if venueHasTool(ctx, ex, "pixelflux-record") {
+	if ex.VenueHasTool(ctx, "pixelflux-record") {
 		return "pixelflux-record", nil
 	}
-	if venueHasTool(ctx, ex, "wf-recorder") {
+	if ex.VenueHasTool(ctx, "wf-recorder") {
 		return "wf-recorder", nil
 	}
 	return "", fmt.Errorf("no desktop recorder available (need pixelflux-record or wf-recorder)")
@@ -256,13 +244,13 @@ func detectDesktopRecorder(ctx context.Context, ex *sdk.Executor) (string, error
 // detectRecordTool probes the venue for available recording tools (auto mode): desktop
 // recorders first (more specific), then the terminal asciinema fallback.
 func detectRecordTool(ctx context.Context, ex *sdk.Executor) (tool, mode string, err error) {
-	if venueHasTool(ctx, ex, "pixelflux-record") {
+	if ex.VenueHasTool(ctx, "pixelflux-record") {
 		return "pixelflux-record", "desktop", nil
 	}
-	if venueHasTool(ctx, ex, "wf-recorder") {
+	if ex.VenueHasTool(ctx, "wf-recorder") {
 		return "wf-recorder", "desktop", nil
 	}
-	if venueHasTool(ctx, ex, "asciinema") {
+	if ex.VenueHasTool(ctx, "asciinema") {
 		return "asciinema", "terminal", nil
 	}
 	return "", "", fmt.Errorf("no recording tool available (need asciinema, pixelflux-record, or wf-recorder)")
@@ -301,7 +289,7 @@ func recordingFilePath(name, mode string) string {
 // falling back to "desktop" when absent/unreadable.
 func readRecordingMode(ctx context.Context, ex *sdk.Executor, name string) string {
 	modeFile := recordingDir + "/" + name + ".mode"
-	out, err := venueCapture(ctx, ex, "cat "+shellQuote(modeFile))
+	out, err := ex.VenueCapture(ctx, "cat "+kit.ShellQuote(modeFile))
 	if err == nil {
 		mode := strings.TrimSpace(out)
 		if mode == "terminal" || mode == "desktop" {
@@ -313,43 +301,7 @@ func readRecordingMode(ctx context.Context, ex *sdk.Executor, name string) strin
 
 func cleanupModeFile(ctx context.Context, ex *sdk.Executor, name string) {
 	modeFile := recordingDir + "/" + name + ".mode"
-	_ = venueRunSilent(ctx, ex, "rm -f "+shellQuote(modeFile))
-}
-
-// --- venue command helpers (over the executor reverse channel) ---
-
-// venueHasTool reports whether `tool` is on PATH on the venue.
-func venueHasTool(ctx context.Context, ex *sdk.Executor, tool string) bool {
-	_, _, exit, err := ex.RunCapture(ctx, "command -v "+tool+" >/dev/null 2>&1")
-	return err == nil && exit == 0
-}
-
-// venueRunSilent runs a command on the venue discarding output, error on a non-zero exit.
-func venueRunSilent(ctx context.Context, ex *sdk.Executor, script string) error {
-	_, _, exit, err := ex.RunCapture(ctx, script)
-	if err != nil {
-		return err
-	}
-	if exit != 0 {
-		return fmt.Errorf("command exited %d", exit)
-	}
-	return nil
-}
-
-// venueCapture runs a command on the venue and returns stdout, surfacing stderr on a
-// non-zero exit.
-func venueCapture(ctx context.Context, ex *sdk.Executor, script string) (string, error) {
-	stdout, stderr, exit, err := ex.RunCapture(ctx, script)
-	if err != nil {
-		return "", err
-	}
-	if exit != 0 {
-		if s := strings.TrimSpace(stderr); s != "" {
-			return "", fmt.Errorf("%s", s)
-		}
-		return "", fmt.Errorf("command exited %d", exit)
-	}
-	return stdout, nil
+	_ = ex.VenueRunSilent(ctx, "rm -f "+kit.ShellQuote(modeFile))
 }
 
 // --- tmux helpers ---
@@ -357,28 +309,28 @@ func venueCapture(ctx context.Context, ex *sdk.Executor, script string) (string,
 func tmuxArgs(args []string) string {
 	quoted := make([]string, len(args))
 	for i, a := range args {
-		quoted[i] = shellQuote(a)
+		quoted[i] = kit.ShellQuote(a)
 	}
 	return strings.Join(quoted, " ")
 }
 
 func checkTmuxInstalled(ctx context.Context, ex *sdk.Executor) error {
-	if !venueHasTool(ctx, ex, "tmux") {
+	if !ex.VenueHasTool(ctx, "tmux") {
 		return fmt.Errorf("tmux is not installed on the target (add the tmux candy to your box, or install it on the host/VM)")
 	}
 	return nil
 }
 
 func tmuxHasSession(ctx context.Context, ex *sdk.Executor, session string) bool {
-	return venueRunSilent(ctx, ex, "tmux has-session -t "+shellQuote(session)) == nil
+	return ex.VenueRunSilent(ctx, "tmux has-session -t "+kit.ShellQuote(session)) == nil
 }
 
 func execTmux(ctx context.Context, ex *sdk.Executor, args ...string) error {
-	return venueRunSilent(ctx, ex, "tmux "+tmuxArgs(args))
+	return ex.VenueRunSilent(ctx, "tmux "+tmuxArgs(args))
 }
 
 func captureTmux(ctx context.Context, ex *sdk.Executor, args ...string) (string, error) {
-	out, err := venueCapture(ctx, ex, "tmux "+tmuxArgs(args))
+	out, err := ex.VenueCapture(ctx, "tmux "+tmuxArgs(args))
 	if err != nil {
 		return "", err
 	}
@@ -393,10 +345,4 @@ func sendTmuxCommand(ctx context.Context, ex *sdk.Executor, session, command str
 		return fmt.Errorf("sending Enter to session %s: %w", session, err)
 	}
 	return nil
-}
-
-// shellQuote wraps s in single quotes for safe shell interpolation — the local analogue of
-// charly's shellSingleQuote / kit.ShellQuote (kept local so this module imports only the SDK).
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

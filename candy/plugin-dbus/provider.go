@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 	pb "github.com/overthinkos/overthink/charly/plugin/proto"
 	"github.com/overthinkos/overthink/charly/plugin/sdk"
 	"github.com/overthinkos/overthink/charly/spec"
@@ -21,20 +22,6 @@ import (
 // method (RunCapture-driven gdbus), then evaluate the stdout/stderr/exit_status matchers
 // itself (via the shared sdk implementation — R3), and return the wire {status,message} the
 // host decodes.
-
-// pluginResult is the wire form a verb provider returns (the host's pluginCheckResult).
-type pluginResult struct {
-	Status  string `json:"status"` // "pass" | "fail" | "skip"
-	Message string `json:"message"`
-}
-
-func resultJSON(status, msg string) (*pb.InvokeReply, error) {
-	j, err := json.Marshal(pluginResult{Status: status, Message: msg})
-	if err != nil {
-		return nil, err
-	}
-	return &pb.InvokeReply{ResultJson: j}, nil
-}
 
 // dbusEnv is the plugin-side decode of the CheckEnv the host ships as Operation.Env for a
 // `dbus:` check step (provider_checkenv.go). The fields mirror the shared CheckEnv; dbus
@@ -60,7 +47,7 @@ func (p provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.Invoke
 	var op spec.Op
 	if len(req.GetParamsJson()) > 0 {
 		if err := json.Unmarshal(req.GetParamsJson(), &op); err != nil {
-			return resultJSON("fail", "dbus: decode op: "+err.Error())
+			return sdk.ResultJSON("fail", "dbus: decode op: "+err.Error())
 		}
 	}
 	var env dbusEnv
@@ -72,7 +59,7 @@ func (p provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.Invoke
 	// Live-deployment verb: skip under `charly check box` (no running deployment with a
 	// session bus in a disposable `podman run --rm`) — mirrors the host's RunModeBox/box-mode skip.
 	if env.Mode == "box" {
-		return resultJSON("skip", fmt.Sprintf("dbus: %s requires a running deployment (skip under charly check box)", method))
+		return sdk.ResultJSON("skip", fmt.Sprintf("dbus: %s requires a running deployment (skip under charly check box)", method))
 	}
 
 	// dbus is EXEC-based: it drives the venue's session bus (gdbus list/call/introspect/notify)
@@ -81,7 +68,7 @@ func (p provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.Invoke
 	// job without the venue.
 	exec, err := sdk.ExecutorFromInvoke(req.GetExecutorBrokerId())
 	if err != nil {
-		return resultJSON("fail", fmt.Sprintf("dbus: %s has no host executor attached — dbus needs the live venue (%v)", method, err))
+		return sdk.ResultJSON("fail", fmt.Sprintf("dbus: %s has no host executor attached — dbus needs the live venue (%v)", method, err))
 	}
 
 	out, runErr := dispatch(ctx, exec, &op)
@@ -99,14 +86,14 @@ func (p provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.Invoke
 		wantExit = *op.ExitStatus
 	}
 	if exit != wantExit {
-		return resultJSON("fail", fmt.Sprintf("dbus: %s: exit=%d, want %d (stderr: %s)", method, exit, wantExit, preview(stderr)))
+		return sdk.ResultJSON("fail", fmt.Sprintf("dbus: %s: exit=%d, want %d (stderr: %s)", method, exit, wantExit, kit.TrimPreview(stderr)))
 	}
 
 	if err := sdk.MatchAll(out, op.Stdout); err != nil {
-		return resultJSON("fail", fmt.Sprintf("dbus: %s: stdout: %v (got: %s)", method, err, preview(out)))
+		return sdk.ResultJSON("fail", fmt.Sprintf("dbus: %s: stdout: %v (got: %s)", method, err, kit.TrimPreview(out)))
 	}
 	if err := sdk.MatchAll(stderr, op.Stderr); err != nil {
-		return resultJSON("fail", fmt.Sprintf("dbus: %s: stderr: %v (got: %s)", method, err, preview(stderr)))
+		return sdk.ResultJSON("fail", fmt.Sprintf("dbus: %s: stderr: %v (got: %s)", method, err, kit.TrimPreview(stderr)))
 	}
 
 	body := out
@@ -116,15 +103,5 @@ func (p provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.Invoke
 	if strings.TrimSpace(body) == "" {
 		body = fmt.Sprintf("dbus %s: exit=%d", method, exit)
 	}
-	return resultJSON("pass", body)
-}
-
-// preview trims long output for an error message (mirrors charly's trimPreview).
-func preview(s string) string {
-	s = strings.TrimSpace(s)
-	const max = 400
-	if len(s) > max {
-		return s[:max] + "…"
-	}
-	return s
+	return sdk.ResultJSON("pass", body)
 }

@@ -31,21 +31,6 @@ type checkVerbServer struct {
 	kv kit.CheckVerbProvider
 }
 
-// checkResultWire is the verb-class result the host decodes (its pluginCheckResult): the
-// SAME {status,message} shape every out-of-process verb returns (R3).
-type checkResultWire struct {
-	Status  string `json:"status"` // "pass" | "fail" | "skip"
-	Message string `json:"message"`
-}
-
-func checkResultReply(status, msg string) (*pb.InvokeReply, error) {
-	j, err := json.Marshal(checkResultWire{Status: status, Message: msg})
-	if err != nil {
-		return nil, err
-	}
-	return &pb.InvokeReply{ResultJson: j}, nil
-}
-
 func kitStatusWire(s kit.Status) string {
 	switch s {
 	case kit.StatusFail:
@@ -61,7 +46,7 @@ func (s *checkVerbServer) Invoke(ctx context.Context, req *pb.InvokeRequest) (*p
 	var op spec.Op
 	if len(req.GetParamsJson()) > 0 {
 		if err := json.Unmarshal(req.GetParamsJson(), &op); err != nil {
-			return checkResultReply("fail", "check verb: decode op: "+err.Error())
+			return ResultJSON("fail", "check verb: decode op: "+err.Error())
 		}
 	}
 	var env checkEnvWire
@@ -70,10 +55,10 @@ func (s *checkVerbServer) Invoke(ctx context.Context, req *pb.InvokeRequest) (*p
 	}
 	cc, err := newSDKCheckContext(req.GetExecutorBrokerId(), env)
 	if err != nil {
-		return checkResultReply("fail", "check verb: reverse channel: "+err.Error())
+		return ResultJSON("fail", "check verb: reverse channel: "+err.Error())
 	}
 	res := s.kv.RunVerb(ctx, cc, &op)
-	return checkResultReply(kitStatusWire(res.Status), res.Message)
+	return ResultJSON(kitStatusWire(res.Status), res.Message)
 }
 
 func (s *checkVerbServer) InvokeStream(req *pb.InvokeRequest, stream pb.Provider_InvokeStreamServer) error {

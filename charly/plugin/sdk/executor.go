@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 
 	plugin "github.com/hashicorp/go-plugin"
 
@@ -149,6 +151,42 @@ func (e *Executor) RunCapture(ctx context.Context, script string) (stdout, stder
 		return r.GetStdout(), r.GetStderr(), int(r.GetExitCode()), errors.New(r.GetError())
 	}
 	return r.GetStdout(), r.GetStderr(), int(r.GetExitCode()), nil
+}
+
+// VenueHasTool reports whether tool is on PATH on the venue — an EXEC-based check verb's
+// tool-presence probe over the reverse channel.
+func (e *Executor) VenueHasTool(ctx context.Context, tool string) bool {
+	_, _, exit, err := e.RunCapture(ctx, "command -v "+tool+" >/dev/null 2>&1")
+	return err == nil && exit == 0
+}
+
+// VenueCapture runs a command on the venue and returns stdout, surfacing stderr on a
+// non-zero exit — an EXEC-based check verb's capture-or-fail helper over the reverse channel.
+func (e *Executor) VenueCapture(ctx context.Context, script string) (string, error) {
+	stdout, stderr, exit, err := e.RunCapture(ctx, script)
+	if err != nil {
+		return "", err
+	}
+	if exit != 0 {
+		if s := strings.TrimSpace(stderr); s != "" {
+			return "", fmt.Errorf("%s", s)
+		}
+		return "", fmt.Errorf("command exited %d", exit)
+	}
+	return stdout, nil
+}
+
+// VenueRunSilent runs a command on the venue discarding output, returning an error on a
+// non-zero exit — an EXEC-based check verb's fire-and-forget helper over the reverse channel.
+func (e *Executor) VenueRunSilent(ctx context.Context, script string) error {
+	_, _, exit, err := e.RunCapture(ctx, script)
+	if err != nil {
+		return err
+	}
+	if exit != 0 {
+		return fmt.Errorf("command exited %d", exit)
+	}
+	return nil
 }
 
 // GetFile reads a venue file back to the host (asRoot reads via sudo) — the check-verb

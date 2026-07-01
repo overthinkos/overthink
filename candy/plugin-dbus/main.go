@@ -45,7 +45,7 @@ type meta struct {
 // schema (dbus.cue) exists only to satisfy the host's non-empty-schema load gate. The SDK
 // compiles the schema standalone here, failing loudly before serving if it is broken.
 func (meta) Describe(context.Context, *pb.Empty) (*pb.Capabilities, error) {
-	return sdk.BuildCapabilities("2026.178.0600",
+	return sdk.BuildCapabilities("2026.182.1805",
 		[]sdk.ProvidedCapability{{Class: "verb", Word: "dbus", InputDef: ""}},
 		schemaFS, "schema")
 }

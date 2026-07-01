@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 	"github.com/overthinkos/overthink/charly/plugin/sdk"
 	"github.com/overthinkos/overthink/charly/spec"
 )
@@ -96,26 +97,13 @@ func modifierZero(op *spec.Op, name string) bool {
 	return false
 }
 
-func checkRequiredModifiers(method string, op *spec.Op) error {
-	var missing []string
-	for _, f := range requiredModifiers[method] {
-		if modifierZero(op, f) {
-			missing = append(missing, f)
-		}
-	}
-	if len(missing) == 0 {
-		return nil
-	}
-	return fmt.Errorf("missing required modifier(s): %s", strings.Join(missing, ", "))
-}
-
 // dispatch runs one wl method against the venue (over the host executor reverse channel)
 // and returns its captured output. A returned error is the verb FAILING (the in-tree CLI
 // Run() returning an error → exit 1); provider.go maps it through the exit_status / stderr
 // matchers + the artifact validators (screenshot).
 func dispatch(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, error) {
 	method := string(op.Wl)
-	if err := checkRequiredModifiers(method, op); err != nil {
+	if err := sdk.CheckRequiredModifiers(method, op, requiredModifiers, modifierZero); err != nil {
 		return "", err
 	}
 	switch method {
@@ -217,7 +205,7 @@ func wlStatus(ctx context.Context, ex *sdk.Executor) (string, error) {
 	fmt.Fprintf(&b, "%-12s %s\n", "compositor:", comp)
 
 	for _, tool := range []string{"grim", "wtype", "wlrctl", "kdotool", "pixelflux-screenshot", "wl-copy", "wl-paste", "wlr-randr", "xdotool", "import", "xprop"} {
-		if venueHasTool(ctx, ex, tool) {
+		if ex.VenueHasTool(ctx, tool) {
 			fmt.Fprintf(&b, "%-12s available\n", tool+":")
 		} else {
 			fmt.Fprintf(&b, "%-12s not found\n", tool+":")
@@ -225,7 +213,7 @@ func wlStatus(ctx context.Context, ex *sdk.Executor) (string, error) {
 	}
 
 	atspiCheck := `/usr/bin/python3 -c "import gi; gi.require_version('Atspi','2.0')" 2>/dev/null`
-	if venueRunSilent(ctx, ex, atspiCheck) == nil {
+	if ex.VenueRunSilent(ctx, atspiCheck) == nil {
 		fmt.Fprintf(&b, "%-12s available\n", "atspi:")
 	} else {
 		fmt.Fprintf(&b, "%-12s not found\n", "atspi:")
@@ -258,7 +246,7 @@ func wlStatus(ctx context.Context, ex *sdk.Executor) (string, error) {
 		fmt.Fprintf(&b, "%-12s unavailable (no sway or wlr-randr)\n", "output:")
 	}
 
-	if venueRunSilent(ctx, ex, `pgrep -f Xwayland >/dev/null 2>&1`) == nil {
+	if ex.VenueRunSilent(ctx, `pgrep -f Xwayland >/dev/null 2>&1`) == nil {
 		count := ""
 		if out, err := wlCapture(ctx, ex, `DISPLAY=:0 xdotool search --name "." 2>/dev/null | wc -l`); err == nil {
 			count = strings.TrimSpace(out)
@@ -288,7 +276,7 @@ func wlWindows(ctx context.Context, ex *sdk.Executor) (string, error) {
 	if detectCompositor(ctx, ex) == "kwin" {
 		return wlCapture(ctx, ex, "kdotool search ''")
 	}
-	if venueRunSilent(ctx, ex, "command -v wlrctl >/dev/null 2>&1") == nil {
+	if ex.VenueRunSilent(ctx, "command -v wlrctl >/dev/null 2>&1") == nil {
 		if out, err := wlCapture(ctx, ex, "wlrctl toplevel list"); err == nil {
 			return out, nil
 		}
@@ -314,7 +302,7 @@ func wlGeometry(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, err
 
 	shellCmd := fmt.Sprintf(
 		`export DISPLAY=:0 && WID=$(xdotool search --class %s 2>/dev/null | head -1 || xdotool search --name %s 2>/dev/null | head -1) && [ -n "$WID" ] && xdotool getwindowgeometry "$WID" 2>/dev/null`,
-		shellQuote(op.Target), shellQuote(op.Target),
+		kit.ShellQuote(op.Target), kit.ShellQuote(op.Target),
 	)
 	if data, err := wlCapture(ctx, ex, shellCmd); err == nil {
 		var x, y, w, h int
@@ -357,7 +345,7 @@ func wlGeometry(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, err
 
 // wlXprop queries X11 window properties via xprop (XWayland windows only).
 func wlXprop(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, error) {
-	if venueRunSilent(ctx, ex, `pgrep -f Xwayland >/dev/null 2>&1`) != nil {
+	if ex.VenueRunSilent(ctx, `pgrep -f Xwayland >/dev/null 2>&1`) != nil {
 		return "XWayland is not running (no X11 clients have been launched)", nil
 	}
 	var shellCmd string
@@ -366,7 +354,7 @@ func wlXprop(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, error)
 	} else {
 		shellCmd = fmt.Sprintf(
 			`export DISPLAY=:0 && WID=$(xdotool search --class %s 2>/dev/null | head -1 || xdotool search --name %s 2>/dev/null | head -1) && [ -n "$WID" ] && xprop -id "$WID" WM_CLASS _NET_WM_NAME _NET_WM_WINDOW_TYPE _NET_WM_PID 2>/dev/null && xdotool getwindowgeometry "$WID" 2>/dev/null || echo "No X11 window matching %s"`,
-			shellQuote(op.Target), shellQuote(op.Target), op.Target,
+			kit.ShellQuote(op.Target), kit.ShellQuote(op.Target), op.Target,
 		)
 	}
 	return wlCapture(ctx, ex, shellCmd)
@@ -383,9 +371,9 @@ func wlAtspi(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, error)
 	}
 	var shellCmd string
 	if op.Query != "" {
-		shellCmd = fmt.Sprintf("/usr/bin/python3 -c %s %s %s", shellQuote(atspiScript), shellQuote(op.Action), shellQuote(op.Query))
+		shellCmd = fmt.Sprintf("/usr/bin/python3 -c %s %s %s", kit.ShellQuote(atspiScript), kit.ShellQuote(op.Action), kit.ShellQuote(op.Query))
 	} else {
-		shellCmd = fmt.Sprintf("/usr/bin/python3 -c %s %s", shellQuote(atspiScript), shellQuote(op.Action))
+		shellCmd = fmt.Sprintf("/usr/bin/python3 -c %s %s", kit.ShellQuote(atspiScript), kit.ShellQuote(op.Action))
 	}
 	wrapped := fmt.Sprintf(`export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/tmp/dbus-session}" && %s`, shellCmd)
 	return wlCapture(ctx, ex, wrapped)
@@ -397,10 +385,10 @@ func wlAtspi(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, error)
 func wlScreenshot(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, error) {
 	var captureCmd string
 	switch {
-	case venueHasTool(ctx, ex, "pixelflux-screenshot"):
-		captureCmd = "pixelflux-screenshot > " + shellQuote(screenshotVenuePath)
-	case venueHasTool(ctx, ex, "grim"):
-		captureCmd = "grim -o HEADLESS-1 " + shellQuote(screenshotVenuePath)
+	case ex.VenueHasTool(ctx, "pixelflux-screenshot"):
+		captureCmd = "pixelflux-screenshot > " + kit.ShellQuote(screenshotVenuePath)
+	case ex.VenueHasTool(ctx, "grim"):
+		captureCmd = "grim -o HEADLESS-1 " + kit.ShellQuote(screenshotVenuePath)
 	default:
 		return "", fmt.Errorf("no screenshot tool available (need pixelflux-screenshot or grim)")
 	}
@@ -414,7 +402,7 @@ func wlScreenshot(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, e
 	if err := os.WriteFile(op.Artifact, data, 0o644); err != nil {
 		return "", fmt.Errorf("writing screenshot to %s: %w", op.Artifact, err)
 	}
-	_ = venueRunSilent(ctx, ex, "rm -f "+shellQuote(screenshotVenuePath))
+	_ = ex.VenueRunSilent(ctx, "rm -f "+kit.ShellQuote(screenshotVenuePath))
 	return fmt.Sprintf("Screenshot saved to %s (%d bytes)", op.Artifact, len(data)), nil
 }
 
@@ -427,7 +415,7 @@ func wlClipboard(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, er
 		if op.Text == "" {
 			return "", fmt.Errorf("text argument required for 'set' action")
 		}
-		if _, err := wlCapture(ctx, ex, fmt.Sprintf("printf '%%s' %s | wl-copy", shellQuote(op.Text))); err != nil {
+		if _, err := wlCapture(ctx, ex, fmt.Sprintf("printf '%%s' %s | wl-copy", kit.ShellQuote(op.Text))); err != nil {
 			return "", fmt.Errorf("setting clipboard: %w", err)
 		}
 		return fmt.Sprintf("Clipboard set (%d chars)", len(op.Text)), nil
@@ -559,7 +547,7 @@ func wlDrag(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, error) 
 }
 
 func wlType(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, error) {
-	if _, err := wlCapture(ctx, ex, "wtype -- "+shellQuote(op.Text)); err != nil {
+	if _, err := wlCapture(ctx, ex, "wtype -- "+kit.ShellQuote(op.Text)); err != nil {
 		return "", fmt.Errorf("typing text: %w", err)
 	}
 	return fmt.Sprintf("Typed %d characters", len(op.Text)), nil
@@ -569,7 +557,7 @@ func wlKey(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, error) {
 	if !wlValidKey(op.KeyName) {
 		return "", fmt.Errorf("unknown key %q (valid: %s)", op.KeyName, wlKeyNames())
 	}
-	if _, err := wlCapture(ctx, ex, "wtype -k "+shellQuote(op.KeyName)); err != nil {
+	if _, err := wlCapture(ctx, ex, "wtype -k "+kit.ShellQuote(op.KeyName)); err != nil {
 		return "", fmt.Errorf("pressing key %s: %w", op.KeyName, err)
 	}
 	return fmt.Sprintf("Pressed key %s", op.KeyName), nil
@@ -602,14 +590,14 @@ func wlFocus(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, error)
 		}
 		return fmt.Sprintf("Focused window matching %q via kdotool", op.Target), nil
 	}
-	if venueRunSilent(ctx, ex, "command -v wlrctl >/dev/null 2>&1") == nil {
-		if wlSilent(ctx, ex, "wlrctl toplevel focus "+shellQuote(op.Target)) == nil {
+	if ex.VenueRunSilent(ctx, "command -v wlrctl >/dev/null 2>&1") == nil {
+		if wlSilent(ctx, ex, "wlrctl toplevel focus "+kit.ShellQuote(op.Target)) == nil {
 			return fmt.Sprintf("Focused window matching %q via wlrctl", op.Target), nil
 		}
 	}
 	cmd := fmt.Sprintf(
 		`export DISPLAY=:0 && xdotool search --name %s windowactivate 2>/dev/null || export DISPLAY=:0 && xdotool search --class %s windowactivate`,
-		shellQuote(op.Target), shellQuote(op.Target),
+		kit.ShellQuote(op.Target), kit.ShellQuote(op.Target),
 	)
 	if _, err := wlCapture(ctx, ex, cmd); err != nil {
 		return "", fmt.Errorf("focusing window %q: %w", op.Target, err)
@@ -691,7 +679,7 @@ func wlResolution(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, e
 	if output == "" {
 		output = "HEADLESS-1"
 	}
-	cmd := fmt.Sprintf("wlr-randr --output %s --custom-mode %s", shellQuote(output), shellQuote(res))
+	cmd := fmt.Sprintf("wlr-randr --output %s --custom-mode %s", kit.ShellQuote(output), kit.ShellQuote(res))
 	if _, err := wlCapture(ctx, ex, cmd); err != nil {
 		return "", fmt.Errorf("setting resolution: %w", err)
 	}
@@ -714,9 +702,9 @@ func wlOverlayShow(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, 
 	}
 	// The declarative overlay-show is the text-overlay positional form: the text is
 	// required; op.Target, when set, names the overlay.
-	args := "charly-overlay show --type text --text " + shellQuote(op.Text)
+	args := "charly-overlay show --type text --text " + kit.ShellQuote(op.Text)
 	if op.Target != "" {
-		args += " --name " + shellQuote(op.Target)
+		args += " --name " + kit.ShellQuote(op.Target)
 	}
 	return wlCapture(ctx, ex, args)
 }
@@ -725,12 +713,12 @@ func wlOverlayHide(ctx context.Context, ex *sdk.Executor, op *spec.Op) (string, 
 	if op.Target == "all" {
 		return wlCapture(ctx, ex, "charly-overlay hide --all")
 	}
-	return wlCapture(ctx, ex, "charly-overlay hide --name "+shellQuote(op.Target))
+	return wlCapture(ctx, ex, "charly-overlay hide --name "+kit.ShellQuote(op.Target))
 }
 
 // checkOverlayAvailable verifies charly-overlay is installed on the venue.
 func checkOverlayAvailable(ctx context.Context, ex *sdk.Executor) error {
-	if venueRunSilent(ctx, ex, "command -v charly-overlay >/dev/null 2>&1") != nil {
+	if ex.VenueRunSilent(ctx, "command -v charly-overlay >/dev/null 2>&1") != nil {
 		return fmt.Errorf("charly-overlay not available on the target (add the wl-overlay candy to your box, or install it on the host/VM)")
 	}
 	return nil
@@ -740,15 +728,15 @@ func checkOverlayAvailable(ctx context.Context, ex *sdk.Executor) error {
 // already running. The daemon hosts the overlay socket; the tmux session keeps it alive
 // across the short-lived overlay invocations.
 func ensureOverlayDaemon(ctx context.Context, ex *sdk.Executor) error {
-	if venueRunSilent(ctx, ex, "test -S /tmp/charly-overlay.sock") == nil {
+	if ex.VenueRunSilent(ctx, "test -S /tmp/charly-overlay.sock") == nil {
 		return nil
 	}
-	if venueRunSilent(ctx, ex, "command -v tmux >/dev/null 2>&1") != nil {
+	if ex.VenueRunSilent(ctx, "command -v tmux >/dev/null 2>&1") != nil {
 		return fmt.Errorf("tmux not available on the target (needed to host the overlay daemon)")
 	}
-	_ = venueRunSilent(ctx, ex, "rm -f /tmp/charly-overlay.sock")
+	_ = ex.VenueRunSilent(ctx, "rm -f /tmp/charly-overlay.sock")
 	daemonCmd := wlShellCmd("charly-overlay daemon")
-	startScript := fmt.Sprintf("tmux new-session -d -s %s sh -c %s", overlayDaemonSession, shellQuote(daemonCmd))
+	startScript := fmt.Sprintf("tmux new-session -d -s %s sh -c %s", overlayDaemonSession, kit.ShellQuote(daemonCmd))
 	if _, stderr, exit, err := ex.RunCapture(ctx, startScript); err != nil {
 		return fmt.Errorf("starting overlay daemon: %w", err)
 	} else if exit != 0 {
@@ -756,7 +744,7 @@ func ensureOverlayDaemon(ctx context.Context, ex *sdk.Executor) error {
 	}
 	for range 20 {
 		time.Sleep(250 * time.Millisecond)
-		if venueRunSilent(ctx, ex, "test -S /tmp/charly-overlay.sock") == nil {
+		if ex.VenueRunSilent(ctx, "test -S /tmp/charly-overlay.sock") == nil {
 			return nil
 		}
 	}
@@ -886,53 +874,19 @@ func wlShellCmd(cmd string) string {
 // wlCapture runs a Wayland tool command on the venue (with the compositor env prelude) and
 // returns its stdout, surfacing stderr on a non-zero exit.
 func wlCapture(ctx context.Context, ex *sdk.Executor, cmd string) (string, error) {
-	return venueCapture(ctx, ex, wlShellCmd(cmd))
+	return ex.VenueCapture(ctx, wlShellCmd(cmd))
 }
 
 // wlSilent runs a Wayland tool command on the venue discarding output (probes / fire-and-
 // forget input), returning an error on a non-zero exit.
 func wlSilent(ctx context.Context, ex *sdk.Executor, cmd string) error {
-	return venueRunSilent(ctx, ex, wlShellCmd(cmd))
-}
-
-// venueCapture runs a command on the venue and returns stdout, surfacing stderr on a
-// non-zero exit.
-func venueCapture(ctx context.Context, ex *sdk.Executor, script string) (string, error) {
-	stdout, stderr, exit, err := ex.RunCapture(ctx, script)
-	if err != nil {
-		return "", err
-	}
-	if exit != 0 {
-		if s := strings.TrimSpace(stderr); s != "" {
-			return "", fmt.Errorf("%s", s)
-		}
-		return "", fmt.Errorf("command exited %d", exit)
-	}
-	return stdout, nil
-}
-
-// venueRunSilent runs a command on the venue discarding output, error on a non-zero exit.
-func venueRunSilent(ctx context.Context, ex *sdk.Executor, script string) error {
-	_, _, exit, err := ex.RunCapture(ctx, script)
-	if err != nil {
-		return err
-	}
-	if exit != 0 {
-		return fmt.Errorf("command exited %d", exit)
-	}
-	return nil
-}
-
-// venueHasTool reports whether `tool` is on PATH on the venue.
-func venueHasTool(ctx context.Context, ex *sdk.Executor, tool string) bool {
-	_, _, exit, err := ex.RunCapture(ctx, "command -v "+tool+" >/dev/null 2>&1")
-	return err == nil && exit == 0
+	return ex.VenueRunSilent(ctx, wlShellCmd(cmd))
 }
 
 // detectCompositor reports "kwin" when KWin (KDE Plasma) is PID-present, else "wlroots"
 // (sway / labwc). The probe runs raw (no env prelude — it needs no Wayland env itself).
 func detectCompositor(ctx context.Context, ex *sdk.Executor) string {
-	if venueRunSilent(ctx, ex, "pgrep -x kwin_wayland >/dev/null 2>&1") == nil {
+	if ex.VenueRunSilent(ctx, "pgrep -x kwin_wayland >/dev/null 2>&1") == nil {
 		return "kwin"
 	}
 	return "wlroots"
@@ -947,7 +901,7 @@ func errKWinPointerUnsupported(method string) error {
 // kdotoolSearchAction chains a kdotool window query with an action verb (KWin focus/close/
 // minimize/fullscreen/geometry), operating on the first match, and returns its stdout.
 func kdotoolSearchAction(ctx context.Context, ex *sdk.Executor, title, verb string, extra ...string) (string, error) {
-	cmd := fmt.Sprintf("kdotool search --name %s %s", shellQuote(title), verb)
+	cmd := fmt.Sprintf("kdotool search --name %s %s", kit.ShellQuote(title), verb)
 	if len(extra) > 0 {
 		cmd += " " + strings.Join(extra, " ")
 	}
@@ -956,7 +910,7 @@ func kdotoolSearchAction(ctx context.Context, ex *sdk.Executor, title, verb stri
 
 // wlrctlToplevel runs a wlrctl toplevel action matching by app_id (sway/labwc).
 func wlrctlToplevel(ctx context.Context, ex *sdk.Executor, action, target string) error {
-	return wlSilent(ctx, ex, fmt.Sprintf("wlrctl toplevel %s %s", action, shellQuote(target)))
+	return wlSilent(ctx, ex, fmt.Sprintf("wlrctl toplevel %s %s", action, kit.ShellQuote(target)))
 }
 
 // ---------------------------------------------------------------------------
@@ -967,7 +921,7 @@ func wlrctlToplevel(ctx context.Context, ex *sdk.Executor, action, target string
 func swaymsgShellCmd(args ...string) string {
 	quoted := make([]string, len(args))
 	for i, a := range args {
-		quoted[i] = shellQuote(a)
+		quoted[i] = kit.ShellQuote(a)
 	}
 	return fmt.Sprintf(
 		`export SWAYSOCK=$(ls -t /tmp/sway-ipc.*.sock 2>/dev/null | head -1) && [ -n "$SWAYSOCK" ] && swaymsg %s`,
@@ -977,7 +931,7 @@ func swaymsgShellCmd(args ...string) string {
 
 // swaymsgCapture runs swaymsg on the venue and returns stdout (error on non-zero exit).
 func swaymsgCapture(ctx context.Context, ex *sdk.Executor, args ...string) (string, error) {
-	return venueCapture(ctx, ex, swaymsgShellCmd(args...))
+	return ex.VenueCapture(ctx, swaymsgShellCmd(args...))
 }
 
 // swaymsgCaptureBytes is the []byte form for JSON tree/output parsing.
@@ -1086,10 +1040,4 @@ func btnName(name string) string {
 		return "left"
 	}
 	return name
-}
-
-// shellQuote wraps s in single quotes for safe shell interpolation — the local analogue of
-// charly's shellSingleQuote / kit.ShellQuote (kept local so this module imports only the SDK).
-func shellQuote(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

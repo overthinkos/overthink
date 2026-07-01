@@ -1,6 +1,6 @@
 plugin-record:
     candy:
-        version: 2026.178.0118
+        version: 2026.182.1805
         description: |-
             OUT-OF-TREE charly plugin serving the `record` live-container check verb — a
             standalone Go module (go.mod + main.go) that manages recording sessions inside a

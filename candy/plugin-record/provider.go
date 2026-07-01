@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 	pb "github.com/overthinkos/overthink/charly/plugin/proto"
 	"github.com/overthinkos/overthink/charly/plugin/sdk"
 	"github.com/overthinkos/overthink/charly/spec"
@@ -22,20 +23,6 @@ import (
 // GetFile-pulls the recording to op.Artifact), then evaluate the stdout/stderr/exit_status
 // matchers + the artifact validators itself (via the shared sdk implementation — R3), and
 // return the wire {status,message} the host decodes.
-
-// pluginResult is the wire form a verb provider returns (the host's pluginCheckResult).
-type pluginResult struct {
-	Status  string `json:"status"` // "pass" | "fail" | "skip"
-	Message string `json:"message"`
-}
-
-func resultJSON(status, msg string) (*pb.InvokeReply, error) {
-	j, err := json.Marshal(pluginResult{Status: status, Message: msg})
-	if err != nil {
-		return nil, err
-	}
-	return &pb.InvokeReply{ResultJson: j}, nil
-}
 
 // recordEnv is the plugin-side decode of the CheckEnv the host ships as Operation.Env for
 // a `record:` check step (provider_checkenv.go). The fields mirror the shared CheckEnv;
@@ -61,7 +48,7 @@ func (p provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.Invoke
 	var op spec.Op
 	if len(req.GetParamsJson()) > 0 {
 		if err := json.Unmarshal(req.GetParamsJson(), &op); err != nil {
-			return resultJSON("fail", "record: decode op: "+err.Error())
+			return sdk.ResultJSON("fail", "record: decode op: "+err.Error())
 		}
 	}
 	var env recordEnv
@@ -73,7 +60,7 @@ func (p provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.Invoke
 	// Live-deployment verb: skip under `charly check box` (no running deployment to record
 	// in a disposable `podman run --rm`) — mirrors the host's RunModeBox/box-mode skip.
 	if env.Mode == "box" {
-		return resultJSON("skip", fmt.Sprintf("record: %s requires a running deployment (skip under charly check box)", method))
+		return sdk.ResultJSON("skip", fmt.Sprintf("record: %s requires a running deployment (skip under charly check box)", method))
 	}
 
 	// record is EXEC-based: it drives the venue (asciinema/wf-recorder via tmux, the
@@ -82,7 +69,7 @@ func (p provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.Invoke
 	// the verb cannot do its job without the venue.
 	exec, err := sdk.ExecutorFromInvoke(req.GetExecutorBrokerId())
 	if err != nil {
-		return resultJSON("fail", fmt.Sprintf("record: %s has no host executor attached — record needs the live venue (%v)", method, err))
+		return sdk.ResultJSON("fail", fmt.Sprintf("record: %s has no host executor attached — record needs the live venue (%v)", method, err))
 	}
 
 	out, runErr := dispatch(ctx, exec, &op)
@@ -100,14 +87,14 @@ func (p provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.Invoke
 		wantExit = *op.ExitStatus
 	}
 	if exit != wantExit {
-		return resultJSON("fail", fmt.Sprintf("record: %s: exit=%d, want %d (stderr: %s)", method, exit, wantExit, preview(stderr)))
+		return sdk.ResultJSON("fail", fmt.Sprintf("record: %s: exit=%d, want %d (stderr: %s)", method, exit, wantExit, kit.TrimPreview(stderr)))
 	}
 
 	if err := sdk.MatchAll(out, op.Stdout); err != nil {
-		return resultJSON("fail", fmt.Sprintf("record: %s: stdout: %v (got: %s)", method, err, preview(out)))
+		return sdk.ResultJSON("fail", fmt.Sprintf("record: %s: stdout: %v (got: %s)", method, err, kit.TrimPreview(out)))
 	}
 	if err := sdk.MatchAll(stderr, op.Stderr); err != nil {
-		return resultJSON("fail", fmt.Sprintf("record: %s: stderr: %v (got: %s)", method, err, preview(stderr)))
+		return sdk.ResultJSON("fail", fmt.Sprintf("record: %s: stderr: %v (got: %s)", method, err, kit.TrimPreview(stderr)))
 	}
 
 	// Artifact-producing method (`stop`): the recording was already GetFile-pulled to
@@ -116,7 +103,7 @@ func (p provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.Invoke
 	// (op.Artifact empty), mirroring the host's post-run pipeline.
 	if op.Artifact != "" {
 		if err := sdk.RunArtifactValidators(&op); err != nil {
-			return resultJSON("fail", fmt.Sprintf("record: %s: artifact: %v", method, err))
+			return sdk.ResultJSON("fail", fmt.Sprintf("record: %s: artifact: %v", method, err))
 		}
 	}
 
@@ -127,15 +114,5 @@ func (p provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.Invoke
 	if strings.TrimSpace(body) == "" {
 		body = fmt.Sprintf("record %s: exit=%d", method, exit)
 	}
-	return resultJSON("pass", body)
-}
-
-// preview trims long output for an error message (mirrors charly's trimPreview).
-func preview(s string) string {
-	s = strings.TrimSpace(s)
-	const max = 400
-	if len(s) > max {
-		return s[:max] + "…"
-	}
-	return s
+	return sdk.ResultJSON("pass", body)
 }

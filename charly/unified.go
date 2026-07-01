@@ -1943,10 +1943,13 @@ func (uf *UnifiedFile) applyDiscoveredManifest(dir, manifest, rootDir string) er
 		for _, gn := range nfNodes {
 			if gn.disc == "candy" && !candyIsImage(gn) {
 				// LAYER candy: register a lazy directory reference (name = dir base, as
-				// the legacy scanner did). scanCandy does the real parse later.
-				// EDGE-INHERIT cutover D: an IMAGE candy (base/from — the former box:)
-				// falls through to normalizeNodeInto → candyKind.DecodeNode → uf.Box
-				// (it is decoded eagerly, exactly as a box: node was before the merge).
+				// the legacy scanner did). scanCandy does the real parse later. This
+				// bootstrap-critical pre-check calls candyIsImage DIRECTLY (it stays core),
+				// so it needs no plugin — that is why the COMPILED-IN candy/plugin-candy-kind
+				// (C2-candy) has no bootstrap cycle. EDGE-INHERIT cutover D: an IMAGE candy
+				// (base/from — the former box:) falls through to normalizeNodeInto →
+				// runPluginKind → foldCandyKind → uf.Box (decoded eagerly by the compiled-in
+				// candy plugin, already registered at init before this load runs).
 				name := filepath.Base(dir)
 				if uf.Candy == nil {
 					uf.Candy = map[string]*InlineCandy{}

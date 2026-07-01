@@ -56,15 +56,18 @@ var (
 	docDirectiveSet = setFromSlice(spec.DocDirectives)
 )
 
-// legacyKindAliases are the reserved top-level keys that mark a LEGACY
-// (pre-node-form) document but are NOT current CUE node kinds: `deploy` is the
-// pre-rename spelling of the `bundle` kind, `check` is the legacy bed-collection
-// map key. The legacy kind-keyed ROUTING was deleted in the #NodeDoc-sole-gate
-// cutover; these aliases survive ONLY as part of classifyDoc's legacy-detection
-// set, so a residual `deploy:` / `check:` collection doc is hard-rejected with a
-// `charly migrate` hint (rather than mis-read as a node named after a non-kind
-// word).
-var legacyKindAliases = []string{"deploy", "check"}
+// legacyKindAliases are the reserved TOP-LEVEL keys that mark a LEGACY (pre-node-form)
+// document: `deploy` is the pre-rename spelling of the `bundle` kind, `check` is the legacy
+// bed-collection map key, and `candy` is the box⊻layer factory whose legacy form was a
+// top-level `candy: {name: …}` (node-form nests it under a name — C2-candy left candy out of
+// KindWords/ResourceKinds, so it is no longer picked up there and must be listed here to stay
+// legacy-detectable; the RejectsLegacyShapes "kind-keyed candy" case gates this). The legacy
+// kind-keyed ROUTING was deleted in the #NodeDoc-sole-gate cutover; these aliases survive ONLY
+// as part of classifyDoc's legacy-detection set, so a residual `deploy:` / `check:` / `candy:`
+// collection doc is hard-rejected with a `charly migrate` hint (rather than mis-read as a node
+// named after a non-kind word). A node LEGITIMATELY named `candy` (value carrying a nested kind
+// discriminator) still classifies as node-form — nodeShapedValue wins over this legacy check.
+var legacyKindAliases = []string{"deploy", "check", "candy"}
 
 // rootShapeKeySet — the top-level keys whose presence (with a non-node-shaped
 // value) marks a doc as a legacy kind-keyed / root-shape document, which

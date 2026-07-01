@@ -7,9 +7,7 @@
 package spec
 
 // KindWords is the reserved kind keywords (the #Node disjunction discriminators).
-var KindWords = []string{
-	"candy",
-}
+var KindWords = []string{}
 
 // ResourceKinds is the DEPLOYABLE subset of the kind keywords — the kinds whose #Node arm nests a sub-ENTITY (resource) child (#ResourceKind).
 var ResourceKinds = []string{

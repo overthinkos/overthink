@@ -76,8 +76,17 @@ func TestNoSinglePluginAPISurface(t *testing.T) {
 		"HTTPDo", "AddBackground")
 
 	// Negative arm (teeth): a re-introduced provider word in a surface MUST be flagged. If this
-	// scanner returned empty here, every positive arm above would be a false pass.
-	probe := spec.KindWords[0]
+	// scanner returned empty here, every positive arm above would be a false pass. spec.KindWords
+	// is now EMPTY (C2-candy externalized the LAST built-in kind arm), so probe with ANY word from
+	// the universe (OpVerbs / compiled-in provider words are always present) instead of KindWords[0].
+	probe := ""
+	for w := range universe {
+		probe = w
+		break
+	}
+	if probe == "" {
+		t.Fatal("provider-word universe is empty — the teeth arm has no word to probe")
+	}
 	if bad := scan([]string{"GenericAction", probe}); len(bad) != 1 || bad[0] != probe {
 		t.Fatalf("word-free scanner has no teeth: scanning a surface containing the provider word %q returned %v, want exactly [%q]", probe, bad, probe)
 	}

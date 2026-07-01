@@ -380,9 +380,11 @@ func (d Diagnostics) HasErrors() bool {
 type StructuralKindLoadEnv struct {
 	Members map[string]*Deploy `json:"members,omitempty"`
 
-	// Standalone is the C2-substrate channel: the host-pre-decoded CANONICAL node the host
-	// threads to a SUBSTRATE structural kind plugin (candy/plugin-substrate, serving
-	// pod/vm/k8s/local/android). Unlike group — whose small scalar value is decoded from
+	// Standalone is the host-pre-decoded CANONICAL node channel the host threads to a structural
+	// kind plugin whose value is RICH + core-referencing: candy/plugin-substrate (C2-substrate,
+	// serving pod/vm/k8s/local/android → deploy/template shapes) AND candy/plugin-candy (C2-candy,
+	// serving candy → candy-image/candy-layer shapes, folding into uf.Box/uf.Candy). Unlike group
+	// — whose small scalar value is decoded from
 	// op.Params against a self-contained #GroupInput and whose members ride Members above —
 	// a substrate value is RICH + core-referencing (#Vm/#Deploy/#LibvirtDomain/… with
 	// host-canonicalized shorthand like tunnel:/port:), so it cannot be re-decoded soundly
@@ -398,15 +400,25 @@ type StructuralKindLoadEnv struct {
 	Standalone *StandaloneLoad `json:"standalone,omitempty"`
 }
 
-// StandaloneLoad carries a SUBSTRATE structural kind's host-pre-decoded canonical node
-// (C2-substrate). Shape names which fold the host performs on the plugin's echo: "deploy" →
-// Deploy (the full BundleNode) folds into uf.Bundle; "template" → Template (the per-substrate
-// typed value's JSON, e.g. a spec.Vm) folds into the typed template map by kind. Exactly one
-// of Deploy / Template is set, matching Shape.
+// StandaloneLoad carries a structural kind's host-pre-decoded canonical node. Shape names
+// which fold the host performs on the plugin's echo:
+//   - "deploy" → Deploy (the full BundleNode) folds into uf.Bundle (C2-substrate);
+//   - "template" → Template (the per-substrate typed value's JSON, e.g. a spec.Vm) folds into
+//     the typed template map by kind (C2-substrate);
+//   - "candy-image" → Box (a full IMAGE, base:/from:) folds into uf.Box (C2-candy);
+//   - "candy-layer" → Candy (a LAYER fragment) folds into uf.Candy (C2-candy).
+//
+// Exactly one of Deploy / Template / Box / Candy is set, matching Shape. Both candy shapes are
+// pre-decoded HOST-SIDE by the core candyIsImage + buildCandy (the bootstrap-critical box⊻layer
+// routing that STAYS core — the discovered-candy pre-check calls it directly), so the plugin is
+// a pure ECHO exactly like substrate. RDD proved a canonical spec.Box / spec.Candy round-trips
+// through JSON byte-faithfully.
 type StandaloneLoad struct {
-	Shape    string          `json:"shape"`              // "deploy" | "template"
+	Shape    string          `json:"shape"`              // "deploy" | "template" | "candy-image" | "candy-layer"
 	Deploy   *Deploy         `json:"deploy,omitempty"`   // Shape=="deploy": the full pre-decoded BundleNode
 	Template json.RawMessage `json:"template,omitempty"` // Shape=="template": the pre-decoded typed template value's JSON
+	Box      *Box            `json:"box,omitempty"`      // Shape=="candy-image": the pre-decoded IMAGE (spec.Box)
+	Candy    *Candy          `json:"candy,omitempty"`    // Shape=="candy-layer": the pre-decoded LAYER (spec.Candy)
 }
 
 // AndroidDeployVenue is the preresolved deploy:android substrate payload the

@@ -19,20 +19,17 @@ import (
 // EXCEPTION — the externalizable dedicated-provider pattern: a provider carrying NO served
 // plugin schema may live in its OWN dedicated plugin_<class>_<name>.go file and self-register
 // via registerDedicatedBuiltin, INTENTIONALLY absent from BOTH this slice and the `providers:`
-// manifest, yet dispatching identically through providerRegistry. Two sub-cases share the
-// mechanism: (1) a schema-LESS IR provider (a deploy-target / step / builder — derived from
-// cross-refs or candy-internal, never user-authored, so no authored input to validate); and
-// (2) a FACTORY KIND provider — now ONLY candy (the box⊻layer factory arm, plugin_candy.go), which
-// IS user-authored but is validated by the CLOSED CORE #Candy/#Box (#NodeDoc) gate rather than a
-// served plugin schema, and which decodes into the typed core maps (box⊻layer → uf.Box/uf.Candy) —
-// so it cannot use the schema-carrying RegisterBuiltinPluginUnit / runPluginKind path the tier-1
-// kinds use. (group + the 5 substrate kinds pod/vm/k8s/local/android are NO LONGER dedicated-builtin
-// KindProviders — group externalized to candy/plugin-group (C2-group) and the substrates to
-// candy/plugin-substrate (C2-substrate); both route through runPluginKind, the substrates
-// host-decoding into uf.Bundle/uf.Pod/uf.VM/… and validating their value against the KEPT
-// #<Kind>Value def host-side.) The per-class bijection gates below still prove every such provider is
-// registered (deploy/step have a gate, kinds have checkKindProviderBijection over spec.KindWords —
-// which now lists ONLY candy). See candy/plugin-deploy-local, plugin_step_reboot.go, plugin_candy.go.
+// manifest, yet dispatching identically through providerRegistry. This covers a schema-LESS IR
+// provider (a deploy-target / step / builder — derived from cross-refs or candy-internal, never
+// user-authored, so no authored input to validate). NO KIND provider remains here: EVERY authoring
+// kind is now an externalized plugin candy routed through runPluginKind — group (candy/plugin-group,
+// C2-group), the 5 substrate kinds pod/vm/k8s/local/android (candy/plugin-substrate, C2-substrate),
+// and the LAST one, the candy box⊻layer factory (candy/plugin-candy-kind, C2-candy). All are
+// COMPILED-IN, host-decoding into the typed core maps (substrates → uf.Bundle/uf.Pod/uf.VM/…; candy
+// → uf.Box/uf.Candy via the bootstrap-critical candyIsImage + buildCandy that STAY core) and
+// validating their rich value host-side against the KEPT #<Kind>Value / #CandyValue def
+// (validateKindValueCUE). So spec.KindWords is now EMPTY and checkKindProviderBijection over it is a
+// no-op. See candy/plugin-deploy-local, plugin_step_reboot.go, candy/plugin-candy-kind.
 var builtinProviderInstances = []Provider{
 	// verbs (ClassVerb) — none of the extracted verbs are here: each is a dedicated plugin
 	// UNIT that self-registers via RegisterBuiltinPluginUnit, absent from both this slice and
@@ -52,16 +49,15 @@ var builtinProviderInstances = []Provider{
 	// instance, absent from this slice AND the providers: manifest; its grpcProvider
 	// registers at loadProjectPlugins time. NO dep-shedder remains here.
 	summarizeVerb{}, killVerb{}, pluginVerb{},
-	// kinds (ClassKind) — NONE remain here: every kind is a dedicated provider file or an
-	// externalized plugin candy. The tier-1 kinds (agent/module/sidecar/package-group/distro/
-	// builder/init/resource/target) + group (candy/plugin-group, C2-group) + the 5 substrate
-	// kinds pod/vm/k8s/local/android (candy/plugin-substrate, C2-substrate) are schema/echo
-	// plugins routed through runPluginKind; the ONLY remaining dedicated-builtin KindProvider is
-	// candy (the box⊻layer factory arm, plugin_candy.go — candyIsImage + buildCandy → uf.Box/
-	// uf.Candy), self-registering via registerDedicatedBuiltin and staying an in-proc typed
-	// DecodeNode because its value is core-typed. candy is absent from BOTH this slice and the
-	// providers: manifest; checkKindProviderBijection proves each spec.KindWords entry (now ONLY
-	// candy) has a registered in-proc KindProvider.
+	// kinds (ClassKind) — NONE remain here, and NONE are dedicated-builtin KindProviders anymore:
+	// EVERY authoring kind is an externalized plugin candy routed through runPluginKind. The tier-1
+	// kinds (agent/module/sidecar/package-group/distro/builder/init/resource/target) + group
+	// (candy/plugin-group, C2-group) + the 5 substrate kinds pod/vm/k8s/local/android
+	// (candy/plugin-substrate, C2-substrate) + the LAST one, the candy box⊻layer factory
+	// (candy/plugin-candy-kind, C2-candy — candyIsImage + buildCandy → uf.Box/uf.Candy, the
+	// bootstrap-critical routing that STAYS core) are all COMPILED-IN plugins. So spec.KindWords is
+	// EMPTY and checkKindProviderBijection over it is a no-op (every kind resolves via its ClassKind
+	// provider — recognizedKind — not a #Node arm nor an in-proc KindProvider).
 	// deploy targets (ClassDeployTarget) — ALL self-register from their dedicated
 	// plugin_deploy_<name>.go files (the externalizable dedicated-provider pattern):
 	// local, pod, vm, k8s, android.

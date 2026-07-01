@@ -146,7 +146,8 @@ func assembleAndValidateEntitySteps(gn *genericNode, label string) error {
 // validateCandyManifestCUE validates a candy manifest. A legacy kind-keyed
 // manifest (`candy: {…}`) validates its entity against #Candy; a unified node-form
 // manifest (`<name>: {candy: …, <children>}`) validates the WHOLE document against
-// #NodeDoc concretely (the #CandyArm + its kind-narrowed children).
+// #NodeDoc (the structural gate) PLUS each candy node's value against #CandyValue
+// concretely.
 func validateCandyManifestCUE(path string, data []byte) error {
 	doc, err := cueDocFromYAML(path, data)
 	if err != nil {
@@ -161,6 +162,33 @@ func validateCandyManifestCUE(path string, data []byte) error {
 	}
 	if verr := doc.Unify(def).Validate(cue.Concrete(true)); verr != nil {
 		return fmt.Errorf("%s: %s", path, errors.Details(verr, nil))
+	}
+	// C2-candy: #Node is now an OPEN struct (candy externalized to candy/plugin-candy-kind), so
+	// the #NodeDoc gate above is STRUCTURAL only — it no longer validates the candy VALUE (the
+	// former #CandyArm did). Restore the CONCRETE candy-value gate here (version+description
+	// required, unknown inline fields rejected) by validating each candy node's inline `candy`
+	// value against the KEPT #CandyValue def — the box-validate counterpart of the load-time
+	// host-side validateKindValueCUE (which is closedness-only).
+	cdef := sharedCueSchema.LookupPath(cue.ParsePath("#CandyValue"))
+	if cdef.Err() != nil {
+		return fmt.Errorf("%s: #CandyValue schema not found: %w", path, cdef.Err())
+	}
+	it, ierr := doc.Fields()
+	if ierr != nil {
+		return fmt.Errorf("%s: %w", path, ierr)
+	}
+	for it.Next() {
+		name := it.Selector().Unquoted()
+		if docDirectiveSet[name] {
+			continue
+		}
+		cv := it.Value().LookupPath(cue.ParsePath("candy"))
+		if !cv.Exists() {
+			continue // not a candy node (e.g. a check bed) — validated by its own path
+		}
+		if verr := cv.Unify(cdef).Validate(cue.Concrete(true)); verr != nil {
+			return fmt.Errorf("%s: candy %q: %s", path, name, errors.Details(verr, nil))
+		}
 	}
 	// #NodeDoc gates the node-form STRUCTURE but accepts each entity's step/data
 	// children as `_`; validateNodeFormSteps types every entity's ASSEMBLED plan

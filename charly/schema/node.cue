@@ -17,20 +17,20 @@
 // kind. A typo'd discriminator, an unknown value field, a wrong-kind child, and two
 // discriminators all FAIL closedness.
 
-// Reserved discriminators = the CORE kind keywords (the kinds with a #Node arm).
-// Negated regex so a child's NAME cannot shadow a kind keyword. The plugin-extracted
-// kinds (agent/module/sidecar/package-group + distro/builder/init/resource/target,
-// group — C2-group, AND the 5 substrate kinds pod/vm/k8s/local/android — C2-substrate)
-// are NOT here — they have no arm and are recognized dynamically by the loader via a
-// registered ClassKind provider (classifyDisc → providerRegistry.ResolveKind). group +
-// the substrates keep their #ResourceKind membership (so the loader still nests their
-// members) while their VALUE is validated HOST-SIDE against the KEPT core value defs
-// (#PodValue/#VmValue/… below) in runPluginKind — a self-contained plugin schema cannot
-// carry the rich core-typed substrate value (it references #Deploy/#Vm/#LibvirtDomain/…),
-// unlike group's small self-contained #GroupInput — and their authored members / template
-// ride op.Env (F5 authored-member INPUT-threading + its substrate-TEMPLATE fold arm).
-// Only `candy` retains a #Node arm (its box⊻layer value is core-typed and stays in-proc).
-_reservedNode: "^(candy)$"
+// EVERY authoring kind is now EXTERNALIZED to a plugin — there are NO #Node arms left
+// (C2-candy externalized the LAST one, `candy`, to candy/plugin-candy, after C2-group +
+// C2-substrate). Each kind is recognized dynamically by the loader via a registered ClassKind
+// provider (classifyDisc → providerRegistry.ResolveKind → recognizedKind), and its VALUE is
+// validated HOST-SIDE against the KEPT core value defs (#CandyValue / #PodValue / #VmValue / …
+// below) in runPluginKind (foldCandyKind / foldSubstrateKind) — a self-contained plugin schema
+// cannot carry these rich core-referencing values (#Candy/#Box/#Deploy/#Vm/#LibvirtDomain/…),
+// unlike group's small self-contained #GroupInput. The substrate + group kinds keep their
+// #ResourceKind membership (so the loader still nests their members); candy is decoded by the
+// BOOTSTRAP-CRITICAL core candyIsImage + buildCandy (which the discovered-candy pre-check calls
+// directly — they stay core, so the COMPILED-IN plugin-candy has no bootstrap cycle). So #Node
+// is now an OPEN struct (any node-shaped mapping) — the structural gate only; per-kind value
+// closedness is the host-side gate. `_reservedNode` (the former child-name-shadow guard) is gone
+// with the last arm — no core kind keyword remains for a child name to shadow.
 
 // #ResourceKind — the DEPLOYABLE kinds: the kinds that nest a sub-ENTITY (resource)
 // child (a deploy-into / alongside member), so a `<name>: {<kind>:…, <child>:
@@ -41,12 +41,13 @@ _reservedNode: "^(candy)$"
 // per-arm child gate stays structural `_` — the deployable-vs-not check is the layered
 // loader check; this enum is its single vocabulary source.)
 //
-// NOTE: `group` is a member of #ResourceKind but has NO #Node arm (C2-group externalized
-// it to candy/plugin-group). So #ResourceKind ⊄ the arm-derived KindWords — the two enums
-// are independent: KindWords = the CORE kinds with a #Node arm (arm-validated values);
-// #ResourceKind = the kinds that nest members (arm-validated OR plugin-served). group's
-// members are pre-decoded host-side (buildResourceMemberChildren) and threaded to
-// plugin-group via op.Env (F5); the parser gate admits them because resourceKindSet has group.
+// NOTE: NONE of these has a #Node arm anymore — group (C2-group), the 5 substrates
+// (C2-substrate), and candy (C2-candy) are ALL plugin-served, so the arm-derived KindWords is
+// now EMPTY. #ResourceKind is INDEPENDENT of KindWords: it is the set of kinds that NEST members
+// (so the loader classifies a resource child + nests it), NOT the set with a #Node arm. Their
+// members are pre-decoded host-side (buildResourceMemberChildren) and threaded to the plugin via
+// op.Env (F5); the parser gate admits them because resourceKindSet has them. candy is NOT a
+// resource kind (it nests no deploy members — it is the box⊻layer factory).
 #ResourceKind: ("pod" | "vm" | "k8s" | "local" | "android" | "group") @go(-)
 
 // ---------------------------------------------------------------------------
@@ -60,13 +61,18 @@ _reservedNode: "^(candy)$"
 // EDGE-INHERIT cutover D: `box:` merges INTO `candy:`. A `candy:` node is EITHER a
 // LAYER fragment (#Candy, no base/from) OR a full IMAGE (#Image — a #Box that REQUIRES
 // `base:` or `from:`, the former box:), routed by that marker in the loader
-// (candyKind.DecodeNode → uf.Box vs uf.Candy). The image arm REQUIRES base⊻from, and
+// (candyIsImage → uf.Box vs uf.Candy). The image arm REQUIRES base⊻from, and
 // #Candy is the DEFAULT (`*`): an IMAGE carries base/from → bottoms #Candy (closed, no
 // base) → resolves to #Image; a LAYER carries neither → #Image is incomplete (its base/
 // from required-but-absent) while #Candy matches → the default resolves it to #Candy.
 // That keeps the disjunction CONCRETELY validatable (a raw `#Candy | #Box` is NOT: a
 // required-but-absent field is INCOMPLETE, not bottom, so a layer never eliminates the
 // image arm). @go(-): the Go types are spec.Candy + spec.Box (decode picks by shape).
+//
+// C2-candy: candy has NO #Node arm anymore (externalized to candy/plugin-candy). #CandyValue is
+// KEPT as the HOST-SIDE value gate: runPluginKind → foldCandyKind validates a candy node's value
+// against #CandyValue (validateKindValueCUE) — the SAME closedness the #CandyArm gave — then runs
+// candyIsImage + buildCandy (core, unchanged) and folds plugin-candy's echo into uf.Box/uf.Candy.
 #Image:      #Box & ({base: string & !=""} | {from: string & !=""})
 #CandyValue: (*#Candy | #Image) @go(-)
 // EDGE-INHERIT cutover B: a substrate kind is BOTH the template entity AND the deploy
@@ -80,35 +86,35 @@ _reservedNode: "^(candy)$"
 // C2-substrate: these 5 substrate kinds have NO #Node arm anymore (externalized to
 // candy/plugin-substrate, mirroring group). They are KEPT here as the HOST-SIDE value
 // gate: runPluginKind validates a substrate node's authored value against #<Kind>Value
-// (validateStandaloneKindValueCUE) — the SAME closedness the #Node arm gave — because a
+// (validateKindValueCUE) — the SAME closedness the #Node arm gave — because a
 // self-contained plugin schema cannot carry these rich core-referencing values. So these
-// defs stay REACHABLE from Go (cue_kind_*.go registerCueKind maps the kind → its value
-// def) while contributing NO #Node arm (KindWords drops the 5).
+// defs stay REACHABLE from Go (via runPluginKind's kindValueDef lookup) while contributing
+// NO #Node arm (KindWords drops the 5). #CandyValue above is the C2-candy analogue.
 #LocalValue:   (#Local | #DeployValue) @go(-)
 #PodValue:     (#Pod | #DeployValue) @go(-)
 #VmValue:      (#Vm | #DeployValue) @go(-)
 #K8sValue:     (#K8s | #DeployValue) @go(-)
 #AndroidValue: (#Android | #DeployValue) @go(-)
-// The build-vocabulary kinds (`distro:`/`builder:`/`init:`/`resource:`), the Calamares
-// install `target:`, the Calamares package group (`package-group:`), the AI-CLI grader
-// catalog (`agent:`), the Calamares installer module (`module:`), the sidecar-template
-// library (`sidecar:`), the targetless deploy group (`group:` — C2-group), AND the 5
-// substrate kinds (`pod:`/`vm:`/`k8s:`/`local:`/`android:` — C2-substrate) are no longer
-// core kinds — each was extracted into a dedicated plugin unit, so none has a #Node arm;
-// such a node passes #NodeDoc as a registered non-core discriminator. A plugin with a
-// self-contained served #*Input schema (distro/builder/…/group) is validated by that
-// schema (runPluginKind → validateAuthoredPluginInput); the 5 substrates, whose value is
-// rich + core-referencing (#Vm/#Deploy/#LibvirtDomain/…) and so cannot be a self-contained
-// plugin schema, are validated HOST-SIDE against the KEPT #<Kind>Value defs above
-// (runPluginKind → validateStandaloneKindValueCUE). The core #Distro / #Builder / #Init /
-// #Resource / #Target / #Agent / #Module / #Sidecar / #Pod / #Vm / #K8s / #Local /
-// #Android / #Deploy defs (schema/*.cue) are KEPT — they still generate spec.Distro /
-// spec.Vm / … (the canonical types the plugins' Invoke and the host decode into). For
-// `group` the plugin (candy/plugin-group) decodes its scalar VALUE into the core
-// spec.Deploy (#Deploy, kept via cue_kind_deploy.go) and attaches the host-threaded
-// authored members; for the substrates candy/plugin-substrate ECHOES the host-pre-decoded
-// canonical node (deploy BundleNode or per-substrate template) the host folds into
-// uf.Bundle / uf.Pod / uf.VM / … (C2-substrate template fold arm).
+// EVERY authoring kind is externalized to a plugin unit — the build-vocabulary kinds
+// (`distro:`/`builder:`/`init:`/`resource:`), the Calamares `target:`/`package-group:`/`module:`,
+// the AI-CLI grader `agent:`, the sidecar `sidecar:`, the targetless deploy `group:` (C2-group),
+// the 5 substrate kinds `pod:`/`vm:`/`k8s:`/`local:`/`android:` (C2-substrate), AND the box⊻layer
+// factory `candy:` (C2-candy) — so NONE has a #Node arm; such a node passes #NodeDoc as a
+// registered non-core discriminator (the OPEN #Node struct). A plugin with a self-contained served
+// #*Input schema (distro/builder/…/group) is validated by that schema (runPluginKind →
+// validateAuthoredPluginInput); the substrates AND candy, whose value is rich + core-referencing
+// (#Vm/#Deploy/#LibvirtDomain/#Candy/#Box/…) and so cannot be a self-contained plugin schema, are
+// validated HOST-SIDE against the KEPT #<Kind>Value / #CandyValue defs above (runPluginKind →
+// validateKindValueCUE). The core #Distro / #Builder / #Init / #Resource / #Target / #Agent /
+// #Module / #Sidecar / #Pod / #Vm / #K8s / #Local / #Android / #Deploy / #Candy / #Box defs
+// (schema/*.cue) are KEPT — they still generate spec.Distro / spec.Vm / spec.Candy / spec.Box /
+// … (the canonical types the plugins' Invoke and the host decode into). For `group` the plugin
+// (candy/plugin-group) decodes its scalar VALUE into the core spec.Deploy (#Deploy, kept via
+// cue_kind_deploy.go) and attaches the host-threaded authored members; for the substrates
+// candy/plugin-substrate ECHOES the host-pre-decoded canonical node (deploy BundleNode or
+// per-substrate template), and candy/plugin-candy ECHOES the host-pre-decoded box⊻layer node
+// (candyIsImage + buildCandy → spec.Box / spec.Candy) — the host folds into uf.Bundle /
+// uf.Pod / uf.VM / … (substrate) and uf.Box / uf.Candy (candy).
 
 // #DeployValue — the AUTHORED deploy shape (the disjunct under each substrate arm):
 // the COMPLETE #Deploy minus the structural nested/peer maps + the derived target —
@@ -118,32 +124,18 @@ _reservedNode: "^(candy)$"
 #DeployValue: #Deploy & {nested?: _|_, peer?: _|_, target?: _|_, member_of?: _|_, inside?: _|_}
 
 // ---------------------------------------------------------------------------
-// Per-kind ARMS. Each arm pins its one discriminator to a CLOSED per-kind VALUE
-// (so a typo'd field / wrong value type in the kind value is a hard error). CHILD
-// nodes are accepted structurally (`_`) at this document gate; their strictness is
-// LAYERED: node_parse.go classifies each child and HARD-ERRORS a typo'd
-// discriminator ("no discriminator"), a two-discriminator node, and a wrong-kind
-// child (a resource/unknown child under a non-deployable kind). The step-CHILD Op
-// fields are typed against the closed #Step/#Op by the VALIDATE entrypoint (charly
-// box validate → validateNodeFormSteps, cue_schema.go) — NOT at this document gate
-// and NOT at decode (decodeEntityViaCUE decodes leniently). A pure-CUE per-child
-// kind-disjunction here is BOTH an O(entities×kinds×children) blow-up AND ambiguous
-// (a data key like `env` also exists on #Step, so #DataChild|#StepChild never
-// resolves) — the layered loader + validate checks are exact and fast.
-// ---------------------------------------------------------------------------
-#CandyArm: close({candy: #CandyValue, {[!~_reservedNode]: _}})
-
-// The unified node — the ONE remaining closed per-kind arm (`candy`, the box⊻layer
-// factory whose value is core-typed and decoded in-proc). `group` (C2-group) and the 5
-// substrate kinds pod/vm/k8s/local/android (C2-substrate) have NO arm — they were
-// externalized to candy/plugin-group / candy/plugin-substrate: such a node passes #NodeDoc
-// via #CandyArm's open `{[!~_reservedNode]: _}` pattern (none of those words is in
-// _reservedNode) and its VALUE is validated HOST-SIDE — group by candy/plugin-group's
-// served #GroupInput, the substrates against the KEPT #<Kind>Value defs above
-// (runPluginKind → validateStandaloneKindValueCUE). #Node stays a (single-arm) disjunction
-// so nodeDiscriminators derives KindWords = {candy} — the externalized kinds resolve via
-// their registered ClassKind provider (recognizedKind), not a #Node arm.
-#Node: #CandyArm
+// The unified node — an OPEN struct. C2-candy externalized the LAST #Node arm (`candy`,
+// to candy/plugin-candy), after C2-group + C2-substrate. There are NO per-kind arms left:
+// EVERY kind is plugin-provided (recognized via a registered ClassKind provider) and its
+// VALUE is validated HOST-SIDE against the KEPT #CandyValue / #<Kind>Value defs above
+// (runPluginKind → foldCandyKind / foldSubstrateKind → validateKindValueCUE). So #Node is
+// the STRUCTURAL gate only: a node must be a mapping (a scalar entity value is rejected). The
+// discriminator + per-child strictness is the LAYERED loader check (node_parse.go classifies
+// each child + HARD-ERRORS a typo'd/absent/double discriminator and a wrong-kind child); the
+// step-CHILD Op fields are typed by the VALIDATE entrypoint (charly box validate →
+// validateNodeFormSteps, cue_schema.go). nodeDiscriminators (schemagen) derives an EMPTY
+// KindWords from this arm-less #Node — every kind resolves via its ClassKind provider.
+#Node: {...}
 
 // #NodeDoc — a whole charly.yml document in unified node-form: the reserved DOCUMENT
 // directives plus a flat map of name-first entity nodes. Validating a document

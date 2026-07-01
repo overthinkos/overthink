@@ -150,21 +150,24 @@ func MapValue(m *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
-// kindWordSet is the CUE-derived reserved kind-word set — the core #Node kind words
-// (spec.KindWords) UNIONED with the DEPLOYABLE resource kinds (spec.ResourceKinds), used by
-// NodeShapedValue to detect a name-first node-form value. ResourceKinds is unioned in so a
-// substrate/group node value (`{vm: …}` / `{group: …}`) is still recognized as node-shaped
-// after C2-group / C2-substrate dropped those kinds from KindWords (they carry no #Node arm
-// but stay valid node discriminators) — without this, `charly migrate` perpetually re-migrates
-// an already-node-form entity NAMED after a substrate kind (idempotency regression).
+// kindWordSet is the reserved node-kind-word set NodeShapedValue uses to detect a name-first
+// node-form value: the core #Node kind words (spec.KindWords) UNIONED with the DEPLOYABLE resource
+// kinds (spec.ResourceKinds) AND `candy`. ResourceKinds is unioned in so a substrate/group node
+// value (`{vm: …}` / `{group: …}`) is still recognized after C2-group / C2-substrate dropped those
+// kinds from KindWords; `candy` is added explicitly because C2-candy externalized the box⊻layer
+// factory to a plugin (candy is in NEITHER KindWords — now EMPTY — NOR ResourceKinds, since it
+// nests no deploy members), yet a `{candy: …}` value must still be recognized as node-shaped —
+// without it, `charly migrate` re-migrates an already-node-form entity named after `candy` and
+// classifyDoc mis-reads a node-form candy doc (idempotency + classification regression).
 var kindWordSet = func() map[string]bool {
-	m := make(map[string]bool, len(spec.KindWords)+len(spec.ResourceKinds))
+	m := make(map[string]bool, len(spec.KindWords)+len(spec.ResourceKinds)+1)
 	for _, k := range spec.KindWords {
 		m[k] = true
 	}
 	for _, k := range spec.ResourceKinds {
 		m[k] = true
 	}
+	m["candy"] = true
 	return m
 }()
 

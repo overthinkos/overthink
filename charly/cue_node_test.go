@@ -72,8 +72,21 @@ func nodeFormRejected(doc string) bool {
 	if yaml.Unmarshal([]byte(doc), &d) != nil {
 		return true
 	}
-	_, _, err := parseNodeTree(&d)
-	return err != nil
+	_, nodes, err := parseNodeTree(&d)
+	if err != nil {
+		return true
+	}
+	// C2-group/C2-substrate/C2-candy: per-kind VALUE closedness moved from the #Node arms
+	// (now an open struct) to the HOST-SIDE loader (runPluginKind → foldCandyKind /
+	// foldSubstrateKind → validateKindValueCUE). Exercise the full node decode so a candy /
+	// substrate value typo (an unknown inline field) is still caught by this "rejected?" helper.
+	uf := &UnifiedFile{}
+	for _, gn := range nodes {
+		if normalizeNodeInto(gn, uf) != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // nodeDocValid is a realistic unified node-form document (child-node): a distro, a

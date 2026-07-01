@@ -88,14 +88,17 @@ func TestCueKinds_Corpus(t *testing.T) {
 	// gate validateNodeDocCUE (the loader's validate-before-execute) uses, so the
 	// per-kind #<Kind> def types each kind-value while the vm `source` disjunction
 	// stays lazy (no spurious concrete "incomplete value" artifact).
-	docDef := sharedCueSchema.LookupPath(cue.ParsePath("#NodeDoc"))
-	if docDef.Err() != nil {
-		t.Fatalf("#NodeDoc schema not found: %v", docDef.Err())
-	}
-	// The recognized entity discriminators — the CUE-derived kind vocabulary
-	// (spec.KindWords), sorted for deterministic discovery + logging.
-	kinds := make([]string, 0, len(kindWordSet))
-	for k := range kindWordSet {
+	// C2-candy: every authoring kind is externalized — #Node is an OPEN struct with NO arms, so
+	// KindWords is EMPTY and the #NodeDoc per-entity grammar is structural-only (validating a node
+	// against it is now vacuous). The corpus VALUE gate moved to the KEPT per-kind value defs
+	// (kindValueDef: candy → #CandyValue, pod/vm/k8s/local/android → #<Kind>Value) — the SAME
+	// host-side gate the loader runs (validateKindValueCUE). So this corpus test validates each
+	// node's inline discriminator value against its kept value def (non-concrete closedness),
+	// proving the whole real corpus passes the host-side gate. Plugin kinds without a kept value
+	// def (group/agent/module/…) are validated via their served plugin schema at runPluginKind and
+	// skipped here (nodeHasPluginKindDisc).
+	kinds := make([]string, 0, len(kindValueDef))
+	for k := range kindValueDef {
 		kinds = append(kinds, k)
 	}
 	sort.Strings(kinds)
@@ -149,8 +152,16 @@ func TestCueKinds_Corpus(t *testing.T) {
 				t.Errorf("FAIL %s:%s: no entity discriminator found in node-form node", f, name)
 				continue
 			}
-			filled := docDef.FillPath(cue.MakePath(cue.Str(name)), node)
-			if verr := filled.Validate(); verr != nil {
+			// Validate the node's inline discriminator value against its KEPT value def
+			// (#CandyValue / #<Kind>Value) non-concrete — the host-side closedness gate
+			// (validateKindValueCUE) over the real corpus.
+			cv := node.LookupPath(cue.ParsePath(kind))
+			vdef := sharedCueSchema.LookupPath(cue.ParsePath(kindValueDef[kind]))
+			if vdef.Err() != nil {
+				t.Errorf("FAIL %s: value def %s for kind %q not found: %v", f, kindValueDef[kind], kind, vdef.Err())
+				continue
+			}
+			if verr := cv.Unify(vdef).Validate(); verr != nil {
 				t.Errorf("FAIL %s:%s.%s: %s", f, kind, name, errors.Details(verr, nil))
 				continue
 			}

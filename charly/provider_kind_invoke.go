@@ -34,6 +34,15 @@ func runPluginKind(prov Provider, gn *genericNode, uf *UnifiedFile) error {
 	if isStandaloneResourceKind(gn.disc) {
 		return foldSubstrateKind(prov, gn, uf)
 	}
+	// C2-candy: the `candy` box⊻layer factory kind is decoded HOST-SIDE by the
+	// bootstrap-critical candyIsImage + buildCandy (which STAY core — the discovered-candy
+	// pre-check calls them directly), then folded into uf.Box (IMAGE) or uf.Candy (LAYER).
+	// Like substrate, its rich core-referencing value can neither ride op.Params nor a
+	// self-contained plugin schema, so it is host-validated against the KEPT #CandyValue def
+	// and the plugin (candy/plugin-candy) is a pure ECHO. See foldCandyKind.
+	if gn.disc == "candy" {
+		return foldCandyKind(prov, gn, uf)
+	}
 	body, err := assembleEntityBody(gn)
 	if err != nil {
 		return fmt.Errorf("node %q: assemble: %w", gn.name, err)
@@ -142,17 +151,19 @@ func runPluginKind(prov Provider, gn *genericNode, uf *UnifiedFile) error {
 	return nil
 }
 
-// substrateValueDef maps a substrate kind to its KEPT #<Kind>Value CUE def (the former
-// #Node arm value #<Kind> | #DeployValue, schema/node.cue). It is the HOST-SIDE closedness
-// gate that replaces the removed #Node arm (C2-substrate): a plugin cannot serve a
-// self-contained schema for these rich core-referencing values, so the host validates the
-// authored value against the KEPT def in-core. Keep in lockstep with isStandaloneResourceKind.
-var substrateValueDef = map[string]string{
+// kindValueDef maps an EXTERNALIZED structural kind to its KEPT #<Kind>Value CUE def
+// (schema/node.cue) — the HOST-SIDE closedness gate that replaces the removed #Node arm: a
+// plugin cannot serve a self-contained schema for these rich core-referencing values, so the
+// host validates the authored value against the KEPT def in-core. Covers the 5 substrate kinds
+// (C2-substrate, #<Kind> | #DeployValue) AND candy (C2-candy, #CandyValue = *#Candy | #Image).
+// Keep in lockstep with isStandaloneResourceKind + the foldSubstrateKind/foldCandyKind branches.
+var kindValueDef = map[string]string{
 	"pod":     "#PodValue",
 	"vm":      "#VmValue",
 	"k8s":     "#K8sValue",
 	"local":   "#LocalValue",
 	"android": "#AndroidValue",
+	"candy":   "#CandyValue",
 }
 
 // foldSubstrateKind decodes a SUBSTRATE structural kind node (pod/vm/k8s/local/android)
@@ -170,7 +181,7 @@ var substrateValueDef = map[string]string{
 // the canonical value round-trips through JSON byte-faithfully, so this is byte-equivalent to
 // the former in-proc standaloneKind decode (buildBundleNodeInto / buildStandaloneResource).
 func foldSubstrateKind(prov Provider, gn *genericNode, uf *UnifiedFile) error {
-	if err := validateStandaloneKindValueCUE(gn); err != nil {
+	if err := validateKindValueCUE(gn); err != nil {
 		return fmt.Errorf("node %q: %w", gn.name, err)
 	}
 	deployShape := isDeployShape(gn) || len(resourceChildren(gn)) > 0
@@ -208,23 +219,81 @@ func foldSubstrateKind(prov Provider, gn *genericNode, uf *UnifiedFile) error {
 	return foldStandaloneTemplateReply(gn.disc, gn.name, out.JSON, uf)
 }
 
-// validateStandaloneKindValueCUE validates a substrate node's authored VALUE against the
-// KEPT #<Kind>Value def — the host-side replacement for the removed #Node arm's closedness
-// (a typo'd field in a `vm:`/`pod:` value is a hard load error, exactly as before). Only a
-// MAPPING value is gated: a SCALAR value is a cross-ref (`pod: coder`), which carries no
-// authored fields to typo-check (it is resolved at deploy). The RAW authored value is
-// validated (shorthand intact) since #<Kind>Value accepts the same shorthand the arm did.
-func validateStandaloneKindValueCUE(gn *genericNode) error {
+// foldCandyKind decodes a `candy` box⊻layer node HOST-SIDE and folds candy/plugin-candy's echo
+// into uf.Box (a full IMAGE — base:/from:) or uf.Candy (a LAYER fragment) (C2-candy). The candy
+// value is rich + core-referencing (#Candy/#Box with host-canonicalized shorthand), so — like
+// substrate — it can neither ride op.Params nor be validated by a self-contained plugin schema.
+// So the host: (1) validates the authored value against the KEPT #CandyValue def; (2) runs the
+// BOOTSTRAP-CRITICAL core box⊻layer routing candyIsImage + buildCandy (which STAY core — the
+// discovered-candy pre-check in unified.go calls them DIRECTLY, so this is the SAME decode source,
+// R3; the "bootstrap cycle" that blocked an EXTERNAL candy plugin does NOT exist for the
+// COMPILED-IN plugin-candy, registered at init before any LoadUnified); (3) threads the canonical
+// spec.Box (image) / spec.Candy (layer) to the plugin's OpLoad via op.Env; (4) folds the plugin's
+// ECHO into uf.Box / uf.Candy. RDD proved a canonical spec.Box / spec.Candy round-trips through
+// JSON byte-faithfully, so this is byte-equivalent to the former in-proc candyKind decode.
+func foldCandyKind(prov Provider, gn *genericNode, uf *UnifiedFile) error {
+	if err := validateKindValueCUE(gn); err != nil {
+		return fmt.Errorf("node %q: %w", gn.name, err)
+	}
+	image := candyIsImage(gn)
+	var env spec.StructuralKindLoadEnv
+	if image {
+		var b BoxConfig
+		if err := decodeNodeValue(gn, &b); err != nil {
+			return fmt.Errorf("node %q: decode image: %w", gn.name, err)
+		}
+		env.Standalone = &spec.StandaloneLoad{Shape: "candy-image", Box: &b}
+	} else {
+		_, ic, berr := buildCandy(gn)
+		if berr != nil {
+			return fmt.Errorf("node %q: decode layer: %w", gn.name, berr)
+		}
+		env.Standalone = &spec.StandaloneLoad{Shape: "candy-layer", Candy: &ic.CandyYAML}
+	}
+	envJSON, err := json.Marshal(env)
+	if err != nil {
+		return fmt.Errorf("node %q: marshal candy env: %w", gn.name, err)
+	}
+	out, err := prov.Invoke(context.Background(), &Operation{Reserved: gn.disc, Op: OpLoad, Env: envJSON})
+	if err != nil {
+		return fmt.Errorf("node %q: candy kind: %w", gn.name, err)
+	}
+	if image {
+		var b BoxConfig
+		if err := json.Unmarshal(out.JSON, &b); err != nil {
+			return fmt.Errorf("node %q: candy image reply decode: %w", gn.name, err)
+		}
+		ensureMap(&uf.Box)
+		uf.Box[gn.name] = b
+		return nil
+	}
+	var c CandyYAML
+	if err := json.Unmarshal(out.JSON, &c); err != nil {
+		return fmt.Errorf("node %q: candy layer reply decode: %w", gn.name, err)
+	}
+	ensureMap(&uf.Candy)
+	uf.Candy[gn.name] = &InlineCandy{CandyYAML: c}
+	return nil
+}
+
+// validateKindValueCUE validates an externalized structural kind node's authored VALUE against
+// the KEPT #<Kind>Value def — the host-side replacement for the removed #Node arm's closedness
+// (a typo'd field in a `vm:`/`pod:`/`candy:` value is a hard load error, exactly as before).
+// Only a MAPPING value is gated: a SCALAR value is a cross-ref (`pod: coder`), which carries no
+// authored fields to typo-check (it is resolved at deploy). The RAW authored value is validated
+// (shorthand intact) since #<Kind>Value accepts the same shorthand the arm did. Covers the 5
+// substrate kinds (#<Kind>Value) AND candy (#CandyValue).
+func validateKindValueCUE(gn *genericNode) error {
 	if gn.discValue == nil || gn.discValue.Kind != yaml.MappingNode {
 		return nil
 	}
-	defPath, ok := substrateValueDef[gn.disc]
+	defPath, ok := kindValueDef[gn.disc]
 	if !ok {
 		return nil
 	}
 	def := sharedCueSchema.LookupPath(cue.ParsePath(defPath))
 	if def.Err() != nil {
-		return fmt.Errorf("substrate value def %s not found: %w", defPath, def.Err())
+		return fmt.Errorf("kind value def %s not found: %w", defPath, def.Err())
 	}
 	b, err := yaml.Marshal(gn.discValue)
 	if err != nil {

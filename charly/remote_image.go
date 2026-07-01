@@ -78,14 +78,10 @@ func ResolveRemoteImage(ref string, tag string) (*RemoteImageContext, error) {
 
 // BuildImage builds the image locally from the cached source.
 func (ctx *RemoteImageContext) BuildImage(_ *ResolvedRuntime, tag string) error {
-	gen, err := NewGenerator(ctx.CacheDir, "", ResolveOpts{})
-	if err != nil {
-		return fmt.Errorf("creating generator for %s: %w", ctx.Ref.RepoPath, err)
-	}
-	if err := gen.Generate(); err != nil {
-		return fmt.Errorf("generating build files for %s: %w", ctx.Ref.RepoPath, err)
-	}
-
+	// The generate+build both run inside buildCmd.Run() now that box build dispatches
+	// through candy/plugin-build → HostBuild("image") → runBoxBuild (NewGenerator + Generate +
+	// buildImages), from ctx.CacheDir after the chdir below. A standalone NewGenerator+Generate
+	// preflight here would be redundant work whose .build/ output runBoxBuild immediately regenerates.
 	buildCmd := &BuildCmd{
 		Boxes: []string{ctx.BoxName},
 		Tag:   tag,

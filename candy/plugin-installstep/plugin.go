@@ -3,9 +3,12 @@
 // sub-categories, distinguished by whether the OpEmit render needs the host build engine:
 //
 //   - PURE (C1.1) — file, shell-hook, shell-snippet, service-packaged, service-custom,
-//     repo-change, apk-install. Each render is pure string formatting from the compiler-produced
+//     repo-change, apk-install, reboot. Each render is pure string formatting from the compiler-produced
 //     spec.InstallStepView (the SAME serializable view the deploy walk consumes), so the plugin
 //     needs no host build engine — it returns the Containerfile fragment directly from OpEmit.
+//     apk-install (C1.1) and reboot (C1.6) are the NO-OP-emit members: both declare Emits=false and
+//     return an empty fragment (an image build reboots nothing / installs no apk); reboot's real
+//     effect is its DEPLOY leg (the host-side guest reboot over RunHostStep), unchanged by this plugin.
 //   - HOST-COUPLED (C1.2/C1.3/C1.4/C1.5) — system-packages, builder, local-pkg-install, and op. Their
 //     build-context render needs the host build ENGINE (system-packages: the DistroDef format
 //     templates + RenderTemplate; builder: the multi-stage buildStageContext + RenderTemplate engine;
@@ -52,7 +55,7 @@ import (
 //go:embed schema/*.cue
 var schemaFS embed.FS
 
-const calver = "2026.182.1545"
+const calver = "2026.182.1600"
 
 // opEmit mirrors charly's OpEmit selector ("emit"). This plugin serves ONLY the build-context
 // emit leg — every other op is a no-op acknowledgment (the deploy leg is charly/plugin/kit.WalkPlans,
@@ -73,6 +76,9 @@ const (
 	wordServiceCustom   = "service-custom"
 	wordRepoChange      = "repo-change"
 	wordApkInstall      = "apk-install"
+	// wordReboot (C1.6) is PURE + NO-OP-emit like apk-install: its build fragment is empty
+	// (an image build reboots nothing), so it declares Emits=false and never reaches emitViaHostBuild.
+	wordReboot = "reboot"
 	// wordSystemPackages (C1.2), wordBuilder (C1.3), wordLocalPkgInstall (C1.4), and wordOp (C1.5)
 	// are HOST-COUPLED: their OpEmit calls back the host build engine over the reverse channel.
 	wordSystemPackages  = "system-packages"
@@ -185,6 +191,12 @@ func renderFragment(word string, v spec.InstallStepView) (string, error) {
 		// image-build time; the android deploy preresolver reads the step at deploy). Kept for
 		// completeness — returns an empty fragment.
 		return "", nil
+	case wordReboot:
+		// reboot (C1.6) declares Emits=false, so the host never invokes OpEmit for it (an image
+		// build reboots nothing). Its real effect is the DEPLOY leg: the host reboots a charly-owned
+		// VM guest + waits for the boot_id change over RunHostStep (rebootVenueAndWait), unchanged by
+		// this plugin. Kept for completeness — returns an empty fragment (mirrors apk-install).
+		return "", nil
 	default:
 		return "", fmt.Errorf("plugin-installstep: unknown step word %q", word)
 	}
@@ -281,7 +293,7 @@ type meta struct {
 
 // Describe advertises the class:step capabilities, each with its declared StepContract. Only Emits
 // is load-bearing here: the host's pod-overlay OCITarget consults it to decide whether to Invoke
-// OpEmit (true) or skip (false, apk-install). Scope/Venue/Gate are nominal — these kinds' deploy leg
+// OpEmit (true) or skip (false, apk-install / reboot). Scope/Venue/Gate are nominal — these kinds' deploy leg
 // is charly/plugin/kit.WalkPlans, which reads the per-instance view.Scope/Venue computed on the
 // concrete step, so the static contract's Scope/Venue/Gate are never consulted. The HOST-COUPLED
 // system-packages (C1.2) + builder (C1.3) + local-pkg-install (C1.4) + op (C1.5) Emits=true too —
@@ -303,6 +315,7 @@ func (meta) Describe(context.Context, *pb.Empty) (*pb.Capabilities, error) {
 			emit(wordServiceCustom, true),
 			emit(wordRepoChange, true),
 			emit(wordApkInstall, false),
+			emit(wordReboot, false),
 			emit(wordSystemPackages, true),
 			emit(wordBuilder, true),
 			emit(wordLocalPkgInstall, true),

@@ -2,49 +2,6 @@ package main
 
 import "testing"
 
-// TestDedicatedProviders_ResolveAndDispatch proves the externalizable
-// dedicated-provider pattern: a schema-less IR provider extracted into its own file —
-// step:Reboot (plugin_step_reboot.go) — still registers into the SAME providerRegistry and
-// dispatches identically, even though it is INTENTIONALLY absent from both
-// builtinProviderInstances and the `providers:` manifest (it self-registers from a package-var
-// initializer via registerDedicatedBuiltin). The test fails if the dedicated registration
-// regresses (provider missing) or if the typed dispatch adapter is lost. (deploy:local was once
-// such a dedicated builtin; it has since externalized into candy/plugin-deploy-local — NO in-proc
-// provider, asserted by TestReservedWordRegistry_DeployBijection. The four builders
-// (cargo/npm/pixi/aur) likewise externalized — NO in-proc provider, asserted by
-// TestExternalizedBuilders_NoInProcProvider below.)
-func TestDedicatedProviders_ResolveAndDispatch(t *testing.T) {
-	// step:Reboot — resolves to a StepProvider (the per-venue Emit* dispatch).
-	sp, ok := stepProviderFor(StepKindReboot)
-	if !ok {
-		t.Fatal("stepProviderFor(StepKindReboot) not resolved — dedicated self-registration regressed")
-	}
-	if sp.Reserved() != string(StepKindReboot) {
-		t.Fatalf("step provider Reserved() = %q, want %q", sp.Reserved(), StepKindReboot)
-	}
-	if sp.Class() != ClassStep {
-		t.Fatalf("step:Reboot Class() = %q, want %q", sp.Class(), ClassStep)
-	}
-	// EmitOCI is a no-op (no machine to reboot at image-build) — exercises the
-	// registry-dispatched method end-to-end.
-	if err := sp.EmitOCI(nil, &RebootStep{CandyName: "k"}, nil); err != nil {
-		t.Fatalf("step:Reboot EmitOCI: %v", err)
-	}
-
-	// The dedicated provider is intentionally ABSENT from the manifest-driven instance supply
-	// — the defining property of the externalizable pattern.
-	byKey := builtinInstanceMap()
-	if _, in := byKey[provKey(ClassStep, string(StepKindReboot))]; in {
-		t.Fatalf("step:Reboot is still in builtinProviderInstances — must self-register from its dedicated file instead")
-	}
-	manifest := parseEmbeddedProviderManifest()
-	for _, w := range manifest[string(ClassStep)] {
-		if w == string(StepKindReboot) {
-			t.Fatalf("step:Reboot is still in the providers: manifest — a dedicated provider must not be listed there")
-		}
-	}
-}
-
 // TestExternalizedBuilders_NoInProcProvider proves the four detection-builders (cargo/npm/pixi/aur)
 // are EXTERNAL out-of-process plugin candies with NO compiled-in BuilderProvider — the builder
 // analogue of TestReservedWordRegistry_DeployBijection. At process start (before any plugin
@@ -79,14 +36,15 @@ func TestExternalizedBuilders_NoInProcProvider(t *testing.T) {
 }
 
 // TestDedicatedProviders_BulkStepResolveAndAbsent proves how every InstallStep kind is SERVED
-// after the C1.1 build-emit externalization. The HOST-COUPLED / host-engine kinds (everything
-// NOT in pluginEmitStepWords) each live in their OWN dedicated plugin_step_<name>.go file,
-// self-register via registerDedicatedBuiltin, and are absent from both builtinProviderInstances
-// and the `providers:` manifest — yet resolve through the SAME providerRegistry as a typed
-// StepProvider. The seven PURE kinds in pluginEmitStepWords have NO in-proc StepProvider: their
-// build-emit is served by the compiled-in class:step plugin candy/plugin-installstep, resolved by
-// its lowercase word with a declared StepContract. The step bijection gate in init() checks the
-// same split (a missing provider panics at startup). The test fails if any registration regresses.
+// after the C1.1–C1.6 build-emit externalization COMPLETED it. The ONE remaining in-proc kind
+// (ExternalPlugin — everything NOT in pluginEmitStepWords) lives in its OWN dedicated
+// plugin_step_external.go file, self-registers via registerDedicatedBuiltin, and is absent from both
+// builtinProviderInstances and the `providers:` manifest — yet resolves through the SAME
+// providerRegistry as a typed StepProvider. The 12 kinds in pluginEmitStepWords have NO in-proc
+// StepProvider: their build-emit is served by the compiled-in class:step plugin
+// candy/plugin-installstep, resolved by its lowercase word with a declared StepContract. The step
+// bijection gate in init() checks the same split (a missing provider panics at startup). The test
+// fails if any registration regresses.
 func TestDedicatedProviders_BulkStepResolveAndAbsent(t *testing.T) {
 	byKey := builtinInstanceMap()
 	manifest := parseEmbeddedProviderManifest()
@@ -100,7 +58,7 @@ func TestDedicatedProviders_BulkStepResolveAndAbsent(t *testing.T) {
 	}
 
 	for _, kind := range allStepKinds {
-		// The seven PURE kinds' build-emit externalized to candy/plugin-installstep: NO in-proc
+		// The 12 plugin-served kinds' build-emit externalized to candy/plugin-installstep: NO in-proc
 		// StepProvider; served by a compiled-in class:step plugin (lowercase word, StepContract).
 		if word, isPlugin := pluginEmitStepWords[kind]; isPlugin {
 			if _, ok := stepProviderFor(kind); ok {
@@ -135,8 +93,8 @@ func TestDedicatedProviders_BulkStepResolveAndAbsent(t *testing.T) {
 		}
 	}
 
-	// The `providers:` manifest carries NO step entries at all — the in-proc step providers are
-	// dedicated builtins and the seven externalized kinds are compiled-in plugin candies.
+	// The `providers:` manifest carries NO step entries at all — the in-proc step provider is a
+	// dedicated builtin and the 12 externalized kinds are compiled-in plugin candies.
 	if len(manifest[string(ClassStep)]) != 0 {
 		t.Fatalf("providers: manifest step list = %v, want empty (no manifest-driven step instances)", manifest[string(ClassStep)])
 	}

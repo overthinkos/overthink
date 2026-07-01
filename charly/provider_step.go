@@ -56,12 +56,15 @@ var allStepKinds = []StepKind{
 // lowercase-hyphenated class:step plugin word that serves their pod-overlay OpEmit
 // (candy/plugin-installstep). These kinds have NO in-proc StepProvider — OCITarget.emitStep routes
 // them here, serializing the step VIEW as the OpEmit payload. Their DEPLOY leg is unchanged
-// (charly/plugin/kit.WalkPlans renders them from the same view). apk-install's plugin declares
+// (charly/plugin/kit.WalkPlans renders them from the same view; reboot's is the host-side guest
+// reboot over RunHostStep → rebootVenueAndWait). apk-install's and reboot's plugin declare
 // Emits=false (no build fragment); every other word Emits=true.
 //
 // Two sub-categories, distinguished by whether the OpEmit render needs the host build engine:
-//   - PURE (C1.1): file/shell-hook/shell-snippet/service-packaged/service-custom/repo-change/
-//     apk-install — the plugin formats the fragment directly from the step VIEW.
+//   - PURE (C1.1 + C1.6): file/shell-hook/shell-snippet/service-packaged/service-custom/repo-change/
+//     apk-install (C1.1) + reboot (C1.6) — the plugin formats the fragment directly from the step
+//     VIEW. apk-install and reboot are the NO-OP-emit members (Emits=false, empty fragment): an
+//     image build installs no apk / reboots nothing.
 //   - HOST-COUPLED (C1.2/C1.3/C1.4/C1.5): system-packages (C1.2) + builder (C1.3) +
 //     local-pkg-install (C1.4) + op (C1.5) — the plugin's OpEmit calls back the host's "step-emit"
 //     host-builder (HostBuild) for a render it cannot do across the process boundary
@@ -79,6 +82,7 @@ var pluginEmitStepWords = map[StepKind]string{
 	StepKindServiceCustom:   "service-custom",
 	StepKindRepoChange:      "repo-change",
 	StepKindApkInstall:      "apk-install",
+	StepKindReboot:          "reboot",
 	StepKindSystemPackages:  "system-packages",
 	StepKindBuilder:         "builder",
 	StepKindLocalPkgInstall: "local-pkg-install",

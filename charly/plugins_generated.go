@@ -14,6 +14,7 @@ import (
 	cp_plugin_distro "github.com/overthinkos/overthink/candy/plugin-distro"
 	cp_plugin_dns "github.com/overthinkos/overthink/candy/plugin-dns"
 	cp_plugin_egress "github.com/overthinkos/overthink/candy/plugin-egress"
+	cp_plugin_enc "github.com/overthinkos/overthink/candy/plugin-enc"
 	cp_plugin_example "github.com/overthinkos/overthink/candy/plugin-example"
 	cp_plugin_example_bootstrap "github.com/overthinkos/overthink/candy/plugin-example-bootstrap"
 	cp_plugin_example_command "github.com/overthinkos/overthink/candy/plugin-example-command"
@@ -49,6 +50,7 @@ func init() {
 	registerCompiledPlugin(cp_plugin_egress.NewProvider(), cp_plugin_egress.NewMeta())
 	registerCompiledPlugin(cp_plugin_k8sgen.NewProvider(), cp_plugin_k8sgen.NewMeta())
 	registerCompiledPlugin(cp_plugin_migrate.NewProvider(), cp_plugin_migrate.NewMeta())
+	registerCompiledPlugin(cp_plugin_enc.NewProvider(), cp_plugin_enc.NewMeta())
 	registerCompiledCheckVerb(cp_plugin_port.NewCheckVerb(), cp_plugin_port.SchemaFS, cp_plugin_port.SchemaDir, cp_plugin_port.InputDefs)
 	registerCompiledCheckVerb(cp_plugin_process.NewCheckVerb(), cp_plugin_process.SchemaFS, cp_plugin_process.SchemaDir, cp_plugin_process.InputDefs)
 	registerCompiledCheckVerb(cp_plugin_interface.NewCheckVerb(), cp_plugin_interface.SchemaFS, cp_plugin_interface.SchemaDir, cp_plugin_interface.InputDefs)

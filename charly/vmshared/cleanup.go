@@ -137,8 +137,8 @@ func InstallSignalHandler() {
 // ssh_tunnel.go) are NOT in this list.
 var sweepablePatterns = []string{
 	"charly-merge-",              // merge.go saveAndLoad + saveImageToDaemon
-	"charly-extpass-",            // enc.go encExtpassArgs
-	"charly-oldpass-",            // enc.go credential migration
+	"charly-extpass-",            // candy/plugin-enc encExtpassArgs
+	"charly-oldpass-",            // candy/plugin-enc passwdVolumes (gocryptfs -passwd old-pass script)
 	"charly-secrets-",            // secrets_gpg.go
 	"charly-libvirt-screenshot-", // libvirt_ops.go
 	"charly-cidata-",             // cloud_init_iso.go

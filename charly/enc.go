@@ -3,15 +3,18 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"slices"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/overthinkos/overthink/charly/spec"
 )
 
 // ResolvedBindMount is ready for -v flags.
@@ -89,36 +92,68 @@ func defaultIsEncryptedMounted(plainDir string) bool {
 	return false
 }
 
-// encExtpassArgs returns gocryptfs -extpass arguments for CLI commands.
-// Uses a temp script file because gocryptfs's flag parser normalizes multi-flag
-// values (turns -c into --c). The script checks GOCRYPTFS_PASSWORD env var first
-// (for testing/CI), then falls back to systemd-ask-password with /dev/tty redirect
-// so it works regardless of whether gocryptfs connects stdin to the child process.
-// Caller must defer the returned cleanup function.
-func encExtpassArgs(imageID string) ([]string, func()) {
-	script := "#!/bin/bash\n" +
-		"if [ -n \"$GOCRYPTFS_PASSWORD\" ]; then\n" +
-		"  printf '%s' \"$GOCRYPTFS_PASSWORD\"\n" +
-		"else\n" +
-		"  exec 0</dev/tty\n" +
-		"  systemd-ask-password --id=" + imageID + " --timeout=0 --echo=masked 'Passphrase for " + imageID + ":'\n" +
-		"fi\n"
-
-	f, err := os.CreateTemp("", "charly-extpass-*.sh")
+// encPlanFor host-prelifts the per-volume gocryptfs execution plan for the given
+// box/instance, filtered to `volume` when non-empty. It loads the deploy config
+// (loadEncryptedVolume — loader, stays core), resolves each volume's cipher/plain
+// dirs (resolveEncVolumeDir — deploy-model path convention, stays core), and probes
+// the initialized/mounted state (isEncryptedInitialized/isEncryptedMounted — the
+// probes the mandatorily-core verifyBindMounts also uses). scopeDir is the scope-unit
+// directory component: deployStorageDir(box,instance) for mount/unmount/passwd, or the
+// bare box name for the ensure path (a pre-existing derivation difference, identical
+// for the common empty-instance case, preserved exactly by this cutover). The result
+// is the self-contained plan candy/plugin-enc executes over OpExecute.
+func encPlanFor(boxName, instance, volume, scopeDir string) ([]spec.EncVolumePlan, error) {
+	mounts, storagePath, err := loadEncryptedVolume(boxName, instance)
 	if err != nil {
-		// Fall back to inline systemd-ask-password (won't work headlessly)
-		ep := "systemd-ask-password --id=" + imageID + " --timeout=0 --echo=masked Passphrase"
-		return []string{"-extpass", ep}, func() {}
+		return nil, err
 	}
-	RegisterTempCleanup(f.Name())
-	if _, werr := f.WriteString(script); werr != nil {
-		fmt.Fprintf(os.Stderr, "encExtpassArgs: write extpass script: %v\n", werr)
+	storageDir := deployStorageDir(boxName, instance)
+	var plan []spec.EncVolumePlan
+	for _, m := range mounts {
+		if volume != "" && m.Name != volume {
+			continue
+		}
+		volDir := resolveEncVolumeDir(m, storagePath, storageDir)
+		cipherDir := filepath.Join(volDir, "cipher")
+		plainDir := filepath.Join(volDir, "plain")
+		plan = append(plan, spec.EncVolumePlan{
+			Name:        m.Name,
+			CipherDir:   cipherDir,
+			PlainDir:    plainDir,
+			ScopeUnit:   fmt.Sprintf("charly-enc-%s-%s", scopeDir, m.Name),
+			Initialized: isEncryptedInitialized(cipherDir),
+			Mounted:     isEncryptedMounted(plainDir),
+		})
 	}
-	if cerr := f.Chmod(0700); cerr != nil {
-		fmt.Fprintf(os.Stderr, "encExtpassArgs: chmod extpass script: %v\n", cerr)
+	return plan, nil
+}
+
+// encExecViaPlugin resolves verb:enc and Invokes its OpExecute with the host-prelifted
+// plan. plugin-enc is compiled-in, so this is an in-proc JSON envelope (no socket) —
+// the passphrase never leaves the process. Mirrors egress.go / k8s_generate.go.
+func encExecViaPlugin(in spec.EncExecInput) error {
+	prov, ok := providerRegistry.resolve(ClassVerb, "enc")
+	if !ok {
+		return fmt.Errorf("enc plugin (verb:enc) not registered — charly built without candy/plugin-enc")
 	}
-	_ = f.Close()
-	return []string{"-extpass", f.Name()}, func() { _ = os.Remove(f.Name()); UnregisterTempCleanup(f.Name()) }
+	params, err := marshalJSON(in)
+	if err != nil {
+		return fmt.Errorf("enc marshal input: %w", err)
+	}
+	res, err := prov.Invoke(context.Background(), &Operation{Reserved: "enc", Op: OpExecute, Params: params})
+	if err != nil {
+		return fmt.Errorf("enc invoke: %w", err)
+	}
+	var reply spec.EncExecReply
+	if res != nil && len(res.JSON) > 0 {
+		if err := json.Unmarshal(res.JSON, &reply); err != nil {
+			return fmt.Errorf("enc decode reply: %w", err)
+		}
+	}
+	if reply.Error != "" {
+		return errors.New(reply.Error)
+	}
+	return nil
 }
 
 // resolveEncPassphrase resolves the gocryptfs passphrase for an image.
@@ -333,23 +368,18 @@ func awaitKeyringUnlockViaPlugin(
 // the most common operational case is "restart when everything is still
 // mounted", and it has no passphrase dependency.
 func encMount(boxName, instance, volume string) error {
-	mounts, storagePath, err := loadEncryptedVolume(boxName, instance)
+	plan, err := encPlanFor(boxName, instance, volume, deployStorageDir(boxName, instance))
 	if err != nil {
 		return err
 	}
 
-	// Fast path: count requested volumes and their mount state. If every
-	// requested volume is already mounted, skip the passphrase lookup.
-	requested := 0
+	// Fast path: if every requested volume is already mounted, skip the passphrase
+	// lookup entirely (host-prelifted mount state, so a broken keyring never blocks a
+	// restart-when-everything-is-mounted).
+	requested := len(plan)
 	mounted := 0
-	for _, m := range mounts {
-		if volume != "" && m.Name != volume {
-			continue
-		}
-		requested++
-		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(boxName, instance))
-		plainDir := filepath.Join(volDir, "plain")
-		if isEncryptedMounted(plainDir) {
+	for _, p := range plan {
+		if p.Mounted {
 			mounted++
 		}
 	}
@@ -362,90 +392,28 @@ func encMount(boxName, instance, volume string) error {
 	if err != nil {
 		return err
 	}
-	extpassArgs, cleanup := encExtpassArgs("charly-" + boxName)
-	defer cleanup()
-
-	for _, m := range mounts {
-		if volume != "" && m.Name != volume {
-			continue
-		}
-
-		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(boxName, instance))
-		cipherDir := filepath.Join(volDir, "cipher")
-		plainDir := filepath.Join(volDir, "plain")
-
-		if !isEncryptedInitialized(cipherDir) {
-			return fmt.Errorf("encrypted volume %q not initialized; run 'charly config %s' first", m.Name, boxName)
-		}
-
-		if isEncryptedMounted(plainDir) {
-			fmt.Fprintf(os.Stderr, "%s: already mounted\n", m.Name)
-			continue
-		}
-
-		if err := os.MkdirAll(plainDir, 0700); err != nil {
-			return fmt.Errorf("creating plain dir for %s: %w", m.Name, err)
-		}
-
-		gcArgs := append(slices.Clone(extpassArgs), "-allow_other", cipherDir, plainDir)
-		scopeUnit := fmt.Sprintf("charly-enc-%s-%s", deployStorageDir(boxName, instance), m.Name)
-		scopeArgs := append([]string{"--scope", "--user", "--unit=" + scopeUnit, "--", "gocryptfs"}, gcArgs...)
-		cmd := exec.Command("systemd-run", scopeArgs...)
-		cmd.Env = append(os.Environ(), "GOCRYPTFS_PASSWORD="+passphrase)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			// Stale scope from a previous run — stop it and retry
-			if stopErr := exec.Command("systemctl", "--user", "stop", scopeUnit+".scope").Run(); stopErr == nil {
-				cmd = exec.Command("systemd-run", scopeArgs...)
-				cmd.Env = append(os.Environ(), "GOCRYPTFS_PASSWORD="+passphrase)
-				cmd.Stdout = os.Stdout
-				cmd.Stderr = os.Stderr
-				if retryErr := cmd.Run(); retryErr != nil {
-					return fmt.Errorf("mounting %s: %w", m.Name, retryErr)
-				}
-			} else {
-				return fmt.Errorf("mounting %s: %w", m.Name, err)
-			}
-		}
-		fmt.Fprintf(os.Stderr, "Mounted %s at %s\n", m.Name, plainDir)
-	}
-	return nil
+	return encExecViaPlugin(spec.EncExecInput{
+		Method:     spec.EncMethodMount,
+		ImageID:    "charly-" + boxName,
+		BoxName:    boxName,
+		Passphrase: passphrase,
+		Volumes:    plan,
+	})
 }
 
 // encUnmount unmounts encrypted volumes for an image.
 // If volume is non-empty, only that volume is unmounted.
 func encUnmount(boxName, instance, volume string) error {
-	mounts, storagePath, err := loadEncryptedVolume(boxName, instance)
+	plan, err := encPlanFor(boxName, instance, volume, deployStorageDir(boxName, instance))
 	if err != nil {
 		return err
 	}
-
-	for _, m := range mounts {
-		if volume != "" && m.Name != volume {
-			continue
-		}
-
-		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(boxName, instance))
-		plainDir := filepath.Join(volDir, "plain")
-
-		if !isEncryptedMounted(plainDir) {
-			fmt.Fprintf(os.Stderr, "%s: not mounted\n", m.Name)
-			continue
-		}
-
-		cmd := exec.Command("fusermount3", "-u", plainDir)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("unmounting %s: %w", m.Name, err)
-		}
-		// Stop the gocryptfs scope unit (gocryptfs may linger after fusermount)
-		scopeUnit := fmt.Sprintf("charly-enc-%s-%s.scope", deployStorageDir(boxName, instance), m.Name)
-		_ = exec.Command("systemctl", "--user", "stop", scopeUnit).Run() // best-effort
-		fmt.Fprintf(os.Stderr, "Unmounted %s\n", m.Name)
-	}
-	return nil
+	return encExecViaPlugin(spec.EncExecInput{
+		Method:  spec.EncMethodUnmount,
+		ImageID: "charly-" + boxName,
+		BoxName: boxName,
+		Volumes: plan,
+	})
 }
 
 // encStatus prints the status of encrypted bind mounts for an image.
@@ -481,20 +449,18 @@ func encStatus(boxName, instance string) error {
 
 // encPasswd changes the gocryptfs password for all encrypted volumes of an image.
 func encPasswd(boxName, instance string) error {
-	mounts, storagePath, err := loadEncryptedVolume(boxName, instance)
+	plan, err := encPlanFor(boxName, instance, "", deployStorageDir(boxName, instance))
 	if err != nil {
 		return err
 	}
 
-	if len(mounts) == 0 {
+	if len(plan) == 0 {
 		return fmt.Errorf("image %q has no encrypted bind mounts", boxName)
 	}
 
-	// All volumes must be unmounted before changing password
-	for _, m := range mounts {
-		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(boxName, instance))
-		plainDir := filepath.Join(volDir, "plain")
-		if isEncryptedMounted(plainDir) {
+	// All volumes must be unmounted before changing password.
+	for _, m := range plan {
+		if m.Mounted {
 			return fmt.Errorf("encrypted volume %q is still mounted; run 'charly config unmount %s' first", m.Name, boxName)
 		}
 	}
@@ -520,43 +486,14 @@ func encPasswd(boxName, instance string) error {
 		return fmt.Errorf("new passphrase and confirmation do not match")
 	}
 
-	for _, m := range mounts {
-		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(boxName, instance))
-		cipherDir := filepath.Join(volDir, "cipher")
-
-		if !isEncryptedInitialized(cipherDir) {
-			fmt.Fprintf(os.Stderr, "%s: not initialized, skipping\n", m.Name)
-			continue
-		}
-
-		// Create temp extpass script that supplies the old password
-		oldScript, err := os.CreateTemp("", "charly-oldpass-*.sh")
-		if err != nil {
-			return fmt.Errorf("creating temp script for %s: %w", m.Name, err)
-		}
-		RegisterTempCleanup(oldScript.Name())
-		if _, werr := oldScript.WriteString("#!/bin/bash\nprintf '%s' '" + strings.ReplaceAll(oldPass, "'", "'\\''") + "'\n"); werr != nil {
-			return fmt.Errorf("writing temp script for %s: %w", m.Name, werr)
-		}
-		if cerr := oldScript.Chmod(0700); cerr != nil {
-			return fmt.Errorf("chmod temp script for %s: %w", m.Name, cerr)
-		}
-		_ = oldScript.Close()
-
-		// Pipe new password via stdin to gocryptfs -passwd
-		cmd := exec.Command("gocryptfs", "-passwd", "-extpass", oldScript.Name(), cipherDir)
-		cmd.Stdin = strings.NewReader(newPass)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		runErr := cmd.Run()
-		_ = os.Remove(oldScript.Name())
-		UnregisterTempCleanup(oldScript.Name())
-		if runErr != nil {
-			return fmt.Errorf("changing password for %s: %w", m.Name, runErr)
-		}
-		fmt.Fprintf(os.Stderr, "Password changed for %s\n", m.Name)
-	}
-	return nil
+	return encExecViaPlugin(spec.EncExecInput{
+		Method:  spec.EncMethodPasswd,
+		ImageID: volID,
+		BoxName: boxName,
+		OldPass: oldPass,
+		NewPass: newPass,
+		Volumes: plan,
+	})
 }
 
 // ensureEncryptedMounts auto-initializes and mounts encrypted volumes as needed.
@@ -564,17 +501,17 @@ func encPasswd(boxName, instance string) error {
 // requiring the user to run charly config init/mount manually first.
 // Resolves the enc passphrase once (keyring → config → interactive prompt).
 func ensureEncryptedMounts(boxName, instance string, autoGenerate bool) error {
-	mounts, storagePath, err := loadEncryptedVolume(boxName, instance)
-	if err != nil || len(mounts) == 0 {
-		return nil // no encrypted mounts configured
+	// The ensure path historically derives the scope-unit from the bare box name
+	// (mount/unmount/passwd use deployStorageDir); identical for the common
+	// empty-instance case. Preserved exactly by this cutover.
+	plan, err := encPlanFor(boxName, instance, "", boxName)
+	if err != nil || len(plan) == 0 {
+		return nil // no encrypted mounts configured (load error swallowed, as before)
 	}
 
 	anyNotReady := false
-	for _, m := range mounts {
-		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(boxName, instance))
-		cipherDir := filepath.Join(volDir, "cipher")
-		plainDir := filepath.Join(volDir, "plain")
-		if !isEncryptedInitialized(cipherDir) || !isEncryptedMounted(plainDir) {
+	for _, m := range plan {
+		if !m.Initialized || !m.Mounted {
 			anyNotReady = true
 			break
 		}
@@ -587,60 +524,13 @@ func ensureEncryptedMounts(boxName, instance string, autoGenerate bool) error {
 	if err != nil {
 		return fmt.Errorf("resolving enc passphrase for %s: %w", boxName, err)
 	}
-	extpassArgs, cleanup := encExtpassArgs("charly-" + boxName)
-	defer cleanup()
-
-	for _, m := range mounts {
-		volDir := resolveEncVolumeDir(m, storagePath, deployStorageDir(boxName, instance))
-		cipherDir := filepath.Join(volDir, "cipher")
-		plainDir := filepath.Join(volDir, "plain")
-
-		if !isEncryptedInitialized(cipherDir) {
-			fmt.Fprintf(os.Stderr, "Initializing encrypted volume %s for %s...\n", m.Name, boxName)
-			if err := os.MkdirAll(cipherDir, 0700); err != nil {
-				return fmt.Errorf("creating cipher dir for %s: %w", m.Name, err)
-			}
-			if err := os.MkdirAll(plainDir, 0700); err != nil {
-				return fmt.Errorf("creating plain dir for %s: %w", m.Name, err)
-			}
-			args := append([]string{"-init"}, extpassArgs...)
-			args = append(args, cipherDir)
-			cmd := exec.Command("gocryptfs", args...)
-			cmd.Env = append(os.Environ(), "GOCRYPTFS_PASSWORD="+passphrase)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("gocryptfs -init for %s: %w", m.Name, err)
-			}
-		}
-		if !isEncryptedMounted(plainDir) {
-			if err := os.MkdirAll(plainDir, 0700); err != nil {
-				return fmt.Errorf("creating plain dir for %s: %w", m.Name, err)
-			}
-			gcArgs := append(slices.Clone(extpassArgs), "-allow_other", cipherDir, plainDir)
-			scopeUnit := fmt.Sprintf("charly-enc-%s-%s", boxName, m.Name)
-			scopeArgs := append([]string{"--scope", "--user", "--unit=" + scopeUnit, "--", "gocryptfs"}, gcArgs...)
-			cmd := exec.Command("systemd-run", scopeArgs...)
-			cmd.Env = append(os.Environ(), "GOCRYPTFS_PASSWORD="+passphrase)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				if stopErr := exec.Command("systemctl", "--user", "stop", scopeUnit+".scope").Run(); stopErr == nil {
-					cmd = exec.Command("systemd-run", scopeArgs...)
-					cmd.Env = append(os.Environ(), "GOCRYPTFS_PASSWORD="+passphrase)
-					cmd.Stdout = os.Stdout
-					cmd.Stderr = os.Stderr
-					if retryErr := cmd.Run(); retryErr != nil {
-						return fmt.Errorf("mounting encrypted volume %s: %w", m.Name, retryErr)
-					}
-				} else {
-					return fmt.Errorf("mounting encrypted volume %s: %w", m.Name, err)
-				}
-			}
-			fmt.Fprintf(os.Stderr, "Mounted encrypted volume %s\n", m.Name)
-		}
-	}
-	return nil
+	return encExecViaPlugin(spec.EncExecInput{
+		Method:     spec.EncMethodEnsure,
+		ImageID:    "charly-" + boxName,
+		BoxName:    boxName,
+		Passphrase: passphrase,
+		Volumes:    plan,
+	})
 }
 
 // askPassword prompts for a password using systemd-ask-password.

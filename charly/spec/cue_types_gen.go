@@ -1050,6 +1050,17 @@ type CandyService struct {
 
 	Exec string `yaml:"exec,omitempty" json:"exec,omitempty"`
 
+	// distro restricts this entry to the named distros — a bare distro name
+	// ("debian") or a versioned tag ("debian:13"). Empty = every distro (the
+	// backward-compatible default). The service analogue of a check step's
+	// exclude_distros: — it lets ONE candy carry per-distro-DIVERGENT packaged
+	// units / exec daemons (the modular virtqemud.socket + virtnetworkd.socket
+	// on Fedora/Arch vs the monolithic libvirtd.socket on Debian/Ubuntu, whose
+	// libvirt is built without the split daemons) WITHOUT a <name>-host sibling
+	// candy (CLAUDE.md "Init-system polymorphism"; R3). Filtered at render time
+	// against the target distro tag chain (compileServiceSteps + generate.go).
+	Distro []string `yaml:"distro,omitempty" json:"distro,omitempty"`
+
 	Env StrMap `yaml:"env,omitempty" json:"env,omitempty"`
 
 	Restart string `yaml:"restart,omitempty" json:"restart,omitempty"`

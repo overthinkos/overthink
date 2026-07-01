@@ -274,14 +274,23 @@ func computeDeployID(box string, layers, addCandies []string) string {
 }
 
 // primaryDistroTag picks the distro tag this plan is materialized against.
-// For host compilation we use the host's detected distro; otherwise we
-// fall back to the image's first distro entry.
+// img.Distro is the AUTHORITATIVE deploy-target distro chain and always wins:
+// syntheticHostBox sets the operator host's tags, syntheticVmBox the GUEST's,
+// and ResolveBox the image's — so a vm deploy resolves the guest distro, a host
+// deploy the operator's, a pod/image deploy the image's. For a host deploy
+// img.Distro[0] == hostCtx.Distro (both from DetectHostDistro; PrimaryTag() ==
+// Tags[0]), so this is byte-identical to the old host path while fixing vm
+// deploys (whose hostCtx.Distro is the OPERATOR's distro, NOT the guest's — the
+// detectHostContext default). hostCtx.Distro is only a fallback when img carries
+// no distro. (Package resolution already uses img via compileSystemPackageSteps,
+// so making the plan's distro img-authoritative also removes a latent
+// inconsistency, never introduces one.)
 func primaryDistroTag(img *ResolvedBox, hostCtx HostContext) string {
-	if hostCtx.Target == "host" && hostCtx.Distro != "" {
-		return hostCtx.Distro
-	}
 	if len(img.Distro) > 0 {
 		return img.Distro[0]
+	}
+	if hostCtx.Distro != "" {
+		return hostCtx.Distro
 	}
 	return ""
 }
@@ -976,14 +985,65 @@ func stringSliceFromYAML(v any) ([]string, bool) {
 // in three different places (the deleted in-proc VM-target lazy fallback,
 // the OCI build's per-entry routing, and the legacy nothing-rendered
 // path on the local deploy target) into ONE compile-time filter.
+// serviceRenderDistros returns the distro tag chain a service entry's distro:
+// filter is matched against for a deploy target. img.Distro is the AUTHORITATIVE
+// deploy-target chain and always wins (mirrors primaryDistroTag): syntheticVmBox
+// sets the GUEST chain (e.g. ["debian:13","debian"]), syntheticHostBox the
+// operator host's, ResolveBox the image's. Using hostCtx.Distro here was the
+// bug that made a vm deploy filter services against the OPERATOR's distro
+// (arch) instead of the guest's (debian) — detectHostContext defaults
+// hostCtx.Target to "host" + the operator distro even for a vm deploy, so a
+// hostCtx-wins rule mis-scoped every vm/pod service. For a host deploy
+// img.Distro is the operator's own tag chain (a SUPERSET of the single
+// PrimaryTag, so arch-derivative hosts like cachyos now also match `arch:`
+// entries). hostCtx.Distro is only a fallback when img carries no distro.
+func serviceRenderDistros(img *ResolvedBox, hostCtx HostContext) []string {
+	if len(img.Distro) > 0 {
+		return img.Distro
+	}
+	if hostCtx.Distro != "" {
+		return []string{hostCtx.Distro}
+	}
+	return nil
+}
+
+// serviceEntryAppliesToDistro reports whether a service entry should render for
+// the given distro tag chain. An entry with an EMPTY distro: list applies to
+// EVERY distro (the backward-compatible default — every pre-existing candy's
+// services keep rendering everywhere). A non-empty list restricts the entry to
+// the named distros, matched against either a bare distro name ("debian") or a
+// full versioned tag ("debian:13") anywhere in the chain. This is the service
+// analogue of a check step's exclude_distros: — the mechanism that lets ONE
+// candy carry per-distro-divergent packaged units (modular virtqemud.socket on
+// Fedora/Arch vs monolithic libvirtd.socket on Debian/Ubuntu) without a
+// <name>-host sibling candy (CLAUDE.md R3).
+func serviceEntryAppliesToDistro(entry *ServiceEntry, distros []string) bool {
+	if len(entry.Distro) == 0 {
+		return true
+	}
+	for _, tag := range distros {
+		if slices.Contains(entry.Distro, tag) {
+			return true
+		}
+		if base, _, found := strings.Cut(tag, ":"); found && slices.Contains(entry.Distro, base) {
+			return true
+		}
+	}
+	return false
+}
+
 func compileServiceSteps(layer *Candy, img *ResolvedBox, hostCtx HostContext) []InstallStep {
 	var out []InstallStep
 	initIsSystemd := hostCtx.Target == "host" || hostCtx.Target == "vm"
+	distros := serviceRenderDistros(img, hostCtx)
 
-	// Detect mixed-entry pairs: which names have a use_packaged form?
+	// Detect mixed-entry pairs: which names have a use_packaged form? Only
+	// entries that APPLY to this target's distro count — a Fedora/Arch-only
+	// packaged form must not suppress a Debian/Ubuntu exec sibling of the same
+	// name (see serviceEntryAppliesToDistro).
 	namesWithPackaged := map[string]bool{}
 	for i := range layer.Service() {
-		if layer.Service()[i].IsPackaged() {
+		if layer.Service()[i].IsPackaged() && serviceEntryAppliesToDistro(&layer.Service()[i], distros) {
 			namesWithPackaged[layer.Service()[i].Name] = true
 		}
 	}
@@ -1034,6 +1094,11 @@ func compileServiceSteps(layer *Candy, img *ResolvedBox, hostCtx HostContext) []
 
 	for i := range layer.Service() {
 		entry := &layer.Service()[i]
+		// Per-distro filter: an entry with a distro: list renders only on the
+		// named distros (see serviceEntryAppliesToDistro).
+		if !serviceEntryAppliesToDistro(entry, distros) {
+			continue
+		}
 		scope := ScopeSystem
 		if entry.EffectiveScope() == "user" {
 			scope = ScopeUser

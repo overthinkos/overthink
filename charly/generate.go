@@ -575,7 +575,7 @@ func (g *Generator) generateContainerfile(boxName string) error {
 	}
 
 	// Assemble init system configs (driven by the embedded init: vocabulary templates)
-	if err := g.emitInitAssembly(&b, candyOrder, activeInits, initHasFragments); err != nil {
+	if err := g.emitInitAssembly(&b, img, candyOrder, activeInits, initHasFragments); err != nil {
 		return err
 	}
 
@@ -1079,7 +1079,7 @@ func (g *Generator) emitExtractedFiles(b *strings.Builder, img *ResolvedBox, can
 // emitInitAssembly assembles init system configs (driven by the embedded init:
 // vocabulary templates): the assembly template, system-level service enablement,
 // and any post-assembly step, per active init system.
-func (g *Generator) emitInitAssembly(b *strings.Builder, candyOrder []string, activeInits map[string]*InitDef, initHasFragments map[string]bool) error {
+func (g *Generator) emitInitAssembly(b *strings.Builder, img *ResolvedBox, candyOrder []string, activeInits map[string]*InitDef, initHasFragments map[string]bool) error {
 	for initName, def := range activeInits {
 		// assembly_template bind-mounts from the scratch stage emitted above;
 		// skip it when no fragments were contributed (stage was not emitted).
@@ -1107,7 +1107,8 @@ func (g *Generator) emitInitAssembly(b *strings.Builder, candyOrder []string, ac
 			layer := g.Candies[candyName]
 			for i := range layer.Service() {
 				entry := &layer.Service()[i]
-				if entry.IsPackaged() && entry.EffectiveScope() == "system" {
+				if entry.IsPackaged() && entry.EffectiveScope() == "system" &&
+					serviceEntryAppliesToDistro(entry, img.Distro) {
 					systemUnits = append(systemUnits, entry.UsePackaged)
 				}
 			}
@@ -1694,6 +1695,7 @@ func (g *Generator) generateInitFragments(boxName, initName string, def *InitDef
 	if err := os.MkdirAll(fragDir, 0755); err != nil {
 		return err
 	}
+	img := g.Boxes[boxName]
 
 	for i, candyName := range candyOrder {
 		layer := g.Candies[candyName]
@@ -1706,6 +1708,12 @@ func (g *Generator) generateInitFragments(boxName, initName string, def *InitDef
 			var candyBuf strings.Builder
 			for j := range layer.Service() {
 				entry := &layer.Service()[j]
+				// Per-distro filter: skip entries whose distro: list excludes
+				// this box's distro (the modular virtqemud/virtnetworkd vs
+				// monolithic libvirtd split — see serviceEntryAppliesToDistro).
+				if img != nil && !serviceEntryAppliesToDistro(entry, img.Distro) {
+					continue
+				}
 				// Per-entry routing: only render entries this init can handle.
 				if entry.IsPackaged() {
 					if def.ServiceSchema == nil || !def.ServiceSchema.SupportsPackaged {

@@ -43,6 +43,7 @@ import (
 	cp_plugin_sidecar "github.com/overthinkos/overthink/candy/plugin-sidecar"
 	cp_plugin_substrate "github.com/overthinkos/overthink/candy/plugin-substrate"
 	cp_plugin_target "github.com/overthinkos/overthink/candy/plugin-target"
+	cp_plugin_tunnel "github.com/overthinkos/overthink/candy/plugin-tunnel"
 	cp_plugin_unix_group "github.com/overthinkos/overthink/candy/plugin-unix-group"
 	cp_plugin_user "github.com/overthinkos/overthink/candy/plugin-user"
 )
@@ -86,4 +87,5 @@ func init() {
 	registerCompiledPlugin(cp_plugin_candy_kind.NewProvider(), cp_plugin_candy_kind.NewMeta())
 	registerCompiledPlugin(cp_plugin_build.NewProvider(), cp_plugin_build.NewMeta())
 	registerCompiledPlugin(cp_plugin_installstep.NewProvider(), cp_plugin_installstep.NewMeta())
+	registerCompiledPlugin(cp_plugin_tunnel.NewProvider(), cp_plugin_tunnel.NewMeta())
 }

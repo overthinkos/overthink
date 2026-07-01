@@ -3,7 +3,7 @@
 // charly's core (the deleted charly/tmux.go + charly/plugin_command_tmux.go). It is the
 // FIRST WELDED-command externalization in the core-externalization program: unlike udev
 // (self-contained, stdlib + x/sys/unix), `charly tmux` was WELDED to the core
-// venue/executor resolver (resolveCheckVenue + the DeployExecutor venueRun/venueCapture
+// venue/executor resolver (resolveCheckVenue + the DeployExecutor RunCapture
 // path). The resolver STAYS core (12 callers); this plugin re-expresses each of the 8
 // tmux leaves as a shell-back through SANCTIONED `charly` CLI verbs — `charly cmd <box>
 // 'tmux …'` (non-interactive) and `charly shell <box> -c 'tmux …'` (interactive) — so no

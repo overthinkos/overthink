@@ -158,7 +158,7 @@ func (s *executorReverseServer) RunHostStep(ctx context.Context, req *pb.HostSte
 		// must NOT arrive here — ok=false is a loud plugin-walk bug.
 		script, ok := resolveProvisionScript(st.Op, st.Distros)
 		if !ok {
-			return &pb.HostStepReply{Error: fmt.Sprintf("RunHostStep: OpStep verb is not act-capable (a plugin-renderable OpStep must be executed by the plugin via RunSystem/RunUser, not routed to RunHostStep)")}, nil
+			return &pb.HostStepReply{Error: "RunHostStep: OpStep verb is not act-capable (a plugin-renderable OpStep must be executed by the plugin via RunSystem/RunUser, not routed to RunHostStep)"}, nil
 		}
 		runErr := s.exec.RunUser(ctx, script, opts)
 		if st.Scope() == ScopeSystem {

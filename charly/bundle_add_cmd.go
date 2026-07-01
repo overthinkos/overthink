@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"os/exec"
 	"strings"
 )
 
@@ -340,8 +339,7 @@ func (c *BundleAddCmd) dispatchNode(path string, node *BundleNode, parentExec De
 	// Carry the per-kind add-time inputs onto the adapter (the unified
 	// Add signature is uniform; kind-specific knobs live on the struct,
 	// matching how Del's gate flags are wired).
-	switch tt := utgt.(type) {
-	case *externalDeployTarget:
+	if tt, ok := utgt.(*externalDeployTarget); ok {
 		// An external substrate with a lifecycle hook honors --node-only the SAME way the
 		// in-proc targets did: skip the substrate PostApply (vm: the nested target:pod
 		// children — the caller deploys them via the dotted path; pod: a no-op PostApply).
@@ -596,8 +594,7 @@ func (c *BundleDelCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	switch tt := utgt.(type) {
-	case *externalDeployTarget:
+	if tt, ok := utgt.(*externalDeployTarget); ok {
 		// Every externalized substrate teardown honors the --keep-repo-changes /
 		// --keep-services gates + the test ReverseRunner. The external Del replays the
 		// recorded ReverseOps via teardownHostDeploy with these (for vm over the guest SSH
@@ -654,17 +651,6 @@ func (c *BundleDelCmd) resolveDelNode() (*BundleNode, string) {
 		}
 	}
 	return &BundleNode{Target: "pod"}, "pod"
-}
-
-// runPodmanCommand invokes the given podman subcommand, capturing
-// errors via the command's exit status but returning nil for
-// idempotent commands (e.g. rmi of a non-existent image shouldn't
-// fail the teardown).
-func runPodmanCommand(engine string, args ...string) error {
-	cmd := exec.Command(engine, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
 }
 
 // ---------------------------------------------------------------------------

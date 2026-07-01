@@ -958,7 +958,7 @@ func main() {
 	if err != nil {
 		if _, ok := errors.AsType[*CheckFailedError](err); ok {
 			fmt.Fprintln(os.Stderr, FormatCLIError(err))
-			os.Exit(CheckFailExitCode)
+			os.Exit(CheckFailExitCode) //nolint:gocritic // reapPlugins() called explicitly at :953 before this os.Exit; the deferred reap is a redundant safety net
 		}
 	}
 	ctx.FatalIfErrorf(FormatCLIError(err))

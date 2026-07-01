@@ -439,7 +439,7 @@ func reverseCoprDisable(op ReverseOp, re ReverseExecutor) error {
 	return nil
 }
 
-// runSudoArgvReverse is the reverse-side analog of runSudoArgs. Accepts
+// runSudoArgvReverse runs a sudo argv on the reverse (teardown) side. Accepts
 // a possibly DEBIAN_FRONTEND-prefixed argv (we strip the prefix and
 // set it as env instead).
 //

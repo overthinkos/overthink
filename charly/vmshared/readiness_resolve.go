@@ -84,7 +84,7 @@ func ResolveReadiness(rc *ReadinessConfig) (ResolvedReadiness, error) {
 func (rr ResolvedReadiness) PluginEnv() []string {
 	out := make([]string, 0, len(readinessSpecs))
 	for _, s := range readinessSpecs {
-		out = append(out, s.env+"="+(*s.dst(&rr)).String())
+		out = append(out, s.env+"="+s.dst(&rr).String())
 	}
 	return out
 }

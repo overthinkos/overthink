@@ -1957,7 +1957,7 @@ func validateSingleTask(candyName string, idx int, verb string, t *Op, known map
 	// resolve to absolute mount points). `command` is a plugin verb now, so its cache:
 	// rides a `plugin: command` step (verb == "plugin").
 	if len(t.Cache) > 0 {
-		if verb != "download" && !(verb == "plugin" && t.Plugin == "command") {
+		if verb != "download" && (verb != "plugin" || t.Plugin != "command") {
 			errs.Add("candy %q: tasks[%d]: cache: is only valid on download: or plugin: command tasks (got %s)", candyName, idx, verb)
 		}
 		for _, p := range t.Cache {

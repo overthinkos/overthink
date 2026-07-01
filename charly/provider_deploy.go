@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/overthinkos/overthink/charly/spec"
@@ -15,16 +14,6 @@ import (
 type DeployTargetProvider interface {
 	Provider
 	ResolveTarget(node *BundleNode, name string) (UnifiedDeployTarget, error)
-}
-
-// builtinDeployBase supplies the in-proc-only Provider half (Class + a stub Invoke)
-// for every built-in deploy-target provider. A compiled-in target resolves via
-// ResolveTarget; it does not serve itself out-of-process.
-type builtinDeployBase struct{}
-
-func (builtinDeployBase) Class() ProviderClass { return ClassDeployTarget }
-func (builtinDeployBase) Invoke(context.Context, *Operation) (*Result, error) {
-	return nil, fmt.Errorf("built-in deploy target is in-process only (no out-of-proc Invoke)")
 }
 
 // deployTargetWords is the canonical deploy-target set (the cross-ref-inferred

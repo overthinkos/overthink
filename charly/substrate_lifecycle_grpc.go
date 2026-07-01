@@ -50,7 +50,7 @@ func marshalDeployOpParams(name, dir string, node *BundleNode, extra map[string]
 		if err != nil {
 			return nil, err
 		}
-		params["node"] = json.RawMessage(nj)
+		params["node"] = nj
 	}
 	for k, v := range extra {
 		params[k] = v

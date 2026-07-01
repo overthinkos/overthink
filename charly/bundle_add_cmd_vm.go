@@ -126,7 +126,7 @@ func vmNameFromDeployName(deployName string) (string, error) {
 }
 
 // resolveVmSshUser picks the SSH user for a spec. Precedence mirrors
-// resolveCloudInitSSHUser: explicit spec.ssh.user → spec.source.base_user
+// vmshared.ResolveCloudInitSSHUser: explicit spec.ssh.user → spec.source.base_user
 // (adopt path for cloud images) → source-kind default ("root" for bootc).
 // cloud_image sources with no base_user declared have no sensible
 // default — callers treat "" as "user must supply --ssh-key none and

@@ -81,22 +81,6 @@ type pluginCheckResult struct {
 	Message string `json:"message"`
 }
 
-// decodePluginInput decodes a builtin CheckVerbProvider step's op.PluginInput map
-// into the plugin's CUE-generated params struct (dst, a *params.<Verb>Input). The
-// host has already validated the input against the plugin's served schema before
-// RunVerb runs (runPluginVerb → validateAuthoredPluginInput), so a decode failure
-// here is a programming/version defect, not an authored-input error — best-effort
-// (dst is left zero on failure). The ONE decode path every in-proc plugin verb
-// shares (R3): process/port/dns and the examplerunverb reference all route through it.
-func decodePluginInput(input map[string]any, dst any) {
-	if len(input) == 0 {
-		return
-	}
-	if b, err := json.Marshal(input); err == nil {
-		_ = json.Unmarshal(b, dst)
-	}
-}
-
 // runPluginVerb dispatches the generic `plugin:` verb to its registered Provider
 // (built-in OR out-of-tree, transport-invisible). This is the permanent plugin
 // fall-through the foundation cutover (C0) adds; the built-in verb switch above is

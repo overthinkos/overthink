@@ -154,27 +154,6 @@ func sshForwardEndpoint(e *SSHExecutor, port int) (*CheckEndpoint, error) {
 	return nil, fmt.Errorf("ssh -L forward to %s:%d did not become ready: %w", dest, port, perr)
 }
 
-// venueRun runs a shell command on the venue, streaming stdout/stderr to the
-// operator's terminal, and returns an error on a non-zero exit. The shared
-// streaming primitive for every interactive `charly check` verb — RunCapture carries
-// the command into the right substrate (podman exec / ssh / local).
-func venueRun(ex DeployExecutor, script string) error {
-	stdout, stderr, exit, err := ex.RunCapture(context.Background(), script)
-	if stdout != "" {
-		fmt.Fprint(os.Stdout, stdout)
-	}
-	if stderr != "" {
-		fmt.Fprint(os.Stderr, stderr)
-	}
-	if err != nil {
-		return err
-	}
-	if exit != 0 {
-		return fmt.Errorf("command exited %d", exit)
-	}
-	return nil
-}
-
 // venueRunSilent runs a command on the venue discarding output, returning an
 // error on non-zero exit (availability probes + fire-and-forget actions).
 func venueRunSilent(ex DeployExecutor, script string) error {
@@ -186,22 +165,6 @@ func venueRunSilent(ex DeployExecutor, script string) error {
 		return fmt.Errorf("command exited %d", exit)
 	}
 	return nil
-}
-
-// venueCapture runs a command on the venue and returns stdout as bytes,
-// surfacing stderr on a non-zero exit.
-func venueCapture(ex DeployExecutor, script string) ([]byte, error) {
-	stdout, stderr, exit, err := ex.RunCapture(context.Background(), script)
-	if err != nil {
-		return nil, err
-	}
-	if exit != 0 {
-		if s := strings.TrimSpace(stderr); s != "" {
-			return nil, fmt.Errorf("%s", s)
-		}
-		return nil, fmt.Errorf("command exited %d", exit)
-	}
-	return []byte(stdout), nil
 }
 
 // venueHasTool reports whether `tool` is on PATH on the venue.

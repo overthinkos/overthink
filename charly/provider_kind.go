@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 )
 
@@ -15,16 +14,6 @@ type KindProvider interface {
 	Provider
 	DecodeNode(gn *genericNode, uf *UnifiedFile) error
 	CueDefPath() string
-}
-
-// builtinKindBase supplies the in-proc-only Provider half (Class + a stub Invoke)
-// for every built-in kind provider. A compiled-in kind decodes via DecodeNode; it
-// does not serve itself out-of-process.
-type builtinKindBase struct{}
-
-func (builtinKindBase) Class() ProviderClass { return ClassKind }
-func (builtinKindBase) Invoke(context.Context, *Operation) (*Result, error) {
-	return nil, fmt.Errorf("built-in kind is in-process only (no out-of-proc Invoke)")
 }
 
 // checkKindProviderBijection asserts every authoring kind keyword (spec.KindWords)

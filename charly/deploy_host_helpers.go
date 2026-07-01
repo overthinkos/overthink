@@ -8,9 +8,8 @@ package main
 //     (used by the external vm deploy AND the RunHostStep SystemPackages arm).
 //   - renderBuilderScript + hostBuilderContext: the builder phase.install.host render
 //     (used by the host-engine builder leg: RunHostStep → runVenueBuilderStep).
-//   - isFileNotFoundErr / EmitOpts.ContextOrDefault: small shared utilities.
-//   - runSudoShell / runSudoArgs: the host sudo wrappers used by deploy_executor.go +
-//     reverse_ops.go.
+//   - EmitOpts.ContextOrDefault: a small shared utility.
+//   - runSudoShell: the host sudo wrapper used by deploy_executor.go + reverse_ops.go.
 
 import (
 	"context"
@@ -85,20 +84,6 @@ func renderBuilderScript(s *BuilderStep, hostHome string) (string, error) {
 	return script, nil
 }
 
-// isFileNotFoundErr returns true when err indicates "the file we tried to read doesn't
-// exist" — treated as a recoverable case for managed-block writes (no existing rc file →
-// start fresh).
-func isFileNotFoundErr(err error) bool {
-	if err == nil {
-		return false
-	}
-	if os.IsNotExist(err) {
-		return true
-	}
-	return strings.Contains(err.Error(), "No such file or directory") ||
-		strings.Contains(err.Error(), "no such file")
-}
-
 // ContextOrDefault returns opts' context if one's attached, or a background context.
 func (o EmitOpts) ContextOrDefault() context.Context {
 	return context.Background()
@@ -116,19 +101,6 @@ func runSudoShell(script string, opts EmitOpts) error {
 	}
 	cmd := exec.Command("sudo", "-n", "bash", "-s")
 	cmd.Stdin = strings.NewReader(script)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-// runSudoArgs spawns sudo with explicit argv (no shell interpretation), e.g.
-// `sudo pacman -U <pkgs…>`. Same -n rationale as runSudoShell.
-func runSudoArgs(argv []string, opts EmitOpts) error {
-	if opts.DryRun {
-		fmt.Fprintln(os.Stderr, "[dry-run] sudo -n "+shellJoin(argv))
-		return nil
-	}
-	cmd := exec.Command("sudo", append([]string{"-n"}, argv...)...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

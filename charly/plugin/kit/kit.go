@@ -148,7 +148,7 @@ func ShellQuote(s string) string {
 }
 
 // TrimPreview truncates s to a 200-char preview (trailing "…") for compact check-output
-// display — the importable analogue of charly's trimPreview.
+// display.
 func TrimPreview(s string) string {
 	s = strings.TrimSpace(s)
 	if len(s) > 200 {
@@ -170,9 +170,8 @@ func WrapContainerCommand(script string) string {
 }
 
 // DecodeInput decodes an Op's plugin_input (map[string]any) into a candy's
-// CUE-generated typed params struct via a JSON round-trip — the importable analogue
-// of charly's decodePluginInput. A nil/empty input leaves out at its zero value;
-// the host has already validated the input against the served schema.
+// CUE-generated typed params struct via a JSON round-trip. A nil/empty input leaves
+// out at its zero value; the host has already validated the input against the served schema.
 func DecodeInput(in map[string]any, out any) {
 	if len(in) == 0 {
 		return

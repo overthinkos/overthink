@@ -156,12 +156,13 @@ func kitStatusToCheck(s kit.Status) CheckStatus {
 // coexist switch treats it like any compiled-in plugin). Called from the generated
 // plugins_generated.go for a kit-shape candy named in charly.yml compiled_plugins.
 // Distinct from registerCompiledPlugin (the pb/dual-placement path) because a kit verb
-// is in-proc-only. The candy passes its RAW schema embed.FS + dir + InputDefs; charly
-// concatenates here via schemaconcat (the candy cannot import internal/schemaconcat) —
-// the SAME concat contract a builtin/external schema goes through (R3). A read/concat
-// failure is a build-time invariant violation (panic, like loadBuiltinPluginUnits).
-func registerCompiledCheckVerb(kv kit.CheckVerbProvider, schemaFS fs.FS, schemaDir string, inputDefs map[string]string) {
-	cueSource, _, err := schemaconcat.ConcatSchema(schemaFS, schemaDir, nil)
+// is in-proc-only. The candy passes its RAW schema embed.FS + InputDefs; charly
+// concatenates here via schemaconcat over the conventional "schema" subdir (the candy
+// cannot import internal/schemaconcat) — the SAME concat contract a builtin/external
+// schema goes through (R3). A read/concat failure is a build-time invariant violation
+// (panic, like loadBuiltinPluginUnits).
+func registerCompiledCheckVerb(kv kit.CheckVerbProvider, schemaFS fs.FS, inputDefs map[string]string) {
+	cueSource, _, err := schemaconcat.ConcatSchema(schemaFS, "schema", nil)
 	if err != nil {
 		panic("registerCompiledCheckVerb " + kv.Reserved() + ": concat schema: " + err.Error())
 	}

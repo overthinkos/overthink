@@ -1350,19 +1350,6 @@ func GateEnabled(g Gate, opts EmitOpts) bool {
 // Small helpers used by step types.
 // ---------------------------------------------------------------------------
 
-// extractString returns m[key] as a string or "" if absent.
-func extractString(m map[string]any, key string) string {
-	if m == nil {
-		return ""
-	}
-	if v, ok := m[key]; ok {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-	return ""
-}
-
 // extractStringSlice returns m[key] as []string or nil if absent.
 // Accepts []string and []interface{} (as produced by yaml.v3) inputs.
 func extractStringSlice(m map[string]any, key string) []string {

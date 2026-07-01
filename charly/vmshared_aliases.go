@@ -76,7 +76,6 @@ type (
 	PhaseTemplates           = vmshared.PhaseTemplates
 	PodSpec                  = vmshared.PodSpec
 	PollClass                = vmshared.PollClass
-	PollConfig               = vmshared.PollConfig
 	PortScope                = vmshared.PortScope
 	PortSpec                 = vmshared.PortSpec
 	PreemptibleConfig        = vmshared.PreemptibleConfig
@@ -103,9 +102,7 @@ type (
 	TunnelYAML               = vmshared.TunnelYAML
 	VmCharlyInstall          = vmshared.VmCharlyInstall
 	VmCloudInit              = vmshared.VmCloudInit
-	VmCloudInitUser          = vmshared.VmCloudInitUser
 	VmDeployState            = vmshared.VmDeployState
-	VmKeyInjection           = vmshared.VmKeyInjection
 	VmKeyInjectionResolved   = vmshared.VmKeyInjectionResolved
 	VmNetwork                = vmshared.VmNetwork
 	VmRuntimeParams          = vmshared.VmRuntimeParams
@@ -121,7 +118,6 @@ type (
 var readinessResolve = vmshared.ResolveReadiness
 
 var (
-	allDigits                   = vmshared.AllDigits
 	CompareGlibc                = vmshared.CompareGlibc
 	CreateSnapshot              = vmshared.CreateSnapshot
 	currentUsername             = vmshared.CurrentUsername
@@ -129,10 +125,7 @@ var (
 	DeleteSnapshot              = vmshared.DeleteSnapshot
 	DetectHostDistro            = vmshared.DetectHostDistro
 	DetectHostGlibc             = vmshared.DetectHostGlibc
-	ErrPollCapExceeded          = vmshared.ErrPollCapExceeded
-	ErrPollConfig               = vmshared.ErrPollConfig
 	ErrPollFatal                = vmshared.ErrPollFatal
-	ErrPollStalled              = vmshared.ErrPollStalled
 	formatForDistroID           = vmshared.FormatForDistroID
 	IncrementSnapshotRefcount   = vmshared.IncrementSnapshotRefcount
 	InstallSignalHandler        = vmshared.InstallSignalHandler
@@ -151,7 +144,6 @@ var (
 	registryPath                = vmshared.RegistryPath
 	RenderCloudInit             = vmshared.RenderCloudInit
 	RenderQemuArgv              = vmshared.RenderQemuArgv
-	resolveCloudInitSSHUser     = vmshared.ResolveCloudInitSSHUser
 	ResolveKeyInjectionChannels = vmshared.ResolveKeyInjectionChannels
 	ResolveOvmfForSpec          = vmshared.ResolveOvmfForSpec
 	ResolveOvmfPaths            = vmshared.ResolveOvmfPaths
@@ -187,9 +179,6 @@ const (
 	PollLocal                        = vmshared.PollLocal
 	PollRemote                       = vmshared.PollRemote
 	readinessAbsoluteCapFallback     = vmshared.ReadinessAbsoluteCapFallback
-	readinessIntervalHeavyFallback   = vmshared.ReadinessIntervalHeavyFallback
-	readinessIntervalLocalFallback   = vmshared.ReadinessIntervalLocalFallback
-	readinessIntervalRemoteFallback  = vmshared.ReadinessIntervalRemoteFallback
 	readinessNoProgressFallback      = vmshared.ReadinessNoProgressFallback
 	readinessPerAttemptFallback      = vmshared.ReadinessPerAttemptFallback
 	readinessPerAttemptHeavyFallback = vmshared.ReadinessPerAttemptHeavyFallback

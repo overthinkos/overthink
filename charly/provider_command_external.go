@@ -117,7 +117,7 @@ func externalCommandHolder(word, field string) any {
 	holderType := reflect.StructOf([]reflect.StructField{
 		{
 			Name: field,
-			Type: reflect.PtrTo(argsType),
+			Type: reflect.PointerTo(argsType),
 			Tag:  reflect.StructTag(fmt.Sprintf(`cmd:"" name:%q help:%q`, word, word+" (out-of-process command plugin)")),
 		},
 	})

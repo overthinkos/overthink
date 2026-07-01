@@ -272,7 +272,6 @@ func (s VerbSpec) HasContext(ctx ExecContext) bool {
 var (
 	ctxBuildDeploy        = []ExecContext{CtxBuild, CtxDeploy}
 	ctxBuildDeployRuntime = []ExecContext{CtxBuild, CtxDeploy, CtxRuntime}
-	ctxDeployRuntime      = []ExecContext{CtxDeploy, CtxRuntime}
 	ctxRuntimeOnly        = []ExecContext{CtxRuntime}
 )
 

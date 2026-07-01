@@ -11,7 +11,7 @@ import (
 // host-engine kit (github.com/overthinkos/overthink/charly/plugin/kit), shared with the out-of-tree
 // plugin candies that also import kit. These thin aliases keep core's call sites unchanged after
 // FU-11 consolidated the former core↔plugin pure-helper duplication (shellSingleQuote was already
-// byte-identical to kit.ShellQuote; trimPreview/wrapContainerCommand moved into kit).
+// byte-identical to kit.ShellQuote; wrapContainerCommand moved into kit).
 var (
 	shellSingleQuote = kit.ShellQuote
 	// shellQuote is the brevity alias used across the build / deploy / notify call sites
@@ -19,7 +19,6 @@ var (
 	// `wl` verb externalized and wl.go was deleted. (The externalized `charly tmux` shell-back
 	// quoter now lives in candy/plugin-tmux, importing kit.ShellQuote directly — R3.)
 	shellQuote           = kit.ShellQuote
-	trimPreview          = kit.TrimPreview
 	wrapContainerCommand = kit.WrapContainerCommand
 )
 
@@ -30,23 +29,20 @@ var (
 	dirExists                  = kit.DirExists
 	sortStrings                = kit.SortStrings
 	firstNonEmpty              = kit.FirstNonEmpty
-	mapHasKey                  = kit.MapHasKey
 	mapValue                   = kit.MapValue
 	nodeShapedValue            = kit.NodeShapedValue
 	firstYAMLVersionLine       = kit.FirstYAMLVersionLine
 	isGitSubmoduleDir          = kit.IsGitSubmoduleDir
 	hasLegacyImagesKey         = kit.HasLegacyImagesKey
 	stripLegacyOverthinkBlocks = kit.StripLegacyOverthinkBlocks
-	// migrateSkipDir / isNestedGitRepo lived in migrate_walk.go (moved to the candy);
-	// the core legacy-images validator still needs migrateSkipDir, so alias kit's copy.
-	migrateSkipDir  = kit.MigrateSkipDir
-	isNestedGitRepo = kit.IsNestedGitRepo
+	// migrateSkipDir lived in migrate_walk.go (moved to the candy); the core
+	// legacy-images validator still needs it, so alias kit's copy.
+	migrateSkipDir = kit.MigrateSkipDir
 
-	scanLegacyLocalImagesInFile    = kit.ScanLegacyLocalImagesInFile
-	rewriteLegacyLocalImagesInFile = kit.RewriteLegacyLocalImagesInFile
-	scalarNode                     = kit.ScalarNode
-	findMappingValue               = kit.FindMappingValue
-	opUnifyCandidateFiles          = kit.OpUnifyCandidateFiles
+	scanLegacyLocalImagesInFile = kit.ScanLegacyLocalImagesInFile
+	scalarNode                  = kit.ScalarNode
+	findMappingValue            = kit.FindMappingValue
+	opUnifyCandidateFiles       = kit.OpUnifyCandidateFiles
 )
 
 // migrateDeployEntity is the legacy-body → node-form transform shared by the

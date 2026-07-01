@@ -213,83 +213,17 @@ func (t *OCITarget) emitLocalPkgInstall(s *LocalPkgInstallStep) error {
 // HostBuild("step-emit", …) during its OpEmit and reach the host build engine. It carries the
 // box-resolved DistroDef wrapped as a DistroConfig (wrapDistroDef) — the datum the SystemPackages
 // step-emitter needs to resolve the format's phase.install.container template (the C1.2 relocation
-// of the SystemPackages build-emit onto the step-emit seam). A PURE step (file/shell-hook/…) ignores
-// the channel entirely.
+// of the SystemPackages build-emit onto the step-emit seam) — plus the Generator + BuilderConfig +
+// Box the Builder step-emitter needs to render a multi-stage / inline builder via the SAME
+// buildStageContext + RenderTemplate pipeline (the C1.3 relocation of the Builder build-emit onto
+// the same seam). A PURE step (file/shell-hook/…) ignores the channel entirely.
 func (t *OCITarget) stepEmitBuildContext() buildEngineContext {
-	return buildEngineContext{DistroCfg: wrapDistroDef(t.DistroDef)}
-}
-
-// emitBuilder renders a multi-stage or inline builder by invoking
-// the same BuildStageContext + RenderTemplate pipeline the legacy
-// generator uses. Requires OCITarget.Box + OCITarget.BuilderConfig
-// to be populated; otherwise emits a comment explaining why nothing
-// was rendered (tests that don't care about real output leave them nil).
-func (t *OCITarget) emitBuilder(s *BuilderStep, _ *InstallPlan) error {
-	if t.BuilderConfig == nil {
-		fmt.Fprintf(&t.buf, "# Builder: %s (layer=%s) — skipped, no BuilderConfig\n",
-			s.Builder, s.CandyName)
-		return nil
+	return buildEngineContext{
+		DistroCfg:     wrapDistroDef(t.DistroDef),
+		Generator:     t.Generator,
+		BuilderConfig: t.BuilderConfig,
+		Box:           t.Box,
 	}
-	bDef, ok := t.BuilderConfig.Builder[s.Builder]
-	if !ok || bDef == nil {
-		return fmt.Errorf("builder %q: not defined in BuilderConfig", s.Builder)
-	}
-	if t.Box == nil {
-		fmt.Fprintf(&t.buf, "# Builder: %s (layer=%s) — skipped, no Image context\n",
-			s.Builder, s.CandyName)
-		return nil
-	}
-
-	layer := t.lookupCandy(s.CandyName)
-	if layer == nil {
-		fmt.Fprintf(&t.buf, "# Builder: %s (layer=%s) — layer not found in scan\n",
-			s.Builder, s.CandyName)
-		return nil
-	}
-
-	// Inline builders (cargo): render InstallTemplate with the builder's
-	// inline context; no separate FROM stage.
-	if bDef.Inline {
-		ctx := &BuildStageContext{
-			LayerStage:  layer.Name,
-			UID:         t.Box.UID,
-			GID:         t.Box.GID,
-			CacheMounts: bDef.CacheMount,
-		}
-		rendered, err := RenderTemplate(s.Builder+"-inline", bDef.InstallTemplate, ctx)
-		if err != nil {
-			return fmt.Errorf("inline builder %s: %w", s.Builder, err)
-		}
-		// Switch USER to the image user for inline builder steps; matches
-		// legacy generate.go:1184-1187.
-		fmt.Fprintf(&t.buf, "USER %d\n", t.Box.UID)
-		t.buf.WriteString(rendered)
-		return nil
-	}
-
-	// Multi-stage builders (pixi/npm/aur): emit the stage via the
-	// Generator's existing buildStageContext helper when available. For
-	// synthetic test paths without a Generator, fall back to an
-	// informative comment so authors can spot unwired test cases.
-	if t.Generator == nil {
-		fmt.Fprintf(&t.buf, "# Builder: %s (layer=%s) — multi-stage requires Generator; emit skipped\n",
-			s.Builder, s.CandyName)
-		return nil
-	}
-	builderRef := ""
-	if t.Box.Builder != nil {
-		builderRef = t.Box.Builder[s.Builder]
-	}
-	ctx := t.Generator.buildStageContext(layer, s.Builder, bDef, t.Box, builderRef)
-	if ctx == nil {
-		return fmt.Errorf("buildStageContext returned nil for %s", s.Builder)
-	}
-	rendered, err := RenderTemplate(s.Builder+"-stage", bDef.StageTemplate, ctx)
-	if err != nil {
-		return fmt.Errorf("multi-stage builder %s: %w", s.Builder, err)
-	}
-	t.buf.WriteString(rendered)
-	return nil
 }
 
 // emitTask renders a single task via the legacy emitTasks pipeline.

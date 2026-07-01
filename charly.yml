@@ -561,6 +561,56 @@ check-local:
             command: "test -f /tmp/charly-examplestep/examplestep-deploy/probe && echo EXAMPLESTEP-DEPLOY-PROBE-PRESENT"
             in_container: false
 # =============================================================================
+# check-builder-local — dedicated builder-DEPLOY-leg bed (added with the C1.3
+# Builder build-emit externalization). Closes the flagged gap: before this bed no
+# disposable deploy applied a built-in pixi/npm/cargo/aur detection-builder candy
+# to a local:/vm: venue, so runVenueBuilderStep (the host-engine builder deploy
+# leg → runVenueHomeArtifactBuilder) was only TRANSITIVELY exercised. A kind:local
+# host deploy (host: local) composing check-builder-npm (a package.json declaring
+# the tiny zero-dep is-number): at deploy charly compiles the npm global prefix in
+# the fedora.fedora-builder image on the host and ships ~/.npm-global onto the
+# venue, then asserts is-number is present under ~/.npm-global on the host. The
+# builder image is pinned via install_opts.builder_image (a kind:local template
+# carries no base-distro builder wiring, so runVenueBuilderStep takes it from the
+# --builder-image override, exactly like check-arch-vm / check-fedora-vm). NOTE the
+# C1.3 change itself is the pod-overlay BUILD-emit (OCITarget.emitStep(BuilderStep)
+# → the step:builder plugin → stepEmitBuilder), proven by the real-chain unit tests
+# (TestOCITargetEmitBuilder{Inline,MultiStage}ViaPlugin) + the live check-addcandy-pod
+# pod-overlay dispatch gate; this bed is the complementary builder-DEPLOY-leg gate
+# the cutover adds.
+# =============================================================================
+check-builder-local:
+    local:
+        from: check-builder-local-app
+        host: local
+        disposable: true
+        lifecycle: dev
+        description: >-
+            Sole proof of the builder DEPLOY leg (runVenueBuilderStep → runVenueHomeArtifactBuilder)
+            applying a built-in npm detection-builder candy to a host: local venue — the dedicated
+            builder-deploy bed added with the C1.3 Builder build-emit externalization (previously
+            runVenueBuilderStep was only transitively exercised, no bed deployed a pixi/npm/cargo/aur
+            builder candy to a local:/vm: venue). Composes check-builder-npm (a package.json declaring
+            the tiny zero-dep is-number), so at local deploy charly compiles the npm global prefix in
+            the fedora.fedora-builder image on the host and ships ~/.npm-global onto the venue; the bed
+            asserts ~/.npm-global/lib/node_modules/is-number is present on the host filesystem. The
+            builder image is pinned via install_opts.builder_image (a kind:local template has no
+            base-distro builder wiring). The C1.3 change's pod-overlay BUILD-emit is proven separately
+            by the real-chain unit tests + the live check-addcandy-pod pod-overlay dispatch.
+    check-builder-local-install_opts:
+        install_opts:
+            builder_image: fedora.fedora-builder
+            allow_root_tasks: true
+    builder-artifact-present:
+        check: the npm builder deployed the is-number artifact into ~/.npm-global on the host venue (proves the builder DEPLOY leg runVenueBuilderStep → runVenueHomeArtifactBuilder applied a detection-builder candy end-to-end)
+        id: builder-artifact-present
+        context:
+            - runtime
+        plugin: command
+        plugin_input:
+            command: 'test -f "$HOME/.npm-global/lib/node_modules/is-number/package.json"'
+            in_container: false
+# =============================================================================
 # check-structkind — R10 witness for F5 authored-member INPUT-threading (the
 # foundation the group/pod/vm/k8s/local/android/candy structural-kind
 # externalizations land on). The TOP node is an EXTERNAL STRUCTURAL plugin kind
@@ -1647,6 +1697,21 @@ check-local-app:
         plugin_input:
             command: "test -f /etc/check-local-marker"
             in_container: false
+# =================================================================
+# check-builder-local-app — the kind:local template for the check-builder-local
+# builder-deploy bed. Composes check-builder-npm (the minimal npm builder fixture)
+# so the bed exercises the builder DEPLOY leg (runVenueBuilderStep) on a host:local
+# venue. Mirrors check-local-app / check-udev-app.
+# =================================================================
+check-builder-local-app:
+    local:
+        description: |-
+            Minimal kind:local template for the check-builder-local bed — composes the npm builder
+            fixture candy check-builder-npm so the bed exercises the builder DEPLOY leg
+            (runVenueBuilderStep → runVenueHomeArtifactBuilder) on a host: local venue.
+    check-builder-local-candy:
+        candy:
+            - check-builder-npm
 # =================================================================
 # check-udev-local — R10 witness for the externalized `charly udev` COMMAND
 # (candy/plugin-udev, command:udev) — the first externalizable-command precedent.

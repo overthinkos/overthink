@@ -63,6 +63,20 @@ type BundleAddCmd struct {
 	// compiler reads it to build plans against the GUEST's distro/format
 	// (apt/dnf), not the operator host's. Not a Kong flag.
 	vmEntity string `kong:"-"`
+
+	// builderImageOverride is this deploy's effective builder-image override —
+	// opts.BuilderImageOverride, i.e. --builder-image (CLI) with
+	// install_opts.builder_image (deployment / template) merged beneath it — captured
+	// per-node before compileNodePlans so the deploy compile methods can seed
+	// hostCtx.BuilderImage (compileHostContext). Without it a kind:local / vm deploy
+	// whose synthetic box carries no builder map entry for a candy's detection builder
+	// (npm/pixi/cargo/aur) leaves the compiled BuilderStep.BuilderImage EMPTY; the
+	// install_opts.builder_image reached only EmitOpts at APPLY, which does NOT cross
+	// into the out-of-process local/vm deploy walk, so builderStepImage there failed
+	// "no builder image for <builder>". Seeding it at compile makes the image travel IN
+	// the step view (step_view.go round-trips BuilderImage) to the out-of-process walk.
+	// Mirrors the vmEntity per-node field. Not a Kong flag.
+	builderImageOverride string `kong:"-"`
 }
 
 // BundleDelCmd implements `charly bundle del <name>`.
@@ -247,6 +261,11 @@ func (c *BundleAddCmd) dispatchNode(path string, node *BundleNode, parentExec De
 	if err != nil {
 		return err
 	}
+
+	// Capture the deploy's effective builder-image override (CLI --builder-image
+	// over install_opts.builder_image, already merged in opts) so the compile
+	// methods seed hostCtx.BuilderImage — see the builderImageOverride field.
+	c.builderImageOverride = opts.BuilderImageOverride
 
 	plans, base, candySet, err := c.compileNodePlans(target, refStr, tag, path, addCandies, cfg, distroCfg, builderCfg, dir)
 	if err != nil {
@@ -729,7 +748,7 @@ func (c *BundleAddCmd) compileBoxPlans(ref *DeployRef, cfg *Config, distroCfg *D
 		return nil, "", nil, err
 	}
 	var plans []*InstallPlan
-	hostCtx := detectHostContext()
+	hostCtx := c.compileHostContext()
 	order = pruneContainerInitForSystemd(order, hostCtx)
 	hostCtx, err = preresolveBuildersInto(hostCtx, cfg, dir, order, layers, img)
 	if err != nil {
@@ -792,7 +811,7 @@ func (c *BundleAddCmd) compileCandyPlansWithContext(ref *DeployRef, cfg *Config,
 	if builderCfg != nil && ctx.BuilderConfig == nil {
 		ctx.BuilderConfig = builderCfg
 	}
-	hostCtx := detectHostContext()
+	hostCtx := c.compileHostContext()
 	order = pruneContainerInitForSystemd(order, hostCtx)
 	hostCtx, err = preresolveBuildersInto(hostCtx, cfg, dir, order, layers, ctx)
 	if err != nil {
@@ -840,7 +859,7 @@ func (c *BundleAddCmd) compileCandyPlans(ref *DeployRef, cfg *Config, distroCfg 
 	if img == nil {
 		img = syntheticHostBox()
 	}
-	hostCtx := detectHostContext()
+	hostCtx := c.compileHostContext()
 	if distroCfg != nil {
 		img.DistroDef = distroCfg.ResolveDistro(img.Distro)
 	}
@@ -901,6 +920,27 @@ func detectHostContext() HostContext {
 		Distro:       hd.PrimaryTag(),
 		GlibcVersion: glibc,
 	}
+}
+
+// compileHostContext returns the deploy-compile HostContext: detectHostContext with
+// this deploy's effective builder-image override (c.builderImageOverride —
+// --builder-image / install_opts.builder_image) seeded onto BuilderImage, so
+// resolveBuilderImage sets the compiled BuilderStep.BuilderImage from it (R3 — the
+// SAME hostCtx.BuilderImage > img.Builder priority every compile already uses). The
+// image then travels IN the step view (step_view.go round-trips BuilderImage) across
+// the process boundary to the out-of-process local/vm deploy walk, where
+// builderStepImage reads it — the ONLY path by which install_opts.builder_image
+// reaches an out-of-process deploy's builder-step image resolution. Empty override →
+// the unchanged path (resolveBuilderImage falls through to img.Builder). The ref (e.g.
+// a namespaced fedora.fedora-builder) is resolved to a concrete image later by
+// BuilderRun → EnsureImagePresent (builder_run.go), so it need not be a full registry
+// ref.
+func (c *BundleAddCmd) compileHostContext() HostContext {
+	hostCtx := detectHostContext()
+	if c.builderImageOverride != "" {
+		hostCtx.BuilderImage = c.builderImageOverride
+	}
+	return hostCtx
 }
 
 // preresolveBuildersInto runs the host-side builder PRE-PASS (builder_preresolve.go) and returns

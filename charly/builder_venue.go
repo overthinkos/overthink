@@ -43,6 +43,17 @@ type buildEngineContext struct {
 	// (renderHostPackageCommand) needs to look up the format's phase.install.host
 	// template. Zero for an Invoke whose plan has no SystemPackagesStep.
 	DistroCfg *DistroConfig
+
+	// The following three are populated ONLY by the pod-overlay BUILD-emit path
+	// (OCITarget.stepEmitBuildContext), so the HOST-COUPLED Builder step-emitter
+	// (stepEmitBuilder, step_emit_hostbuild.go) can render a multi-stage / inline builder
+	// via the SAME buildStageContext + RenderTemplate pipeline the box build uses (R3, the
+	// C1.3 relocation of the Builder build-emit onto the step-emit seam). They are zero for
+	// every deploy-leg buildEngineContext — the Builder DEPLOY leg is runVenueBuilderStep
+	// (a separate host-engine path driven via RunHostStep), which reads none of them.
+	Generator     *Generator
+	BuilderConfig *BuilderConfig
+	Box           *ResolvedBox
 }
 
 // builderStepImage resolves the builder image ref for a BuilderStep:

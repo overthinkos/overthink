@@ -6,16 +6,18 @@
 //     repo-change, apk-install. Each render is pure string formatting from the compiler-produced
 //     spec.InstallStepView (the SAME serializable view the deploy walk consumes), so the plugin
 //     needs no host build engine — it returns the Containerfile fragment directly from OpEmit.
-//   - HOST-COUPLED (C1.2) — system-packages. Its build-context render needs the host build ENGINE
-//     (the DistroDef format templates + RenderTemplate), which cannot cross the process boundary,
-//     so its OpEmit calls back the host's "step-emit" host-builder over the reverse channel
-//     (Executor.HostBuild) and ECHOES the returned spec.EmitReply. The engine stays in core
-//     (charly/step_emit_hostbuild.go: stepEmitSystemPackages); the plugin only REQUESTS it.
+//   - HOST-COUPLED (C1.2/C1.3) — system-packages and builder. Their build-context render needs the
+//     host build ENGINE (system-packages: the DistroDef format templates + RenderTemplate;
+//     builder: the multi-stage buildStageContext + RenderTemplate engine), which cannot cross the
+//     process boundary, so their OpEmit calls back the host's "step-emit" host-builder over the
+//     reverse channel (Executor.HostBuild) and ECHOES the returned spec.EmitReply. The engine stays
+//     in core (charly/step_emit_hostbuild.go: stepEmitSystemPackages / stepEmitBuilder); the plugin
+//     only REQUESTS it.
 //
 // The DEPLOY leg for ALL these kinds STAYS in charly/plugin/kit.WalkPlans (walkFile / walkShellHook
-// / …; system-packages is a host-engine kind driven via RunHostStep → renderHostPackageCommand),
-// which renders them over the executor reverse channel; this plugin serves ONLY OpEmit (the
-// pod-overlay build-emit the host's OCITarget splices).
+// / …; system-packages + builder are host-engine kinds driven via RunHostStep →
+// renderHostPackageCommand / runVenueBuilderStep), which renders them over the executor reverse
+// channel; this plugin serves ONLY OpEmit (the pod-overlay build-emit the host's OCITarget splices).
 //
 // Placement is free: charly COMPILES this candy IN (listed in charly.yml compiled_plugins:,
 // registered in-process via registerCompiledPlugin), and the SAME provider serves OUT-OF-PROCESS
@@ -46,7 +48,7 @@ import (
 //go:embed schema/*.cue
 var schemaFS embed.FS
 
-const calver = "2026.182.1200"
+const calver = "2026.182.1300"
 
 // opEmit mirrors charly's OpEmit selector ("emit"). This plugin serves ONLY the build-context
 // emit leg — every other op is a no-op acknowledgment (the deploy leg is charly/plugin/kit.WalkPlans,
@@ -67,9 +69,20 @@ const (
 	wordServiceCustom   = "service-custom"
 	wordRepoChange      = "repo-change"
 	wordApkInstall      = "apk-install"
-	// wordSystemPackages is HOST-COUPLED (C1.2): its OpEmit calls back the host build engine.
+	// wordSystemPackages (C1.2) and wordBuilder (C1.3) are HOST-COUPLED: their OpEmit calls back the
+	// host build engine over the reverse channel.
 	wordSystemPackages = "system-packages"
+	wordBuilder        = "builder"
 )
+
+// hostCoupledStepWords is the set of step words whose OpEmit delegates the fragment render to the
+// host "step-emit" host-builder (they cannot format their Containerfile fragment from the step VIEW
+// alone). Every other served word is PURE (renderFragment). Kept as a set so adding the next
+// host-coupled kind is a one-line change.
+var hostCoupledStepWords = map[string]bool{
+	wordSystemPackages: true,
+	wordBuilder:        true,
+}
 
 // NewProvider returns the step provider for in-proc registration or out-of-proc serving.
 func NewProvider() pb.ProviderServer { return &provider{} }
@@ -86,10 +99,10 @@ func (provider) Invoke(ctx context.Context, req *pb.InvokeRequest) (*pb.InvokeRe
 	if req.GetOp() != opEmit {
 		return &pb.InvokeReply{ResultJson: []byte("{}")}, nil
 	}
-	// system-packages is HOST-COUPLED (C1.2): its build-context render needs the host build engine,
-	// so instead of formatting a fragment here it calls back the host's "step-emit" host-builder and
-	// echoes the returned spec.EmitReply. The other (PURE) kinds format their fragment directly.
-	if req.GetReserved() == wordSystemPackages {
+	// The HOST-COUPLED kinds (system-packages C1.2, builder C1.3) need the host build engine, so
+	// instead of formatting a fragment here they call back the host's "step-emit" host-builder and
+	// echo the returned spec.EmitReply. The other (PURE) kinds format their fragment directly.
+	if hostCoupledStepWords[req.GetReserved()] {
 		return emitViaHostBuild(ctx, req)
 	}
 	var view spec.InstallStepView
@@ -261,8 +274,9 @@ type meta struct {
 // is load-bearing here: the host's pod-overlay OCITarget consults it to decide whether to Invoke
 // OpEmit (true) or skip (false, apk-install). Scope/Venue/Gate are nominal — these kinds' deploy leg
 // is charly/plugin/kit.WalkPlans, which reads the per-instance view.Scope/Venue computed on the
-// concrete step, so the static contract's Scope/Venue/Gate are never consulted. system-packages
-// (HOST-COUPLED, C1.2) Emits=true too — its OpEmit delegates to the host "step-emit" host-builder.
+// concrete step, so the static contract's Scope/Venue/Gate are never consulted. The HOST-COUPLED
+// system-packages (C1.2) + builder (C1.3) Emits=true too — their OpEmit delegates to the host
+// "step-emit" host-builder.
 func (meta) Describe(context.Context, *pb.Empty) (*pb.Capabilities, error) {
 	emit := func(word string, emits bool) sdk.ProvidedCapability {
 		return sdk.ProvidedCapability{
@@ -281,6 +295,7 @@ func (meta) Describe(context.Context, *pb.Empty) (*pb.Capabilities, error) {
 			emit(wordRepoChange, true),
 			emit(wordApkInstall, false),
 			emit(wordSystemPackages, true),
+			emit(wordBuilder, true),
 		},
 		schemaFS, "schema")
 }

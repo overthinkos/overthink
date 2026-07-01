@@ -104,6 +104,71 @@ func TestOCITargetEmitSystemPackagesPrefersNewPhases(t *testing.T) {
 	}
 }
 
+// TestOCITargetEmitBuilderInlineViaPlugin drives the FULL real chain the C1.3 externalization
+// introduces for an INLINE (cargo) builder: BuilderStep → OCITarget.Emit → emitStep →
+// pluginEmitStepWords[Builder]="builder" → spliceClassStepEmit("builder") → the compiled-in
+// candy/plugin-installstep OpEmit → emitViaHostBuild → HostBuild("step-emit",{Word:"builder"}) →
+// stepEmitBuilder (the in-core host build engine on the in-proc reverse channel) → inline render.
+// It asserts the byte-equivalent `cargo install` output the former in-proc OCITarget builder
+// build-emit produced — the test FAILS without this change (there is no in-proc Builder StepProvider;
+// the plugin must serve step:builder and the host must render via the step-emit seam). This is the exact
+// in-proc chain a pod overlay with an inline-builder add_candy runs host-side.
+func TestOCITargetEmitBuilderInlineViaPlugin(t *testing.T) {
+	bc := &BuilderConfig{Builder: map[string]*BuilderDef{
+		"cargo": {Inline: true, InstallTemplate: "RUN cargo install --path .\n"},
+	}}
+	gen := &Generator{Candies: map[string]*Candy{"mytool": {Name: "mytool"}}}
+	tgt := &OCITarget{
+		BuilderConfig: bc,
+		Box:           &ResolvedBox{UID: 1000, GID: 1000},
+		Generator:     gen,
+	}
+	plan := &InstallPlan{Candy: "mytool", Steps: []InstallStep{
+		&BuilderStep{Builder: "cargo", CandyName: "mytool", Phase: PhaseInstall},
+	}}
+	if err := tgt.Emit([]*InstallPlan{plan}, EmitOpts{}); err != nil {
+		t.Fatalf("Emit: %v", err)
+	}
+	got := tgt.String()
+	if !strings.Contains(got, "USER 1000") {
+		t.Errorf("inline builder must switch USER to the image user via the plugin chain: %s", got)
+	}
+	if !strings.Contains(got, "cargo install --path .") {
+		t.Errorf("inline builder template not rendered via the step:builder plugin chain: %s", got)
+	}
+}
+
+// TestOCITargetEmitBuilderMultiStageViaPlugin drives the FULL real chain for a MULTI-STAGE
+// (pixi/npm/aur) builder — the richer render that goes through Generator.buildStageContext +
+// StageTemplate. Same dispatch path as the inline test (through the compiled-in plugin's OpEmit and
+// the in-proc HostBuild), proving stepEmitBuilder reaches the threaded Generator/BuilderConfig/Box
+// build engine (buildEngineContext) and emits the `FROM <builder> AS <stage>` stage the pod-overlay
+// build needs.
+func TestOCITargetEmitBuilderMultiStageViaPlugin(t *testing.T) {
+	bc := &BuilderConfig{Builder: map[string]*BuilderDef{
+		"pixi": {StageTemplate: "FROM {{.BuilderRef}} AS {{.StageName}}\nRUN pixi install\n"},
+	}}
+	gen := &Generator{Candies: map[string]*Candy{"mytool": {Name: "mytool"}}}
+	tgt := &OCITarget{
+		BuilderConfig: bc,
+		Box:           &ResolvedBox{UID: 1000, GID: 1000, Builder: map[string]string{"pixi": "ghcr.io/x/builder:latest"}},
+		Generator:     gen,
+	}
+	plan := &InstallPlan{Candy: "mytool", Steps: []InstallStep{
+		&BuilderStep{Builder: "pixi", CandyName: "mytool", Phase: PhaseInstall},
+	}}
+	if err := tgt.Emit([]*InstallPlan{plan}, EmitOpts{}); err != nil {
+		t.Fatalf("Emit: %v", err)
+	}
+	got := tgt.String()
+	if !strings.Contains(got, "FROM ghcr.io/x/builder:latest AS mytool-pixi-build") {
+		t.Errorf("multi-stage builder FROM stage not rendered via the step:builder plugin chain: %s", got)
+	}
+	if !strings.Contains(got, "RUN pixi install") {
+		t.Errorf("multi-stage builder body not rendered via the step:builder plugin chain: %s", got)
+	}
+}
+
 func TestOCITargetSkipsVenueSkip(t *testing.T) {
 	// A step with VenueSkip should be elided entirely.
 	tgt := &OCITarget{}

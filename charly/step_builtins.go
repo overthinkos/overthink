@@ -11,8 +11,6 @@ package main
 // therefore absent from both the builtinProviderInstances slice and the `providers:` manifest, yet
 // dispatches identically through providerRegistry.ResolveStep:
 
-// builderStepProvider (StepKindBuilder) lives in plugin_step_builder.go.
-
 // opStepProvider (StepKindOp) lives in plugin_step_op.go.
 
 // localPkgInstallStepProvider (StepKindLocalPkgInstall) lives in plugin_step_local_pkg_install.go.
@@ -28,7 +26,9 @@ package main
 //   - The seven PURE kinds (C1.1) — File, ShellHook, ShellSnippet, ServicePackaged, ServiceCustom,
 //     RepoChange, ApkInstall — whose fragment the plugin formats directly from the step VIEW.
 //     apk-install declares Emits=false (no build fragment — the android deploy preresolver reads it).
-//   - The HOST-COUPLED SystemPackages kind (C1.2) — its OpEmit calls back the host's "step-emit"
-//     host-builder for the DistroDef-format-template render (step_emit_hostbuild.go), which cannot
-//     cross the process boundary. Its DEPLOY leg (host-engine, RunHostStep → renderHostPackageCommand)
-//     is likewise unchanged.
+//   - The HOST-COUPLED SystemPackages (C1.2) + Builder (C1.3) kinds — their OpEmit calls back the
+//     host's "step-emit" host-builder for a render they cannot do across the process boundary
+//     (SystemPackages needs the DistroDef-format templates; Builder needs the multi-stage
+//     buildStageContext + RenderTemplate engine). See step_emit_hostbuild.go (stepEmitSystemPackages,
+//     stepEmitBuilder). Their DEPLOY legs (host-engine via RunHostStep → renderHostPackageCommand /
+//     runVenueBuilderStep) are likewise unchanged.

@@ -21,8 +21,10 @@ import (
 // The per-word emitter registry (stepEmitters) holds one renderer per relocated host-coupled step
 // kind. C1.2 registered the FIRST — system-packages (stepEmitSystemPackages, below), whose plugin's
 // OpEmit calls HostBuild("step-emit", {Word:"system-packages", …}) and whose in-core rendering
-// registers here via registerStepEmitter. The seam is GENERIC (dispatches by word, no per-word case
-// here), exactly like hostBuilders dispatches by kind.
+// registers here via registerStepEmitter. C1.3 registered the SECOND — builder (stepEmitBuilder,
+// below), whose build-emit needs the multi-stage builder render engine (buildStageContext +
+// RenderTemplate) that cannot cross the process boundary. The seam is GENERIC (dispatches by word,
+// no per-word case here), exactly like hostBuilders dispatches by kind.
 
 // stepEmitter renders one host-coupled external step kind's build-context Containerfile fragment
 // IN-CORE from the opaque request + the host build-engine context. Registered per step word.
@@ -128,3 +130,98 @@ func stepEmitSystemPackages(req spec.StepEmitRequest, build buildEngineContext) 
 // kind relocated onto the step-emit seam (C1.2). Its plugin (candy/plugin-installstep) serves the
 // OpEmit that calls back HostBuild("step-emit", {Word:"system-packages", …}).
 var _ = func() bool { registerStepEmitter("system-packages", stepEmitSystemPackages); return true }()
+
+// stepEmitBuilder renders the Builder InstallStep's BUILD-context (container-venue) Containerfile
+// fragment IN-CORE — the C1.3 relocation of the Builder build-emit off OCITarget onto the step-emit
+// seam. The Builder build-emit is HOST-COUPLED: it needs the host build ENGINE — the embedded
+// builder: vocabulary (BuilderConfig), the multi-stage stage_template render (Generator.buildStageContext),
+// and the box UID/GID + builder-ref (ResolvedBox) — none of which can cross the process boundary. So
+// its serving class:step plugin (candy/plugin-installstep) calls back HostBuild("step-emit", …)
+// during OpEmit and this renders the fragment host-side. The render is UNCHANGED from the former
+// in-proc OCITarget builder build-emit (R3): reconstruct the concrete step from the wire view
+// (stepFromView), then reuse the SAME buildStageContext + RenderTemplate pipeline the box build uses.
+// The build engine
+// (Generator/BuilderConfig/Box) is threaded on the reverse channel via buildEngineContext (populated
+// by OCITarget.stepEmitBuildContext); a nil BuilderConfig / Box / layer yields the SAME informative
+// skip comment the former in-proc render produced (synthetic test paths), and an undefined builder or
+// a template error is a LOUD failure (never a silent empty bake, R4).
+func stepEmitBuilder(req spec.StepEmitRequest, build buildEngineContext) (string, error) {
+	var view spec.InstallStepView
+	if len(req.Payload) > 0 {
+		if err := json.Unmarshal(req.Payload, &view); err != nil {
+			return "", fmt.Errorf("decode Builder step view: %w", err)
+		}
+	}
+	step, err := stepFromView(view)
+	if err != nil {
+		return "", err
+	}
+	s, ok := step.(*BuilderStep)
+	if !ok {
+		return "", fmt.Errorf("step-emit builder: view kind %q is not a BuilderStep", view.Kind)
+	}
+
+	if build.BuilderConfig == nil {
+		return fmt.Sprintf("# Builder: %s (layer=%s) — skipped, no BuilderConfig\n",
+			s.Builder, s.CandyName), nil
+	}
+	bDef, ok := build.BuilderConfig.Builder[s.Builder]
+	if !ok || bDef == nil {
+		return "", fmt.Errorf("builder %q: not defined in BuilderConfig", s.Builder)
+	}
+	if build.Box == nil {
+		return fmt.Sprintf("# Builder: %s (layer=%s) — skipped, no Image context\n",
+			s.Builder, s.CandyName), nil
+	}
+
+	// candyByName is nil-safe (returns nil for a nil Generator), matching the former
+	// OCITarget.lookupCandy guard.
+	layer := build.Generator.candyByName(s.CandyName)
+	if layer == nil {
+		return fmt.Sprintf("# Builder: %s (layer=%s) — layer not found in scan\n",
+			s.Builder, s.CandyName), nil
+	}
+
+	// Inline builders (cargo): render InstallTemplate with the builder's inline context; no
+	// separate FROM stage. Switch USER to the image user for the inline builder steps.
+	if bDef.Inline {
+		ctx := &BuildStageContext{
+			LayerStage:  layer.Name,
+			UID:         build.Box.UID,
+			GID:         build.Box.GID,
+			CacheMounts: bDef.CacheMount,
+		}
+		rendered, err := RenderTemplate(s.Builder+"-inline", bDef.InstallTemplate, ctx)
+		if err != nil {
+			return "", fmt.Errorf("inline builder %s: %w", s.Builder, err)
+		}
+		return fmt.Sprintf("USER %d\n", build.Box.UID) + rendered, nil
+	}
+
+	// Multi-stage builders (pixi/npm/aur): emit the stage via the Generator's buildStageContext
+	// helper. A synthetic path without a Generator falls back to an informative comment (the layer
+	// lookup above already returned nil for a nil Generator, so this is defensive parity with the
+	// former in-proc render).
+	if build.Generator == nil {
+		return fmt.Sprintf("# Builder: %s (layer=%s) — multi-stage requires Generator; emit skipped\n",
+			s.Builder, s.CandyName), nil
+	}
+	builderRef := ""
+	if build.Box.Builder != nil {
+		builderRef = build.Box.Builder[s.Builder]
+	}
+	ctx := build.Generator.buildStageContext(layer, s.Builder, bDef, build.Box, builderRef)
+	if ctx == nil {
+		return "", fmt.Errorf("buildStageContext returned nil for %s", s.Builder)
+	}
+	rendered, err := RenderTemplate(s.Builder+"-stage", bDef.StageTemplate, ctx)
+	if err != nil {
+		return "", fmt.Errorf("multi-stage builder %s: %w", s.Builder, err)
+	}
+	return rendered, nil
+}
+
+// Register the builder step-emitter at package-var init — the SECOND host-coupled step kind
+// relocated onto the step-emit seam (C1.3). Its plugin (candy/plugin-installstep) serves the OpEmit
+// that calls back HostBuild("step-emit", {Word:"builder", …}).
+var _ = func() bool { registerStepEmitter("builder", stepEmitBuilder); return true }()

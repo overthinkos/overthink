@@ -61,12 +61,13 @@ var builtinProviderInstances = []Provider{
 	// deploy targets (ClassDeployTarget) — ALL self-register from their dedicated
 	// plugin_deploy_<name>.go files (the externalizable dedicated-provider pattern):
 	// local, pod, vm, k8s, android.
-	// steps (ClassStep) — the HOST-COUPLED / host-engine step providers self-register from their
-	// dedicated plugin_step_<name>.go files: SystemPackages, Builder, Op, LocalPkgInstall, Reboot,
-	// ExternalPlugin. The seven PURE builtin step kinds' BUILD-emit externalized (C1.1) to the
-	// compiled-in class:step plugin candy/plugin-installstep (file/shell-hook/shell-snippet/
-	// service-packaged/service-custom/repo-change/apk-install) — routed by pluginEmitStepWords, no
-	// in-proc StepProvider; their deploy leg stays charly/plugin/kit.WalkPlans.
+	// steps (ClassStep) — the host-engine step providers self-register from their dedicated
+	// plugin_step_<name>.go files: Op, LocalPkgInstall, Reboot, ExternalPlugin. The builtin step
+	// kinds whose BUILD-emit externalized to the compiled-in class:step plugin candy/plugin-installstep
+	// have NO in-proc StepProvider — routed by pluginEmitStepWords: the seven PURE kinds (C1.1,
+	// file/shell-hook/shell-snippet/service-packaged/service-custom/repo-change/apk-install) plus the
+	// HOST-COUPLED SystemPackages (C1.2) + Builder (C1.3), whose OpEmit calls back the host's
+	// "step-emit" host-builder. Their deploy leg stays charly/plugin/kit.WalkPlans.
 	// builders (ClassBuilder) — the four detection-builders (aur/pixi/cargo/npm) are EXTERNAL
 	// out-of-process plugin candies (candy/plugin-builder-<word>): their build-time multi-stage
 	// stays the core embedded vocabulary (emitBuilderStages), while their deploy-time IR shim

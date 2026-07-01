@@ -10,7 +10,6 @@ package spec
 var KindWords = []string{
 	"android",
 	"candy",
-	"group",
 	"k8s",
 	"local",
 	"pod",

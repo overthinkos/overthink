@@ -19,20 +19,29 @@
 
 // Reserved discriminators = the CORE kind keywords (the kinds with a #Node arm).
 // Negated regex so a child's NAME cannot shadow a kind keyword. The plugin-extracted
-// kinds (agent/module/sidecar/package-group + distro/builder/init/resource/target) are
-// NOT here — they have no arm and are recognized dynamically by the loader via a
-// registered ClassKind provider (classifyDisc → providerRegistry.ResolveKind).
-_reservedNode: "^(candy|pod|vm|k8s|local|android|group)$"
+// kinds (agent/module/sidecar/package-group + distro/builder/init/resource/target AND
+// group — C2-group) are NOT here — they have no arm and are recognized dynamically by
+// the loader via a registered ClassKind provider (classifyDisc → providerRegistry.ResolveKind).
+// group is the FIRST resource kind extracted: it keeps its #ResourceKind membership (so the
+// loader still nests its members) while its VALUE is validated by candy/plugin-group's served
+// #GroupInput (runPluginKind) and its authored members ride op.Env (F5 input-threading).
+_reservedNode: "^(candy|pod|vm|k8s|local|android)$"
 
-// #ResourceKind — the DEPLOYABLE subset of the kind keywords: the kinds whose
-// #Node arm admits a sub-ENTITY (resource) child (a deploy-into / alongside
-// member), so a `<name>: {<kind>:…, <child>: {<resource-kind>:…}}` node is a
-// bundle-shaped node. Every OTHER kind admits only data + step children. The
-// loader (node_parse.go) classifies a resource child against this set; schemagen
-// emits it as spec.ResourceKinds so the Go side derives the deployable vocabulary
-// from this ONE CUE source instead of a hand list. (node.cue's per-arm child gate
-// stays structural `_` — the deployable-vs-not check is the layered loader check;
-// this enum is its single vocabulary source.)
+// #ResourceKind — the DEPLOYABLE kinds: the kinds that nest a sub-ENTITY (resource)
+// child (a deploy-into / alongside member), so a `<name>: {<kind>:…, <child>:
+// {<resource-kind>:…}}` node is a bundle-shaped node. Every OTHER kind admits only
+// data + step children. The loader (node_parse.go) classifies a resource child against
+// this set; schemagen emits it as spec.ResourceKinds so the Go side derives the
+// deployable vocabulary from this ONE CUE source instead of a hand list. (node.cue's
+// per-arm child gate stays structural `_` — the deployable-vs-not check is the layered
+// loader check; this enum is its single vocabulary source.)
+//
+// NOTE: `group` is a member of #ResourceKind but has NO #Node arm (C2-group externalized
+// it to candy/plugin-group). So #ResourceKind ⊄ the arm-derived KindWords — the two enums
+// are independent: KindWords = the CORE kinds with a #Node arm (arm-validated values);
+// #ResourceKind = the kinds that nest members (arm-validated OR plugin-served). group's
+// members are pre-decoded host-side (buildResourceMemberChildren) and threaded to
+// plugin-group via op.Env (F5); the parser gate admits them because resourceKindSet has group.
 #ResourceKind: ("pod" | "vm" | "k8s" | "local" | "android" | "group") @go(-)
 
 // ---------------------------------------------------------------------------
@@ -67,19 +76,19 @@ _reservedNode: "^(candy|pod|vm|k8s|local|android|group)$"
 #VmValue:      (#Vm | #DeployValue) @go(-)
 #K8sValue:     (#K8s | #DeployValue) @go(-)
 #AndroidValue: (#Android | #DeployValue) @go(-)
-// group: is a TARGETLESS deploy group (#Deploy with members, no own workload — the
-// former targetless `bundle:`). @go(-): the Go type is BundleNode via the loader. The
-// build-vocabulary kinds (`distro:`/`builder:`/`init:`/`resource:`), the Calamares
+// The build-vocabulary kinds (`distro:`/`builder:`/`init:`/`resource:`), the Calamares
 // install `target:`, the Calamares package group (`package-group:`), the AI-CLI grader
-// catalog (`agent:`), the Calamares installer module (`module:`), and the
-// sidecar-template library (`sidecar:`) are no longer core kinds — each was extracted
-// into a dedicated plugin unit, so none has a #Node arm; such a node passes #NodeDoc as
-// a registered non-core discriminator and is validated by the plugin's served #*Input
-// schema (runPluginKind). The core #Distro / #Builder / #Init / #Resource / #Target /
-// #Agent / #Module / #Sidecar defs (schema/distro.cue, …) are KEPT — they still generate
-// spec.Distro / … (the canonical types the plugins' Invoke decodes into), exactly as
-// #Group stays core.
-#GroupValue: #DeployValue @go(-)
+// catalog (`agent:`), the Calamares installer module (`module:`), the sidecar-template
+// library (`sidecar:`), AND the targetless deploy group (`group:` — C2-group) are no
+// longer core kinds — each was extracted into a dedicated plugin unit, so none has a
+// #Node arm; such a node passes #NodeDoc as a registered non-core discriminator and is
+// validated by the plugin's served #*Input schema (runPluginKind). The core #Distro /
+// #Builder / #Init / #Resource / #Target / #Agent / #Module / #Sidecar defs
+// (schema/distro.cue, …) are KEPT — they still generate spec.Distro / … (the canonical
+// types the plugins' Invoke decodes into). For `group` the plugin (candy/plugin-group)
+// decodes its scalar VALUE into the core spec.Deploy (#Deploy, kept via cue_kind_deploy.go)
+// and attaches the host-threaded authored members — validated by its self-contained
+// #GroupInput (distinct from the unrelated Calamares package-group #Group in group.cue).
 
 // #DeployValue — the AUTHORED deploy shape (the disjunct under each substrate arm):
 // the COMPLETE #Deploy minus the structural nested/peer maps + the derived target —
@@ -108,11 +117,12 @@ _reservedNode: "^(candy|pod|vm|k8s|local|android|group)$"
 #K8sArm: close({k8s: #K8sValue, {[!~_reservedNode]: _}})
 #LocalArm: close({local: #LocalValue, {[!~_reservedNode]: _}})
 #AndroidArm: close({android: #AndroidValue, {[!~_reservedNode]: _}})
-#GroupArm: close({group: #GroupValue, {[!~_reservedNode]: _}})
 
-// The unified node — a disjunction of the closed per-kind arms.
-#Node: #CandyArm | #PodArm | #VmArm | #K8sArm | #LocalArm |
-	#AndroidArm | #GroupArm
+// The unified node — a disjunction of the closed per-kind arms. `group` has NO arm
+// (C2-group externalized it to candy/plugin-group): a `group:` node passes #NodeDoc via
+// the arms' open `{[!~_reservedNode]: _}` pattern (group is no longer in _reservedNode)
+// and its VALUE is validated by the plugin's served #GroupInput (runPluginKind).
+#Node: #CandyArm | #PodArm | #VmArm | #K8sArm | #LocalArm | #AndroidArm
 
 // #NodeDoc — a whole charly.yml document in unified node-form: the reserved DOCUMENT
 // directives plus a flat map of name-first entity nodes. Validating a document

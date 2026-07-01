@@ -1,19 +1,22 @@
 package main
 
-// candyKind is the `candy` KIND — the box⊻layer factory arm — extracted into its OWN
-// file as a dedicated-builtin KindProvider, COMPLETING Phase 2 (every kind is now a
-// dedicated provider). It mirrors the deploy-shape extraction (plugin_group.go /
-// plugin_substrate.go).
+// candyKind is the `candy` KIND — the box⊻layer factory arm — a dedicated-builtin
+// KindProvider. It mirrors the deploy-shape substrate builtin (plugin_substrate.go).
 //
 // Unlike the tier-1 kinds (distro/builder/init/resource/target/agent/module/sidecar/
-// package-group), which became schema-carrying RegisterBuiltinPluginUnit plugins routed
-// out-of-process through runPluginKind, candy DECODES the authored node body into TWO
-// different TYPED core maps — uf.Box for a full IMAGE (the former box:, marked by base:/
-// from:), uf.Candy for a LAYER fragment — via the core box⊻layer routing (candyIsImage +
-// buildCandy, node_candy.go). Those core helpers STAY in CORE and this provider calls them
-// in-proc (the same rule that kept buildBundleNodeInto core for the deploy-shape kinds). An
-// out-of-tree candy plugin is deferred to the ExecutorService enabler (the JSON Invoke
-// envelope cannot reach the typed maps). candy is therefore INTENTIONALLY absent from both
+// package-group) and now `group` (C2-group, candy/plugin-group), which became plugin kinds
+// routed through runPluginKind, candy DECODES the authored node body into TWO different TYPED
+// core maps — uf.Box for a full IMAGE (the former box:, marked by base:/from:), uf.Candy for a
+// LAYER fragment — via the core box⊻layer routing (candyIsImage + buildCandy, node_candy.go).
+// candy stays CORE for an ENDURING reason the F5 foundation does NOT remove: it is
+// BOOTSTRAP-LOADER-CORE. candyIsImage + buildCandy run during the discovered-candy PRE-CHECK in
+// unified.go (distinguishing a lazy LAYER ref from an eager IMAGE decode) BEFORE any plugin
+// connects — a candy kind served by a plugin would need the plugin loaded to decode the very
+// candies the plugin lives among, a bootstrap cycle. (The F5 authored-member input-threading
+// foundation LANDED — super fe52b96c — and refuted the old "the JSON Invoke envelope cannot
+// thread the member tree / reach the typed maps" claim for the DEPLOY-shape kinds, which is why
+// group externalized; candy is unaffected by that reasoning — its blocker is the load-ORDER
+// bootstrap cycle, not the envelope.) candy is therefore absent from both
 // builtinProviderInstances and the `providers:` manifest, yet dispatches identically through
 // providerRegistry.ResolveKind; checkKindProviderBijection still proves it is registered. The
 // authored body is validated by the closed core #Candy/#Box (#NodeDoc) gate

@@ -606,6 +606,46 @@ check-structkind:
         local:
             from: check-structkind-app
             host: local
+# =============================================================================
+# check-group — R10 witness for the EXTERNALIZED `group` structural kind (C2-group).
+# `group:` is no longer a compiled-in core KindProvider; it is served by the
+# compiled-in structural plugin candy/plugin-group (kind:group, Structural:true).
+# A REAL `group:` node here therefore exercises the full path: the loader recognizes
+# `group` via the compiled-in provider, runPluginKind PRE-DECODES the authored member
+# (buildResourceMemberChildren — the core recursion) + threads it to plugin-group's
+# OpLoad via op.Env (F5 authored-member input-threading), and plugin-group attaches it
+# to a targetless spec.Deploy the host folds into uf.Bundle — byte-equivalent to the
+# former builtin groupKind. The reconstructed member (check-group-member, a kind:local
+# host deploy of check-group-app) is brought up and its hoisted marker check asserts
+# /etc/check-group-marker on the host — proving a real group decode deploys end-to-end.
+# =============================================================================
+check-group-app:
+    local:
+        description: |-
+            Minimal kind:local template for the check-group member — composes check-group-layer
+            (drops /etc/check-group-marker on the host) so the group member has a deterministic,
+            collision-free host-side deploy effect.
+    check-group-app-candy:
+        candy:
+            - check-group-layer
+check-group:
+    group:
+        disposable: true
+        lifecycle: dev
+        description: >-
+            Sole R10 witness of the externalized `group` structural kind (candy/plugin-group,
+            C2-group): a REAL targetless `group:` deploy group decoded out of core through the
+            compiled-in plugin-group over the F5 authored-member input-threading foundation. The
+            authored member (check-group-member) is pre-decoded host-side and threaded to
+            plugin-group via op.Env; the plugin attaches it to a targetless spec.Deploy the host
+            folds into uf.Bundle. bringUpMembers deploys the member (a kind:local host deploy of
+            check-group-app applying check-group-layer), and the hoisted marker check asserts
+            /etc/check-group-marker on the host filesystem — proving a real group: decode
+            reconstructs + deploys its authored member end-to-end, identical to the former builtin.
+    check-group-member:
+        local:
+            from: check-group-app
+            host: local
 
 # candy/plugin-example-deploy (recognized at parse time via the plugin-declaration
 # pre-scan, connected at deploy time via loadDeployPlugins). Add Invokes the plugin

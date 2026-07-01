@@ -1954,9 +1954,12 @@ check-doctor-local:
 # the /usr/lib/charly/plugins bake) and syscall.Exec's the plugin binary, which raw-forwards to the
 # hidden in-core `charly __<word>` command whose Run handler stays core — proving the externalized
 # command + the hidden-command raw-forward dispatch (leaf AND tree) end-to-end.
-# NOTE: `charly version` was DELIBERATELY EXCLUDED from C15 — pkg/arch/PKGBUILD's pkgver() stamps the
-# package version via `bin/charly version`, an unfixable chicken-and-egg if externalized — so it stays
-# a core command and is not exercised here (it is covered by candy/charly's own version check).
+# NOTE: `charly version` is a DELIBERATE value/risk EXCEPTION kept core — NOT "unfixable". RDD (2026-07-01)
+# refuted the chicken-and-egg claim (pkgver()'s `bin/charly version` is a convenience; the CalVer is already
+# Taskfile-computed via pkg/arch/calver.sh, so externalizing IS feasible), but it sheds ZERO deps and would
+# make R9's canonical identity command depend on the plugin subsystem across 3 package repos — worst-value,
+# highest-blast-radius; operator-decided to keep it a core command. Not exercised here (covered by
+# candy/charly's own version check).
 # =================================================================
 check-commands-app:
     local:

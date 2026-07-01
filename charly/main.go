@@ -114,10 +114,14 @@ type CLI struct {
 	// plugin can reach (R3) — so each plugin is a THIN forwarder that syscall.Exec's
 	// `charly __<word> <args…>` (the SAME __vm / __doctor internal-command pattern; the
 	// settings/candy subtrees raw-forward every subcommand token through kong passthrough, so ONE
-	// forwarder covers a leaf AND a tree). NOTE: `charly version` was DELIBERATELY EXCLUDED from
-	// C15 — pkg/arch/PKGBUILD's pkgver() stamps the package version via `bin/charly version`, so a
-	// project-less, plugin-less dev binary MUST still resolve `version`; externalizing it is an
-	// unfixable chicken-and-egg, so version stays a core command (the Version field below).
+	// forwarder covers a leaf AND a tree). NOTE: `charly version` is a DELIBERATE value/risk EXCEPTION
+	// kept core (the Version field below) — NOT an "unfixable" one. RDD (2026-07-01) refuted the old
+	// chicken-and-egg claim: pkgver()'s `bin/charly version` is only a convenience (the CalVer is
+	// already Taskfile-computed via pkg/arch/calver.sh, and reading it from a sidecar / recomputing at
+	// the superproject root sidesteps the submodule mismatch), so externalizing IS feasible. It is
+	// excluded because it sheds ZERO deps, removes ~5 core lines, and would make R9's canonical identity
+	// command depend on the plugin-resolution subsystem across 3 package repos — worst-value, highest-
+	// blast-radius of any externalization. Operator-decided to keep core.
 	CleanInternal    CleanCmd    `cmd:"" name:"__clean" hidden:"" help:"internal: prune build artifacts (the externalized charly clean plugin forwards here)"`
 	SettingsInternal SettingsCmd `cmd:"" name:"__settings" hidden:"" help:"internal: runtime config get/set/list (the externalized charly settings plugin forwards here)"`
 	CandyInternal    CandyCmd    `cmd:"" name:"__candy" hidden:"" help:"internal: candy.yml authoring (the externalized charly candy plugin forwards here)"`
@@ -138,9 +142,10 @@ type CLI struct {
 	// check is special-cased: its nested out-of-process command plugins (charly check
 	// kube/adb/appium) are injected into the holder's CheckCmd.Plugins by
 	// attachNestedCheckPlugins below. Only the machinery commands box / __plugin / migrate / version
-	// (plus the hidden __* internals above) stay hardcoded on the CLI struct. (version stays core —
-	// pkg/arch's pkgver() stamps the package version via `bin/charly version`, an unfixable
-	// chicken-and-egg if externalized; excluded from C15.)
+	// (plus the hidden __* internals above) stay hardcoded on the CLI struct. (version stays core as a
+	// deliberate value/risk EXCEPTION — NOT unfixable: RDD 2026-07-01 proved externalizing is feasible
+	// but zero-value + highest-blast-radius, weakening R9's canonical identity command; operator-decided
+	// to keep core. See the NOTE above the __* internals.)
 	Version VersionCmd `cmd:"" help:"Print computed CalVer tag"`
 }
 

@@ -18,11 +18,11 @@ import (
 // an EmitReply (reusing EmitReply — R3). A PURE external step never reaches here: it returns its
 // fragment directly from OpEmit (OCITarget.emitExternalStep splices that).
 //
-// FOUNDATION: the per-word emitter registry (stepEmitters) is EMPTY — no builtin step kind is
-// relocated yet (C1). It becomes populated when C1 externalizes a host-coupled step kind (e.g.
-// system-packages), whose plugin's OpEmit calls HostBuild("step-emit", …) and whose in-core
-// rendering registers here via registerStepEmitter. The seam is GENERIC (dispatches by word,
-// no per-word case here), exactly like hostBuilders dispatches by kind.
+// The per-word emitter registry (stepEmitters) holds one renderer per relocated host-coupled step
+// kind. C1.2 registered the FIRST — system-packages (stepEmitSystemPackages, below), whose plugin's
+// OpEmit calls HostBuild("step-emit", {Word:"system-packages", …}) and whose in-core rendering
+// registers here via registerStepEmitter. The seam is GENERIC (dispatches by word, no per-word case
+// here), exactly like hostBuilders dispatches by kind.
 
 // stepEmitter renders one host-coupled external step kind's build-context Containerfile fragment
 // IN-CORE from the opaque request + the host build-engine context. Registered per step word.
@@ -30,7 +30,7 @@ type stepEmitter func(req spec.StepEmitRequest, build buildEngineContext) (strin
 
 // stepEmitters maps a step WORD → its in-core fragment renderer. Populated at package-var init
 // (before any init(), like hostBuilders / the substrate registries), so lookup is race-free.
-// Empty in the foundation; C1 registers a renderer per relocated host-coupled step kind.
+// Holds one renderer per relocated host-coupled step kind (C1.2 registered system-packages).
 var stepEmitters = map[string]stepEmitter{}
 
 // registerStepEmitter records one host-coupled step kind's in-core fragment renderer. Panics on
@@ -78,3 +78,53 @@ func hostBuildStepEmit(_ context.Context, specJSON []byte, build buildEngineCont
 // Register the step-emit host-builder at package-var init (before any init(), like the
 // image/overlay/plugin-binary builders).
 var _ = func() bool { registerHostBuilder("step-emit", hostBuildStepEmit); return true }()
+
+// stepEmitSystemPackages renders the SystemPackages InstallStep's BUILD-context (container-venue)
+// Containerfile fragment IN-CORE — the C1.2 relocation of the SystemPackages build-emit off
+// OCITarget onto the step-emit seam. SystemPackages' build-emit is HOST-COUPLED: it needs the host
+// build ENGINE (the DistroDef format templates + RenderTemplate) that cannot cross the process
+// boundary, so its serving class:step plugin (candy/plugin-installstep) calls back
+// HostBuild("step-emit", …) during OpEmit and this renders the fragment host-side. The render is
+// UNCHANGED from the former in-proc build-emit (R3): reconstruct the concrete step from the wire
+// view (stepFromView), resolve the box-specific FormatDef via the SAME DistroConfig.FindFormat path
+// the host deploy render uses (build.DistroCfg wraps the box-resolved DistroDef — wrapDistroDef),
+// and render the format's phase.install.container template. A nil FormatDef is a LOUD error (as the
+// former in-proc render was); an empty template for the phase/venue is legitimately nothing to emit.
+func stepEmitSystemPackages(req spec.StepEmitRequest, build buildEngineContext) (string, error) {
+	var view spec.InstallStepView
+	if len(req.Payload) > 0 {
+		if err := json.Unmarshal(req.Payload, &view); err != nil {
+			return "", fmt.Errorf("decode SystemPackages step view: %w", err)
+		}
+	}
+	step, err := stepFromView(view)
+	if err != nil {
+		return "", err
+	}
+	s, ok := step.(*SystemPackagesStep)
+	if !ok {
+		return "", fmt.Errorf("step-emit system-packages: view kind %q is not a SystemPackagesStep", view.Kind)
+	}
+	formatDef := build.DistroCfg.FindFormat(s.Format)
+	if formatDef == nil {
+		return "", fmt.Errorf("no distro definition for format %q", s.Format)
+	}
+	template := formatPhaseTemplate(formatDef, s.Phase, VenueContainerBuilder)
+	if template == "" {
+		// No template for this phase/venue is not an error — some phases simply have
+		// nothing to emit in the container (e.g. cleanup phases whose host: blocks only
+		// record state for teardown).
+		return "", nil
+	}
+	ctx := NewInstallContext(s.RawInstallContext, formatDefCacheMountDefs(formatDef))
+	rendered, err := RenderTemplate(s.Format+"-install", template, ctx)
+	if err != nil {
+		return "", fmt.Errorf("rendering %s install template: %w", s.Format, err)
+	}
+	return rendered, nil
+}
+
+// Register the system-packages step-emitter at package-var init — the FIRST host-coupled step
+// kind relocated onto the step-emit seam (C1.2). Its plugin (candy/plugin-installstep) serves the
+// OpEmit that calls back HostBuild("step-emit", {Word:"system-packages", …}).
+var _ = func() bool { registerStepEmitter("system-packages", stepEmitSystemPackages); return true }()

@@ -138,11 +138,11 @@ func TestExternalStepKind_EndToEnd(t *testing.T) {
 }
 
 // TestStepEmitHostBuilder proves the F-STEP-EMIT "step-emit" HostBuild seam — the generic
-// host-builder a HOST-COUPLED external step kind's OpEmit calls back to for a fragment the host
-// build ENGINE renders in-core (the seam C1 registers a per-word emitter into when it externalizes
-// a host-coupled step kind). Foundation: the per-word registry is empty, so the test registers a
-// fixture emitter (unique word) directly, drives hostBuildStepEmit by word, and asserts an
-// unregistered word + the registry-level "step-emit" host-builder registration.
+// host-builder a HOST-COUPLED step kind's OpEmit calls back to for a fragment the host build ENGINE
+// renders in-core (the seam C1.2 registered the system-packages per-word emitter into). The test
+// registers a fixture emitter under a test-only word to exercise the generic by-word dispatch in
+// isolation, drives hostBuildStepEmit by word, and asserts an unregistered word + the registry-level
+// "step-emit" host-builder registration.
 func TestStepEmitHostBuilder(t *testing.T) {
 	// The "step-emit" host-builder is registered on the F10 hostBuilders seam at init.
 	if _, ok := hostBuilderFor("step-emit"); !ok {
@@ -150,7 +150,8 @@ func TestStepEmitHostBuilder(t *testing.T) {
 	}
 
 	const word = "test-stepemit-fixture"
-	// Register a fixture in-core emitter by word (foundation registry is otherwise empty).
+	// Register a fixture in-core emitter under a test-only word (the real registry also holds the
+	// C1.2 system-packages emitter; this fixture exercises the generic by-word dispatch in isolation).
 	stepEmitters[word] = func(req spec.StepEmitRequest, _ buildEngineContext) (string, error) {
 		return "RUN echo host-coupled-" + string(req.Payload) + " > /etc/step-emit-fixture\n", nil
 	}

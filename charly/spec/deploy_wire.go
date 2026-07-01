@@ -523,8 +523,8 @@ type EmitReply struct {
 // as an EmitReply (the reply reuses EmitReply — R3). Word is the step reserved word; Payload
 // is the step's opaque per-kind input (the SAME bytes the plugin received in op.Params);
 // Distros carries the image's distro tags (BuildEnv). A PURE step never sends this — it
-// returns its EmitReply.Fragment directly from OpEmit. Foundation: the per-word emitter
-// registry is empty until C1 relocates a host-coupled step kind onto it.
+// returns its EmitReply.Fragment directly from OpEmit. The host's per-word emitter registry
+// holds one renderer per relocated host-coupled step kind (C1.2 registered system-packages).
 type StepEmitRequest struct {
 	Word    string          `json:"word"`
 	Payload json.RawMessage `json:"payload,omitempty"`

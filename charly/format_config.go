@@ -304,6 +304,22 @@ func (dc *DistroConfig) FindFormat(name string) *FormatDef {
 	return nil
 }
 
+// wrapDistroDef presents one already-resolved DistroDef as a DistroConfig so the format-keyed
+// FindFormat resolver returns that def's FormatDef. The pod-overlay build-emit (OCITarget) carries a
+// box-resolved DistroDef, not a full DistroConfig; wrapping it lets the step-emit host-builder
+// resolve the FormatDef through the SAME DistroConfig.FindFormat path the host deploy render uses
+// (renderHostPackageCommand) — one format-resolution shape across build + deploy (R3). FindFormat on
+// the single wrapped def yields exactly def.Format[name] (the def is already inherit-resolved), so
+// the emitted fragment matches what the former in-proc OCITarget SystemPackages build-emit produced
+// from t.DistroDef.Format[name]. Returns nil for a nil def (FindFormat then yields nil → the caller
+// reports "no distro definition").
+func wrapDistroDef(def *DistroDef) *DistroConfig {
+	if def == nil {
+		return nil
+	}
+	return &DistroConfig{Distro: map[string]*DistroDef{"resolved": def}}
+}
+
 // ValidFormat returns true if any distro defines this format name.
 func (dc *DistroConfig) ValidFormat(name string) bool {
 	if dc == nil {

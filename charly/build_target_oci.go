@@ -148,10 +148,12 @@ func (t *OCITarget) emitExternalStep(s *externalStep, _ *InstallPlan) error {
 // compiler-emitted step (an authored external step must not return empty).
 //
 // The Invoke ctx carries an IN-PROC reverse channel (the SAME sdk.ContextWithExecutor +
-// executorReverseServer that dispatchBuild threads for the compiled-in build:box plugin, R3), so a
-// HOST-COUPLED external step can call back HostBuild("step-emit", …) during its OpEmit — the host
-// build ENGINE stays in core (the step-emit seam), the plugin only REQUESTS it. A PURE step ignores
-// the channel and returns its fragment directly.
+// executorReverseServer that dispatchBuild threads for the compiled-in build:box plugin, R3),
+// threaded with the box BUILD-ENGINE context (stepEmitBuildContext — the box-resolved DistroDef),
+// so a HOST-COUPLED step can call back HostBuild("step-emit", …) during its OpEmit — the host build
+// ENGINE stays in core (the step-emit seam), the plugin only REQUESTS it. The compiler-emitted
+// system-packages kind (C1.2) takes this path (its build-emit needs DistroDef.Format); a PURE step
+// (file/shell-hook/…) ignores the channel and returns its fragment directly.
 func (t *OCITarget) spliceClassStepEmit(word string, payload []byte, allowEmpty bool) error {
 	prov, ok := providerRegistry.resolve(ClassStep, word)
 	if !ok {
@@ -172,7 +174,7 @@ func (t *OCITarget) spliceClassStepEmit(word string, payload []byte, allowEmpty 
 		distros = t.Box.Tags
 	}
 	ctx := sdk.ContextWithExecutor(context.Background(),
-		sdk.NewInProcExecutor(&inprocExecutorClient{srv: &executorReverseServer{}}))
+		sdk.NewInProcExecutor(&inprocExecutorClient{srv: &executorReverseServer{build: t.stepEmitBuildContext()}}))
 	frag, err := invokeOpEmitFragmentOpt(ctx, prov, word, payload, distros, allowEmpty)
 	if err != nil {
 		return fmt.Errorf("class:step %q build-emit: %w", word, err)
@@ -187,10 +189,6 @@ func (t *OCITarget) spliceClassStepEmit(word string, payload []byte, allowEmpty 
 	return nil
 }
 
-// emitSystemPackages renders a format-specific package install. Uses
-// PhaseTemplate lookup so the new phase: path preempts the legacy
-// install_template when present. Falls back to legacy InstallTemplate
-// for the (install, container) cell.
 // emitLocalPkgInstall emits the image-build install of a candy's `localpkg:`
 // package via the shared renderLocalPkgImageInstall (production release-download
 // vs disposable-check-bed in-development build — see that function). The
@@ -210,28 +208,15 @@ func (t *OCITarget) emitLocalPkgInstall(s *LocalPkgInstallStep) error {
 	return nil
 }
 
-func (t *OCITarget) emitSystemPackages(s *SystemPackagesStep) error {
-	if t.DistroDef == nil || t.DistroDef.Format == nil {
-		return fmt.Errorf("no distro definition for format %s", s.Format)
-	}
-	formatDef := t.DistroDef.Format[s.Format]
-	if formatDef == nil {
-		return fmt.Errorf("no format %q in distro", s.Format)
-	}
-	template := formatPhaseTemplate(formatDef, s.Phase, VenueContainerBuilder)
-	if template == "" {
-		// No template for this phase/venue is not an error — some phases
-		// simply have nothing to emit in the container (e.g. cleanup
-		// phases whose host: blocks only record state for teardown).
-		return nil
-	}
-	ctx := NewInstallContext(s.RawInstallContext, formatDefCacheMountDefs(formatDef))
-	rendered, err := RenderTemplate(s.Format+"-install", template, ctx)
-	if err != nil {
-		return fmt.Errorf("rendering %s install template: %w", s.Format, err)
-	}
-	t.buf.WriteString(rendered)
-	return nil
+// stepEmitBuildContext is the host BUILD-ENGINE context threaded onto the in-proc reverse channel
+// spliceClassStepEmit stands up, so a HOST-COUPLED class:step plugin can call back
+// HostBuild("step-emit", …) during its OpEmit and reach the host build engine. It carries the
+// box-resolved DistroDef wrapped as a DistroConfig (wrapDistroDef) — the datum the SystemPackages
+// step-emitter needs to resolve the format's phase.install.container template (the C1.2 relocation
+// of the SystemPackages build-emit onto the step-emit seam). A PURE step (file/shell-hook/…) ignores
+// the channel entirely.
+func (t *OCITarget) stepEmitBuildContext() buildEngineContext {
+	return buildEngineContext{DistroCfg: wrapDistroDef(t.DistroDef)}
 }
 
 // emitBuilder renders a multi-stage or inline builder by invoking

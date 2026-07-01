@@ -128,10 +128,38 @@ func encPlanFor(boxName, instance, volume, scopeDir string) ([]spec.EncVolumePla
 	return plan, nil
 }
 
+// fuseConfPath is the fuse.conf location; a package var so tests point it elsewhere.
+var fuseConfPath = "/etc/fuse.conf"
+
+// fuseAllowOtherEnabled reports whether fuse.conf has an ACTIVE (uncommented, value-less)
+// `user_allow_other` line. Every charly encrypted-volume mount uses `gocryptfs -allow_other`
+// (so rootless podman keep-id can reach the FUSE plain dir), and fusermount3 REFUSES
+// -allow_other unless this option is set. An absent/unreadable file counts as not enabled.
+func fuseAllowOtherEnabled() bool {
+	data, err := os.ReadFile(fuseConfPath)
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == "user_allow_other" {
+			return true
+		}
+	}
+	return false
+}
+
 // encExecViaPlugin resolves verb:enc and Invokes its OpExecute with the host-prelifted
 // plan. plugin-enc is compiled-in, so this is an in-proc JSON envelope (no socket) —
 // the passphrase never leaves the process. Mirrors egress.go / k8s_generate.go.
 func encExecViaPlugin(in spec.EncExecInput) error {
+	// Preflight: the mount methods run `gocryptfs -allow_other`, which fusermount3 rejects
+	// unless `user_allow_other` is set in fuse.conf. Fail fast with the exact fix (before any
+	// volume mounts partway) instead of surfacing the raw fusermount3 error mid-plan.
+	if in.Method == spec.EncMethodMount || in.Method == spec.EncMethodEnsure {
+		if !fuseAllowOtherEnabled() {
+			return fmt.Errorf("encrypted volumes require 'user_allow_other' in %s (gocryptfs -allow_other, for rootless-podman keep-id access) — enable it with: echo user_allow_other | sudo tee -a %s", fuseConfPath, fuseConfPath)
+		}
+	}
 	prov, ok := providerRegistry.resolve(ClassVerb, "enc")
 	if !ok {
 		return fmt.Errorf("enc plugin (verb:enc) not registered — charly built without candy/plugin-enc")

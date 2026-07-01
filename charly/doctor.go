@@ -126,6 +126,7 @@ func runDoctorChecks(distro Distro) []CheckGroup {
 				checkBinary("gocryptfs", distro),
 				checkBinary("fusermount3", distro),
 				checkBinary("systemd-ask-password", distro),
+				checkFuseAllowOther(),
 			},
 		},
 		{
@@ -724,6 +725,22 @@ func managerShort(manager string) string {
 		return "unknown package manager"
 	}
 	return manager
+}
+
+// checkFuseAllowOther reports whether fuse.conf enables user_allow_other — required for the
+// `gocryptfs -allow_other` every charly encrypted-volume mount uses (rootless-podman keep-id
+// access). Missing → a WARNING with the exact fix, so `charly doctor` flags the prereq
+// proactively instead of leaving the operator to hit the raw fusermount3 error at mount time.
+func checkFuseAllowOther() DoctorCheckResult {
+	if fuseAllowOtherEnabled() {
+		return DoctorCheckResult{Name: "user_allow_other", Status: CheckOK, Detail: fuseConfPath}
+	}
+	return DoctorCheckResult{
+		Name:        "user_allow_other",
+		Status:      CheckWarning,
+		Detail:      "not enabled in " + fuseConfPath + " (encrypted volumes will fail to mount)",
+		InstallHint: "echo user_allow_other | sudo tee -a " + fuseConfPath,
+	}
 }
 
 // secretStorageChecks returns checks for the credential/secret storage subsystem. The

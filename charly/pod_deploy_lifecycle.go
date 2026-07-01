@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/overthinkos/overthink/charly/spec"
 )
 
 // pod_deploy_lifecycle.go — the HOST-SIDE lifecycle hook for the EXTERNAL `pod` deploy
@@ -45,15 +48,21 @@ var _ = func() bool {
 }()
 
 // PrepareVenue builds the overlay container image HOST-SIDE and returns a host-local
-// ShellExecutor (the plugin walks nothing; the overlay is baked here). It LIFTS the prior
-// PodUnifiedTarget.Add body: a Generator + ResolvedBox so the overlay's OCITarget renders
-// tasks as RUN directives, the base-image DistroDef so SystemPackagesSteps render with the
-// base image's package format, the baseRef CalVer (newest-local when unset), candy-secret
-// injection, then PodDeployTarget.Emit — which synthesizes the add_candy overlay when
-// present, or tags the deploy-name alias when there is none. plans is the add_candy overlay
-// plan set (empty for a pod with no add_candy; the external-substrate compileNodePlans skips
-// the primary box plan — the candies are already baked into the base image).
-func (podSubstrateLifecycle) PrepareVenue(_ context.Context, name, dir string, node *BundleNode, plans []*InstallPlan, opts EmitOpts) (DeployExecutor, error) {
+// ShellExecutor (the plugin walks nothing; the overlay is baked here). It REQUESTS the build
+// through the uniform F10 hostBuilders registry (the "overlay" host-builder — the pod-substrate
+// sibling of "image"/"containerfiles"), instead of constructing the PodDeployTarget/OCITarget
+// inline: the build ENGINE stays host-side, in-process (runOverlayBuild), and only the
+// serializable OverlayBuildRequest crosses the registry seam. The overlay build's LIVE inputs —
+// the add_candy overlay plans and, for a nested pod-in-pod overlay, the parent venue executor +
+// node (the "venue" the build runs in) — cannot ride a []byte payload, so they are threaded on
+// the ctx (the SAME pattern sdk.ContextWithExecutor uses across the reverse channel). A DIRECT
+// registry call (not a plugin round-trip like `charly box build`) is correct: PrepareVenue is
+// ALREADY the host-side pod lifecycle hook, so the engine it dispatches is host-side too —
+// exactly like ensureBuilderImageBuilt calling the host image engine without a reverse-channel
+// hop. plans is the add_candy overlay plan set (empty for a pod with no add_candy; the
+// external-substrate compileNodePlans skips the primary box plan — the base candies are already
+// baked into the base image).
+func (podSubstrateLifecycle) PrepareVenue(ctx context.Context, name, dir string, node *BundleNode, plans []*InstallPlan, opts EmitOpts) (DeployExecutor, error) {
 	if dir == "" {
 		if cwd, err := os.Getwd(); err == nil {
 			dir = cwd
@@ -75,21 +84,163 @@ func (podSubstrateLifecycle) PrepareVenue(_ context.Context, name, dir string, n
 	// MERGED node (never a charly.yml re-read).
 	registerEphemeralIfMarked(node, name)
 
+	// Request the overlay build via the uniform hostBuilders registry. The registration is a
+	// package-var init invariant, so a missing builder is a hard startup bug — surfaced loud.
+	fn, ok := hostBuilderFor(overlayBuilderKind)
+	if !ok {
+		return nil, fmt.Errorf("pod deploy %q: no %q host-builder registered", name, overlayBuilderKind)
+	}
+	reqJSON, err := marshalJSON(spec.OverlayBuildRequest{
+		Dir:              dir,
+		DeployName:       name,
+		Image:            node.Image,
+		Version:          node.Version,
+		DryRun:           opts.DryRun,
+		AssumeYes:        opts.AssumeYes,
+		AllowRepoChanges: opts.AllowRepoChanges,
+		AllowRootTasks:   opts.AllowRootTasks,
+		WithServices:     opts.WithServices,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("pod deploy %q: marshal overlay request: %w", name, err)
+	}
+	// Thread the LIVE build inputs (the compiled plans + the nested-venue ParentExec/
+	// ParentNode) on the ctx — a live executor cannot ride the []byte request.
+	ctx = withOverlayBuildInputs(ctx, &overlayBuildInputs{
+		plans:      plans,
+		parentExec: opts.ParentExec,
+		parentNode: opts.ParentNode,
+	})
+	resJSON, err := fn(ctx, reqJSON, buildEngineContext{})
+	if err != nil {
+		return nil, fmt.Errorf("pod deploy %q: overlay build: %w", name, err)
+	}
+	var reply spec.OverlayBuildReply
+	if len(resJSON) > 0 {
+		if err := json.Unmarshal(resJSON, &reply); err != nil {
+			return nil, fmt.Errorf("pod deploy %q: decode overlay reply: %w", name, err)
+		}
+	}
+	if reply.Error != "" {
+		return nil, fmt.Errorf("pod deploy %q: %s", name, reply.Error)
+	}
+
+	if !opts.DryRun {
+		overlayRef := reply.OverlayRef
+		fmt.Printf("Overlay image ready: %s\n", overlayRef)
+		fmt.Println("To start the container, run: charly start " + reply.DeployName)
+		// Persist the concrete overlay ref so config/start deploy EXACTLY this
+		// overlay (carrying the add_candy: layers), instead of re-resolving the
+		// base image: short-name by a CalVer sort the overlay alias can lose to
+		// the base on a same-minute build (the add_candy-on-pod deploy-resolution
+		// quirk). Only when an overlay was actually built — add_candy present, so
+		// OverlayImageRef differs from the base; a plain pod persists nothing and
+		// config falls back to the base-name resolution. Keyed exactly as config
+		// reads it (parseDeployKey → the same box/instance split).
+		if overlayRef != "" && overlayRef != reply.BaseImage {
+			boxKey, instKey := parseDeployKey(name)
+			saveDeployState(boxKey, instKey, SaveDeployStateInput{ResolvedImage: overlayRef})
+		}
+	}
+
+	// Host-local venue: the overlay is baked host-side; the plugin walks nothing, and
+	// recordVenueLedger no-ops on a ShellExecutor (a pod carries no venue-side ledger).
+	return ShellExecutor{}, nil
+}
+
+// overlayBuilderKind is the F10 hostBuilders key for the pod-overlay build — a generic action
+// noun ("build the overlay"), the pod-substrate sibling of "image"/"containerfiles" (build.go)
+// and "plugin-binary" (plugin_dispatch_reverse.go). Deliberately NOT a provider WORD (the F11
+// uniform-API gate forbids one on this surface — TestNoSinglePluginAPISurface).
+const overlayBuilderKind = "overlay"
+
+// overlayBuildInputs carries the LIVE (non-serializable) inputs for the pod-overlay build
+// across the F10 hostBuilders registry seam: the compiled InstallPlans and, for a nested
+// pod-in-pod overlay, the parent venue executor + node (the venue the overlay `podman build`
+// runs in). They cannot cross a []byte specJSON boundary (a live DeployExecutor is not
+// serializable), so they ride the ctx — the SAME mechanism sdk.ContextWithExecutor uses to
+// thread a live executor across the placement-invisible reverse channel. The serializable
+// OverlayBuildRequest carries the scalars; this carries the rest.
+type overlayBuildInputs struct {
+	plans      []*InstallPlan
+	parentExec DeployExecutor
+	parentNode *BundleNode
+}
+
+type overlayBuildInputsKey struct{}
+
+// withOverlayBuildInputs attaches the live overlay-build inputs to ctx.
+func withOverlayBuildInputs(ctx context.Context, in *overlayBuildInputs) context.Context {
+	return context.WithValue(ctx, overlayBuildInputsKey{}, in)
+}
+
+// overlayBuildInputsFrom reads the live overlay-build inputs from ctx (nil when absent — a
+// caller that requested the build with no live inputs, e.g. an empty-plans probe).
+func overlayBuildInputsFrom(ctx context.Context) *overlayBuildInputs {
+	in, _ := ctx.Value(overlayBuildInputsKey{}).(*overlayBuildInputs)
+	return in
+}
+
+// hostBuildOverlay is the F10 "overlay" host-builder: it decodes the OverlayBuildRequest
+// scalars, reads the live plans + parent venue from the ctx, runs the pod-overlay build engine
+// HOST-SIDE in-proc, and returns the opaque OverlayBuildReply. A build FAILURE rides
+// OverlayBuildReply.Error (the reply-error convention, like hostBuildImage). The
+// buildEngineContext arg is unused: the engine reconstructs Config/ResolvedBox/Candy from
+// req.Dir (exactly as the prior inline PrepareVenue body — and runBoxBuild — do).
+func hostBuildOverlay(ctx context.Context, specJSON []byte, _ buildEngineContext) ([]byte, error) {
+	var req spec.OverlayBuildRequest
+	if err := json.Unmarshal(specJSON, &req); err != nil {
+		return nil, fmt.Errorf("overlay host-build: decode request: %w", err)
+	}
+	reply, err := runOverlayBuild(ctx, req, overlayBuildInputsFrom(ctx))
+	reply.Error = errString(err)
+	return marshalJSON(reply)
+}
+
+// runOverlayBuild is the HOST-SIDE pod-overlay build engine behind the "overlay" host-builder.
+// It reconstructs the Generator + ResolvedBox + DistroDef from req.Dir (so the overlay's
+// OCITarget renders task steps as actual RUN directives with the base image's package format),
+// resolves the base image ref, injects candy secrets, and runs PodDeployTarget.Emit — which
+// synthesizes the add_candy overlay when present, or tags the deploy-name alias when there is
+// none. The engine body is UNCHANGED from the prior inline PrepareVenue construction; only its
+// home moved (host-side, in-process — nothing crosses gRPC). The live plans + parent venue
+// come from `in` (threaded on the ctx, never serialized).
+func runOverlayBuild(_ context.Context, req spec.OverlayBuildRequest, in *overlayBuildInputs) (spec.OverlayBuildReply, error) {
+	dir := req.Dir
+	if dir == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return spec.OverlayBuildReply{}, err
+		}
+		dir = cwd
+	}
+
+	var (
+		plans      []*InstallPlan
+		parentExec DeployExecutor
+		parentNode *BundleNode
+	)
+	if in != nil {
+		plans = in.plans
+		parentExec = in.parentExec
+		parentNode = in.parentNode
+	}
+
 	// Re-load the build vocabulary (distro/builder) for the base-image DistroDef + the
 	// overlay BuilderConfig. dispatchNode already registered it via loadConfigForDeploy; the
-	// hook re-reads the configs (self-contained, like vmSubstrateLifecycle re-loads VmSpec).
+	// engine re-reads the configs (self-contained, like runBoxBuild re-runs NewGenerator).
 	distroCfg, builderCfg, _, err := LoadDefaultBuildConfig(dir)
 	if err != nil {
-		return nil, fmt.Errorf("pod deploy %q: load build config: %w", name, err)
+		return spec.OverlayBuildReply{}, fmt.Errorf("load build config: %w", err)
 	}
 
 	// The box ref the overlay inherits FROM (the `pod: image:` field). Falls back to the
 	// deploy name for a bare deploy (legacy parity with PodUnifiedTarget's NodeName fallback).
-	base := node.Image
+	base := req.Image
 	if base == "" {
-		base = name
+		base = req.DeployName
 	}
-	tag := node.Version
+	tag := req.Version
 
 	// Build a Generator + ResolvedBox so the overlay's OCITarget renders task steps as
 	// actual RUN directives (not "no Generator context" comments). Thread the deploy's
@@ -136,9 +287,9 @@ func (podSubstrateLifecycle) PrepareVenue(_ context.Context, name, dir string, n
 	// A nested pod (a dotted deploy path, e.g. "parent.child") flattens to a dot-free
 	// container/overlay name — the SAME NestedContainerName mapping the prior dispatcher's
 	// PodUnifiedTarget case applied. A top-level pod (no dot) is unchanged.
-	deployName := name
-	if strings.Contains(name, ".") {
-		deployName = NestedContainerName(name)
+	deployName := req.DeployName
+	if strings.Contains(deployName, ".") {
+		deployName = NestedContainerName(deployName)
 	}
 
 	tgt := &PodDeployTarget{
@@ -153,39 +304,38 @@ func (podSubstrateLifecycle) PrepareVenue(_ context.Context, name, dir string, n
 	// Resolve + inject candy secrets so the overlay Containerfile emits `export VAR=VALUE`
 	// before each add_candy task body (R3 shared helper). No-op when plans is empty.
 	if _, _, serr := prepareCandySecrets(plans, dir); serr != nil {
-		return nil, fmt.Errorf("pod deploy %q: loading candies for secret resolution: %w", name, serr)
+		return spec.OverlayBuildReply{}, fmt.Errorf("loading candies for secret resolution: %w", serr)
 	}
 
 	// Thread ParentExec: when this container is a child of another deployment, the overlay
 	// build runs in the parent's venue.
-	if opts.ParentExec != nil {
-		tgt.Executor = opts.ParentExec
-	}
-	if err := tgt.Emit(plans, opts); err != nil {
-		return nil, fmt.Errorf("pod deploy %q: overlay build: %w", name, err)
-	}
-	if !opts.DryRun {
-		overlayRef := tgt.OverlayImageRef()
-		fmt.Printf("Overlay image ready: %s\n", overlayRef)
-		fmt.Println("To start the container, run: charly start " + deployName)
-		// Persist the concrete overlay ref so config/start deploy EXACTLY this
-		// overlay (carrying the add_candy: layers), instead of re-resolving the
-		// base image: short-name by a CalVer sort the overlay alias can lose to
-		// the base on a same-minute build (the add_candy-on-pod deploy-resolution
-		// quirk). Only when an overlay was actually built — add_candy present, so
-		// OverlayImageRef differs from the base; a plain pod persists nothing and
-		// config falls back to the base-name resolution. Keyed exactly as config
-		// reads it (parseDeployKey → the same box/instance split).
-		if overlayRef != "" && overlayRef != tgt.BaseImage {
-			boxKey, instKey := parseDeployKey(name)
-			saveDeployState(boxKey, instKey, SaveDeployStateInput{ResolvedImage: overlayRef})
-		}
+	if parentExec != nil {
+		tgt.Executor = parentExec
 	}
 
-	// Host-local venue: the overlay is baked host-side; the plugin walks nothing, and
-	// recordVenueLedger no-ops on a ShellExecutor (a pod carries no venue-side ledger).
-	return ShellExecutor{}, nil
+	opts := EmitOpts{
+		DryRun:           req.DryRun,
+		AssumeYes:        req.AssumeYes,
+		AllowRepoChanges: req.AllowRepoChanges,
+		AllowRootTasks:   req.AllowRootTasks,
+		WithServices:     req.WithServices,
+		ParentExec:       parentExec,
+		ParentNode:       parentNode,
+	}
+	if err := tgt.Emit(plans, opts); err != nil {
+		return spec.OverlayBuildReply{}, fmt.Errorf("overlay build: %w", err)
+	}
+
+	return spec.OverlayBuildReply{
+		OverlayRef: tgt.OverlayImageRef(),
+		BaseImage:  tgt.BaseImage,
+		DeployName: deployName,
+	}, nil
 }
+
+// Register the overlay host-builder on the F10 HostBuild seam at package-var init (before any
+// init(), like the substrate/preresolver registries + the image/containerfiles builders).
+var _ = func() bool { registerHostBuilder(overlayBuilderKind, hostBuildOverlay); return true }()
 
 // ArtifactKey keys candy artifacts under the deploy name (the generic default) — pod has no
 // shared-cluster artifact naming like vm's k3s ClusterProfile, so it returns "".

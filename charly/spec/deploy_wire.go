@@ -563,6 +563,43 @@ type BuildReply struct {
 	Error   string   `json:"error,omitempty"`
 }
 
+// OverlayBuildRequest is the BUILD-ENGINE DISPATCH envelope for the pod-overlay build — the
+// F10 "overlay" host-builder, the pod-substrate sibling of BuildRequest. It carries only the
+// SERIALIZABLE scalars the host engine cannot reconstruct from Dir; everything heavy the
+// engine reads (Config / ResolvedBox / Candy / DistroDef) is reconstructed HOST-SIDE from Dir
+// via NewGenerator, exactly as runBoxBuild / the prior inline PrepareVenue body did.
+//
+// The overlay build's LIVE inputs — the deployment's compiled InstallPlans and, for a nested
+// pod-in-pod overlay, the parent venue executor + node — do NOT ride this envelope: a live
+// DeployExecutor is not serializable. The overlay build is dispatched IN-PROCESS host-side by
+// podSubstrateLifecycle.PrepareVenue (a direct hostBuilders lookup, no gRPC hop), so those
+// live inputs ride the ctx instead (the SAME pattern sdk.ContextWithExecutor uses to thread a
+// live executor across the placement-invisible reverse channel). See package main
+// overlayBuildInputs.
+type OverlayBuildRequest struct {
+	Dir              string `json:"dir,omitempty"`                // project dir (build-context root) the host reconstructs config from
+	DeployName       string `json:"deploy_name,omitempty"`        // the raw deploy name (dotted for a nested pod; flattened engine-side)
+	Image            string `json:"image,omitempty"`              // the base box the overlay inherits FROM (node.Image; "" → DeployName)
+	Version          string `json:"version,omitempty"`            // the base image CalVer pin (node.Version; "" → newest-local)
+	DryRun           bool   `json:"dry_run,omitempty"`            //
+	AssumeYes        bool   `json:"assume_yes,omitempty"`         //
+	AllowRepoChanges bool   `json:"allow_repo_changes,omitempty"` //
+	AllowRootTasks   bool   `json:"allow_root_tasks,omitempty"`   //
+	WithServices     bool   `json:"with_services,omitempty"`      //
+}
+
+// OverlayBuildReply is what the "overlay" host-builder returns: the built overlay image ref
+// (== BaseImage when there was no add_candy overlay to synthesize), the resolved base image
+// ref, and the flattened deploy name. The caller (PrepareVenue) uses these to print the start
+// hint and persist the concrete overlay ref (saveDeployState) so config/start deploy exactly
+// this overlay. A build FAILURE rides Error (the reply-error convention, like BuildReply).
+type OverlayBuildReply struct {
+	OverlayRef string `json:"overlay_ref,omitempty"`
+	BaseImage  string `json:"base_image,omitempty"`
+	DeployName string `json:"deploy_name,omitempty"`
+	Error      string `json:"error,omitempty"`
+}
+
 // ---------------------------------------------------------------------------
 // Deploy-time builder-IR wire — what an externalized DETECTION-builder plugin
 // (cargo/npm/pixi/aur) exchanges with the host on the OpCollectContext +

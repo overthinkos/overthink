@@ -149,3 +149,47 @@ func TestPodLifecycle_Rebuild_DryRun(t *testing.T) {
 // captureCharlyStdout (os.Args[0] = the test binary inside `go test`, which doesn't
 // understand the CLI verbs). The dry-run-able Rebuild + the stubbed-subcommand paths above
 // cover the deterministic logic.
+
+// TestOverlayHostBuilderRegistered proves PrepareVenue's overlay build goes through the
+// uniform F10 hostBuilders registry: the "overlay" kind (the pod-substrate sibling of
+// "image"/"containerfiles") is registered at package-var init. Without the registration
+// PrepareVenue's hostBuilderFor(overlayBuilderKind) lookup fails hard — this is the C14.3
+// build-dispatch-unification invariant (the pod overlay build is no longer an inline
+// PodDeployTarget construction).
+func TestOverlayHostBuilderRegistered(t *testing.T) {
+	if _, ok := hostBuilderFor(overlayBuilderKind); !ok {
+		t.Fatalf("the %q host-builder must be registered on the F10 hostBuilders registry", overlayBuilderKind)
+	}
+	// The kind must be a generic action noun, not a provider WORD (the F11 uniform-API gate
+	// TestNoSinglePluginAPISurface scans hostBuilders kinds against the provider-word universe).
+	if universe := buildProviderWordUniverse(); universe[overlayBuilderKind] {
+		t.Fatalf("hostBuilders kind %q is a provider word — the F11 uniform-API gate forbids one on this surface", overlayBuilderKind)
+	}
+}
+
+// TestOverlayBuildInputsCtxRoundTrip proves the live-input carrier: PrepareVenue threads the
+// compiled plans + the nested-venue ParentExec/ParentNode on the ctx (a live executor cannot
+// ride the serializable []byte OverlayBuildRequest), and the host-builder reads them back
+// unchanged. A missing value reads back nil (the empty-plans / no-parent probe).
+func TestOverlayBuildInputsCtxRoundTrip(t *testing.T) {
+	if got := overlayBuildInputsFrom(context.Background()); got != nil {
+		t.Fatalf("overlayBuildInputsFrom on a bare ctx = %v, want nil", got)
+	}
+	plans := []*InstallPlan{{Candy: "marker", AddCandies: []string{"marker"}}}
+	node := &BundleNode{Image: "base"}
+	exec := ShellExecutor{}
+	ctx := withOverlayBuildInputs(context.Background(), &overlayBuildInputs{plans: plans, parentExec: exec, parentNode: node})
+	got := overlayBuildInputsFrom(ctx)
+	if got == nil {
+		t.Fatal("overlayBuildInputsFrom returned nil after withOverlayBuildInputs")
+	}
+	if len(got.plans) != 1 || got.plans[0].Candy != "marker" {
+		t.Errorf("plans not round-tripped: %v", got.plans)
+	}
+	if got.parentExec == nil {
+		t.Error("parentExec not round-tripped")
+	}
+	if got.parentNode != node {
+		t.Error("parentNode not round-tripped")
+	}
+}

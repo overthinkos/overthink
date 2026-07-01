@@ -344,7 +344,14 @@ func nodeDiscriminators(schema cue.Value) ([]string, error) {
 	if node.Err() != nil {
 		return nil, fmt.Errorf("#Node not found: %w", node.Err())
 	}
-	_, args := node.Expr()
+	// #Node is USUALLY a disjunction of per-kind arms (Expr → OrOp + the arms). When only
+	// ONE core kind arm remains (C2-substrate reduced #Node to just #CandyArm), Expr is NOT an
+	// OrOp, so treat the node ITSELF as the single arm — its regular fields are the (one)
+	// discriminator. Without this, a single-arm #Node yields an EMPTY KindWords.
+	op, args := node.Expr()
+	if op != cue.OrOp {
+		args = []cue.Value{node}
+	}
 	seen := map[string]bool{}
 	for _, arm := range args {
 		it, err := arm.Fields(cue.Optional(true), cue.Definitions(false))

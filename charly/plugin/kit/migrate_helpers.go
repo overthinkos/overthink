@@ -150,11 +150,19 @@ func MapValue(m *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
-// kindWordSet is the CUE-derived reserved kind-word set (spec.KindWords), used by
-// NodeShapedValue to detect a name-first node-form value.
+// kindWordSet is the CUE-derived reserved kind-word set — the core #Node kind words
+// (spec.KindWords) UNIONED with the DEPLOYABLE resource kinds (spec.ResourceKinds), used by
+// NodeShapedValue to detect a name-first node-form value. ResourceKinds is unioned in so a
+// substrate/group node value (`{vm: …}` / `{group: …}`) is still recognized as node-shaped
+// after C2-group / C2-substrate dropped those kinds from KindWords (they carry no #Node arm
+// but stay valid node discriminators) — without this, `charly migrate` perpetually re-migrates
+// an already-node-form entity NAMED after a substrate kind (idempotency regression).
 var kindWordSet = func() map[string]bool {
-	m := make(map[string]bool, len(spec.KindWords))
+	m := make(map[string]bool, len(spec.KindWords)+len(spec.ResourceKinds))
 	for _, k := range spec.KindWords {
+		m[k] = true
+	}
+	for _, k := range spec.ResourceKinds {
 		m[k] = true
 	}
 	return m

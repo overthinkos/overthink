@@ -379,6 +379,34 @@ func (d Diagnostics) HasErrors() bool {
 // position (check_members.go), so host-side pre-decode is structure-preserving.
 type StructuralKindLoadEnv struct {
 	Members map[string]*Deploy `json:"members,omitempty"`
+
+	// Standalone is the C2-substrate channel: the host-pre-decoded CANONICAL node the host
+	// threads to a SUBSTRATE structural kind plugin (candy/plugin-substrate, serving
+	// pod/vm/k8s/local/android). Unlike group — whose small scalar value is decoded from
+	// op.Params against a self-contained #GroupInput and whose members ride Members above —
+	// a substrate value is RICH + core-referencing (#Vm/#Deploy/#LibvirtDomain/… with
+	// host-canonicalized shorthand like tunnel:/port:), so it cannot be re-decoded soundly
+	// from op.Params by a plugin nor validated by a self-contained plugin schema. The host
+	// therefore decodes the WHOLE node via the core buildBundleNode (deploy shape) /
+	// decodeNodeValue (template shape) — the SINGLE decode source of truth (R3) — validates
+	// it host-side against the KEPT #<Kind>Value def, and threads the canonical result here.
+	// The plugin ECHOES it in its reply; the host folds the echo into uf.Bundle (deploy) or
+	// the typed template map uf.Pod/uf.VM/… (template — the C2-substrate TEMPLATE fold arm
+	// that extends F5's deploy-only fold). nil for group (which uses Members). RDD proved a
+	// canonical spec.Deploy / spec.Vm / spec.Pod / … round-trips through JSON byte-faithfully,
+	// so this thread-echo-fold is byte-equivalent to the former in-proc standaloneKind decode.
+	Standalone *StandaloneLoad `json:"standalone,omitempty"`
+}
+
+// StandaloneLoad carries a SUBSTRATE structural kind's host-pre-decoded canonical node
+// (C2-substrate). Shape names which fold the host performs on the plugin's echo: "deploy" →
+// Deploy (the full BundleNode) folds into uf.Bundle; "template" → Template (the per-substrate
+// typed value's JSON, e.g. a spec.Vm) folds into the typed template map by kind. Exactly one
+// of Deploy / Template is set, matching Shape.
+type StandaloneLoad struct {
+	Shape    string          `json:"shape"`              // "deploy" | "template"
+	Deploy   *Deploy         `json:"deploy,omitempty"`   // Shape=="deploy": the full pre-decoded BundleNode
+	Template json.RawMessage `json:"template,omitempty"` // Shape=="template": the pre-decoded typed template value's JSON
 }
 
 // AndroidDeployVenue is the preresolved deploy:android substrate payload the

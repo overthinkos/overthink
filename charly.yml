@@ -647,6 +647,68 @@ check-group:
             from: check-group-app
             host: local
 
+# =============================================================================
+# check-substrate — R10 witness for the EXTERNALIZED substrate structural kinds
+# (C2-substrate). pod/vm/k8s/local/android are no longer compiled-in core
+# KindProviders; the compiled-in structural plugin candy/plugin-substrate serves all
+# 5 (kind:pod/vm/k8s/local/android, Structural:true). This bed exercises the full
+# path in ITS lightest RUNNABLE form using the `local:` substrate (host-side, no VM/
+# image boot):
+#   - check-substrate-app is a BARE `local:` TEMPLATE (no from:/image:, no members) →
+#     runPluginKind → foldSubstrateKind pre-decodes it via the core loader, validates
+#     its value against the KEPT #LocalValue def, threads it to plugin-substrate's
+#     OpLoad, and folds the ECHO into the typed template map uf.Local — the C2-substrate
+#     TEMPLATE fold arm (the standalone counterpart of the deploy fold into uf.Bundle);
+#   - check-substrate is a `local:` DEPLOY (from: check-substrate-app) → foldSubstrateKind
+#     pre-decodes the full BundleNode, threads it, and folds the echo into uf.Bundle.
+# bringUpMembers deploys the member; the hoisted marker check asserts
+# /etc/check-substrate-marker on the host — proving BOTH substrate shapes decode +
+# deploy end-to-end through the plugin, byte-equivalent to the former in-proc
+# standaloneKind. The rich `vm:` TEMPLATE fold (the PRIMARY VM authoring form) into
+# uf.VM is proven byte-equivalent by TestSubstrateKind_BothShapesByteEquivalent and
+# LIVE by box/debian's check-debian-debootstrap-vm (a `vm:` template + `vm:` deploy,
+# both now routed through plugin-substrate).
+# =============================================================================
+check-substrate-app:
+    local:
+        description: |-
+            Minimal kind:local TEMPLATE for the check-substrate member — a BARE `local:` node (no
+            from:/image:, no members) so it folds into uf.Local via candy/plugin-substrate's TEMPLATE
+            fold arm (C2-substrate). Composes check-substrate-layer (drops /etc/check-substrate-marker
+            on the host) so the member has a deterministic, collision-free host-side deploy effect.
+    check-substrate-app-candy:
+        candy:
+            - check-substrate-layer
+check-substrate:
+    local:
+        from: check-substrate-app
+        host: local
+        disposable: true
+        lifecycle: dev
+        description: >-
+            Sole R10 witness of the externalized substrate structural kinds (candy/plugin-substrate,
+            C2-substrate): a REAL `local:` DEPLOY (deploy shape → uf.Bundle) inheriting a REAL BARE
+            `local:` TEMPLATE (check-substrate-app, template shape → uf.Local), BOTH decoded out of
+            core through the compiled-in plugin-substrate. runPluginKind → foldSubstrateKind pre-decodes
+            each node via the core loader (buildBundleNode for the deploy, decodeNodeValue for the
+            template — the single decode source of truth), validates its value against the KEPT
+            #LocalValue def, threads the canonical result to plugin-substrate's OpLoad, and folds the
+            ECHO into uf.Bundle / uf.Local. The deploy applies check-substrate-layer to the host, and
+            the marker check asserts /etc/check-substrate-marker — proving both substrate shapes
+            reconstruct + deploy end-to-end, byte-equivalent to the former in-proc standaloneKind.
+    substrate-marker-present:
+        check: command=test -f /etc/check-substrate-marker && echo SUBSTRATE-DEPLOY-OK
+        id: substrate-marker-present
+        description: the substrate local DEPLOY (folded into uf.Bundle via plugin-substrate) applied its inherited template's marker layer on the host
+        stdout:
+            - contains: SUBSTRATE-DEPLOY-OK
+        context:
+            - runtime
+        plugin: command
+        plugin_input:
+            command: "test -f /etc/check-substrate-marker && echo SUBSTRATE-DEPLOY-OK"
+            in_container: false
+
 # candy/plugin-example-deploy (recognized at parse time via the plugin-declaration
 # pre-scan, connected at deploy time via loadDeployPlugins). Add Invokes the plugin
 # out-of-process; it dials back through the SDK Executor to write markers on the host

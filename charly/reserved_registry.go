@@ -69,11 +69,18 @@ var legacyKindAliases = []string{"deploy", "check"}
 // rootShapeKeySet — the top-level keys whose presence (with a non-node-shaped
 // value) marks a doc as a legacy kind-keyed / root-shape document, which
 // classifyDoc hard-rejects with a `charly migrate` hint. Derived from the CUE
-// vocabulary (doc directives + every kind word) PLUS the legacy collection-map
-// aliases. It is the legacy-DETECTOR only — no routing reads it.
+// vocabulary (doc directives + every core kind word + every DEPLOYABLE resource
+// kind) PLUS the legacy collection-map aliases. ResourceKinds is unioned in so a
+// legacy `pod:`/`vm:`/`k8s:`/`local:`/`android:`/`group:` collection map is still
+// detected after those kinds left KindWords (C2-group / C2-substrate externalized
+// them — they carry no #Node arm but stay legacy-detectable resource kinds). It is
+// the legacy-DETECTOR only — no routing reads it.
 var rootShapeKeySet = func() map[string]bool {
 	m := setFromSlice(spec.DocDirectives)
 	for k := range kindWordSet {
+		m[k] = true
+	}
+	for _, k := range spec.ResourceKinds {
 		m[k] = true
 	}
 	for _, legacy := range legacyKindAliases {

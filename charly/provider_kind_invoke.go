@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"cuelang.org/go/cue"
+	"cuelang.org/go/cue/errors"
 	"github.com/overthinkos/overthink/charly/spec"
 	"gopkg.in/yaml.v3"
 )
@@ -23,6 +25,15 @@ import (
 // keeps the per-entity decode hot path zero-JSON for builtins — the E3 envelope is
 // paid only out-of-process. Transport-invisible above the registry.
 func runPluginKind(prov Provider, gn *genericNode, uf *UnifiedFile) error {
+	// C2-substrate: a substrate structural kind (pod/vm/k8s/local/android) is decoded
+	// HOST-SIDE (its rich core-referencing value cannot ride op.Params nor a self-contained
+	// plugin schema — see foldSubstrateKind) and folds into uf.Bundle (deploy) or the typed
+	// template map (template). It does NOT use the op.Params + plugin-schema validation the
+	// group-style / flat kinds below take — its value is validated host-side against the KEPT
+	// #<Kind>Value def.
+	if isStandaloneResourceKind(gn.disc) {
+		return foldSubstrateKind(prov, gn, uf)
+	}
 	body, err := assembleEntityBody(gn)
 	if err != nil {
 		return fmt.Errorf("node %q: assemble: %w", gn.name, err)
@@ -128,6 +139,104 @@ func runPluginKind(prov Provider, gn *genericNode, uf *UnifiedFile) error {
 		uf.PluginKinds[gn.disc] = map[string]json.RawMessage{}
 	}
 	uf.PluginKinds[gn.disc][gn.name] = out.JSON
+	return nil
+}
+
+// substrateValueDef maps a substrate kind to its KEPT #<Kind>Value CUE def (the former
+// #Node arm value #<Kind> | #DeployValue, schema/node.cue). It is the HOST-SIDE closedness
+// gate that replaces the removed #Node arm (C2-substrate): a plugin cannot serve a
+// self-contained schema for these rich core-referencing values, so the host validates the
+// authored value against the KEPT def in-core. Keep in lockstep with isStandaloneResourceKind.
+var substrateValueDef = map[string]string{
+	"pod":     "#PodValue",
+	"vm":      "#VmValue",
+	"k8s":     "#K8sValue",
+	"local":   "#LocalValue",
+	"android": "#AndroidValue",
+}
+
+// foldSubstrateKind decodes a SUBSTRATE structural kind node (pod/vm/k8s/local/android)
+// HOST-SIDE and folds candy/plugin-substrate's echo into the right map (C2-substrate). The
+// value is rich + core-referencing (#Vm/#Deploy/#LibvirtDomain/… with host-canonicalized
+// shorthand like tunnel:/port:), so — unlike group's scalar #GroupInput value — it cannot be
+// re-decoded soundly from the raw op.Params by a plugin nor validated by a self-contained
+// plugin schema. So the host: (1) validates the authored value against the KEPT #<Kind>Value
+// def (the closedness the removed #Node arm gave); (2) detects the shape (needs the
+// genericNode tree); (3) pre-decodes the CANONICAL node via the core buildBundleNode (deploy)
+// / decodeStandaloneTemplateJSON (template) — the SINGLE decode source of truth (R3); (4)
+// threads it to the plugin's OpLoad via op.Env (spec.StructuralKindLoadEnv.Standalone); (5)
+// folds the plugin's ECHO into uf.Bundle (deploy) or the typed template map uf.Pod/uf.VM/…
+// (template — the C2-substrate TEMPLATE fold arm extending F5's deploy-only fold). RDD proved
+// the canonical value round-trips through JSON byte-faithfully, so this is byte-equivalent to
+// the former in-proc standaloneKind decode (buildBundleNodeInto / buildStandaloneResource).
+func foldSubstrateKind(prov Provider, gn *genericNode, uf *UnifiedFile) error {
+	if err := validateStandaloneKindValueCUE(gn); err != nil {
+		return fmt.Errorf("node %q: %w", gn.name, err)
+	}
+	deployShape := isDeployShape(gn) || len(resourceChildren(gn)) > 0
+	var env spec.StructuralKindLoadEnv
+	if deployShape {
+		bn, err := buildBundleNode(gn)
+		if err != nil {
+			return fmt.Errorf("node %q: decode deploy: %w", gn.name, err)
+		}
+		env.Standalone = &spec.StandaloneLoad{Shape: "deploy", Deploy: bn}
+	} else {
+		tmpl, err := decodeStandaloneTemplateJSON(gn)
+		if err != nil {
+			return fmt.Errorf("node %q: decode template: %w", gn.name, err)
+		}
+		env.Standalone = &spec.StandaloneLoad{Shape: "template", Template: tmpl}
+	}
+	envJSON, err := json.Marshal(env)
+	if err != nil {
+		return fmt.Errorf("node %q: marshal substrate env: %w", gn.name, err)
+	}
+	out, err := prov.Invoke(context.Background(), &Operation{Reserved: gn.disc, Op: OpLoad, Env: envJSON})
+	if err != nil {
+		return fmt.Errorf("node %q: substrate kind %q: %w", gn.name, gn.disc, err)
+	}
+	if deployShape {
+		var dn BundleNode
+		if err := json.Unmarshal(out.JSON, &dn); err != nil {
+			return fmt.Errorf("node %q: substrate deploy reply decode: %w", gn.name, err)
+		}
+		ensureMap(&uf.Bundle)
+		uf.Bundle[gn.name] = dn
+		return nil
+	}
+	return foldStandaloneTemplateReply(gn.disc, gn.name, out.JSON, uf)
+}
+
+// validateStandaloneKindValueCUE validates a substrate node's authored VALUE against the
+// KEPT #<Kind>Value def — the host-side replacement for the removed #Node arm's closedness
+// (a typo'd field in a `vm:`/`pod:` value is a hard load error, exactly as before). Only a
+// MAPPING value is gated: a SCALAR value is a cross-ref (`pod: coder`), which carries no
+// authored fields to typo-check (it is resolved at deploy). The RAW authored value is
+// validated (shorthand intact) since #<Kind>Value accepts the same shorthand the arm did.
+func validateStandaloneKindValueCUE(gn *genericNode) error {
+	if gn.discValue == nil || gn.discValue.Kind != yaml.MappingNode {
+		return nil
+	}
+	defPath, ok := substrateValueDef[gn.disc]
+	if !ok {
+		return nil
+	}
+	def := sharedCueSchema.LookupPath(cue.ParsePath(defPath))
+	if def.Err() != nil {
+		return fmt.Errorf("substrate value def %s not found: %w", defPath, def.Err())
+	}
+	b, err := yaml.Marshal(gn.discValue)
+	if err != nil {
+		return fmt.Errorf("%s value: marshal: %w", gn.disc, err)
+	}
+	entity, err := cueDocFromYAML("node "+gn.name, b)
+	if err != nil {
+		return err
+	}
+	if verr := entity.Unify(def).Validate(); verr != nil {
+		return fmt.Errorf("%s: %s", gn.disc, errors.Details(verr, nil))
+	}
 	return nil
 }
 

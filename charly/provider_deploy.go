@@ -101,21 +101,23 @@ func externalDeploySubstratePluginRef(word string) (string, bool) {
 	return "@" + DefaultProjectRepo + "/" + sub, true
 }
 
-// checkDeployProviderBijection: every canonical deploy-target word is a valid kind
-// (⊆ spec.KindWords — the "word is known" invariant) AND is served by EXACTLY ONE
-// of {an in-proc DeployTargetProvider, an external plugin (externalizedDeploySubstrates)}
-// — never both (XOR), never neither. Run in the same init() that registers (after
-// registration), avoiding the alphabetical race. An externalized word legitimately
-// has NO provider at process start (its grpcProvider connects later at load time).
+// checkDeployProviderBijection: every canonical deploy-target word is a valid deployable
+// kind (⊆ spec.ResourceKinds — the "word is known" invariant; the substrate kinds
+// pod/vm/k8s/local/android are ResourceKinds even after C2-substrate dropped them from
+// KindWords, since they are externalized to candy/plugin-substrate and no longer carry a
+// #Node arm) AND is served by EXACTLY ONE of {an in-proc DeployTargetProvider, an external
+// plugin (externalizedDeploySubstrates)} — never both (XOR), never neither. Run in the same
+// init() that registers (after registration), avoiding the alphabetical race. An externalized
+// word legitimately has NO provider at process start (its grpcProvider connects later at load).
 func checkDeployProviderBijection() error {
 	kinds := map[string]bool{}
-	for _, k := range spec.KindWords {
+	for _, k := range spec.ResourceKinds {
 		kinds[k] = true
 	}
 	var problems []string
 	for _, w := range deployTargetWords {
 		if !kinds[w] {
-			problems = append(problems, w+" (not a spec.KindWords kind)")
+			problems = append(problems, w+" (not a spec.ResourceKinds kind)")
 		}
 		p, hasBuiltin := providerRegistry.resolve(ClassDeployTarget, w)
 		ext := externalizedDeploySubstrates[w]

@@ -19,13 +19,18 @@
 
 // Reserved discriminators = the CORE kind keywords (the kinds with a #Node arm).
 // Negated regex so a child's NAME cannot shadow a kind keyword. The plugin-extracted
-// kinds (agent/module/sidecar/package-group + distro/builder/init/resource/target AND
-// group — C2-group) are NOT here — they have no arm and are recognized dynamically by
-// the loader via a registered ClassKind provider (classifyDisc → providerRegistry.ResolveKind).
-// group is the FIRST resource kind extracted: it keeps its #ResourceKind membership (so the
-// loader still nests its members) while its VALUE is validated by candy/plugin-group's served
-// #GroupInput (runPluginKind) and its authored members ride op.Env (F5 input-threading).
-_reservedNode: "^(candy|pod|vm|k8s|local|android)$"
+// kinds (agent/module/sidecar/package-group + distro/builder/init/resource/target,
+// group — C2-group, AND the 5 substrate kinds pod/vm/k8s/local/android — C2-substrate)
+// are NOT here — they have no arm and are recognized dynamically by the loader via a
+// registered ClassKind provider (classifyDisc → providerRegistry.ResolveKind). group +
+// the substrates keep their #ResourceKind membership (so the loader still nests their
+// members) while their VALUE is validated HOST-SIDE against the KEPT core value defs
+// (#PodValue/#VmValue/… below) in runPluginKind — a self-contained plugin schema cannot
+// carry the rich core-typed substrate value (it references #Deploy/#Vm/#LibvirtDomain/…),
+// unlike group's small self-contained #GroupInput — and their authored members / template
+// ride op.Env (F5 authored-member INPUT-threading + its substrate-TEMPLATE fold arm).
+// Only `candy` retains a #Node arm (its box⊻layer value is core-typed and stays in-proc).
+_reservedNode: "^(candy)$"
 
 // #ResourceKind — the DEPLOYABLE kinds: the kinds that nest a sub-ENTITY (resource)
 // child (a deploy-into / alongside member), so a `<name>: {<kind>:…, <child>:
@@ -65,12 +70,20 @@ _reservedNode: "^(candy|pod|vm|k8s|local|android)$"
 #Image:      #Box & ({base: string & !=""} | {from: string & !=""})
 #CandyValue: (*#Candy | #Image) @go(-)
 // EDGE-INHERIT cutover B: a substrate kind is BOTH the template entity AND the deploy
-// (the eliminated `bundle:` role folds in). One arm accepts the disjunction
+// (the eliminated `bundle:` role folds in). The value is the disjunction
 // `#Template | #Deploy`, routed by SHAPE in the loader (a template carries its own
 // config — source:/composition; a deploy carries from:/image: + the deploy config).
 // The RDD spike proved `cue vet` resolves this disjunction unambiguously even with
 // overlapping fields. @go(-): the Go types come from #Local/#Pod/#Vm/#K8s/#Android +
-// #Deploy directly; this value def is validation-only (the arm is the load gate).
+// #Deploy directly; this value def is validation-only.
+//
+// C2-substrate: these 5 substrate kinds have NO #Node arm anymore (externalized to
+// candy/plugin-substrate, mirroring group). They are KEPT here as the HOST-SIDE value
+// gate: runPluginKind validates a substrate node's authored value against #<Kind>Value
+// (validateStandaloneKindValueCUE) — the SAME closedness the #Node arm gave — because a
+// self-contained plugin schema cannot carry these rich core-referencing values. So these
+// defs stay REACHABLE from Go (cue_kind_*.go registerCueKind maps the kind → its value
+// def) while contributing NO #Node arm (KindWords drops the 5).
 #LocalValue:   (#Local | #DeployValue) @go(-)
 #PodValue:     (#Pod | #DeployValue) @go(-)
 #VmValue:      (#Vm | #DeployValue) @go(-)
@@ -79,16 +92,23 @@ _reservedNode: "^(candy|pod|vm|k8s|local|android)$"
 // The build-vocabulary kinds (`distro:`/`builder:`/`init:`/`resource:`), the Calamares
 // install `target:`, the Calamares package group (`package-group:`), the AI-CLI grader
 // catalog (`agent:`), the Calamares installer module (`module:`), the sidecar-template
-// library (`sidecar:`), AND the targetless deploy group (`group:` — C2-group) are no
-// longer core kinds — each was extracted into a dedicated plugin unit, so none has a
-// #Node arm; such a node passes #NodeDoc as a registered non-core discriminator and is
-// validated by the plugin's served #*Input schema (runPluginKind). The core #Distro /
-// #Builder / #Init / #Resource / #Target / #Agent / #Module / #Sidecar defs
-// (schema/distro.cue, …) are KEPT — they still generate spec.Distro / … (the canonical
-// types the plugins' Invoke decodes into). For `group` the plugin (candy/plugin-group)
-// decodes its scalar VALUE into the core spec.Deploy (#Deploy, kept via cue_kind_deploy.go)
-// and attaches the host-threaded authored members — validated by its self-contained
-// #GroupInput (distinct from the unrelated Calamares package-group #Group in group.cue).
+// library (`sidecar:`), the targetless deploy group (`group:` — C2-group), AND the 5
+// substrate kinds (`pod:`/`vm:`/`k8s:`/`local:`/`android:` — C2-substrate) are no longer
+// core kinds — each was extracted into a dedicated plugin unit, so none has a #Node arm;
+// such a node passes #NodeDoc as a registered non-core discriminator. A plugin with a
+// self-contained served #*Input schema (distro/builder/…/group) is validated by that
+// schema (runPluginKind → validateAuthoredPluginInput); the 5 substrates, whose value is
+// rich + core-referencing (#Vm/#Deploy/#LibvirtDomain/…) and so cannot be a self-contained
+// plugin schema, are validated HOST-SIDE against the KEPT #<Kind>Value defs above
+// (runPluginKind → validateStandaloneKindValueCUE). The core #Distro / #Builder / #Init /
+// #Resource / #Target / #Agent / #Module / #Sidecar / #Pod / #Vm / #K8s / #Local /
+// #Android / #Deploy defs (schema/*.cue) are KEPT — they still generate spec.Distro /
+// spec.Vm / … (the canonical types the plugins' Invoke and the host decode into). For
+// `group` the plugin (candy/plugin-group) decodes its scalar VALUE into the core
+// spec.Deploy (#Deploy, kept via cue_kind_deploy.go) and attaches the host-threaded
+// authored members; for the substrates candy/plugin-substrate ECHOES the host-pre-decoded
+// canonical node (deploy BundleNode or per-substrate template) the host folds into
+// uf.Bundle / uf.Pod / uf.VM / … (C2-substrate template fold arm).
 
 // #DeployValue — the AUTHORED deploy shape (the disjunct under each substrate arm):
 // the COMPLETE #Deploy minus the structural nested/peer maps + the derived target —
@@ -112,17 +132,18 @@ _reservedNode: "^(candy|pod|vm|k8s|local|android)$"
 // resolves) — the layered loader + validate checks are exact and fast.
 // ---------------------------------------------------------------------------
 #CandyArm: close({candy: #CandyValue, {[!~_reservedNode]: _}})
-#PodArm: close({pod: #PodValue, {[!~_reservedNode]: _}})
-#VmArm: close({vm: #VmValue, {[!~_reservedNode]: _}})
-#K8sArm: close({k8s: #K8sValue, {[!~_reservedNode]: _}})
-#LocalArm: close({local: #LocalValue, {[!~_reservedNode]: _}})
-#AndroidArm: close({android: #AndroidValue, {[!~_reservedNode]: _}})
 
-// The unified node — a disjunction of the closed per-kind arms. `group` has NO arm
-// (C2-group externalized it to candy/plugin-group): a `group:` node passes #NodeDoc via
-// the arms' open `{[!~_reservedNode]: _}` pattern (group is no longer in _reservedNode)
-// and its VALUE is validated by the plugin's served #GroupInput (runPluginKind).
-#Node: #CandyArm | #PodArm | #VmArm | #K8sArm | #LocalArm | #AndroidArm
+// The unified node — the ONE remaining closed per-kind arm (`candy`, the box⊻layer
+// factory whose value is core-typed and decoded in-proc). `group` (C2-group) and the 5
+// substrate kinds pod/vm/k8s/local/android (C2-substrate) have NO arm — they were
+// externalized to candy/plugin-group / candy/plugin-substrate: such a node passes #NodeDoc
+// via #CandyArm's open `{[!~_reservedNode]: _}` pattern (none of those words is in
+// _reservedNode) and its VALUE is validated HOST-SIDE — group by candy/plugin-group's
+// served #GroupInput, the substrates against the KEPT #<Kind>Value defs above
+// (runPluginKind → validateStandaloneKindValueCUE). #Node stays a (single-arm) disjunction
+// so nodeDiscriminators derives KindWords = {candy} — the externalized kinds resolve via
+// their registered ClassKind provider (recognizedKind), not a #Node arm.
+#Node: #CandyArm
 
 // #NodeDoc — a whole charly.yml document in unified node-form: the reserved DOCUMENT
 // directives plus a flat map of name-first entity nodes. Validating a document

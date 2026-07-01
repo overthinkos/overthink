@@ -3,10 +3,11 @@ package main
 // provider_builder_external.go — the externalized DETECTION-builder registry surface, the
 // builder-class companion of provider_deploy.go's externalizedDeploySubstrates /
 // externalDeploySubstratePlugins. The four detection-builders (cargo/npm/pixi/aur) are served
-// by OUT-OF-PROCESS plugin candies: their build-time multi-stage stays the CORE embedded
-// vocabulary (emitBuilderStages), while their DEPLOY-TIME IR shim (per-candy stage context +
-// teardown ops) is carried out-of-process over OpCollectContext + OpReverse, resolved in the
-// host-side build PRE-PASS (builder_preresolve.go).
+// by OUT-OF-PROCESS plugin candies: their BUILD-TIME multi-stage is resolved by the plugin's
+// OpResolve leg (kit.BuilderResolve, spliced by emitBuilderStages/emitBuilderArtifacts — C10),
+// and their DEPLOY-TIME IR shim (per-candy stage context + teardown ops) is carried
+// out-of-process over OpCollectContext + OpReverse, resolved in the host-side build PRE-PASS
+// (builder_preresolve.go).
 //
 // Selection stays DETECTION (candyNeedsBuilder against the embedded builder: vocabulary), never an
 // authored external_builder: field — so the ~39 consumer candies that carry a pixi.toml /

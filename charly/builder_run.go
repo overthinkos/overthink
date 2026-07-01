@@ -19,8 +19,9 @@ package main
 //   -e CARGO_HOME=$HOME/.cargo
 //   -w /work
 //
-// The invoked shell command comes from the builder's stage_template
-// (with {{.Home}} resolved to the host user's home).
+// The invoked shell command comes from the builder's phase.install.host cell
+// (renderBuilderScript, with {{.Home}} resolved to the host user's home) — the
+// deploy-time host analog of the build-time multi-stage (now kit.BuilderResolve).
 //
 // For aur specifically, the bind-mount set is different: the output
 // /tmp/aur-pkgs/ is mounted to a tmpdir so the caller can run

@@ -62,10 +62,10 @@ type hostBuilderContext struct {
 }
 
 // renderBuilderScript turns a BuilderStep into the bash script that runs inside the builder
-// container — the host-side analog of the container stage_template, fully config-driven: it
-// renders the builder's phase.install.host cell via the SAME RenderTemplate engine the OCI
-// path uses for stage_template. HOME/PIXI_CACHE_DIR/NPM_CONFIG_PREFIX/CARGO_HOME are injected
-// by BuilderRunOpts.Env before the script starts.
+// container — the host-side (deploy) analog of the build-time multi-stage, fully config-driven:
+// it renders the builder's phase.install.host cell via the SAME RenderTemplate engine
+// (text/template). HOME/PIXI_CACHE_DIR/NPM_CONFIG_PREFIX/CARGO_HOME are injected by
+// BuilderRunOpts.Env before the script starts.
 func renderBuilderScript(s *BuilderStep, hostHome string) (string, error) {
 	if s.BuilderDef == nil {
 		return "", fmt.Errorf("builder %q: no builder definition (BuilderDef unset)", s.Builder)

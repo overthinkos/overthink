@@ -109,13 +109,13 @@ func TestOCITargetEmitSystemPackagesPrefersNewPhases(t *testing.T) {
 // pluginEmitStepWords[Builder]="builder" → spliceClassStepEmit("builder") → the compiled-in
 // candy/plugin-installstep OpEmit → emitViaHostBuild → HostBuild("step-emit",{Word:"builder"}) →
 // stepEmitBuilder (the in-core host build engine on the in-proc reverse channel) → inline render.
-// It asserts the byte-equivalent `cargo install` output the former in-proc OCITarget builder
-// build-emit produced — the test FAILS without this change (there is no in-proc Builder StepProvider;
-// the plugin must serve step:builder and the host must render via the step-emit seam). This is the exact
-// in-proc chain a pod overlay with an inline-builder add_candy runs host-side.
+// Since C10, an EXTERNALIZED inline builder (cargo) renders its InlineFragment via kit.BuilderResolve
+// (no longer the embedded vocabulary install_template — the bDef needs only Inline:true), so this
+// asserts kit's `cargo install --path /ctx` output. This is the exact in-proc chain a pod overlay
+// with an inline-builder add_candy runs host-side.
 func TestOCITargetEmitBuilderInlineViaPlugin(t *testing.T) {
 	bc := &BuilderConfig{Builder: map[string]*BuilderDef{
-		"cargo": {Inline: true, InstallTemplate: "RUN cargo install --path .\n"},
+		"cargo": {Inline: true},
 	}}
 	gen := &Generator{Candies: map[string]*Candy{"mytool": {Name: "mytool"}}}
 	tgt := &OCITarget{
@@ -133,20 +133,22 @@ func TestOCITargetEmitBuilderInlineViaPlugin(t *testing.T) {
 	if !strings.Contains(got, "USER 1000") {
 		t.Errorf("inline builder must switch USER to the image user via the plugin chain: %s", got)
 	}
-	if !strings.Contains(got, "cargo install --path .") {
-		t.Errorf("inline builder template not rendered via the step:builder plugin chain: %s", got)
+	if !strings.Contains(got, "cargo install --path /ctx") {
+		t.Errorf("inline builder not rendered via the step:builder plugin chain + kit.BuilderResolve: %s", got)
 	}
 }
 
 // TestOCITargetEmitBuilderMultiStageViaPlugin drives the FULL real chain for a MULTI-STAGE
-// (pixi/npm/aur) builder — the richer render that goes through Generator.buildStageContext +
-// StageTemplate. Same dispatch path as the inline test (through the compiled-in plugin's OpEmit and
-// the in-proc HostBuild), proving stepEmitBuilder reaches the threaded Generator/BuilderConfig/Box
-// build engine (buildEngineContext) and emits the `FROM <builder> AS <stage>` stage the pod-overlay
-// build needs.
+// (pixi/npm/aur) builder. Same dispatch path as the inline test (through the compiled-in plugin's
+// OpEmit and the in-proc HostBuild), proving stepEmitBuilder reaches the threaded
+// Generator/BuilderConfig/Box build engine (buildEngineContext). Since C10, an EXTERNALIZED
+// multi-stage builder (pixi) renders its stage via kit.BuilderResolve (no longer the embedded
+// vocabulary StageTemplate — the bDef needs only the "pixi" key present, the host still resolves the
+// builder ref from Box.Builder), so this asserts kit's stage: the `FROM <builder> AS <stage>` line +
+// the pixi cache-dir ENV line kit always emits.
 func TestOCITargetEmitBuilderMultiStageViaPlugin(t *testing.T) {
 	bc := &BuilderConfig{Builder: map[string]*BuilderDef{
-		"pixi": {StageTemplate: "FROM {{.BuilderRef}} AS {{.StageName}}\nRUN pixi install\n"},
+		"pixi": {},
 	}}
 	gen := &Generator{Candies: map[string]*Candy{"mytool": {Name: "mytool"}}}
 	tgt := &OCITarget{
@@ -162,10 +164,10 @@ func TestOCITargetEmitBuilderMultiStageViaPlugin(t *testing.T) {
 	}
 	got := tgt.String()
 	if !strings.Contains(got, "FROM ghcr.io/x/builder:latest AS mytool-pixi-build") {
-		t.Errorf("multi-stage builder FROM stage not rendered via the step:builder plugin chain: %s", got)
+		t.Errorf("multi-stage builder FROM stage not rendered via the step:builder plugin chain + kit.BuilderResolve: %s", got)
 	}
-	if !strings.Contains(got, "RUN pixi install") {
-		t.Errorf("multi-stage builder body not rendered via the step:builder plugin chain: %s", got)
+	if !strings.Contains(got, "ENV PIXI_CACHE_DIR=/tmp/pixi-cache") {
+		t.Errorf("multi-stage builder body not rendered via the step:builder plugin chain + kit.BuilderResolve: %s", got)
 	}
 }
 

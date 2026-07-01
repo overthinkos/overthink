@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/overthinkos/overthink/charly/plugin/kit"
 	"github.com/overthinkos/overthink/charly/spec"
 )
 
@@ -140,14 +141,15 @@ var _ = func() bool { registerStepEmitter("system-packages", stepEmitSystemPacka
 
 // stepEmitBuilder renders the Builder InstallStep's BUILD-context (container-venue) Containerfile
 // fragment IN-CORE — the C1.3 relocation of the Builder build-emit off OCITarget onto the step-emit
-// seam. The Builder build-emit is HOST-COUPLED: it needs the host build ENGINE — the embedded
-// builder: vocabulary (BuilderConfig), the multi-stage stage_template render (Generator.buildStageContext),
-// and the box UID/GID + builder-ref (ResolvedBox) — none of which can cross the process boundary. So
-// its serving class:step plugin (candy/plugin-installstep) calls back HostBuild("step-emit", …)
-// during OpEmit and this renders the fragment host-side. The render is UNCHANGED from the former
-// in-proc OCITarget builder build-emit (R3): reconstruct the concrete step from the wire view
-// (stepFromView), then reuse the SAME buildStageContext + RenderTemplate pipeline the box build uses.
-// The build engine
+// seam. The Builder build-emit is HOST-COUPLED: it needs the host build ENGINE — the builder:
+// vocabulary (BuilderConfig, for DETECTION + cache mounts + context inputs), the box UID/GID +
+// builder-ref (ResolvedBox), and Generator.buildStageContext to compute the render context — none of
+// which can cross the process boundary. So its serving class:step plugin (candy/plugin-installstep)
+// calls back HostBuild("step-emit", …) during OpEmit and this renders the fragment host-side. For an
+// EXTERNALIZED detection builder (pixi/npm/aur/cargo) the STAGE render itself is kit.BuilderResolve
+// (C10 — the SAME render the box-build path + the plugin's OpResolve use, R3, driven off the
+// host-computed buildStageContext via builderResolveInputFrom); a custom (non-externalized) builder
+// still renders from its vocabulary stage_template / install_template. The build engine
 // (Generator/BuilderConfig/Box) is threaded on the reverse channel via buildEngineContext (populated
 // by OCITarget.stepEmitBuildContext); a nil BuilderConfig / Box / layer yields the SAME informative
 // skip comment the former in-proc render produced (synthetic test paths), and an undefined builder or
@@ -189,14 +191,24 @@ func stepEmitBuilder(req spec.StepEmitRequest, build buildEngineContext) (string
 			s.Builder, s.CandyName), nil
 	}
 
-	// Inline builders (cargo): render InstallTemplate with the builder's inline context; no
-	// separate FROM stage. Switch USER to the image user for the inline builder steps.
+	// Inline builders (cargo): render the in-candy RUN with the builder's inline context; no
+	// separate FROM stage. Switch USER to the image user for the inline builder steps. An
+	// EXTERNALIZED inline builder (cargo) renders via kit.BuilderResolve (C10 — the SAME render
+	// the box-build path and the plugin's OpResolve use, R3); a custom one via its vocabulary
+	// install_template.
 	if bDef.Inline {
 		ctx := &BuildStageContext{
 			LayerStage:  layer.Name,
 			UID:         build.Box.UID,
 			GID:         build.Box.GID,
 			CacheMounts: bDef.CacheMount,
+		}
+		if externalizedBuilders[s.Builder] {
+			reply, err := kit.BuilderResolve(s.Builder, builderResolveInputFrom(layer.Name, s.Builder, bDef, ctx))
+			if err != nil {
+				return "", fmt.Errorf("inline builder %s: %w", s.Builder, err)
+			}
+			return fmt.Sprintf("USER %d\n", build.Box.UID) + reply.InlineFragment, nil
 		}
 		rendered, err := RenderTemplate(s.Builder+"-inline", bDef.InstallTemplate, ctx)
 		if err != nil {
@@ -220,6 +232,16 @@ func stepEmitBuilder(req spec.StepEmitRequest, build buildEngineContext) (string
 	ctx := build.Generator.buildStageContext(layer, s.Builder, bDef, build.Box, builderRef)
 	if ctx == nil {
 		return "", fmt.Errorf("buildStageContext returned nil for %s", s.Builder)
+	}
+	// An EXTERNALIZED multi-stage builder (pixi/npm/aur) renders its stage via kit.BuilderResolve
+	// (C10 — the SAME render the box-build path + the plugin's OpResolve use, R3); a custom one via
+	// its vocabulary stage_template.
+	if externalizedBuilders[s.Builder] {
+		reply, err := kit.BuilderResolve(s.Builder, builderResolveInputFrom(layer.Name, s.Builder, bDef, ctx))
+		if err != nil {
+			return "", fmt.Errorf("multi-stage builder %s: %w", s.Builder, err)
+		}
+		return reply.Stage, nil
 	}
 	rendered, err := RenderTemplate(s.Builder+"-stage", bDef.StageTemplate, ctx)
 	if err != nil {

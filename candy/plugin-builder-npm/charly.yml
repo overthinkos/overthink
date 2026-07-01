@@ -1,14 +1,15 @@
 plugin-builder-npm:
     candy:
-        version: 2026.181.0200
+        version: 2026.182.0200
         description: |-
-            OUT-OF-TREE charly plugin serving the `npm` builder's DEPLOY-TIME IR shim. A standalone
-            Go module dispatching the two deploy-time builder ops to the shared charly/plugin/kit
-            logic (R3): OpCollectContext (npm records no stage context — globals are read from
-            package.json host-side at install time) and OpReverse (npm → npm-uninstall-g when globals
-            are known). The host invokes both in its build PRE-PASS, BEFORE the pure BuildDeployPlan
-            compile, so the compiler never dials a plugin. The builder's BUILD-TIME multi-stage stays
-            the CORE embedded vocabulary (emitBuilderStages); selection stays DETECTION (a candy's
+            OUT-OF-TREE charly plugin serving the `npm` builder's BUILD-TIME multi-stage (OpResolve)
+            + its DEPLOY-TIME IR shim. A standalone Go module dispatching to the shared
+            charly/plugin/kit logic (R3): OpResolve (→ kit.BuilderResolve — the `FROM <builder> AS
+            npm-build` stage + COPY artifacts, C10, no longer the core embedded vocabulary),
+            OpCollectContext (npm records no stage context — globals are read from package.json
+            host-side at install time) and OpReverse (npm → npm-uninstall-g when globals are known).
+            The deploy-time pair runs in the host build PRE-PASS, BEFORE the pure BuildDeployPlan
+            compile, so the compiler never dials a plugin. Selection stays DETECTION (a candy's
             package.json), never an authored external_builder:.
     plugin-builder-npm-decl:
         plugin:
@@ -16,7 +17,7 @@ plugin-builder-npm:
                 - builder:npm
             source: github.com/overthinkos/overthink/candy/plugin-builder-npm
     npm-builder-module-present:
-        check: the out-of-tree npm builder plugin ships a buildable Go module (go.mod + the provider main) the host builds + serves out-of-process for the deploy-time OpCollectContext/OpReverse pre-pass
+        check: the out-of-tree npm builder plugin ships a buildable Go module (go.mod + the provider main) the host builds + serves out-of-process for the build-time OpResolve + deploy-time OpCollectContext/OpReverse legs
         id: npm-builder-module-present
         context:
             - build

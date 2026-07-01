@@ -1,6 +1,7 @@
 // Command plugin-builder-aur is the OUT-OF-TREE charly plugin serving the `aur` builder's
-// DEPLOY-TIME IR shim. A builder's BUILD-TIME multi-stage stays the CORE embedded vocabulary
-// (charly's generate.go emitBuilderStages); this plugin carries the per-builder deploy-time legs:
+// build-time multi-stage AND its deploy-time IR shim. Its BUILD-TIME multi-stage — the
+// `FROM <builder> AS …` block + COPY artifacts — is resolved HERE via OpResolve →
+// kit.BuilderResolve (C10, no longer the core embedded builder: vocabulary); its deploy-time legs:
 //
 //   - OpCollectContext → the per-candy stage-context keys the host records on a BuilderStep
 //     (aur → {packages, replaces} from the candy's aur: section); and
@@ -34,9 +35,9 @@ func main() { sdk.Serve(&provider{}, &meta{}) }
 
 type provider struct{ pb.UnimplementedProviderServer }
 
-// Invoke dispatches the two deploy-time builder ops to the shared kit logic. Any other op is a loud
-// error (a builder serves neither OpResolve here — its build-time multi-stage is the core vocabulary
-// — nor any deploy/check op).
+// Invoke dispatches the build-time OpResolve (→ kit.BuilderResolve: the multi-stage Stage +
+// CopyArtifacts / InlineFragment) and the two deploy-time IR ops (OpCollectContext / OpReverse) to
+// the shared kit logic. Any other op is a loud error.
 func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeReply, error) {
 	switch req.GetOp() {
 	case sdk.OpCollectContext:
@@ -63,8 +64,24 @@ func (provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeRepl
 			return nil, err
 		}
 		return &pb.InvokeReply{ResultJson: j}, nil
+	case sdk.OpResolve:
+		var in spec.BuilderResolveInput
+		if len(req.GetParamsJson()) > 0 {
+			if err := json.Unmarshal(req.GetParamsJson(), &in); err != nil {
+				return nil, fmt.Errorf("builder %q: decode resolve input: %w", builderWord, err)
+			}
+		}
+		reply, err := kit.BuilderResolve(builderWord, in)
+		if err != nil {
+			return nil, err
+		}
+		j, err := json.Marshal(reply)
+		if err != nil {
+			return nil, err
+		}
+		return &pb.InvokeReply{ResultJson: j}, nil
 	}
-	return nil, fmt.Errorf("builder %q: unsupported op %q (serves only %q + %q)", builderWord, req.GetOp(), sdk.OpCollectContext, sdk.OpReverse)
+	return nil, fmt.Errorf("builder %q: unsupported op %q (serves only %q, %q, %q)", builderWord, req.GetOp(), sdk.OpResolve, sdk.OpCollectContext, sdk.OpReverse)
 }
 
 type meta struct {
@@ -74,7 +91,7 @@ type meta struct {
 // Describe advertises the builder:aur capability + its self-contained CUE schema over the same
 // channel a builtin uses; BuildCapabilities compiles the schema standalone, failing loudly if broken.
 func (meta) Describe(context.Context, *pb.Empty) (*pb.Capabilities, error) {
-	return sdk.BuildCapabilities("2026.181.0400",
+	return sdk.BuildCapabilities("2026.182.0400",
 		[]sdk.ProvidedCapability{{Class: "builder", Word: builderWord, InputDef: "#AurBuilderInput"}},
 		schemaFS, "schema")
 }

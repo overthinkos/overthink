@@ -72,7 +72,8 @@ var builtinProviderInstances = []Provider{
 	// the host-side guest reboot over RunHostStep → rebootVenueAndWait).
 	// builders (ClassBuilder) — the four detection-builders (aur/pixi/cargo/npm) are EXTERNAL
 	// out-of-process plugin candies (candy/plugin-builder-<word>): their build-time multi-stage
-	// stays the core embedded vocabulary (emitBuilderStages), while their deploy-time IR shim
+	// is resolved by the plugin's OpResolve leg (C10, kit.BuilderResolve, spliced by
+	// emitBuilderStages), while their deploy-time IR shim
 	// (per-candy stage context + teardown ops) is served over OpCollectContext/OpReverse and
 	// resolved in the host-side build pre-pass (builder_preresolve.go). No in-proc BuilderProvider
 	// remains; the registry resolves a builder word to its connected grpcProvider.

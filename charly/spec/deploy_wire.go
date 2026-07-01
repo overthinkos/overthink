@@ -531,20 +531,62 @@ type StepEmitRequest struct {
 	Distros []string        `json:"distros,omitempty"`
 }
 
-// BuilderResolveReply is what an external builder plugin returns from an OpResolve
-// Invoke at image-generation time — the build-time BUILDER leg, the multi-stage
-// counterpart of a verb/step's EmitReply. Stage is the `FROM <ref> AS <name>` block
-// (its RUN/COPY body included) spliced PRE-main-FROM by emitExternalBuilderStages
-// (alongside the embedded builder: vocabulary's StageTemplate output); CopyArtifacts
-// are the `COPY --from=<stage> …` directives spliced POST-main-FROM by
-// emitExternalBuilderArtifacts to pull the built artifacts into the final image. A
-// candy SELECTS the external builder via its `external_builder:` field; the same
-// reply travels both splice points (cached per candy on the Generator). Both the
-// Stage and the CopyArtifacts are egress-validated with the rest of the Containerfile
-// before it hits disk.
+// BuilderResolveReply is what a builder plugin returns from an OpResolve Invoke at
+// image-generation time — the build-time BUILDER leg, the multi-stage counterpart of a
+// verb/step's EmitReply. It serves BOTH the `external_builder:`-SELECTED out-of-tree
+// builders AND the four DETECTION-builders (pixi/npm/aur/cargo, whose build-time
+// multi-stage moved out of the embedded builder: vocabulary into their plugins — see
+// kit.BuilderResolve). Stage is the `FROM <ref> AS <name>` block (its RUN/COPY body
+// included) spliced PRE-main-FROM (emitExternalBuilderStages for external_builder;
+// emitBuilderStages for detection builders); CopyArtifacts are the `COPY --from=<stage> …`
+// directives spliced POST-main-FROM to pull the built artifacts into the final image;
+// CopyBinary is the single builder-BINARY copy line (pixi → /usr/local/bin/pixi) the host
+// emits ONCE per builder (deduped across candies, mirroring the former
+// emitBuilderArtifacts copy_binary handling); InlineFragment is the in-candy RUN an INLINE
+// builder (cargo) emits IN the main image (no separate FROM stage) — Stage/CopyArtifacts
+// are empty for an inline builder, InlineFragment empty for a multi-stage one. All fields
+// are egress-validated with the rest of the Containerfile before it hits disk.
 type BuilderResolveReply struct {
-	Stage         string   `json:"stage"`
-	CopyArtifacts []string `json:"copy_artifacts,omitempty"`
+	Stage          string   `json:"stage,omitempty"`
+	CopyArtifacts  []string `json:"copy_artifacts,omitempty"`
+	CopyBinary     string   `json:"copy_binary,omitempty"`
+	InlineFragment string   `json:"inline_fragment,omitempty"`
+}
+
+// BuilderResolveInput is the OpResolve params: the RENDER CONTEXT the host computes and
+// hands a builder plugin so it can render its build-time multi-stage self-contained. The
+// host owns DETECTION (which candy triggers which builder — filesystem probes) and the
+// serializable render context (the resolved builder image ref, the target user identity,
+// the pre-rendered cache-mount flag strings); the plugin (via kit.BuilderResolve) owns the
+// multi-stage TEMPLATE + the COPY-artifact/binary shape. The `external_builder:` path sends
+// a MINIMAL input (Candy only — an out-of-tree builder renders a self-contained stage that
+// reads none of the detection fields); the DETECTION path (pixi/npm/aur/cargo) sends the
+// full context. Cache mounts arrive PRE-RENDERED (CacheMountsOwned/CacheMountsAuto) because
+// the host owns the cache_mount vocab + the RenderCacheMounts helper — so the plugin needs
+// no cache-mount render engine and the emitted bytes stay byte-identical to the former
+// embedded-vocabulary render.
+type BuilderResolveInput struct {
+	Candy            string   `json:"candy"`
+	Builder          string   `json:"builder,omitempty"`
+	BuilderRef       string   `json:"builder_ref,omitempty"`
+	StageName        string   `json:"stage_name,omitempty"`
+	LayerStage       string   `json:"layer_stage,omitempty"`
+	CopySrc          string   `json:"copy_src,omitempty"`
+	UID              int      `json:"uid,omitempty"`
+	GID              int      `json:"gid,omitempty"`
+	Home             string   `json:"home,omitempty"`
+	User             string   `json:"user,omitempty"`
+	Manifest         string   `json:"manifest,omitempty"`
+	HasLockFile      bool     `json:"has_lock_file,omitempty"`
+	InstallCmd       string   `json:"install_cmd,omitempty"`
+	ManylinuxFix     string   `json:"manylinux_fix,omitempty"`
+	HasBuildScript   bool     `json:"has_build_script,omitempty"`
+	BuildScript      string   `json:"build_script,omitempty"`
+	Packages         []string `json:"packages,omitempty"`
+	Options          []string `json:"options,omitempty"`
+	CacheMountsOwned string   `json:"cache_mounts_owned,omitempty"`
+	CacheMountsAuto  string   `json:"cache_mounts_auto,omitempty"`
+	Inline           bool     `json:"inline,omitempty"`
 }
 
 // BuildRequest is the BUILD-ENGINE DISPATCH envelope (F10 HostBuild seam): what `charly box
@@ -620,8 +662,9 @@ type OverlayBuildReply struct {
 // ---------------------------------------------------------------------------
 // Deploy-time builder-IR wire — what an externalized DETECTION-builder plugin
 // (cargo/npm/pixi/aur) exchanges with the host on the OpCollectContext +
-// OpReverse legs. A builder's build-time multi-stage stays the CORE vocabulary
-// (emitBuilderStages); these two carry the per-builder DEPLOY-TIME IR shim — the
+// OpReverse legs. A builder's build-time multi-stage is resolved by its OpResolve leg
+// (BuilderResolveInput/BuilderResolveReply above — C10); these two carry the per-builder
+// DEPLOY-TIME IR shim — the
 // stage-context the compiler records on a BuilderStep, and that step's teardown
 // ops — out-of-process. The host invokes BOTH in the build PRE-PASS (host-side,
 // before the pure BuildDeployPlan compile reads the result).

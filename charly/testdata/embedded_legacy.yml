@@ -195,28 +195,6 @@ aur:
                     done
                     echo 'aur artifacts staged for host install:' >&2
                     ls -la /tmp/aur-pkgs/ >&2
-        stage_template: |
-            FROM {{.BuilderRef}} AS {{.StageName}}
-            USER root
-            RUN echo '{{.User}} ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
-            USER {{.UID}}
-            WORKDIR {{.Home}}
-            ENV XDG_CACHE_HOME=/tmp/aur-xdg-cache
-            RUN {{cacheMountsAuto .CacheMounts .UID .GID}} \
-                mkdir -p /tmp/aur-build /tmp/aur-srcdest /tmp/aur-xdg-cache && \
-                cp /etc/makepkg.conf /tmp/makepkg.conf && \
-                sed -i '/^OPTIONS/s/ debug/ !debug/' /tmp/makepkg.conf && \
-                echo 'SRCDEST=/tmp/aur-srcdest' >> /tmp/makepkg.conf && \
-                sudo pacman -Syu --noconfirm && \
-                yay -S --noconfirm --needed --builddir /tmp/aur-build --makepkgconf /tmp/makepkg.conf
-            {{- range .Options}} {{.}}{{end}}
-            {{- range .Packages}} \
-                  {{.}}{{end}} && \
-                mkdir -p /tmp/aur-pkgs && \
-                find /tmp/aur-build -name '*.pkg.tar.zst' -exec cp {} /tmp/aur-pkgs/ \;
-        copy_artifact:
-            - src: /tmp/aur-pkgs/
-              dst: /tmp/aur-pkgs/
 cargo:
     builder:
         detect_file:
@@ -235,9 +213,6 @@ cargo:
                     set -e
                     if [ ! -f /work/Cargo.toml ]; then echo 'no Cargo.toml in /work' >&2; exit 1; fi
                     cargo install --path /work --root "$CARGO_HOME"
-        install_template: |
-            RUN --mount=type=bind,from={{.LayerStage}},source=/,target=/ctx \
-                {{cacheMountsOwned .CacheMounts .UID .GID}}cargo install --path /ctx
 npm:
     builder:
         detect_file:
@@ -260,20 +235,6 @@ npm:
                     cd "$STAGE"
                     node -e 'var d=require("./package.json").dependencies||{};for(var[n,v]of Object.entries(d))console.log(v==="*"?n:n+"@"+v)' | xargs -r npm install -g
                     rm -rf "$STAGE"
-        stage_template: |
-            FROM {{.BuilderRef}} AS {{.StageName}}
-            USER {{.UID}}
-            WORKDIR {{.Home}}
-            # Override NPM_CONFIG_PREFIX from the builder image so npm writes to
-            # the TARGET image's HOME (not the builder's /home/user). Without this,
-            # uid=0 target images silently get empty copy_artifacts.
-            ENV NPM_CONFIG_PREFIX={{.Home}}/.npm-global
-            COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/package.json package.json
-            RUN {{cacheMountsOwned .CacheMounts .UID .GID}}node -e 'var d=require("./package.json").dependencies||{};for(var[n,v]of Object.entries(d))console.log(v==="*"?n:n+"@"+v)' | xargs npm install -g && rm -f package.json
-        copy_artifact:
-            - src: '{{.Home}}'
-              dst: '{{.Home}}'
-              chown: true
 pixi:
     builder:
         detect_file:
@@ -297,30 +258,6 @@ pixi:
         runtime_env:
             PIXI_CACHE_DIR: "~/.cache/pixi"
             RATTLER_CACHE_DIR: "~/.cache/rattler"
-        stage_template: |
-            FROM {{.BuilderRef}} AS {{.StageName}}
-            USER {{.UID}}
-            WORKDIR {{.Home}}
-            {{- if .HasLockFile}}
-            COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/pixi.lock pixi.lock
-            {{- end}}
-            COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/{{.Manifest}} {{.Manifest}}
-            {{.ManylinuxFix}}
-            ENV PIXI_CACHE_DIR=/tmp/pixi-cache RATTLER_CACHE_DIR=/tmp/rattler-cache
-            {{- if .HasBuildScript}}
-            # build.sh is COPY'd (NOT bind-mounted) so its CONTENT is part of this
-            # stage's BuildKit cache key — editing build.sh (e.g. the pixelflux
-            # NVENC patch) MUST invalidate the compile. A
-            # `--mount=type=bind,from=<stage>,source=/build.sh` delivers the file
-            # but its content NEVER enters the RUN cache key (the key is parent-SHA
-            # + COPY'd manifest + RUN-text), so a changed build.sh silently reused
-            # a stale compiled artifact — the "new code not picked up" bug. COPY
-            # keys it exactly like pixi.toml / pixi.lock above.
-            COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/{{.BuildScript}} /tmp/{{.BuildScript}}
-            RUN {{cacheMountsOwned .CacheMounts .UID .GID}}{{.InstallCmd}} && bash /tmp/{{.BuildScript}} && rm -f {{.Manifest}} pixi.lock
-            {{- else}}
-            RUN {{cacheMountsOwned .CacheMounts .UID .GID}}{{.InstallCmd}} && rm -f {{.Manifest}} pixi.lock
-            {{- end}}
         # Host-venue build script for target:local / target:vm deploys
         # (BuilderRun runs it inside the builder container with HOME +
         # PIXI_CACHE_DIR/RATTLER_CACHE_DIR supplied via BuilderRunOpts.Env and
@@ -360,13 +297,6 @@ pixi:
         manylinux_fix: |
             RUN grep -q 'system-requirements' {{.Manifest}} || printf '\n[system-requirements]\nlibc = { family = "glibc", version = "2.39" }\n' >> {{.Manifest}}
         build_script: build.sh
-        copy_artifact:
-            - src: '{{.Home}}'
-              dst: '{{.Home}}'
-              chown: true
-        copy_binary:
-            src: /usr/local/bin/pixi
-            dst: /usr/local/bin/pixi
     pixi-env:
         env:
             PIXI_CACHE_DIR: /tmp/pixi-cache

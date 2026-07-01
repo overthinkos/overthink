@@ -6,8 +6,8 @@ package kit
 // pure functions here, keyed by the builder word — so the per-builder Go logic lives in ONE
 // place a leaf plugin module imports (this package depends only on the stdlib + charly/spec).
 //
-// A builder's BUILD-TIME multi-stage stays the CORE embedded vocabulary (emitBuilderStages);
-// these functions are ONLY the deploy-time legs:
+// A builder's BUILD-TIME multi-stage is resolved by kit.BuilderResolve (builder_resolve.go, C10);
+// these functions are the deploy-time legs:
 //
 //   - BuilderCollectContext: the per-candy stage-context keys the host merges onto the base
 //     ({layer,builder,home}) to form BuilderStep.RawStageContext. Behaviour-preserving copy of

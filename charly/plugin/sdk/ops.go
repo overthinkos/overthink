@@ -15,8 +15,8 @@ const (
 	OpBuild    = "build"    // build: dispatch the image-build / generate engine host-side (F10 HostBuild seam)
 
 	// OpCollectContext + OpReverse are the DEPLOY-TIME builder-IR legs of an externalized
-	// detection-builder plugin (cargo/npm/pixi/aur). A builder's build-time multi-stage stays
-	// the CORE vocabulary (emitBuilderStages); these two carry the per-builder deploy-time IR
+	// detection-builder plugin (cargo/npm/pixi/aur). A builder's build-time multi-stage is
+	// resolved by its OpResolve leg (C10); these two carry the per-builder deploy-time IR
 	// shim — the stage-context the compiler records on a BuilderStep + that step's teardown
 	// ops — out-of-process. BOTH are invoked HOST-SIDE in the build PRE-PASS (BEFORE the pure
 	// BuildDeployPlan compile reads the result), never inside the pure compiler.

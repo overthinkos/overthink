@@ -489,8 +489,8 @@ func loadPluginUnit(ctx context.Context, name string, p *CandyPluginDecl, srcDir
 //     Op.Plugin words in its FLATTENED bed plan — see deployNodePluginContext).
 //
 // The EXTERNALIZED detection-builders (cargo/npm/pixi/aur) are NOT collected here: their
-// build-time multi-stage is the core embedded vocabulary (emitBuilderStages — build never
-// dispatches the plugin), and the deploy-time OpCollectContext/OpReverse legs are connected
+// build-time multi-stage OpResolve leg (C10) is connected on-demand by emitBuilderStages
+// (ensureBuildersConnected), and the deploy-time OpCollectContext/OpReverse legs are connected
 // PRECISELY + on-demand by the build pre-pass (builder_preresolve.go's ensureBuildersConnected,
 // scoped to the deploy's actually-detected + distro-gated builders) — NOT surfaced across an
 // entire box scan, which over-built unrelated builder plugins (e.g. aur on a fedora deploy).

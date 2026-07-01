@@ -892,8 +892,15 @@ func (s *ApkInstallStep) Reverse() []ReverseOp { return nil }
 //   - On a NON-pac deploy target the executor records a clean skip (a Fedora /
 //     Debian host has no pacman; the candy's own `cmd:` task curls the binary
 //     there as the documented fallback).
-//   - OCITarget SKIPS it — no makepkg in a container image build; the image
-//     bakes one self-contained binary via the candy's COPY/curl `cmd:` task.
+//   - The IMAGE build (generate.go writeCandySteps) AND the pod-overlay build-emit
+//     RENDER the localpkg IMAGE install via renderLocalPkgImageInstall: a PRODUCTION
+//     box DOWNLOADS the published release, a DISPOSABLE check bed BUILDS the
+//     in-development package on the host and COPYs it in (both install via the SAME
+//     dep-resolving install template). The pod-overlay build-emit routes through
+//     candy/plugin-installstep's `step:local-pkg-install` OpEmit, which calls back the
+//     host `step-emit` seam (stepEmitLocalPkgInstall) — the build engine stays in core.
+//     A distro with no localpkg-capable format (LocalPkg==nil) renders nothing; the
+//     candy's own COPY/curl `cmd:` task is the fallback there.
 //   - the android / k8s substrates (external) SKIP it (no Arch package surface).
 //
 // The PKGBUILD location is resolved at EMIT time (not compile time), so the

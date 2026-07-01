@@ -1,6 +1,6 @@
 plugin-installstep:
     candy:
-        version: 2026.182.1300
+        version: 2026.182.1430
         description: |-
             Compiled-in DUAL-PLACEMENT charly class:step plugin serving the BUILD-context OpEmit
             leg for the compiler-emitted builtin InstallStep kinds. Two sub-categories: the seven
@@ -8,19 +8,21 @@ plugin-installstep:
             repo-change, apk-install — whose fragment is pure string formatting from the
             compiler-produced spec.InstallStepView (the SAME view the deploy walk consumes), so the
             plugin returns the pod-overlay Containerfile fragment directly from OpEmit; and the
-            HOST-COUPLED system-packages (C1.2) + builder (C1.3) kinds, whose build-context render
-            needs the host build engine (system-packages: DistroDef format templates + RenderTemplate;
-            builder: the multi-stage buildStageContext + RenderTemplate engine) and so calls back the
+            HOST-COUPLED system-packages (C1.2) + builder (C1.3) + local-pkg-install (C1.4) kinds,
+            whose build-context render needs the host build engine (system-packages: DistroDef format
+            templates + RenderTemplate; builder: the multi-stage buildStageContext + RenderTemplate
+            engine; local-pkg-install: renderLocalPkgImageInstall — buildLocalPkgOnHost + host-dir
+            staging for a dev bed, the release-download RUN for production) and so calls back the
             host's "step-emit" host-builder over the reverse channel (Executor.HostBuild) and echoes
             the returned fragment. The DEPLOY leg for ALL these kinds STAYS unchanged in
-            charly/plugin/kit.WalkPlans (system-packages + builder are host-engine kinds driven via
-            RunHostStep → renderHostPackageCommand / runVenueBuilderStep); this plugin serves ONLY
-            OpEmit. apk-install declares Emits=false (no build fragment — the android deploy
-            preresolver reads the step at deploy). The C1.1/C1.2/C1.3 externalization of the builtin
-            InstallStep build-emit: the build leg moves out of charly's OCITarget.emit* methods into
-            this plugin, the deploy leg is unchanged. Its Go lives in this candy's own module
-            (NewProvider/NewMeta + a cmd/serve out-of-process shim), compiled INTO charly via
-            charly.yml compiled_plugins:.
+            charly/plugin/kit.WalkPlans (system-packages + builder + local-pkg-install are host-engine
+            kinds driven via RunHostStep → renderHostPackageCommand / runVenueBuilderStep /
+            execLocalPkgInstall); this plugin serves ONLY OpEmit. apk-install declares Emits=false (no
+            build fragment — the android deploy preresolver reads the step at deploy). The
+            C1.1/C1.2/C1.3/C1.4 externalization of the builtin InstallStep build-emit: the build leg
+            moves out of charly's OCITarget.emit* methods into this plugin, the deploy leg is
+            unchanged. Its Go lives in this candy's own module (NewProvider/NewMeta + a cmd/serve
+            out-of-process shim), compiled INTO charly via charly.yml compiled_plugins:.
     plugin-installstep-decl:
         plugin:
             providers:
@@ -33,6 +35,7 @@ plugin-installstep:
                 - step:apk-install
                 - step:system-packages
                 - step:builder
+                - step:local-pkg-install
             source: github.com/overthinkos/overthink/candy/plugin-installstep
     installstep-module-present:
         check: the compiled-in class:step build-emit plugin ships a buildable Go module the host can build + serve (in-proc in the default binary, out-of-process via cmd/serve when not compiled in)

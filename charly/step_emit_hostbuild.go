@@ -23,8 +23,10 @@ import (
 // OpEmit calls HostBuild("step-emit", {Word:"system-packages", …}) and whose in-core rendering
 // registers here via registerStepEmitter. C1.3 registered the SECOND — builder (stepEmitBuilder,
 // below), whose build-emit needs the multi-stage builder render engine (buildStageContext +
-// RenderTemplate) that cannot cross the process boundary. The seam is GENERIC (dispatches by word,
-// no per-word case here), exactly like hostBuilders dispatches by kind.
+// RenderTemplate) that cannot cross the process boundary. C1.4 registered the THIRD —
+// local-pkg-install (stepEmitLocalPkgInstall, below), whose build-emit needs the host localpkg
+// build engine (renderLocalPkgImageInstall → buildLocalPkgOnHost + host-dir staging). The seam is
+// GENERIC (dispatches by word, no per-word case here), exactly like hostBuilders dispatches by kind.
 
 // stepEmitter renders one host-coupled external step kind's build-context Containerfile fragment
 // IN-CORE from the opaque request + the host build-engine context. Registered per step word.
@@ -225,3 +227,46 @@ func stepEmitBuilder(req spec.StepEmitRequest, build buildEngineContext) (string
 // relocated onto the step-emit seam (C1.3). Its plugin (candy/plugin-installstep) serves the OpEmit
 // that calls back HostBuild("step-emit", {Word:"builder", …}).
 var _ = func() bool { registerStepEmitter("builder", stepEmitBuilder); return true }()
+
+// stepEmitLocalPkgInstall renders the LocalPkgInstall InstallStep's BUILD-context Containerfile
+// fragment IN-CORE — the C1.4 relocation of the LocalPkgInstall build-emit off OCITarget onto the
+// step-emit seam. The LocalPkgInstall build-emit is HOST-COUPLED: renderLocalPkgImageInstall reads
+// the box-type switch off the Generator (DevLocalPkg) and, for a disposable check bed, BUILDS the
+// candy's package from LOCAL in-development source on the HOST (buildLocalPkgOnHost — makepkg /
+// podman) and STAGES the built file into the per-image build dir (ImageBuildDir) — none of which can
+// cross the process boundary. So its serving class:step plugin (candy/plugin-installstep) calls back
+// HostBuild("step-emit", …) during OpEmit and this renders the fragment host-side. The render is
+// UNCHANGED from the former in-proc OCITarget localpkg build-emit (R3): reconstruct the concrete step
+// from the wire view (stepFromView), then call the SAME renderLocalPkgImageInstall generate.go's
+// image build also uses — a PRODUCTION box DOWNLOADS the published release, a DISPOSABLE bed BUILDS
+// the in-development package and COPYs it in; a distro with no localpkg-capable format (LocalPkg==nil)
+// renders nothing. The build engine (Generator.DevLocalPkg + Box.Name + ImageBuildDir) is threaded on
+// the reverse channel via buildEngineContext (populated by OCITarget.stepEmitBuildContext); the
+// overlay/deploy path never sets DevLocalPkg, so the pod-overlay build-emit takes the production leg.
+func stepEmitLocalPkgInstall(req spec.StepEmitRequest, build buildEngineContext) (string, error) {
+	var view spec.InstallStepView
+	if len(req.Payload) > 0 {
+		if err := json.Unmarshal(req.Payload, &view); err != nil {
+			return "", fmt.Errorf("decode LocalPkgInstall step view: %w", err)
+		}
+	}
+	step, err := stepFromView(view)
+	if err != nil {
+		return "", err
+	}
+	s, ok := step.(*LocalPkgInstallStep)
+	if !ok {
+		return "", fmt.Errorf("step-emit local-pkg-install: view kind %q is not a LocalPkgInstallStep", view.Kind)
+	}
+	dev := build.Generator != nil && build.Generator.DevLocalPkg
+	boxName := ""
+	if build.Box != nil {
+		boxName = build.Box.Name
+	}
+	return renderLocalPkgImageInstall(s, dev, build.ImageBuildDir, boxName)
+}
+
+// Register the local-pkg-install step-emitter at package-var init — the THIRD host-coupled step kind
+// relocated onto the step-emit seam (C1.4). Its plugin (candy/plugin-installstep) serves the OpEmit
+// that calls back HostBuild("step-emit", {Word:"local-pkg-install", …}).
+var _ = func() bool { registerStepEmitter("local-pkg-install", stepEmitLocalPkgInstall); return true }()

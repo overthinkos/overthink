@@ -44,16 +44,24 @@ type buildEngineContext struct {
 	// template. Zero for an Invoke whose plan has no SystemPackagesStep.
 	DistroCfg *DistroConfig
 
-	// The following three are populated ONLY by the pod-overlay BUILD-emit path
+	// The following are populated ONLY by the pod-overlay BUILD-emit path
 	// (OCITarget.stepEmitBuildContext), so the HOST-COUPLED Builder step-emitter
 	// (stepEmitBuilder, step_emit_hostbuild.go) can render a multi-stage / inline builder
 	// via the SAME buildStageContext + RenderTemplate pipeline the box build uses (R3, the
-	// C1.3 relocation of the Builder build-emit onto the step-emit seam). They are zero for
-	// every deploy-leg buildEngineContext — the Builder DEPLOY leg is runVenueBuilderStep
-	// (a separate host-engine path driven via RunHostStep), which reads none of them.
+	// C1.3 relocation of the Builder build-emit onto the step-emit seam), and the HOST-COUPLED
+	// LocalPkgInstall step-emitter (stepEmitLocalPkgInstall) can render the dev/prod localpkg
+	// IMAGE install via renderLocalPkgImageInstall (the C1.4 relocation). They are zero for
+	// every deploy-leg buildEngineContext — the Builder DEPLOY leg is runVenueBuilderStep and
+	// the LocalPkgInstall DEPLOY leg is execLocalPkgInstall (separate host-engine paths driven
+	// via RunHostStep), which read none of them.
 	Generator     *Generator
 	BuilderConfig *BuilderConfig
 	Box           *ResolvedBox
+	// ImageBuildDir is the OCITarget's per-image (pod-overlay) build dir — the imageDir the
+	// dev-mode localpkg build-emit stages a locally-built package into
+	// (renderLocalPkgImageDevInstall). It is OCITarget.BuildDir, NOT Generator.BuildDir (the
+	// overlay build dir differs from the project .build root). Zero for every deploy-leg context.
+	ImageBuildDir string
 }
 
 // builderStepImage resolves the builder image ref for a BuilderStep:

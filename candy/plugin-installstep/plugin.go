@@ -6,13 +6,15 @@
 //     repo-change, apk-install. Each render is pure string formatting from the compiler-produced
 //     spec.InstallStepView (the SAME serializable view the deploy walk consumes), so the plugin
 //     needs no host build engine — it returns the Containerfile fragment directly from OpEmit.
-//   - HOST-COUPLED (C1.2/C1.3) — system-packages and builder. Their build-context render needs the
-//     host build ENGINE (system-packages: the DistroDef format templates + RenderTemplate;
-//     builder: the multi-stage buildStageContext + RenderTemplate engine), which cannot cross the
-//     process boundary, so their OpEmit calls back the host's "step-emit" host-builder over the
-//     reverse channel (Executor.HostBuild) and ECHOES the returned spec.EmitReply. The engine stays
-//     in core (charly/step_emit_hostbuild.go: stepEmitSystemPackages / stepEmitBuilder); the plugin
-//     only REQUESTS it.
+//   - HOST-COUPLED (C1.2/C1.3/C1.4) — system-packages, builder, and local-pkg-install. Their
+//     build-context render needs the host build ENGINE (system-packages: the DistroDef format
+//     templates + RenderTemplate; builder: the multi-stage buildStageContext + RenderTemplate engine;
+//     local-pkg-install: renderLocalPkgImageInstall — buildLocalPkgOnHost + host-dir staging for a
+//     dev bed, the release-download RUN for production), which cannot cross the process boundary, so
+//     their OpEmit calls back the host's "step-emit" host-builder over the reverse channel
+//     (Executor.HostBuild) and ECHOES the returned spec.EmitReply. The engine stays in core
+//     (charly/step_emit_hostbuild.go: stepEmitSystemPackages / stepEmitBuilder /
+//     stepEmitLocalPkgInstall); the plugin only REQUESTS it.
 //
 // The DEPLOY leg for ALL these kinds STAYS in charly/plugin/kit.WalkPlans (walkFile / walkShellHook
 // / …; system-packages + builder are host-engine kinds driven via RunHostStep →
@@ -48,7 +50,7 @@ import (
 //go:embed schema/*.cue
 var schemaFS embed.FS
 
-const calver = "2026.182.1300"
+const calver = "2026.182.1430"
 
 // opEmit mirrors charly's OpEmit selector ("emit"). This plugin serves ONLY the build-context
 // emit leg — every other op is a no-op acknowledgment (the deploy leg is charly/plugin/kit.WalkPlans,
@@ -69,10 +71,11 @@ const (
 	wordServiceCustom   = "service-custom"
 	wordRepoChange      = "repo-change"
 	wordApkInstall      = "apk-install"
-	// wordSystemPackages (C1.2) and wordBuilder (C1.3) are HOST-COUPLED: their OpEmit calls back the
-	// host build engine over the reverse channel.
-	wordSystemPackages = "system-packages"
-	wordBuilder        = "builder"
+	// wordSystemPackages (C1.2), wordBuilder (C1.3), and wordLocalPkgInstall (C1.4) are
+	// HOST-COUPLED: their OpEmit calls back the host build engine over the reverse channel.
+	wordSystemPackages  = "system-packages"
+	wordBuilder         = "builder"
+	wordLocalPkgInstall = "local-pkg-install"
 )
 
 // hostCoupledStepWords is the set of step words whose OpEmit delegates the fragment render to the
@@ -80,8 +83,9 @@ const (
 // alone). Every other served word is PURE (renderFragment). Kept as a set so adding the next
 // host-coupled kind is a one-line change.
 var hostCoupledStepWords = map[string]bool{
-	wordSystemPackages: true,
-	wordBuilder:        true,
+	wordSystemPackages:  true,
+	wordBuilder:         true,
+	wordLocalPkgInstall: true,
 }
 
 // NewProvider returns the step provider for in-proc registration or out-of-proc serving.
@@ -275,8 +279,8 @@ type meta struct {
 // OpEmit (true) or skip (false, apk-install). Scope/Venue/Gate are nominal — these kinds' deploy leg
 // is charly/plugin/kit.WalkPlans, which reads the per-instance view.Scope/Venue computed on the
 // concrete step, so the static contract's Scope/Venue/Gate are never consulted. The HOST-COUPLED
-// system-packages (C1.2) + builder (C1.3) Emits=true too — their OpEmit delegates to the host
-// "step-emit" host-builder.
+// system-packages (C1.2) + builder (C1.3) + local-pkg-install (C1.4) Emits=true too — their OpEmit
+// delegates to the host "step-emit" host-builder.
 func (meta) Describe(context.Context, *pb.Empty) (*pb.Capabilities, error) {
 	emit := func(word string, emits bool) sdk.ProvidedCapability {
 		return sdk.ProvidedCapability{
@@ -296,6 +300,7 @@ func (meta) Describe(context.Context, *pb.Empty) (*pb.Capabilities, error) {
 			emit(wordApkInstall, false),
 			emit(wordSystemPackages, true),
 			emit(wordBuilder, true),
+			emit(wordLocalPkgInstall, true),
 		},
 		schemaFS, "schema")
 }

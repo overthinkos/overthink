@@ -13,8 +13,6 @@ package main
 
 // opStepProvider (StepKindOp) lives in plugin_step_op.go.
 
-// localPkgInstallStepProvider (StepKindLocalPkgInstall) lives in plugin_step_local_pkg_install.go.
-
 // rebootStepProvider (StepKindReboot) lives in plugin_step_reboot.go.
 
 // externalPluginStepProvider (StepKindExternalPlugin) lives in plugin_step_external.go.
@@ -26,9 +24,11 @@ package main
 //   - The seven PURE kinds (C1.1) — File, ShellHook, ShellSnippet, ServicePackaged, ServiceCustom,
 //     RepoChange, ApkInstall — whose fragment the plugin formats directly from the step VIEW.
 //     apk-install declares Emits=false (no build fragment — the android deploy preresolver reads it).
-//   - The HOST-COUPLED SystemPackages (C1.2) + Builder (C1.3) kinds — their OpEmit calls back the
-//     host's "step-emit" host-builder for a render they cannot do across the process boundary
-//     (SystemPackages needs the DistroDef-format templates; Builder needs the multi-stage
-//     buildStageContext + RenderTemplate engine). See step_emit_hostbuild.go (stepEmitSystemPackages,
-//     stepEmitBuilder). Their DEPLOY legs (host-engine via RunHostStep → renderHostPackageCommand /
-//     runVenueBuilderStep) are likewise unchanged.
+//   - The HOST-COUPLED SystemPackages (C1.2) + Builder (C1.3) + LocalPkgInstall (C1.4) kinds — their
+//     OpEmit calls back the host's "step-emit" host-builder for a render they cannot do across the
+//     process boundary (SystemPackages needs the DistroDef-format templates; Builder needs the
+//     multi-stage buildStageContext + RenderTemplate engine; LocalPkgInstall needs the host localpkg
+//     build engine renderLocalPkgImageInstall → buildLocalPkgOnHost + host-dir staging). See
+//     step_emit_hostbuild.go (stepEmitSystemPackages, stepEmitBuilder, stepEmitLocalPkgInstall).
+//     Their DEPLOY legs (host-engine via RunHostStep → renderHostPackageCommand /
+//     runVenueBuilderStep / execLocalPkgInstall) are likewise unchanged.

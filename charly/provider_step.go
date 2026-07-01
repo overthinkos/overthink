@@ -62,11 +62,13 @@ var allStepKinds = []StepKind{
 // Two sub-categories, distinguished by whether the OpEmit render needs the host build engine:
 //   - PURE (C1.1): file/shell-hook/shell-snippet/service-packaged/service-custom/repo-change/
 //     apk-install — the plugin formats the fragment directly from the step VIEW.
-//   - HOST-COUPLED (C1.2/C1.3): system-packages (C1.2) + builder (C1.3) — the plugin's OpEmit calls
-//     back the host's "step-emit" host-builder (HostBuild) for a render it cannot do across the
-//     process boundary (system-packages needs the DistroDef format templates; builder needs the
-//     multi-stage buildStageContext + RenderTemplate engine). See charly/step_emit_hostbuild.go
-//     (stepEmitSystemPackages, stepEmitBuilder).
+//   - HOST-COUPLED (C1.2/C1.3/C1.4): system-packages (C1.2) + builder (C1.3) + local-pkg-install
+//     (C1.4) — the plugin's OpEmit calls back the host's "step-emit" host-builder (HostBuild) for a
+//     render it cannot do across the process boundary (system-packages needs the DistroDef format
+//     templates; builder needs the multi-stage buildStageContext + RenderTemplate engine;
+//     local-pkg-install needs the host localpkg build engine renderLocalPkgImageInstall →
+//     buildLocalPkgOnHost + host-dir staging). See charly/step_emit_hostbuild.go
+//     (stepEmitSystemPackages, stepEmitBuilder, stepEmitLocalPkgInstall).
 var pluginEmitStepWords = map[StepKind]string{
 	StepKindFile:            "file",
 	StepKindShellHook:       "shell-hook",
@@ -77,6 +79,7 @@ var pluginEmitStepWords = map[StepKind]string{
 	StepKindApkInstall:      "apk-install",
 	StepKindSystemPackages:  "system-packages",
 	StepKindBuilder:         "builder",
+	StepKindLocalPkgInstall: "local-pkg-install",
 }
 
 // checkStepProviderBijection asserts every InstallStep kind is SERVED. A kind in

@@ -169,6 +169,38 @@ func TestOCITargetEmitBuilderMultiStageViaPlugin(t *testing.T) {
 	}
 }
 
+// TestOCITargetEmitLocalPkgInstallViaPlugin drives the FULL real chain the C1.4 externalization
+// introduces for a PRODUCTION localpkg install: LocalPkgInstallStep → OCITarget.Emit → emitStep →
+// pluginEmitStepWords[LocalPkgInstall]="local-pkg-install" → spliceClassStepEmit("local-pkg-install") →
+// the compiled-in candy/plugin-installstep OpEmit → emitViaHostBuild → HostBuild("step-emit",
+// {Word:"local-pkg-install"}) → stepEmitLocalPkgInstall (the in-core host localpkg build engine on the
+// in-proc reverse channel) → renderLocalPkgImageInstall. It asserts the release-download RUN the former
+// in-proc OCITarget localpkg build-emit produced — the test FAILS without this change (there is no
+// in-proc LocalPkgInstall StepProvider; the plugin must serve step:local-pkg-install and the host must
+// register the step-emit renderer). This is the exact in-proc chain a pod overlay with a localpkg
+// add_candy runs host-side.
+func TestOCITargetEmitLocalPkgInstallViaPlugin(t *testing.T) {
+	lp := testPacLocalPkgDef()
+	lp.DownloadTemplate = "https://github.com/overthinkos/overthink/releases/latest/download/opencharly-${ARCH}.pkg.tar.zst"
+	tgt := &OCITarget{Box: &ResolvedBox{Name: "charly-arch"}}
+	plan := &InstallPlan{Candy: "charly", Steps: []InstallStep{
+		&LocalPkgInstallStep{CandyName: "charly", Format: "pac", LocalPkg: lp},
+	}}
+	if err := tgt.Emit([]*InstallPlan{plan}, EmitOpts{}); err != nil {
+		t.Fatalf("Emit: %v", err)
+	}
+	got := tgt.String()
+	if !strings.Contains(got, "curl -fsSL") || !strings.Contains(got, "releases/latest/download/opencharly-${ARCH}.pkg.tar.zst") {
+		t.Errorf("production localpkg build-emit must DOWNLOAD the published release via the step:local-pkg-install plugin chain; got:\n%s", got)
+	}
+	if !strings.Contains(got, "pacman -U --noconfirm") {
+		t.Errorf("production localpkg build-emit must install via the format install template via the plugin chain; got:\n%s", got)
+	}
+	if strings.Contains(got, "COPY ") {
+		t.Errorf("production mode must NOT COPY a locally-built package; got:\n%s", got)
+	}
+}
+
 func TestOCITargetSkipsVenueSkip(t *testing.T) {
 	// A step with VenueSkip should be elided entirely.
 	tgt := &OCITarget{}

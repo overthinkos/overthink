@@ -189,25 +189,6 @@ func (t *OCITarget) spliceClassStepEmit(word string, payload []byte, allowEmpty 
 	return nil
 }
 
-// emitLocalPkgInstall emits the image-build install of a candy's `localpkg:`
-// package via the shared renderLocalPkgImageInstall (production release-download
-// vs disposable-check-bed in-development build — see that function). The
-// check-bed switch flows through the Generator's DevLocalPkg flag (one source,
-// both image-build paths read it). The overlay path (deploy-time) never sets it.
-func (t *OCITarget) emitLocalPkgInstall(s *LocalPkgInstallStep) error {
-	dev := t.Generator != nil && t.Generator.DevLocalPkg
-	boxName := ""
-	if t.Box != nil {
-		boxName = t.Box.Name
-	}
-	run, err := renderLocalPkgImageInstall(s, dev, t.BuildDir, boxName)
-	if err != nil {
-		return err
-	}
-	t.buf.WriteString(run)
-	return nil
-}
-
 // stepEmitBuildContext is the host BUILD-ENGINE context threaded onto the in-proc reverse channel
 // spliceClassStepEmit stands up, so a HOST-COUPLED class:step plugin can call back
 // HostBuild("step-emit", …) during its OpEmit and reach the host build engine. It carries the
@@ -216,13 +197,16 @@ func (t *OCITarget) emitLocalPkgInstall(s *LocalPkgInstallStep) error {
 // of the SystemPackages build-emit onto the step-emit seam) — plus the Generator + BuilderConfig +
 // Box the Builder step-emitter needs to render a multi-stage / inline builder via the SAME
 // buildStageContext + RenderTemplate pipeline (the C1.3 relocation of the Builder build-emit onto
-// the same seam). A PURE step (file/shell-hook/…) ignores the channel entirely.
+// the same seam), plus the Generator (DevLocalPkg) + Box (Name) + ImageBuildDir the LocalPkgInstall
+// step-emitter needs to render the dev/prod localpkg IMAGE install via renderLocalPkgImageInstall
+// (the C1.4 relocation). A PURE step (file/shell-hook/…) ignores the channel entirely.
 func (t *OCITarget) stepEmitBuildContext() buildEngineContext {
 	return buildEngineContext{
 		DistroCfg:     wrapDistroDef(t.DistroDef),
 		Generator:     t.Generator,
 		BuilderConfig: t.BuilderConfig,
 		Box:           t.Box,
+		ImageBuildDir: t.BuildDir,
 	}
 }
 

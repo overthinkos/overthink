@@ -883,6 +883,25 @@ check-charly-vm:
                 test "$(command -v charly)" -ef /usr/bin/charly &&
                 charly version &&
                 echo LOCALPKG-PAC-AUTORESOLVE-OK
+    welded-command-project-less:
+        check: the welded command plugins are baked beside charly at /usr/lib/charly/plugins so a core welded command dispatches project-less on the opencharly-git install
+        id: welded-command-project-less
+        description: the opencharly-git package bakes the command:<word> plugins (doctor/vm/clean/…) beside the binary at /usr/lib/charly/plugins, so `charly doctor` dispatches project-less on the installed package (FAILS on a package that shipped only the binary)
+        stdout:
+            - contains: WELDED-CMD-PROJECT-LESS-OK
+        exit_status: 0
+        context:
+            - runtime
+        plugin: command
+        plugin_input:
+            command: |
+                test -x /usr/lib/charly/plugins/plugin-doctor &&
+                test -f /usr/lib/charly/plugins/plugin-doctor.providers &&
+                test -x /usr/lib/charly/plugins/plugin-vm &&
+                test -x /usr/lib/charly/plugins/plugin-clean &&
+                cd /tmp &&
+                charly doctor 2>/dev/null | grep -q 'Container Engine' &&
+                echo WELDED-CMD-PROJECT-LESS-OK
 charly-cli:
     group:
         description: AI check — an agent operates the charly management command surface (build → deploy → status) end-to-end.

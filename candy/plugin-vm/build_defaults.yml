@@ -724,13 +724,22 @@ debian:
                     build_template: |
                         set -e
                         SUPER=$(cd {{.SrcDir}}/../.. && pwd)
-                        mkdir -p "$SUPER/bin"
+                        mkdir -p "$SUPER/bin/plugins"
                         [ -x "$SUPER/bin/charly" ] || (cd "$SUPER/charly" && CGO_ENABLED=1 go build -ldflags "-X main.BuildCalVer=$(bash "$SUPER/pkg/arch/calver.sh")" -o "$SUPER/bin/charly" .)
+                        # Build the welded command plugins beside charly (the SAME
+                        # pkg/host-command-plugins.txt set the arch PKGBUILD bakes) so
+                        # `charly doctor`/`clean`/`vm` and the other welded commands resolve
+                        # project-less on the installed deb.
+                        while read -r p; do
+                          case "$p" in ''|\#*) continue ;; esac
+                          ( cd "$SUPER/candy/$p" && GOWORK=off go build -trimpath -o "$SUPER/bin/plugins/$p" . )
+                          "$SUPER/bin/charly" __plugin-providers "$SUPER/candy/$p" > "$SUPER/bin/plugins/$p.providers"
+                        done < "$SUPER/pkg/host-command-plugins.txt"
                         podman run --rm -v {{.SrcDir}}:/src:ro -v "$SUPER/bin":/ovbin:ro -v {{.PkgDest}}:/out:Z docker.io/library/debian:13 bash -lc '
                           set -e
                           export DEBIAN_FRONTEND=noninteractive
                           apt-get update -qq && apt-get install -y -qq build-essential debhelper >/dev/null
-                          cp -aT /src /tmp/src && cp /ovbin/charly /tmp/src/charly
+                          cp -aT /src /tmp/src && cp /ovbin/charly /tmp/src/charly && cp -a /ovbin/plugins /tmp/src/plugins
                           cd /tmp/src
                           # Stamp the .deb version from the binary CalVer so each
                           # build is upgradeable (a static changelog version would
@@ -956,12 +965,21 @@ fedora:
                     build_template: |
                         set -e
                         SUPER=$(cd {{.SrcDir}}/../.. && pwd)
-                        mkdir -p "$SUPER/bin"
+                        mkdir -p "$SUPER/bin/plugins"
                         [ -x "$SUPER/bin/charly" ] || (cd "$SUPER/charly" && CGO_ENABLED=1 go build -ldflags "-X main.BuildCalVer=$(bash "$SUPER/pkg/arch/calver.sh")" -o "$SUPER/bin/charly" .)
+                        # Build the welded command plugins beside charly (the SAME
+                        # pkg/host-command-plugins.txt set the arch PKGBUILD bakes) so
+                        # `charly doctor`/`clean`/`vm` and the other welded commands resolve
+                        # project-less on the installed rpm. /ovbin/plugins = $SUPER/bin/plugins.
+                        while read -r p; do
+                          case "$p" in ''|\#*) continue ;; esac
+                          ( cd "$SUPER/candy/$p" && GOWORK=off go build -trimpath -o "$SUPER/bin/plugins/$p" . )
+                          "$SUPER/bin/charly" __plugin-providers "$SUPER/candy/$p" > "$SUPER/bin/plugins/$p.providers"
+                        done < "$SUPER/pkg/host-command-plugins.txt"
                         podman run --rm -v {{.SrcDir}}:/src:ro -v "$SUPER/bin":/ovbin:ro -v {{.PkgDest}}:/out:Z docker.io/library/fedora:43 bash -lc '
                           set -e
                           dnf install -y -q rpm-build >/dev/null
-                          rpmbuild -bb --define "_topdir /tmp/rb" --define "ovbin /ovbin/charly" --define "ovver $(/ovbin/charly version)" /src/opencharly.spec
+                          rpmbuild -bb --define "_topdir /tmp/rb" --define "ovbin /ovbin/charly" --define "ovplugins /ovbin/plugins" --define "ovver $(/ovbin/charly version)" /src/opencharly.spec
                           find /tmp/rb/RPMS -name "*.rpm" -exec install -Dm644 -t /out {} +
                         '
                     install_template: |

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/overthinkos/overthink/charly/spec"
 )
@@ -25,7 +26,11 @@ import (
 // below), whose build-emit needs the multi-stage builder render engine (buildStageContext +
 // RenderTemplate) that cannot cross the process boundary. C1.4 registered the THIRD —
 // local-pkg-install (stepEmitLocalPkgInstall, below), whose build-emit needs the host localpkg
-// build engine (renderLocalPkgImageInstall → buildLocalPkgOnHost + host-dir staging). The seam is
+// build engine (renderLocalPkgImageInstall → buildLocalPkgOnHost + host-dir staging). C1.5 registered
+// the FOURTH and RICHEST — op (stepEmitOp, below), whose build-emit drives the full
+// Generator.emitTasks per-verb render pipeline (COPY staging, inline-content staging, adjacent
+// mkdir/link/setcap coalescing, the act-verb `case "plugin"` seam) that cannot cross the process
+// boundary. The seam is
 // GENERIC (dispatches by word, no per-word case here), exactly like hostBuilders dispatches by kind.
 
 // stepEmitter renders one host-coupled external step kind's build-context Containerfile fragment
@@ -176,8 +181,8 @@ func stepEmitBuilder(req spec.StepEmitRequest, build buildEngineContext) (string
 			s.Builder, s.CandyName), nil
 	}
 
-	// candyByName is nil-safe (returns nil for a nil Generator), matching the former
-	// OCITarget.lookupCandy guard.
+	// candyByName is nil-safe (returns nil for a nil Generator) and carries the remote
+	// qualified-key add_candy fallback (bare CandyName → the fully-qualified Candies key).
 	layer := build.Generator.candyByName(s.CandyName)
 	if layer == nil {
 		return fmt.Sprintf("# Builder: %s (layer=%s) — layer not found in scan\n",
@@ -270,3 +275,57 @@ func stepEmitLocalPkgInstall(req spec.StepEmitRequest, build buildEngineContext)
 // relocated onto the step-emit seam (C1.4). Its plugin (candy/plugin-installstep) serves the OpEmit
 // that calls back HostBuild("step-emit", {Word:"local-pkg-install", …}).
 var _ = func() bool { registerStepEmitter("local-pkg-install", stepEmitLocalPkgInstall); return true }()
+
+// stepEmitOp renders the Op InstallStep's BUILD-context Containerfile fragment IN-CORE — the C1.5
+// relocation of the OpStep build-emit off OCITarget onto the step-emit seam, the FOURTH host-coupled
+// step kind and the RICHEST: the OpStep build-emit drives Generator.emitTasks, the full per-verb
+// render pipeline (COPY staging from the layer scratch stage, content-addressed inline-content
+// staging under .build/<image>/_inline, adjacent mkdir/link/setcap coalescing, and the act-verb
+// `case "plugin"` seam the box build shares). emitTasks needs the host build ENGINE — the scanned
+// Candy set (Generator.candyByName), the box UID/GID/Home (ResolvedBox), and the per-image build dir
+// + build-context prefix for inline-content staging — none of which can cross the process boundary.
+// So its serving class:step plugin (candy/plugin-installstep) calls back HostBuild("step-emit", …)
+// during OpEmit and this renders the fragment host-side. The render is UNCHANGED from the former
+// in-proc OCITarget Op build-emit (R3): reconstruct the *OpStep from the wire view (stepFromView), look the
+// candy up by its bare name (candyByName — nil-safe, with the remote qualified-key add_candy
+// fallback), and drive the SAME Generator.emitTasks the box build (writeCandySteps→emitTasks) uses,
+// for the ONE op the step carries. The build engine (Generator + Box + ImageBuildDir +
+// ContextRelPrefix) is threaded on the reverse channel via buildEngineContext (populated by
+// OCITarget.stepEmitBuildContext); the overlay/deploy path is the only build-emit caller (the box
+// build never routes an OpStep through OCITarget). A synthetic path without a Generator / Box yields
+// the SAME informative comment the former in-proc OCITarget Op build-emit produced; a candy the scan never saw is a
+// LOUD error (never a silent empty bake, R4).
+func stepEmitOp(req spec.StepEmitRequest, build buildEngineContext) (string, error) {
+	var view spec.InstallStepView
+	if len(req.Payload) > 0 {
+		if err := json.Unmarshal(req.Payload, &view); err != nil {
+			return "", fmt.Errorf("decode Op step view: %w", err)
+		}
+	}
+	step, err := stepFromView(view)
+	if err != nil {
+		return "", err
+	}
+	s, ok := step.(*OpStep)
+	if !ok {
+		return "", fmt.Errorf("step-emit op: view kind %q is not an OpStep", view.Kind)
+	}
+	if build.Generator == nil || build.Box == nil {
+		kind, _ := s.Op.Kind()
+		return fmt.Sprintf("# Task: %s (layer=%s) — no Generator context\n", kind, s.CandyName), nil
+	}
+	layer := build.Generator.candyByName(s.CandyName)
+	if layer == nil {
+		return "", fmt.Errorf("task emit: candy %q not found", s.CandyName)
+	}
+	var b strings.Builder
+	if _, err := build.Generator.emitTasks(&b, layer, build.Box, []Op{*s.Op}, build.ImageBuildDir, build.ContextRelPrefix); err != nil {
+		return "", err
+	}
+	return b.String(), nil
+}
+
+// Register the op step-emitter at package-var init — the FOURTH host-coupled step kind relocated
+// onto the step-emit seam (C1.5). Its plugin (candy/plugin-installstep) serves the OpEmit that calls
+// back HostBuild("step-emit", {Word:"op", …}).
+var _ = func() bool { registerStepEmitter("op", stepEmitOp); return true }()

@@ -62,13 +62,15 @@ var allStepKinds = []StepKind{
 // Two sub-categories, distinguished by whether the OpEmit render needs the host build engine:
 //   - PURE (C1.1): file/shell-hook/shell-snippet/service-packaged/service-custom/repo-change/
 //     apk-install — the plugin formats the fragment directly from the step VIEW.
-//   - HOST-COUPLED (C1.2/C1.3/C1.4): system-packages (C1.2) + builder (C1.3) + local-pkg-install
-//     (C1.4) — the plugin's OpEmit calls back the host's "step-emit" host-builder (HostBuild) for a
-//     render it cannot do across the process boundary (system-packages needs the DistroDef format
-//     templates; builder needs the multi-stage buildStageContext + RenderTemplate engine;
-//     local-pkg-install needs the host localpkg build engine renderLocalPkgImageInstall →
-//     buildLocalPkgOnHost + host-dir staging). See charly/step_emit_hostbuild.go
-//     (stepEmitSystemPackages, stepEmitBuilder, stepEmitLocalPkgInstall).
+//   - HOST-COUPLED (C1.2/C1.3/C1.4/C1.5): system-packages (C1.2) + builder (C1.3) +
+//     local-pkg-install (C1.4) + op (C1.5) — the plugin's OpEmit calls back the host's "step-emit"
+//     host-builder (HostBuild) for a render it cannot do across the process boundary
+//     (system-packages needs the DistroDef format templates; builder needs the multi-stage
+//     buildStageContext + RenderTemplate engine; local-pkg-install needs the host localpkg build
+//     engine renderLocalPkgImageInstall → buildLocalPkgOnHost + host-dir staging; op needs the
+//     RICHEST Generator.emitTasks per-verb render pipeline — COPY staging + op coalescing). See
+//     charly/step_emit_hostbuild.go (stepEmitSystemPackages, stepEmitBuilder,
+//     stepEmitLocalPkgInstall, stepEmitOp).
 var pluginEmitStepWords = map[StepKind]string{
 	StepKindFile:            "file",
 	StepKindShellHook:       "shell-hook",
@@ -80,6 +82,7 @@ var pluginEmitStepWords = map[StepKind]string{
 	StepKindSystemPackages:  "system-packages",
 	StepKindBuilder:         "builder",
 	StepKindLocalPkgInstall: "local-pkg-install",
+	StepKindOp:              "op",
 }
 
 // checkStepProviderBijection asserts every InstallStep kind is SERVED. A kind in

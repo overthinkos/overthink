@@ -201,6 +201,41 @@ func TestOCITargetEmitLocalPkgInstallViaPlugin(t *testing.T) {
 	}
 }
 
+// TestOCITargetEmitOpViaPlugin drives the FULL real chain the C1.5 externalization introduces for an
+// Op (task) step — the RICHEST build-emit, which drives Generator.emitTasks: OpStep → OCITarget.Emit →
+// emitStep → pluginEmitStepWords[Op]="op" → spliceClassStepEmit("op") → the compiled-in
+// candy/plugin-installstep OpEmit → emitViaHostBuild → HostBuild("step-emit",{Word:"op"}) → stepEmitOp
+// (the in-core Generator.emitTasks engine on the in-proc reverse channel) → the per-verb emitters. It
+// asserts both a RUN (mkdir) and a COPY (from the layer scratch stage) — the test FAILS without this
+// change (there is no in-proc Op StepProvider after the cutover; the plugin must serve step:op and the
+// host must register the step-emit renderer + thread Generator/Box/BuildDir/ContextRelPrefix onto the
+// buildEngineContext). This is the exact in-proc chain a pod overlay with a run:/task add_candy runs
+// host-side.
+func TestOCITargetEmitOpViaPlugin(t *testing.T) {
+	dir := t.TempDir()
+	gen := &Generator{BuildDir: dir, Candies: map[string]*Candy{"mytool": {Name: "mytool"}}}
+	tgt := &OCITarget{
+		Generator:        gen,
+		Box:              testResolvedBox(),
+		BuildDir:         dir,
+		ContextRelPrefix: ".build/mytool",
+	}
+	plan := &InstallPlan{Candy: "mytool", Steps: []InstallStep{
+		&OpStep{Op: &Op{Mkdir: "/opt/foo"}, CandyName: "mytool", ResolvedUser: "root"},
+		&OpStep{Op: &Op{Copy: "bin/tool", To: "/opt/foo/tool"}, CandyName: "mytool", ResolvedUser: "root"},
+	}}
+	if err := tgt.Emit([]*InstallPlan{plan}, EmitOpts{}); err != nil {
+		t.Fatalf("Emit: %v", err)
+	}
+	got := tgt.String()
+	if !strings.Contains(got, "RUN mkdir -p /opt/foo") {
+		t.Errorf("mkdir op not rendered as a RUN via the step:op plugin chain:\n%s", got)
+	}
+	if !strings.Contains(got, "COPY --from=mytool") || !strings.Contains(got, "bin/tool") || !strings.Contains(got, "/opt/foo/tool") {
+		t.Errorf("copy op not rendered as a COPY from the layer scratch stage via the step:op plugin chain:\n%s", got)
+	}
+}
+
 func TestOCITargetSkipsVenueSkip(t *testing.T) {
 	// A step with VenueSkip should be elided entirely.
 	tgt := &OCITarget{}
@@ -247,30 +282,34 @@ func (f *fakeSkipStep) Venue() Venue         { return VenueSkip }
 func (f *fakeSkipStep) RequiresGate() Gate   { return GateNone }
 func (f *fakeSkipStep) Reverse() []ReverseOp { return nil }
 
-// TestOCITargetLookupCandyRemoteQualifiedKey guards the add_candy-on-pod overlay
+// TestGeneratorCandyByNameRemoteQualifiedKey guards the add_candy-on-pod overlay
 // build: a REMOTE add_candy candy (fetched via ResolveOpts.ExtraCandyRefs) is keyed
 // in Generator.Candies under its fully-qualified ref, while the compiled plan step's
-// CandyName is the candy's bare intrinsic name. lookupCandy must resolve the bare
-// name to the qualified-key candy, or OCITarget.Emit fails with
-// `task emit: candy "<name>" not found`. Regression for the add_candy-on-pod-overlay
-// "candy not found" build failure.
-func TestOCITargetLookupCandyRemoteQualifiedKey(t *testing.T) {
+// CandyName is the candy's bare intrinsic name. candyByName (the step-emit Op/Builder
+// path's candy resolver) must resolve the bare name to the qualified-key candy, or the
+// OpStep build-emit fails with `task emit: candy "<name>" not found`. Regression for the
+// add_candy-on-pod-overlay "candy not found" build failure.
+func TestGeneratorCandyByNameRemoteQualifiedKey(t *testing.T) {
 	gen := &Generator{Candies: map[string]*Candy{
 		"github.com/org/repo/candy/marker": {Name: "marker"},
 		"local-layer":                      {Name: "local-layer"},
 	}}
-	tgt := &OCITarget{Generator: gen}
 
 	// Exact (local) key — bare == .Name — still resolves directly.
-	if c := tgt.lookupCandy("local-layer"); c == nil || c.Name != "local-layer" {
+	if c := gen.candyByName("local-layer"); c == nil || c.Name != "local-layer" {
 		t.Fatalf("local-layer: got %v, want .Name=local-layer", c)
 	}
 	// Bare name resolves the qualified-key remote candy (the regression this fix closes).
-	if c := tgt.lookupCandy("marker"); c == nil || c.Name != "marker" {
+	if c := gen.candyByName("marker"); c == nil || c.Name != "marker" {
 		t.Fatalf("marker bare-name lookup returned %v; qualified-key .Name fallback is broken", c)
 	}
 	// An unknown name is still nil (no accidental match).
-	if c := tgt.lookupCandy("nonexistent"); c != nil {
+	if c := gen.candyByName("nonexistent"); c != nil {
 		t.Fatalf("nonexistent: want nil, got %v", c)
+	}
+	// A nil Generator is safe (returns nil).
+	var nilGen *Generator
+	if c := nilGen.candyByName("marker"); c != nil {
+		t.Fatalf("nil Generator candyByName: want nil, got %v", c)
 	}
 }

@@ -7,9 +7,10 @@ import (
 
 // The act-emit enabler renders a run: step whose verb is a state-provision plugin
 // (plugin: <verb> + plugin_input, the provider implementing ProvisionActor) into shell at
-// install emit — the gap that opened once unix_group left #Op. Both DeployTarget emit
-// paths (renderOpCommand for the local/vm targets, emitOp for the OCI build) reach the
-// provider's RenderProvisionScript via the shared resolveProvisionScript seam (R3).
+// install emit — the gap that opened once unix_group left #Op. Both install-emit paths
+// (renderOpCommand for the local/vm targets, and the OCI pod-overlay Op build-emit via the
+// step:op OpEmit → step-emit seam → emitTasks `case "plugin"`) reach the provider's
+// RenderProvisionScript via the shared resolveProvisionScript seam (R3).
 
 // unixGroupActStep is the canonical exercise op: a `run:` step authoring the extracted
 // unix_group verb as a plugin (groupadd checkgrp with gid 4242).
@@ -53,10 +54,10 @@ func rawUnixGroupOp() Op {
 
 // emitTasks IS the real box-build emit path (writeCandySteps → g.emitTasks walks the
 // candy's runOps straight here). It must render a RAW plugin: unix_group run-Op — with NO
-// pre-conversion — into a Containerfile RUN carrying the groupadd. This guards the
-// regression a direct-emitOp test missed: emitOp pre-converted plugin→command, but the box
-// build never goes through emitOp, so a missing `case "plugin"` in emitTasks silently
-// dropped the groupadd as `# unknown verb "plugin"`.
+// pre-conversion — into a Containerfile RUN carrying the groupadd. This guards the box-build
+// `case "plugin"` seam DIRECTLY: the box build never goes through the pod-overlay OpStep
+// build-emit, so a missing `case "plugin"` in emitTasks would silently drop the groupadd as
+// `# unknown verb "plugin"` even if the overlay path stayed green.
 func TestEmitTasks_PluginAct_UnixGroup(t *testing.T) {
 	dir := t.TempDir()
 	layer := &Candy{Name: "lyr"}
@@ -196,22 +197,26 @@ func TestEmitTasks_PluginAct_KernelParam(t *testing.T) {
 	}
 }
 
-// emitOp (the OCI pod-overlay path) delegates the same RAW plugin op to emitTasks — proving
-// the pod-overlay build and the box build share the ONE `case "plugin"` seam (no
-// emitOp-local pre-conversion).
+// The OCI pod-overlay OpStep build-emit (C1.5) routes the RAW plugin act op through the FULL
+// step-emit chain: OpStep → OCITarget.Emit → emitStep → pluginEmitStepWords[Op]="op" →
+// spliceClassStepEmit("op") → candy/plugin-installstep OpEmit → emitViaHostBuild →
+// HostBuild("step-emit",{Word:"op"}) → stepEmitOp → Generator.emitTasks `case "plugin"`. This proves
+// the pod-overlay build and the box build still share the ONE `case "plugin"` seam (no pre-conversion)
+// even after the OpStep build-emit externalized onto the step-emit host-builder.
 func TestEmitOp_PluginAct_UnixGroup_OCI(t *testing.T) {
 	dir := t.TempDir()
 	layer := &Candy{Name: "lyr"}
 	g := &Generator{BuildDir: dir, Candies: map[string]*Candy{"lyr": layer}}
 	tgt := &OCITarget{Generator: g, Box: testResolvedBox(), BuildDir: dir, ContextRelPrefix: ".build/test-img"}
 	op := rawUnixGroupOp()
-	if err := tgt.emitOp(&OpStep{Op: &op, CandyName: "lyr"}); err != nil {
-		t.Fatalf("emitOp: %v", err)
+	plan := &InstallPlan{Candy: "lyr", Steps: []InstallStep{&OpStep{Op: &op, CandyName: "lyr"}}}
+	if err := tgt.Emit([]*InstallPlan{plan}, EmitOpts{}); err != nil {
+		t.Fatalf("Emit: %v", err)
 	}
 	out := tgt.buf.String()
 	for _, want := range []string{"RUN", "groupadd", "checkgrp", "4242"} {
 		if !strings.Contains(out, want) {
-			t.Errorf("emitOp Containerfile = %q, want substring %q", out, want)
+			t.Errorf("OpStep build-emit Containerfile = %q, want substring %q", out, want)
 		}
 	}
 }

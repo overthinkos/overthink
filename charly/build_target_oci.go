@@ -7,9 +7,14 @@ package main
 // generate.go writeCandySteps→emitTasks; the IR/OCITarget path is deploy-only.
 //
 // OCITarget is a thin walker over the InstallPlan that delegates to the
-// format/template rendering machinery in format_template.go + tasks.go
-// (OCITarget.emitOp for a plugin/run op delegates to the SAME emitTasks seam
-// box build uses, so the overlay stays functionally equivalent for one candy).
+// format/template rendering machinery in format_template.go + tasks.go. Every
+// compiler-emitted step kind's BUILD-emit is served by the compiled-in class:step
+// plugin candy/plugin-installstep (routed by pluginEmitStepWords through
+// spliceClassStepEmit); the HOST-COUPLED kinds (system-packages/builder/
+// local-pkg-install/op) call back the host build engine over the in-proc reverse
+// channel (step_emit_hostbuild.go), so the Op build-emit still flows through the
+// SAME Generator.emitTasks seam the box build uses and the overlay stays
+// functionally equivalent for one candy.
 //
 // The key property we want from OCITarget: feeding it a plan produced
 // by BuildDeployPlan must emit a Containerfile fragment that's
@@ -199,63 +204,19 @@ func (t *OCITarget) spliceClassStepEmit(word string, payload []byte, allowEmpty 
 // buildStageContext + RenderTemplate pipeline (the C1.3 relocation of the Builder build-emit onto
 // the same seam), plus the Generator (DevLocalPkg) + Box (Name) + ImageBuildDir the LocalPkgInstall
 // step-emitter needs to render the dev/prod localpkg IMAGE install via renderLocalPkgImageInstall
-// (the C1.4 relocation). A PURE step (file/shell-hook/…) ignores the channel entirely.
+// (the C1.4 relocation), plus the Generator + Box + ImageBuildDir + ContextRelPrefix the Op
+// step-emitter needs to drive the SAME Generator.emitTasks per-verb render pipeline the box build
+// uses (the C1.5 relocation of the OpStep build-emit onto the same seam). A PURE step
+// (file/shell-hook/…) ignores the channel entirely.
 func (t *OCITarget) stepEmitBuildContext() buildEngineContext {
 	return buildEngineContext{
-		DistroCfg:     wrapDistroDef(t.DistroDef),
-		Generator:     t.Generator,
-		BuilderConfig: t.BuilderConfig,
-		Box:           t.Box,
-		ImageBuildDir: t.BuildDir,
+		DistroCfg:        wrapDistroDef(t.DistroDef),
+		Generator:        t.Generator,
+		BuilderConfig:    t.BuilderConfig,
+		Box:              t.Box,
+		ImageBuildDir:    t.BuildDir,
+		ContextRelPrefix: t.ContextRelPrefix,
 	}
-}
-
-// emitTask renders a single task via the legacy emitTasks pipeline.
-// Because emitTasks processes the entire candy in one pass (including
-// coalescing adjacent mkdir/link/setcap batches), we accumulate
-// consecutive TaskSteps and flush them through emitTasks as a group.
-// This preserves today's rendering semantics exactly.
-func (t *OCITarget) emitOp(s *OpStep) error {
-	// Single-task emission delegates to the same emitTasks that
-	// writeCandySteps calls, but for one task at a time via a synthetic
-	// single-element layer.tasks slice. Requires Generator + Image.
-	if t.Generator == nil || t.Box == nil {
-		kind, _ := s.Op.Kind()
-		fmt.Fprintf(&t.buf, "# Task: %s (layer=%s) — no Generator context\n",
-			kind, s.CandyName)
-		return nil
-	}
-	layer := t.lookupCandy(s.CandyName)
-	if layer == nil {
-		return fmt.Errorf("task emit: candy %q not found", s.CandyName)
-	}
-
-	// Render just this one op (the OpStep the compiler produced from a plan
-	// run: step) via the shared emitter. A plugin: <verb> run-Op (the act-emit
-	// enabler) is handled by emitTasks' `case "plugin"` — the SAME seam the box
-	// build (writeCandySteps→emitTasks) flows through, so there is NO pre-conversion
-	// here (one seam, not two — R3/R5).
-	_, err := t.Generator.emitTasks(&t.buf, layer, t.Box, []Op{*s.Op}, t.BuildDir, t.ContextRelPrefix)
-	return err
-}
-
-// lookupCandy pulls the Candy struct by name from the Generator's
-// scanned candy set. Returns nil when the Generator is nil.
-//
-// A plan step's CandyName is the candy's INTRINSIC bare name (e.g.
-// "pod-addcandy-marker"), but a REMOTE add_candy candy fetched via
-// ResolveOpts.ExtraCandyRefs is keyed in Generator.Candies under its
-// fully-qualified ref (e.g. "github.com/org/repo/candy/pod-addcandy-marker").
-// A local candy keys bare == .Name, so the direct lookup covers it; for a
-// remote add_candy overlay layer the direct lookup misses, so fall back to
-// matching the Candy's own Name. Without this fallback an add_candy overlay
-// that pulls a remote layer with a run:/task step fails the overlay build with
-// `task emit: candy "<name>" not found` even though the candy WAS scanned in.
-func (t *OCITarget) lookupCandy(name string) *Candy {
-	if t.Generator == nil {
-		return nil
-	}
-	return t.Generator.candyByName(name)
 }
 
 // formatDefCacheMountDefs returns the cache mounts as the type

@@ -62,6 +62,12 @@ type buildEngineContext struct {
 	// (renderLocalPkgImageDevInstall). It is OCITarget.BuildDir, NOT Generator.BuildDir (the
 	// overlay build dir differs from the project .build root). Zero for every deploy-leg context.
 	ImageBuildDir string
+	// ContextRelPrefix is the OCITarget's build-context-relative prefix for staged inline
+	// content — the datum the HOST-COUPLED Op step-emitter (stepEmitOp, step_emit_hostbuild.go)
+	// passes to Generator.emitTasks so a write: op stages its content-addressed COPY source
+	// under the correct .build/<image>/_inline path (the C1.5 relocation of the OpStep build-emit
+	// onto the step-emit seam). It is OCITarget.ContextRelPrefix. Zero for every deploy-leg context.
+	ContextRelPrefix string
 }
 
 // builderStepImage resolves the builder image ref for a BuilderStep:

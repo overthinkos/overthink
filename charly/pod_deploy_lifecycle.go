@@ -246,8 +246,8 @@ func runOverlayBuild(_ context.Context, req spec.OverlayBuildRequest, in *overla
 	// actual RUN directives (not "no Generator context" comments). Thread the deploy's
 	// add_candy: refs into the candy scan (ExtraCandyRefs) — the SAME merged set the
 	// compile (compileNodePlans) resolved, carried on the plans' AddCandies provenance
-	// (R3) — so OCITarget.lookupCandy can resolve each add_candy candy BY NAME. Without
-	// this the overlay Generator scanned only the project + box candies, so an add_candy
+	// (R3) — so the OpStep build-emit's candyByName can resolve each add_candy candy BY NAME.
+	// Without this the overlay Generator scanned only the project + box candies, so an add_candy
 	// candy carrying a run:/task step (e.g. a remote @github marker layer) failed the
 	// overlay build with `task emit: candy "<name>" not found`, baking the add_candy
 	// layer into NOTHING. A bare local ref is a no-op in ExtraCandyRefs (addRef gates on

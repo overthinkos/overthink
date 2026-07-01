@@ -47,9 +47,7 @@ type CLI struct {
 	// with --dir.
 	Repo string `long:"repo" env:"CHARLY_PROJECT_REPO" placeholder:"OWNER/REPO[@REF]" help:"Read charly.yml from a remote git repo (e.g. overthinkos/overthink). Use 'default' for overthinkos/overthink."`
 
-	Clean    CleanCmd          `cmd:"" help:"Prune reusable build artifacts to defaults: retention (images, check runs) + sweep one-time makepkg leftovers"`
 	Box      BoxCmd            `cmd:"" name:"box" help:"Build, generate, inspect, and pull container boxes (reads charly.yml)"`
-	Candy    CandyCmd          `cmd:"" name:"candy" help:"Edit candy.yml files in the project's candy/ directory"`
 	Plugin   PluginInternalCmd `cmd:"" name:"__plugin" hidden:"" help:"internal: plugin server/relay plumbing"`
 	CliModel CliModelCmd       `cmd:"" name:"__cli-model" hidden:"" help:"internal: emit the CLI command tree as JSON (sdk.CLIModel) for the out-of-process MCP bridge"`
 
@@ -103,23 +101,44 @@ type CLI struct {
 	// the leaf onto one hidden command (doctor is a flags-only leaf, so the plugin raw-forwards).
 	DoctorInternal DoctorCmd `cmd:"" name:"__doctor" hidden:"" help:"internal: host dependency status (the externalized charly doctor command plugin forwards here)"`
 
-	Migrate  MigrateCmd  `cmd:"" help:"Migrate any opencharly config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
-	Settings SettingsCmd `cmd:"" help:"Manage runtime configuration (get/set/list)"`
+	// __clean / __settings / __candy re-home three of cutover C15's remaining WELDED machinery
+	// commands — CleanCmd (clean.go), SettingsCmd + its get/set/list/path/reset subtree (main.go),
+	// and CandyCmd + its set/add-{rpm,deb,pac,aur} subtree (scaffold_cmds.go) — onto hidden core
+	// commands, exposing each to its externalized `charly <word>` COMMAND plugin
+	// (candy/plugin-{clean,settings,candy}). Their Run handlers STAY core — they read charly.yml
+	// defaults + ResolveRuntime + prune .build/.check/podman tags (clean); read/write
+	// ~/.config/charly/config.yml + the credential store (settings); mutate candy/<name>/charly.yml
+	// via the yaml.v3 Node API + the traversal guard (candy) — none of which an out-of-process
+	// plugin can reach (R3) — so each plugin is a THIN forwarder that syscall.Exec's
+	// `charly __<word> <args…>` (the SAME __vm / __doctor internal-command pattern; the
+	// settings/candy subtrees raw-forward every subcommand token through kong passthrough, so ONE
+	// forwarder covers a leaf AND a tree). NOTE: `charly version` was DELIBERATELY EXCLUDED from
+	// C15 — pkg/arch/PKGBUILD's pkgver() stamps the package version via `bin/charly version`, so a
+	// project-less, plugin-less dev binary MUST still resolve `version`; externalizing it is an
+	// unfixable chicken-and-egg, so version stays a core command (the Version field below).
+	CleanInternal    CleanCmd    `cmd:"" name:"__clean" hidden:"" help:"internal: prune build artifacts (the externalized charly clean plugin forwards here)"`
+	SettingsInternal SettingsCmd `cmd:"" name:"__settings" hidden:"" help:"internal: runtime config get/set/list (the externalized charly settings plugin forwards here)"`
+	CandyInternal    CandyCmd    `cmd:"" name:"__candy" hidden:"" help:"internal: candy.yml authoring (the externalized charly candy plugin forwards here)"`
+
+	Migrate MigrateCmd `cmd:"" help:"Migrate any opencharly config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
 	// Every non-machinery command — the deploy-lifecycle + leaf-domain set (alias,
 	// ssh, start, stop, status, restart, update, remove, logs,
 	// shell, cmd, cp, volume, service, config, bundle, reap-orphans) PLUS check
 	// — is no longer a hardcoded field: each arrives via cli.Plugins as a builtin
 	// CommandProvider in its own plugin_command_<name>.go (collectCommandPlugins()).
-	// (mcp/secrets/udev/tmux/preempt/feature, vm AND doctor are now EXTERNAL commands served
-	// out-of-process by candy/plugin-* , dispatched via syscall.Exec, not builtin
-	// CommandProviders; see collectExternalCommandPlugins. vm/doctor forward to the hidden
-	// __vm / __doctor core commands above — their Run handlers stay core.)
+	// (mcp/secrets/udev/tmux/preempt/feature/vm/doctor AND clean/settings/candy are now
+	// EXTERNAL commands served out-of-process by candy/plugin-* , dispatched via syscall.Exec,
+	// not builtin CommandProviders; see collectExternalCommandPlugins. vm/doctor/clean/settings/
+	// candy forward to the hidden __vm / __doctor / __clean / __settings / __candy core commands
+	// above — their Run handlers stay core.)
 	// KongCommand() returns the existing <Name>Cmd struct verbatim, so the Run handler (and
 	// the core machinery it calls) is unchanged: only the CLI registration LOCATION moved.
 	// check is special-cased: its nested out-of-process command plugins (charly check
 	// kube/adb/appium) are injected into the holder's CheckCmd.Plugins by
-	// attachNestedCheckPlugins below. Only the machinery commands above (clean/box/
-	// candy/__plugin/migrate/settings) plus version stay hardcoded.
+	// attachNestedCheckPlugins below. Only the machinery commands box / __plugin / migrate / version
+	// (plus the hidden __* internals above) stay hardcoded on the CLI struct. (version stays core —
+	// pkg/arch's pkgver() stamps the package version via `bin/charly version`, an unfixable
+	// chicken-and-egg if externalized; excluded from C15.)
 	Version VersionCmd `cmd:"" help:"Print computed CalVer tag"`
 }
 

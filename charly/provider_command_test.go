@@ -312,4 +312,20 @@ func TestCommandProviders_ExtractedReachMCP(t *testing.T) {
 	if paths["feature.list"] {
 		t.Error("feature.list unexpectedly present in the builtin CLI model — `feature` is now an external command (candy/plugin-feature, the third welded-command externalization), not a builtin CommandProvider")
 	}
+	// C15's three remaining welded-command externalizations: clean/settings/candy are now
+	// EXTERNAL commands (candy/plugin-{clean,settings,candy}) re-homed onto the hidden
+	// __clean/__settings/__candy core commands — so their user-facing leaves are absent
+	// from this builtin-only model (their hidden __* twins stay, but are marked hidden).
+	// NOTE: `version` is DELIBERATELY NOT here — it was excluded from C15 (pkg/arch's pkgver()
+	// stamps the package version via `bin/charly version`), so it stays a CORE command and IS
+	// present in the builtin model (asserted by TestCLIModel_CoversCommands).
+	if paths["clean"] {
+		t.Error("clean unexpectedly present in the builtin CLI model — `clean` is now an external command (candy/plugin-clean, C15), forwarding to the hidden __clean core command")
+	}
+	if paths["settings.list"] {
+		t.Error("settings.list unexpectedly present in the builtin CLI model — `settings` is now an external command (candy/plugin-settings, C15), forwarding to the hidden __settings core command tree")
+	}
+	if paths["candy.set"] {
+		t.Error("candy.set unexpectedly present in the builtin CLI model — `candy` is now an external command (candy/plugin-candy, C15), forwarding to the hidden __candy core command tree")
+	}
 }

@@ -1726,3 +1726,85 @@ check-doctor-local:
         plugin_input:
             command: charly doctor
             in_container: false
+
+# =================================================================
+# check-commands-local — R10 witness for cutover C15's THREE remaining externalized COMMANDs
+# (candy/plugin-{clean,settings,candy}: command:clean / command:settings / command:candy) — the
+# sixth-through-eighth welded-command externalizations. ONE disposable kind:local deploy on
+# host: local composes the three command plugins and runs each command host-side with a SAFE,
+# read-only / dry-run / --help invocation, one check step per command:
+#   - `charly settings list`  → exit 0 + stdout lists the resolved runtime-config keys (auto_enable);
+#   - `charly candy --help`   → exit 0 (a TREE command whose --help proves dispatch WITHOUT mutating
+#                                any candy manifest — the tree has no non-mutating read verb);
+#   - `charly clean --dry-run`→ exit 0 + stdout carries the "would remove" retention report (dry-run
+#                                touches nothing).
+# For each the host charly resolves the command word via the discovered candy/plugin-* prescan (or
+# the /usr/lib/charly/plugins bake) and syscall.Exec's the plugin binary, which raw-forwards to the
+# hidden in-core `charly __<word>` command whose Run handler stays core — proving the externalized
+# command + the hidden-command raw-forward dispatch (leaf AND tree) end-to-end.
+# NOTE: `charly version` was DELIBERATELY EXCLUDED from C15 — pkg/arch/PKGBUILD's pkgver() stamps the
+# package version via `bin/charly version`, an unfixable chicken-and-egg if externalized — so it stays
+# a core command and is not exercised here (it is covered by candy/charly's own version check).
+# =================================================================
+check-commands-app:
+    local:
+        description: |-
+            Minimal kind:local template for the check-commands-local bed — composes the three
+            command-only candy/plugin-{clean,settings,candy} plugins (no install content) so the bed
+            exercises the externalized `charly clean`/`settings`/`candy` CLIs host-side.
+    check-commands-candy:
+        candy:
+            - plugin-clean
+            - plugin-settings
+            - plugin-candy
+check-commands-local:
+    local:
+        from: check-commands-app
+        host: local
+        disposable: true
+        lifecycle: dev
+        description: >-
+            Sole proof of cutover C15's three remaining externalized COMMANDs (candy/plugin-clean,
+            plugin-settings, plugin-candy — command:clean / command:settings / command:candy), the
+            sixth-through-eighth welded-command externalizations in the core-externalization program.
+            A disposable kind:local deploy on host: local runs each command host-side with a safe
+            read-only / dry-run / --help invocation: the host charly resolves each command word via
+            the discovered plugin prescan and syscall.Exec's the plugin binary, which raw-forwards to
+            the hidden in-core `charly __clean`/`__settings`/`__candy` command whose Run handler stays
+            core. Every command exits 0 — proving the externalized command + the hidden-command
+            raw-forward dispatch (leaf AND command-tree) end-to-end. (`charly version` is excluded
+            from C15 — it stays a core command; pkgver() stamps the package version via it.)
+    settings-list-runs:
+        check: command=charly settings list exits 0 and lists the resolved runtime-config keys (proving the externalized command TREE raw-forwards to the in-core __settings handler)
+        id: settings-list-runs
+        exit_status: 0
+        stdout:
+            - contains: 'auto_enable'
+        context:
+            - runtime
+        plugin: command
+        plugin_input:
+            command: charly settings list
+            in_container: false
+    candy-help-runs:
+        check: command=charly candy --help exits 0 (proving the externalized command TREE resolves + raw-forwards to the in-core __candy handler without mutating any candy manifest)
+        id: candy-help-runs
+        exit_status: 0
+        context:
+            - runtime
+        plugin: command
+        plugin_input:
+            command: charly candy --help
+            in_container: false
+    clean-dry-run-runs:
+        check: command=charly clean --dry-run exits 0 and prints the would-remove retention report (proving the externalized command raw-forwards to the in-core __clean handler, touching nothing)
+        id: clean-dry-run-runs
+        exit_status: 0
+        stdout:
+            - contains: 'would remove'
+        context:
+            - runtime
+        plugin: command
+        plugin_input:
+            command: charly clean --dry-run
+            in_container: false

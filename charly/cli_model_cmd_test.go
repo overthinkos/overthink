@@ -22,7 +22,10 @@ func cliModelLeafPaths(t *testing.T) map[string]bool {
 // TestCLIModel_CoversCommands proves the CLI-export seam enumerates the command tree the
 // out-of-process MCP bridge reflects into tools — both hardcoded machinery (box.build,
 // version) and commands contributed via CommandProviders (alias.list; `secrets` is an
-// EXTERNAL command now — candy/plugin-secrets — so it is absent from this builtin model).
+// EXTERNAL command now — candy/plugin-secrets — so it is absent from this builtin model, as
+// are the C15-externalized clean/settings/candy — see TestCommandProviders_ExtractedReachMCP.
+// `version` stays a CORE command — pkg/arch's pkgver() stamps the package version via it — so it
+// remains present here).
 func TestCLIModel_CoversCommands(t *testing.T) {
 	paths := cliModelLeafPaths(t)
 	for _, want := range []string{"box.build", "alias.list", "version"} {

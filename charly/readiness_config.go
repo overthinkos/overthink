@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"sync/atomic"
 )
 
 // readiness_config.go — charly core's readiness ENTRY. The config→resolved resolver AND the
@@ -19,12 +20,28 @@ import (
 // defaults (always safe + never-hang) with a logged warning — a bad config block degrades to the
 // built-in defaults rather than breaking every deploy.
 var (
-	readinessOnce   sync.Once
-	readinessCached ResolvedReadiness
+	readinessOnce    sync.Once
+	readinessCached  ResolvedReadiness
+	readinessLoading atomic.Bool // re-entrancy guard — see loadedReadiness
 )
 
 func loadedReadiness() ResolvedReadiness {
+	// Re-entrancy guard (sync.Once is NOT re-entrant). The Once's resolver below calls
+	// LoadUnified, which connects the project's kind plugins; each LocalTransport.Connect threads
+	// readiness env via readinessPluginEnv → loadedReadiness — a SAME-goroutine re-entry into this
+	// Once that would deadlock on its internal mutex (RCA'd via `charly doctor` in-project:
+	// credentialHealth → connectPluginByWord → loadProjectPlugins → Connect → readinessPluginEnv →
+	// loadedReadiness → LoadUnified → connectDeclaredKindPlugins → … → loadedReadiness). The
+	// readiness bounds are not resolved yet mid-load, so a re-entrant (or concurrent-during-first-
+	// load) call returns the built-in defaults: a plugin connected to LOAD the config cannot depend
+	// on the not-yet-resolved readiness, and the built-in defaults are always safe + never-hang.
+	if readinessLoading.Load() {
+		rr, _ := readinessResolve(nil)
+		return rr
+	}
 	readinessOnce.Do(func() {
+		readinessLoading.Store(true)
+		defer readinessLoading.Store(false)
 		var def *ReadinessConfig
 		if uf, ok, err := LoadUnified("."); err == nil && ok && uf != nil {
 			def = uf.Defaults.Readiness

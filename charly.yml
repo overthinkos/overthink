@@ -1672,3 +1672,57 @@ check-feature-local:
         plugin_input:
             command: charly feature list candy
             in_container: false
+
+# =================================================================
+# check-doctor-local — R10 witness for the externalized `charly doctor` COMMAND
+# (candy/plugin-doctor, command:doctor) — the FIFTH welded-command externalization.
+# A disposable kind:local deploy on host: local that runs the deterministic `charly doctor`
+# host-side:
+#   - `charly doctor` → exits 0 and prints the host-dependency report; the externalized command
+#     resolves the `doctor` word via the discovered candy/plugin-doctor prescan, syscall.Exec's
+#     the plugin binary (host-built, or baked at /usr/lib/charly/plugins by pkg/arch), and the
+#     plugin raw-forwards to the hidden in-core `charly __doctor` command, whose DoctorCmd.Run
+#     handler drives the package-main host-detection symbols (credentialHealth / DetectGPU /
+#     DetectVFIO …) that cannot cross the process boundary. The output is asserted to contain the
+#     stable "Container Engine" group header (always printed), proving the externalized command +
+#     the hidden-command raw-forward dispatch end-to-end. `charly doctor` exits 0 whenever a
+#     container engine (podman/docker) is present — the sole required group — which holds on any
+#     charly host, so the bed's exit-0 assertion is deterministic.
+# =================================================================
+check-doctor-app:
+    local:
+        description: |-
+            Minimal kind:local template for the check-doctor-local bed — composes the
+            command-only candy/plugin-doctor (no install content) so the bed exercises the
+            externalized `charly doctor` CLI host-side.
+    check-doctor-candy:
+        candy:
+            - plugin-doctor
+check-doctor-local:
+    local:
+        from: check-doctor-app
+        host: local
+        disposable: true
+        lifecycle: dev
+        description: >-
+            Sole proof of the externalized `charly doctor` COMMAND (candy/plugin-doctor,
+            command:doctor), the fifth welded-command externalization in the core-externalization
+            program. A disposable kind:local deploy on host: local runs `charly doctor` host-side:
+            the host charly resolves the `doctor` word via the discovered candy/plugin-doctor
+            prescan and syscall.Exec's the plugin binary, which raw-forwards to the hidden in-core
+            `charly __doctor` command (DoctorCmd.Run drives the package-main host-detection symbols
+            credentialHealth / DetectGPU / DetectVFIO that stay core). The command exits 0 and
+            prints the host-dependency report — including the "Container Engine" group header —
+            proving the externalized command + the hidden-command raw-forward dispatch end-to-end.
+    doctor-runs:
+        check: command=charly doctor exits 0 and prints the host-dependency report (proving the externalized command raw-forwards to the in-core __doctor handler)
+        id: doctor-runs
+        exit_status: 0
+        stdout:
+            - contains: 'Container Engine'
+        context:
+            - runtime
+        plugin: command
+        plugin_input:
+            command: charly doctor
+            in_container: false

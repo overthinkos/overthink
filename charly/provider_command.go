@@ -13,7 +13,7 @@ import (
 // kong.Plugins (the CLI struct embeds kong.Plugins); the embedded command type
 // carries the Run(...) handler Kong dispatches to. This is the 6th provider class
 // (kind/verb/deploy/step/builder/command). Only NON-machinery commands become
-// providers; the machinery commands (box/migrate/__plugin/settings/version/doctor/
+// providers; the machinery commands (box/migrate/__plugin/settings/version/
 // clean/candy) stay hardcoded on the CLI struct.
 type CommandProvider interface {
 	Provider

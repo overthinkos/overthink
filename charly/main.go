@@ -48,7 +48,6 @@ type CLI struct {
 	Repo string `long:"repo" env:"CHARLY_PROJECT_REPO" placeholder:"OWNER/REPO[@REF]" help:"Read charly.yml from a remote git repo (e.g. overthinkos/overthink). Use 'default' for overthinkos/overthink."`
 
 	Clean    CleanCmd          `cmd:"" help:"Prune reusable build artifacts to defaults: retention (images, check runs) + sweep one-time makepkg leftovers"`
-	Doctor   DoctorCmd         `cmd:"" help:"Show host dependency status"`
 	Box      BoxCmd            `cmd:"" name:"box" help:"Build, generate, inspect, and pull container boxes (reads charly.yml)"`
 	Candy    CandyCmd          `cmd:"" name:"candy" help:"Edit candy.yml files in the project's candy/ directory"`
 	Plugin   PluginInternalCmd `cmd:"" name:"__plugin" hidden:"" help:"internal: plugin server/relay plumbing"`
@@ -93,6 +92,17 @@ type CLI struct {
 	// is large + nested, so the plugin forwards raw args rather than re-expressing each leaf).
 	VmInternal VmCmd `cmd:"" name:"__vm" hidden:"" help:"internal: the VM lifecycle command tree (the externalized charly vm plugin forwards here)"`
 
+	// __doctor re-homes the in-core DoctorCmd (doctor.go — host dependency status) onto ONE
+	// hidden command, exposing it to the externalized `charly doctor` COMMAND plugin
+	// (candy/plugin-doctor, command:doctor). DoctorCmd's Run handler STAYS core — it calls
+	// package-main host-detection symbols (credentialHealth; DetectGPU / DetectAMDGPU /
+	// GPURunArgs / DetectHostDevices in devices.go; DetectVFIO / VfioGroupAccessible /
+	// MemlockLimitBytes in gpu/vfio) that this out-of-process plugin cannot reach (R3) — so the
+	// plugin is a THIN forwarder that syscall.Exec's `charly __doctor <args…>` (command.go). This
+	// is the SAME internal-command pattern as __vm / __feature-list / __preempt-status, re-homing
+	// the leaf onto one hidden command (doctor is a flags-only leaf, so the plugin raw-forwards).
+	DoctorInternal DoctorCmd `cmd:"" name:"__doctor" hidden:"" help:"internal: host dependency status (the externalized charly doctor command plugin forwards here)"`
+
 	Migrate  MigrateCmd  `cmd:"" help:"Migrate any opencharly config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
 	Settings SettingsCmd `cmd:"" help:"Manage runtime configuration (get/set/list)"`
 	// Every non-machinery command — the deploy-lifecycle + leaf-domain set (alias,
@@ -100,15 +110,15 @@ type CLI struct {
 	// shell, cmd, cp, volume, service, config, bundle, reap-orphans) PLUS check
 	// — is no longer a hardcoded field: each arrives via cli.Plugins as a builtin
 	// CommandProvider in its own plugin_command_<name>.go (collectCommandPlugins()).
-	// (mcp/secrets/udev/tmux/preempt/feature AND vm are now EXTERNAL commands served
+	// (mcp/secrets/udev/tmux/preempt/feature, vm AND doctor are now EXTERNAL commands served
 	// out-of-process by candy/plugin-* , dispatched via syscall.Exec, not builtin
-	// CommandProviders; see collectExternalCommandPlugins. vm forwards to the hidden
-	// __vm core command above — its VmCmd Run handlers stay core.)
+	// CommandProviders; see collectExternalCommandPlugins. vm/doctor forward to the hidden
+	// __vm / __doctor core commands above — their Run handlers stay core.)
 	// KongCommand() returns the existing <Name>Cmd struct verbatim, so the Run handler (and
 	// the core machinery it calls) is unchanged: only the CLI registration LOCATION moved.
 	// check is special-cased: its nested out-of-process command plugins (charly check
 	// kube/adb/appium) are injected into the holder's CheckCmd.Plugins by
-	// attachNestedCheckPlugins below. Only the machinery commands above (clean/doctor/box/
+	// attachNestedCheckPlugins below. Only the machinery commands above (clean/box/
 	// candy/__plugin/migrate/settings) plus version stay hardcoded.
 	Version VersionCmd `cmd:"" help:"Print computed CalVer tag"`
 }

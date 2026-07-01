@@ -49,8 +49,42 @@ func buildBundleNode(gn *genericNode) (*BundleNode, error) {
 		setBundleCrossRef(&dn, gn.disc, gn.discValue.Value)
 	}
 
+	children, err := buildResourceMemberChildren(gn)
+	if err != nil {
+		return nil, err
+	}
+	for name, member := range children {
+		// A targetless GROUP (no own workload target) places members ALONGSIDE
+		// (shared net → Peer); a WORKLOAD places its resource children INSIDE its
+		// venue (deploy-into → Nested).
+		if dn.Target == "" {
+			if dn.Members == nil {
+				dn.Members = map[string]*BundleNode{}
+			}
+			dn.Members[name] = member
+		} else {
+			if dn.Children == nil {
+				dn.Children = map[string]*BundleNode{}
+			}
+			dn.Children[name] = member
+		}
+	}
+	return &dn, nil
+}
+
+// buildResourceMemberChildren decodes gn's RESOURCE-MEMBER entity children into a
+// name→*BundleNode map via the SAME buildBundleNode recursion — the SINGLE source of
+// truth for authored member-tree decode (R3). It is called by buildBundleNode (the
+// in-proc builtin path, which then partitions into Members/Children by the node's
+// Target) AND by runPluginKind (the EXTERNAL structural-kind path — F5 authored-member
+// input-threading — which threads this decoded subtree to the plugin's OpLoad via
+// op.Env so the plugin attaches it to its spec.Deploy reply). Data + step children are
+// NOT members — they fold into the node body via decodeNodeValue. A non-resource entity
+// child is a hard error (deploy/resource children must be pod/vm/k8s/local/android/group).
+func buildResourceMemberChildren(gn *genericNode) (map[string]*BundleNode, error) {
+	var out map[string]*BundleNode
 	for _, rk := range gn.children {
-		// Data + step children are folded into the bundle body by decodeNodeValue;
+		// Data + step children are folded into the node body by decodeNodeValue;
 		// only sub-ENTITY children are resource members.
 		if rk.discClass != "entity" {
 			continue
@@ -62,22 +96,12 @@ func buildBundleNode(gn *genericNode) (*BundleNode, error) {
 		if err != nil {
 			return nil, err
 		}
-		// A targetless GROUP (no own workload target) places members ALONGSIDE
-		// (shared net → Peer); a WORKLOAD places its resource children INSIDE its
-		// venue (deploy-into → Nested).
-		if dn.Target == "" {
-			if dn.Members == nil {
-				dn.Members = map[string]*BundleNode{}
-			}
-			dn.Members[rk.name] = member
-		} else {
-			if dn.Children == nil {
-				dn.Children = map[string]*BundleNode{}
-			}
-			dn.Children[rk.name] = member
+		if out == nil {
+			out = map[string]*BundleNode{}
 		}
+		out[rk.name] = member
 	}
-	return &dn, nil
+	return out, nil
 }
 
 // isResourceDisc reports whether a discriminator names a deploy-substrate kind

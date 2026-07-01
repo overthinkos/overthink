@@ -365,6 +365,22 @@ func (d Diagnostics) HasErrors() bool {
 	return false
 }
 
+// StructuralKindLoadEnv is the OpLoad invocation context (op.Env) the host threads to a
+// STRUCTURAL class:kind plugin (F5 authored-member input-threading). A structural kind's
+// authored RESOURCE-MEMBER children (pod/vm/k8s/local/android/group sub-entities) cannot ride
+// op.Params — that JSON is unified against the plugin's CLOSED #<Kind>Input def, which the
+// member subtree would violate. So the host PRE-DECODES the authored member children HOST-SIDE,
+// via the SAME core buildBundleNode recursion the builtin path uses (buildResourceMemberChildren
+// — one member-decode source of truth, R3), and threads the decoded subtree HERE. The plugin
+// decodes only its KIND-SPECIFIC scalar config from op.Params and ATTACHES these members to its
+// spec.Deploy reply — Members for a targetless kind (group), Children for a workload kind — so
+// runPluginKind folds a COMPLETE Bundle (with members) into uf.Bundle, identical to the builtin
+// decode. Cross-member `${HOST:…}` refs survive as literal strings resolved later by tree
+// position (check_members.go), so host-side pre-decode is structure-preserving.
+type StructuralKindLoadEnv struct {
+	Members map[string]*Deploy `json:"members,omitempty"`
+}
+
 // AndroidDeployVenue is the preresolved deploy:android substrate payload the
 // host's android deploy preresolver produces (in DeployVenue.Substrate) and the
 // candy/plugin-adb deploy:android provider decodes. The host resolves the device

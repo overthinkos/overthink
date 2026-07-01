@@ -93,6 +93,44 @@ func recognizedKind(word string) bool {
 	return declaredKind[word]
 }
 
+// recognizedStructuralKind reports whether `word` resolves to a CONNECTED provider that decodes a
+// STRUCTURAL entity (F5) — a plugin kind whose OpLoad reply is a spec.Deploy member tree the host
+// folds into uf.Bundle. Precisely EXCLUDES FLAT plugin kinds and the tier-1 kinds (distro/builder/
+// init/target/agent/module/sidecar/package-group), which are registered providers but NOT structural.
+func recognizedStructuralKind(word string) bool {
+	prov, ok := providerRegistry.ResolveKind(word)
+	if !ok {
+		return false
+	}
+	sc, ok := prov.(structuralKindCarrier)
+	return ok && sc.isStructuralKind()
+}
+
+// isDeclaredExternalKind reports whether `word` is a pre-scan-DECLARED external plugin kind (an F4/F5
+// plugin candy's `kind:<word>` declaration) whose out-of-process provider may not be connected yet.
+// This set is external-only — a core kind is never declared via a plugin manifest.
+func isDeclaredExternalKind(word string) bool {
+	declaredDeployMu.RLock()
+	defer declaredDeployMu.RUnlock()
+	return declaredKind[word]
+}
+
+// externalKindMayNestMembers reports whether a node whose discriminator is `word` may nest
+// sub-ENTITY (resource-member) children at PARSE time because `word` is an EXTERNAL STRUCTURAL plugin
+// kind (F5 authored-member input-threading). It admits ONLY a connected STRUCTURAL kind — a FLAT
+// plugin kind and every non-structural CORE kind (candy/distro/…) stay guarded (parseNode's
+// resourceKindSet check covers the core DEPLOY kinds). During the depth-0 connect pre-pass a declared
+// external kind may not be connected yet (structural-ness unknown), so it is admitted THERE and the
+// definitive decision is deferred to runPluginKind once connected: a STRUCTURAL kind reconstructs the
+// authored members; a FLAT kind hard-errors on member children (never a silent drop). Mirrors
+// recognizedDeploySubstrate's "declared-before-connected" leniency.
+func externalKindMayNestMembers(word string) bool {
+	if recognizedStructuralKind(word) {
+		return true
+	}
+	return inKindConnectPass() && isDeclaredExternalKind(word)
+}
+
 // registerDeclaredKind records one declared external kind word (F4).
 func registerDeclaredKind(word string) {
 	if word == "" {

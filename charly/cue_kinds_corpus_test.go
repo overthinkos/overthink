@@ -180,8 +180,8 @@ func nodeHasPluginKindDisc(node cue.Value) bool {
 		if kindWordSet[k] {
 			continue // a core kind — already handled by the kinds loop
 		}
-		if _, ok := providerRegistry.ResolveKind(k); ok {
-			return true // a registered plugin kind
+		if recognizedKind(k) {
+			return true // a registered OR pre-scan-declared plugin kind (incl. external structural kinds) — validated via the loader/bed path, not core #NodeDoc here
 		}
 		if isExternalDeploySubstrate(k) {
 			return true // an external (out-of-process) deploy substrate — validated via the loader/bed path, not core #NodeDoc here

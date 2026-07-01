@@ -560,8 +560,53 @@ check-local:
         plugin_input:
             command: "test -f /tmp/charly-examplestep/examplestep-deploy/probe && echo EXAMPLESTEP-DEPLOY-PROBE-PRESENT"
             in_container: false
-# External (out-of-process) deploy-target lifecycle witness over the E3b reverse
-# channel. The substrate is the `exampledeploy` word served by the out-of-tree
+# =============================================================================
+# check-structkind — R10 witness for F5 authored-member INPUT-threading (the
+# foundation the group/pod/vm/k8s/local/android/candy structural-kind
+# externalizations land on). The TOP node is an EXTERNAL STRUCTURAL plugin kind
+# (examplestructkind, candy/plugin-example-structkind, out-of-process — NOT
+# compiled in): its authored resource-MEMBER child is pre-decoded HOST-SIDE (the
+# core buildBundleNode recursion) and threaded to the plugin's OpLoad via op.Env;
+# the plugin ATTACHES it to its spec.Deploy reply, so the host folds a COMPLETE
+# Bundle (with the AUTHORED member) into uf.Bundle — byte-equivalent to a builtin
+# group (proven hermetically by TestExternalStructKind_StructuralDecode, which
+# also covers peer + nested + cross-member ${HOST:} reconstruction). This bed is
+# the RUNTIME leg: the reconstructed member (a kind:local host deploy applying
+# check-structkind-layer) is brought up and its hoisted marker check runs on the
+# host — proving the reconstructed authored member DEPLOYS end-to-end. The
+# deploy-config scalars (disposable/lifecycle/description) ride op.Params; the
+# member rides op.Env (input-threaded).
+# =============================================================================
+check-structkind-app:
+    local:
+        description: |-
+            Minimal kind:local template for the check-structkind member — composes
+            check-structkind-layer (drops /etc/check-structkind-marker on the host) so the
+            structural-kind member has a deterministic, collision-free host-side deploy effect.
+    check-structkind-app-candy:
+        candy:
+            - check-structkind-layer
+check-structkind:
+    examplestructkind:
+        disposable: true
+        lifecycle: dev
+        description: >-
+            Sole RUNTIME witness of F5 authored-member INPUT-threading: the top node is the
+            external STRUCTURAL plugin kind examplestructkind (out-of-process, candy/
+            plugin-example-structkind), whose authored resource-member child is pre-decoded
+            host-side via the core buildBundleNode recursion and threaded to the plugin's OpLoad
+            via op.Env; the plugin attaches it to its spec.Deploy reply so the host folds a
+            COMPLETE Bundle (with the authored member) into uf.Bundle, byte-equivalent to a
+            builtin group. The reconstructed member (check-structkind-member, a kind:local host
+            deploy of check-structkind-app) is brought up and its hoisted marker check asserts
+            /etc/check-structkind-marker on the host filesystem — proving the reconstructed
+            authored member deploys end-to-end. Hermetic peer/nested/cross-member reconstruction
+            is proven by TestExternalStructKind_StructuralDecode.
+    check-structkind-member:
+        local:
+            from: check-structkind-app
+            host: local
+
 # candy/plugin-example-deploy (recognized at parse time via the plugin-declaration
 # pre-scan, connected at deploy time via loadDeployPlugins). Add Invokes the plugin
 # out-of-process; it dials back through the SDK Executor to write markers on the host

@@ -160,12 +160,15 @@ func parseNode(name string, m *yaml.Node, asChild bool) (*genericNode, error) {
 				return nil, err
 			}
 			// Wrong-kind-child gate: only a DEPLOYABLE kind nests sub-ENTITY members
-			// (a pod/vm/k8s/local/android/group). A non-deployable kind
-			// (candy/distro/…) admits ONLY data + step children. (This replaces
-			// the per-child CUE kind-disjunction, which was an O(N×kinds×children)
-			// blow-up; CUE still strictly validates each node's closed VALUE.)
-			if child.discClass == "entity" && !resourceKindSet[gn.disc] {
-				return nil, fmt.Errorf("node %q (kind %q): sub-entity child %q (kind %q) is not allowed — only deployable kinds (pod/vm/k8s/local/android/group) nest sub-entities", name, gn.disc, child.name, child.disc)
+			// (a pod/vm/k8s/local/android/group) OR an EXTERNAL plugin kind (a
+			// STRUCTURAL kind reconstructs the authored members, F5; a FLAT kind is
+			// hard-errored later by runPluginKind — never silently dropped). A
+			// non-deployable CORE kind (candy/distro/…) admits ONLY data + step
+			// children. (This replaces the per-child CUE kind-disjunction, which was an
+			// O(N×kinds×children) blow-up; CUE still strictly validates each node's
+			// closed VALUE.)
+			if child.discClass == "entity" && !resourceKindSet[gn.disc] && !externalKindMayNestMembers(gn.disc) {
+				return nil, fmt.Errorf("node %q (kind %q): sub-entity child %q (kind %q) is not allowed — only deployable kinds (pod/vm/k8s/local/android/group) or an external structural plugin kind nest sub-entities", name, gn.disc, child.name, child.disc)
 			}
 			gn.children = append(gn.children, child)
 		}

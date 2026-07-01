@@ -71,7 +71,29 @@ func runPluginKind(prov Provider, gn *genericNode, uf *UnifiedFile) error {
 			return fmt.Errorf("node %q: kind %q validation failed: %s", gn.name, gn.disc, formatKindDiagnostics(diags))
 		}
 	}
-	out, err := prov.Invoke(context.Background(), &Operation{Reserved: gn.disc, Op: OpLoad, Params: json.RawMessage(paramsJSON)})
+	// F5 authored-member input-threading: a STRUCTURAL kind's authored RESOURCE-MEMBER
+	// children are pre-decoded HOST-SIDE via the SAME core buildBundleNode recursion the
+	// builtin path uses (buildResourceMemberChildren — one member-decode source of truth,
+	// R3) and threaded to the plugin's OpLoad via op.Env, so the plugin reconstructs the
+	// authored member tree into its spec.Deploy reply. They CANNOT ride op.Params: it is
+	// unified against the plugin's CLOSED #<Kind>Input def, which the member subtree would
+	// violate. A FLAT kind (F4) is not structural — no member env, opaque body only.
+	structural := false
+	if sc, ok := prov.(structuralKindCarrier); ok && sc.isStructuralKind() {
+		structural = true
+	}
+	var envJSON json.RawMessage
+	if structural {
+		members, merr := buildResourceMemberChildren(gn)
+		if merr != nil {
+			return fmt.Errorf("node %q: decode members: %w", gn.name, merr)
+		}
+		envJSON, err = json.Marshal(spec.StructuralKindLoadEnv{Members: members})
+		if err != nil {
+			return fmt.Errorf("node %q: marshal member env: %w", gn.name, err)
+		}
+	}
+	out, err := prov.Invoke(context.Background(), &Operation{Reserved: gn.disc, Op: OpLoad, Params: json.RawMessage(paramsJSON), Env: envJSON})
 	if err != nil {
 		return fmt.Errorf("node %q: plugin kind %q: %w", gn.name, gn.disc, err)
 	}
@@ -79,7 +101,7 @@ func runPluginKind(prov Provider, gn *genericNode, uf *UnifiedFile) error {
 	// folds into uf.Bundle — the SAME map a builtin structural kind's DecodeNode populates
 	// (buildBundleNodeInto), so the entity participates in deploy/check exactly like a builtin
 	// pod/group/candy. A FLAT kind (F4) lands its opaque body in uf.PluginKinds, unchanged.
-	if sc, ok := prov.(structuralKindCarrier); ok && sc.isStructuralKind() {
+	if structural {
 		var dn BundleNode
 		if err := json.Unmarshal(out.JSON, &dn); err != nil {
 			return fmt.Errorf("node %q: structural kind %q reply decode: %w", gn.name, gn.disc, err)
@@ -89,6 +111,15 @@ func runPluginKind(prov Provider, gn *genericNode, uf *UnifiedFile) error {
 		}
 		uf.Bundle[gn.name] = dn
 		return nil
+	}
+	// A FLAT (non-structural) kind's body is opaque (uf.PluginKinds) — it has NO member tree, and
+	// assembleEntityBody skips entity children, so any authored resource-member child would be
+	// SILENTLY DROPPED. Reject loudly instead (the parser admits members under any external kind;
+	// this is where a flat kind's members are caught, F5 authored-member input-threading).
+	for _, ch := range gn.children {
+		if ch.discClass == "entity" {
+			return fmt.Errorf("node %q: kind %q is not structural — it cannot nest resource-member children (%q); declare Structural:true to reconstruct authored members", gn.name, gn.disc, ch.name)
+		}
 	}
 	if uf.PluginKinds == nil {
 		uf.PluginKinds = map[string]map[string]json.RawMessage{}

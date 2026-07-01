@@ -3,102 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// --- A1: scanVFIO against a synthetic sysfs tree ---
-
-func writeFile(t *testing.T, path, content string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func symlink(t *testing.T, target, link string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(target, link); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestScanVFIO(t *testing.T) {
-	sys := t.TempDir()
-	cmdline := filepath.Join(sys, "cmdline")
-	writeFile(t, cmdline, "BOOT_IMAGE=/vmlinuz root=UUID=x amd_iommu=on iommu=pt rw\n")
-
-	// IOMMU group 13: a GPU (0300) + its audio function (0403).
-	gpu := filepath.Join(sys, "bus", "pci", "devices", "0000:01:00.0")
-	aud := filepath.Join(sys, "bus", "pci", "devices", "0000:01:00.1")
-	writeFile(t, filepath.Join(gpu, "class"), "0x030000\n")
-	writeFile(t, filepath.Join(gpu, "vendor"), "0x10de\n")
-	writeFile(t, filepath.Join(gpu, "device"), "0x2704\n")
-	writeFile(t, filepath.Join(aud, "class"), "0x040300\n")
-	writeFile(t, filepath.Join(aud, "vendor"), "0x10de\n")
-	writeFile(t, filepath.Join(aud, "device"), "0x22bb\n")
-
-	// driver + iommu_group symlinks (scanVFIO reads basename only).
-	symlink(t, "../../../bus/pci/drivers/vfio-pci", filepath.Join(gpu, "driver"))
-	symlink(t, "../../../bus/pci/drivers/snd_hda_intel", filepath.Join(aud, "driver"))
-	symlink(t, "../../../kernel/iommu_groups/13", filepath.Join(gpu, "iommu_group"))
-	symlink(t, "../../../kernel/iommu_groups/13", filepath.Join(aud, "iommu_group"))
-
-	// iommu group membership listing.
-	grpDev := filepath.Join(sys, "kernel", "iommu_groups", "13", "devices")
-	writeFile(t, filepath.Join(grpDev, "0000:01:00.0"), "")
-	writeFile(t, filepath.Join(grpDev, "0000:01:00.1"), "")
-
-	rep := scanVFIO(sys, cmdline)
-
-	if !rep.IOMMUEnabled {
-		t.Error("expected IOMMUEnabled=true (iommu_groups populated)")
-	}
-	if rep.IOMMUKind != "amd" {
-		t.Errorf("IOMMUKind = %q, want amd", rep.IOMMUKind)
-	}
-	if len(rep.GPUs) != 1 {
-		t.Fatalf("len(GPUs) = %d, want 1 (only the 0x0300 device)", len(rep.GPUs))
-	}
-	g := rep.GPUs[0]
-	if g.Addr != "0000:01:00.0" || g.VendorID != "0x10de" || g.DeviceID != "0x2704" {
-		t.Errorf("GPU id mismatch: %+v", g)
-	}
-	if g.Driver != "vfio-pci" {
-		t.Errorf("GPU driver = %q, want vfio-pci", g.Driver)
-	}
-	if g.IOMMUGroup != 13 {
-		t.Errorf("GPU IOMMUGroup = %d, want 13", g.IOMMUGroup)
-	}
-	if len(g.GroupMembers) != 2 {
-		t.Fatalf("GroupMembers = %d, want 2 (GPU + audio)", len(g.GroupMembers))
-	}
-	// Members sorted by Addr → GPU first, audio second.
-	if g.GroupMembers[0].Addr != "0000:01:00.0" || g.GroupMembers[1].Addr != "0000:01:00.1" {
-		t.Errorf("group members not sorted/expected: %+v", g.GroupMembers)
-	}
-}
-
-func TestScanVFIO_NoIOMMU(t *testing.T) {
-	sys := t.TempDir()
-	cmdline := filepath.Join(sys, "cmdline")
-	writeFile(t, cmdline, "BOOT_IMAGE=/vmlinuz root=UUID=x rw\n") // no iommu flag
-	rep := scanVFIO(sys, cmdline)
-	if rep.IOMMUEnabled {
-		t.Error("expected IOMMUEnabled=false with empty iommu_groups")
-	}
-	if rep.IOMMUKind != "" {
-		t.Errorf("IOMMUKind = %q, want empty", rep.IOMMUKind)
-	}
-}
+// scanVFIO / scanVFIO_NoIOMMU tests moved to candy/plugin-gpu/detect_test.go alongside
+// the scanVFIO detector (cutover C11 — the GPU/VFIO host-detection externalization).
 
 // --- A2: PCI-address parsing + hostdevs block rendering ---
 

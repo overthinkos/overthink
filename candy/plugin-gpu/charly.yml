@@ -1,0 +1,52 @@
+plugin-gpu:
+    candy:
+        version: 2026.182.0001
+        description: |-
+            GPU/VFIO HOST-DETECTION plugin (cutover C11) — the sysfs/exec probing charly core
+            formerly held in charly/devices.go: NVIDIA-usable-via-CDI detection (nvidia-smi +
+            CDI-spec/nvidia-ctk reachability), AMD-GPU + GFX-version detection (amdgpu DRM +
+            KFD topology), VFIO passthrough readiness (IOMMU groups, per-function PCI scan,
+            display-class GPU + IOMMU-group members), host-device auto-detection (device_patterns
+            glob + real-GPU render-node pick), user-scope CDI-spec generation, and the
+            RLIMIT_MEMLOCK + /dev/vfio group-access passthrough-readiness probes.
+
+            Carved out of charly core behind thin in-core resolve+Invoke shims (DetectGPU /
+            DetectAMDGPU / DetectVFIO / DetectHostDevices / EnsureCDI / MemlockLimitBytes /
+            VfioGroupAccessible + detectAMDGFXVersion, in charly/gpu_shim.go); the detection
+            RESULT types (VFIOReport/VFIOGpu/VFIOPCIDevice/DetectedDevices) live in package spec
+            and are aliased in core so the ~10 consumers (config_image/start/shell CDI-env sites,
+            `charly doctor`, `charly vm gpu`, `charly vm create`) compile unchanged.
+
+            Compiled-in (an in-proc inprocProvider): the deploy/config hot paths call the shims
+            many times, and MemlockLimitBytes must read charly's OWN process RLIMIT_MEMLOCK — both
+            require in-process placement. The three static data tables (device_patterns /
+            gpu_vendors / pci_class_labels) stay in charly's embedded charly.yml (a must-stay core
+            consumer, `charly doctor`, reads device_patterns) and are threaded in via
+            spec.GpuProbeInput — ONE data source (R3).
+
+            The DRIVER-SWITCH (vfio<->nvidia rebind) + auto-allocation primitives stay in core:
+            they are coupled to the arbiter (preempt.go) + `charly vm gpu` (vm_gpu_cmd.go) and
+            externalize WITH the arbiter in cutover C9.
+
+            The R10 witness is the disposable check-gpu-local bed: `charly vm gpu status` +
+            `charly vm gpu list` exit 0 host-side on a GPU-less host, proving plugin-gpu loads +
+            DetectGPU/DetectVFIO dispatch through it.
+    plugin-gpu-decl:
+        plugin:
+            providers:
+                - verb:gpu
+            source: github.com/overthinkos/overthink/candy/plugin-gpu
+    # ADE build-context check: a deterministic check that does NOT depend on a live
+    # deployment — it mirrors candy/plugin-k8sgen's k8sgen-module-present: a trivial
+    # build-context `plugin: command` (the built-in command CHECK verb) running `true`,
+    # proving the host can build + compile in the module. The full dispatch end-to-end
+    # (`charly vm gpu status`/`list` → DetectVFIO/DetectGPU through verb:gpu) is exercised by
+    # the live R10 bed (check-gpu-local).
+    gpu-module-present:
+        check: the gpu-detection plugin ships a buildable Go module the host compiles in
+        id: gpu-module-present
+        context:
+            - build
+        plugin: command
+        plugin_input:
+            command: "true"

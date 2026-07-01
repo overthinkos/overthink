@@ -1,10 +1,15 @@
 package main
 
 import (
-	"os"
 	"reflect"
 	"testing"
 )
+
+// TestAMDGFXVersionParsing (parseKFDGFXVersion) + TestGpuUsableViaCDI (gpuUsableViaCDI)
+// moved to candy/plugin-gpu/detect_test.go alongside those detection primitives
+// (cutover C11). The tests here exercise the KEPT-core surface: the DetectHostDevices
+// shim var (swapped with a fake), the DetectedDevices struct, and the pure env/group
+// helpers (appendAutoDetectedEnv / appendEnvUnique / appendGroupsForAMDGPU).
 
 func TestDetectHostDevicesWithGPU(t *testing.T) {
 	orig := DetectHostDevices
@@ -225,40 +230,6 @@ func TestAMDGPUGroupsInQuadlet(t *testing.T) {
 	}
 }
 
-func TestAMDGFXVersionParsing(t *testing.T) {
-	tests := []struct {
-		name     string
-		content  string
-		expected string
-	}{
-		{"RDNA2", "gfx_target_version 100306\n", "10.3.0"},
-		{"RDNA3", "gfx_target_version 110000\n", "11.0.0"},
-		{"CPU node", "gfx_target_version 0\n", ""},
-		{"missing", "some_other_field 123\n", ""},
-		{"RDNA1", "gfx_target_version 90012\n", "9.0.0"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Write temp file
-			f, err := os.CreateTemp("", "kfd-props-*")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer os.Remove(f.Name()) //nolint:errcheck
-			if _, err := f.WriteString(tt.content); err != nil {
-				t.Fatal(err)
-			}
-			_ = f.Close()
-
-			got := parseKFDGFXVersion(f.Name())
-			if got != tt.expected {
-				t.Errorf("parseKFDGFXVersion(%q) = %q, want %q", tt.content, got, tt.expected)
-			}
-		})
-	}
-}
-
 func TestRenderNodeDetection(t *testing.T) {
 	orig := DetectHostDevices
 	defer func() { DetectHostDevices = orig }()
@@ -372,75 +343,5 @@ func TestAppendEnvUnique(t *testing.T) {
 	}
 	if env[1] != "HSA_OVERRIDE_GFX_VERSION=10.3.0" {
 		t.Errorf("expected original value preserved, got %q", env[1])
-	}
-}
-
-// TestGpuUsableViaCDI exercises the pure decision helper that backs
-// defaultDetectGPU. The contract: GPU is usable only when the driver is
-// loaded AND CDI is achievable (existing spec OR nvidia-ctk on PATH).
-func TestGpuUsableViaCDI(t *testing.T) {
-	missing := func(string) error { return os.ErrNotExist }
-	present := func(string) error { return nil }
-	specAt := func(target string) func(string) error {
-		return func(p string) error {
-			if p == target {
-				return nil
-			}
-			return os.ErrNotExist
-		}
-	}
-
-	tests := []struct {
-		name         string
-		driverLoaded bool
-		statFn       func(string) error
-		lookPathFn   func(string) error
-		want         bool
-	}{
-		{
-			name:         "driver missing → false even when CDI tooling is present",
-			driverLoaded: false,
-			statFn:       present,
-			lookPathFn:   present,
-			want:         false,
-		},
-		{
-			name:         "driver loaded + no spec + no nvidia-ctk → false (the bug we fixed)",
-			driverLoaded: true,
-			statFn:       missing,
-			lookPathFn:   missing,
-			want:         false,
-		},
-		{
-			name:         "driver loaded + spec at /etc/cdi/nvidia.yaml → true",
-			driverLoaded: true,
-			statFn:       specAt("/etc/cdi/nvidia.yaml"),
-			lookPathFn:   missing,
-			want:         true,
-		},
-		{
-			name:         "driver loaded + spec at /var/run/cdi/nvidia.yaml → true",
-			driverLoaded: true,
-			statFn:       specAt("/var/run/cdi/nvidia.yaml"),
-			lookPathFn:   missing,
-			want:         true,
-		},
-		{
-			name:         "driver loaded + no spec + nvidia-ctk on PATH → true (EnsureCDI can generate)",
-			driverLoaded: true,
-			statFn:       missing,
-			lookPathFn:   present,
-			want:         true,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := gpuUsableViaCDI(tc.driverLoaded, tc.statFn, tc.lookPathFn)
-			if got != tc.want {
-				t.Errorf("gpuUsableViaCDI(driverLoaded=%v) = %v, want %v",
-					tc.driverLoaded, got, tc.want)
-			}
-		})
 	}
 }

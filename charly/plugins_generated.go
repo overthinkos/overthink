@@ -23,6 +23,7 @@ import (
 	cp_plugin_example_external "github.com/overthinkos/overthink/candy/plugin-example-external"
 	cp_plugin_examplerunverb "github.com/overthinkos/overthink/candy/plugin-examplerunverb"
 	cp_plugin_file "github.com/overthinkos/overthink/candy/plugin-file"
+	cp_plugin_gpu "github.com/overthinkos/overthink/candy/plugin-gpu"
 	cp_plugin_group "github.com/overthinkos/overthink/candy/plugin-group"
 	cp_plugin_http "github.com/overthinkos/overthink/candy/plugin-http"
 	cp_plugin_init "github.com/overthinkos/overthink/candy/plugin-init"
@@ -55,6 +56,7 @@ func init() {
 	registerCompiledPlugin(cp_plugin_example_bootstrap.NewProvider(), cp_plugin_example_bootstrap.NewMeta())
 	registerCompiledPlugin(cp_plugin_egress.NewProvider(), cp_plugin_egress.NewMeta())
 	registerCompiledPlugin(cp_plugin_k8sgen.NewProvider(), cp_plugin_k8sgen.NewMeta())
+	registerCompiledPlugin(cp_plugin_gpu.NewProvider(), cp_plugin_gpu.NewMeta())
 	registerCompiledPlugin(cp_plugin_migrate.NewProvider(), cp_plugin_migrate.NewMeta())
 	registerCompiledPlugin(cp_plugin_enc.NewProvider(), cp_plugin_enc.NewMeta())
 	registerCompiledCheckVerb(cp_plugin_port.NewCheckVerb(), cp_plugin_port.SchemaFS, cp_plugin_port.InputDefs)

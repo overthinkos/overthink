@@ -36,6 +36,7 @@ compiled_plugins:
     - plugin-example-bootstrap
     - plugin-egress
     - plugin-k8sgen
+    - plugin-gpu
     - plugin-migrate
     - plugin-enc
     - plugin-port

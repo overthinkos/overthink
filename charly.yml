@@ -2042,3 +2042,70 @@ check-commands-local:
         plugin_input:
             command: charly clean --dry-run
             in_container: false
+
+# =================================================================
+# check-gpu-local — R10 witness for cutover C11's externalized GPU/VFIO HOST-DETECTION
+# (candy/plugin-gpu, verb:gpu) — the DETECTION cluster of the core-externalization program.
+# A disposable kind:local deploy on host: local that runs the two deterministic, GPU-less
+# `charly vm gpu` sub-commands host-side:
+#   - `charly vm gpu status` → exits 0 and prints the VFIO/passthrough report; the in-core
+#     Detect* shims (gpu_shim.go) resolve verb:gpu and Invoke the COMPILED-IN plugin, so
+#     DetectVFIO() + MemlockLimitBytes() run THROUGH plugin-gpu (the IOMMU / vfio-pci /
+#     memlock lines are always printed, so the assertion is host-independent).
+#   - `charly vm gpu list`   → exits 0 (DetectVFIO() dispatches; prints the hostdevs block or
+#     "No GPUs detected" — both host-dependent, so only exit 0 is asserted).
+# The bed does NOT assert "GPUs: none detected": scanVFIO reports ANY display-class PCI
+# device (incl. an integrated GPU), so that string is not host-deterministic — the always-
+# printed header/IOMMU/vfio-pci/memlock lines are. The real driver-flip/NVENC path is NOT
+# this bed's gate (it stays the gated cachyos GPU beds); the DRIVER-SWITCH + auto-allocation
+# externalization is cutover C9 (arbiter + `charly vm gpu` coupling).
+# =================================================================
+check-gpu-app:
+    local:
+        description: |-
+            Minimal kind:local template for the check-gpu-local bed — composes the
+            compiled-in candy/plugin-gpu (verb:gpu, no install content) so the bed exercises
+            the externalized GPU/VFIO host-detection via `charly vm gpu` host-side.
+    check-gpu-candy:
+        candy:
+            - plugin-gpu
+check-gpu-local:
+    local:
+        from: check-gpu-app
+        host: local
+        disposable: true
+        lifecycle: dev
+        description: >-
+            Sole proof of cutover C11's externalized GPU/VFIO HOST-DETECTION (candy/plugin-gpu,
+            verb:gpu), the DETECTION cluster of the core-externalization program. A disposable
+            kind:local deploy on host: local runs `charly vm gpu status` + `charly vm gpu list`
+            host-side: the in-core Detect* shims (gpu_shim.go) resolve verb:gpu and Invoke the
+            COMPILED-IN plugin, so DetectVFIO() + MemlockLimitBytes() run through plugin-gpu.
+            Both commands exit 0 and print the VFIO/passthrough report — proving plugin-gpu loads
+            + the detection code path dispatches through it on this host. The driver-switch +
+            auto-allocation primitives stay in core and externalize with the arbiter (cutover C9).
+    gpu-status-runs:
+        check: command=charly vm gpu status exits 0 and prints the VFIO/passthrough report (proving DetectVFIO + MemlockLimitBytes dispatch through the compiled-in verb:gpu plugin)
+        id: gpu-status-runs
+        exit_status: 0
+        stdout:
+            - contains: 'VFIO / GPU passthrough status'
+            - contains: 'IOMMU:'
+            - contains: 'vfio-pci driver:'
+            - contains: 'memlock limit:'
+        context:
+            - runtime
+        plugin: command
+        plugin_input:
+            command: charly vm gpu status
+            in_container: false
+    gpu-list-runs:
+        check: command=charly vm gpu list exits 0 (proving DetectVFIO dispatches through the compiled-in verb:gpu plugin on a GPU-less-or-iGPU host)
+        id: gpu-list-runs
+        exit_status: 0
+        context:
+            - runtime
+        plugin: command
+        plugin_input:
+            command: charly vm gpu list
+            in_container: false

@@ -11,6 +11,7 @@ use ./candy/plugin-example-command
 use ./candy/plugin-example-bootstrap
 use ./candy/plugin-egress
 use ./candy/plugin-k8sgen
+use ./candy/plugin-gpu
 use ./candy/plugin-migrate
 use ./candy/plugin-enc
 use ./candy/plugin-port

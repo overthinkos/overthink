@@ -1063,6 +1063,13 @@ type stepContract struct {
 	Scope Scope
 	Venue Venue
 	Gate  Gate
+	// Emits is the F-STEP-EMIT flag: the step produces a build-context Containerfile
+	// FRAGMENT (the serving plugin answers Invoke(OpEmit) → spec.EmitReply.Fragment).
+	// The pod-overlay OCITarget consults it via the open external-step arm — Emits=true →
+	// bake the fragment; Emits=false → skip (a deploy-only external step, like apk on an
+	// image build). Advisory for the DEPLOY leg (executeExternalStep ignores it); load-bearing
+	// for the BUILD leg (OCITarget.emitExternalStep).
+	Emits bool
 }
 
 // stepContractCarrier is implemented by a provider (grpcProvider out-of-proc, inprocProvider

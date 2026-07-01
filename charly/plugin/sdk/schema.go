@@ -55,6 +55,12 @@ type StepContract struct {
 	Scope string // "system" | "user" | "user-profile"
 	Venue int    // 0=host-native, 1=container-builder, 2=skip
 	Gate  string // "" | "allow-repo-changes" | "allow-root-tasks" | "with-services"
+	// Emits declares that the step produces a build-context Containerfile FRAGMENT
+	// (the plugin serves Invoke(OpEmit) → EmitReply.Fragment). The pod-overlay OCITarget
+	// bakes it; false => a deploy-only step (no build fragment — OCITarget skips it, like
+	// apk on an image build). F-STEP-EMIT: the BUILD leg C1 needs to externalize a step
+	// kind whose EmitOCI produces a Containerfile fragment.
+	Emits bool
 }
 
 // BuildCapabilities is the serve-side half of the "every plugin ships its own CUE
@@ -84,7 +90,7 @@ func BuildCapabilities(calver string, provided []ProvidedCapability, schemaFS fs
 	for _, c := range provided {
 		pc := &pb.ProvidedCapability{Class: c.Class, Word: c.Word, InputDef: c.InputDef, Structural: c.Structural, Lifecycle: c.Lifecycle, Preresolve: c.Preresolve, Validates: c.Validates, Phase: c.Phase}
 		if c.StepContract != nil {
-			pc.StepContract = &pb.StepContract{Scope: c.StepContract.Scope, Venue: int32(c.StepContract.Venue), Gate: c.StepContract.Gate}
+			pc.StepContract = &pb.StepContract{Scope: c.StepContract.Scope, Venue: int32(c.StepContract.Venue), Gate: c.StepContract.Gate, Emits: c.StepContract.Emits}
 		}
 		out = append(out, pc)
 	}

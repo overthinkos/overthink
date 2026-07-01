@@ -88,7 +88,7 @@ func buildUnitInProc(meta pb.PluginMetaServer, srv pb.ProviderServer) (*PluginUn
 		// A compiled-in class:step capability carries its declared StepContract too (F3) —
 		// the in-proc twin of buildUnit's grpcProvider population (R3, placement parity).
 		if sc := c.GetStepContract(); class == ClassStep && sc != nil {
-			ip.contract = &stepContract{Scope: scopeFromName(sc.GetScope()), Venue: Venue(sc.GetVenue()), Gate: Gate(sc.GetGate())}
+			ip.contract = &stepContract{Scope: scopeFromName(sc.GetScope()), Venue: Venue(sc.GetVenue()), Gate: Gate(sc.GetGate()), Emits: sc.GetEmits()}
 		}
 		// A compiled-in class:kind capability carries its STRUCTURAL flag too (F5, R3 parity).
 		if class == ClassKind && c.GetStructural() {

@@ -54,6 +54,7 @@ message StepContract {
   string scope = 1;   // "system" | "user" | "user-profile"
   int32 venue = 2;    // Venue enum: 0=host-native, 1=container-builder, 2=skip
   string gate = 3;    // "" | "allow-repo-changes" | "allow-root-tasks" | "with-services"
+  bool emits = 4;     // F-STEP-EMIT: the step produces a build-context Containerfile FRAGMENT (Invoke(OpEmit)); the pod-overlay OCITarget bakes it. false => deploy-only step (no build fragment; OCITarget skips it, like apk on an image build)
 }
 
 // Provider — the ONE uniform capability service. `reserved` is the reserved word

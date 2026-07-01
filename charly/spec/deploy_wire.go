@@ -514,6 +514,23 @@ type EmitReply struct {
 	Fragment string `json:"fragment"`
 }
 
+// StepEmitRequest is the F-STEP-EMIT HostBuild envelope for a HOST-COUPLED external step
+// kind's build-context fragment. A class:step plugin whose OpEmit needs the host build ENGINE
+// (the DistroDef format templates, the Generator's task/builder rendering — the machinery a
+// []byte can't carry across the process boundary) calls back Executor.HostBuild("step-emit",
+// StepEmitRequest{…}) during its OpEmit; the host's registered "step-emit" host-builder
+// dispatches by Word to a per-word emitter that renders the fragment IN-CORE and returns it
+// as an EmitReply (the reply reuses EmitReply — R3). Word is the step reserved word; Payload
+// is the step's opaque per-kind input (the SAME bytes the plugin received in op.Params);
+// Distros carries the image's distro tags (BuildEnv). A PURE step never sends this — it
+// returns its EmitReply.Fragment directly from OpEmit. Foundation: the per-word emitter
+// registry is empty until C1 relocates a host-coupled step kind onto it.
+type StepEmitRequest struct {
+	Word    string          `json:"word"`
+	Payload json.RawMessage `json:"payload,omitempty"`
+	Distros []string        `json:"distros,omitempty"`
+}
+
 // BuilderResolveReply is what an external builder plugin returns from an OpResolve
 // Invoke at image-generation time — the build-time BUILDER leg, the multi-stage
 // counterpart of a verb/step's EmitReply. Stage is the `FROM <ref> AS <name>` block

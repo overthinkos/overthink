@@ -239,7 +239,7 @@ func buildUnit(conn *sdk.Conn, caps *pb.Capabilities) (*PluginUnit, error) {
 		// A class:step capability may DECLARE its install-step contract (F3): the host carries
 		// the plugin-declared Scope/Venue/Gate so compileActOp builds an externalStep with it.
 		if sc := c.GetStepContract(); class == ClassStep && sc != nil {
-			gp.contract = &stepContract{Scope: scopeFromName(sc.GetScope()), Venue: Venue(sc.GetVenue()), Gate: Gate(sc.GetGate())}
+			gp.contract = &stepContract{Scope: scopeFromName(sc.GetScope()), Venue: Venue(sc.GetVenue()), Gate: Gate(sc.GetGate()), Emits: sc.GetEmits()}
 		}
 		// A class:kind capability may declare it decodes a STRUCTURAL entity (F5): runPluginKind
 		// folds its spec.Deploy reply into uf.Bundle instead of landing a flat body opaquely.

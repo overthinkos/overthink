@@ -262,6 +262,7 @@ type StepContract struct {
 	Scope         string                 `protobuf:"bytes,1,opt,name=scope,proto3" json:"scope,omitempty"`  // "system" | "user" | "user-profile"
 	Venue         int32                  `protobuf:"varint,2,opt,name=venue,proto3" json:"venue,omitempty"` // Venue enum: 0=host-native, 1=container-builder, 2=skip
 	Gate          string                 `protobuf:"bytes,3,opt,name=gate,proto3" json:"gate,omitempty"`    // "" | "allow-repo-changes" | "allow-root-tasks" | "with-services"
+	Emits         bool                   `protobuf:"varint,4,opt,name=emits,proto3" json:"emits,omitempty"` // F-STEP-EMIT: the step produces a build-context Containerfile FRAGMENT (Invoke(OpEmit)); the pod-overlay OCITarget bakes it. false => deploy-only step (no build fragment; OCITarget skips it, like apk on an image build)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -315,6 +316,13 @@ func (x *StepContract) GetGate() string {
 		return x.Gate
 	}
 	return ""
+}
+
+func (x *StepContract) GetEmits() bool {
+	if x != nil {
+		return x.Emits
+	}
+	return false
 }
 
 type InvokeRequest struct {
@@ -1466,11 +1474,12 @@ const file_plugin_proto_rawDesc = "" +
 	"preresolve\x18\a \x01(\bR\n" +
 	"preresolve\x12\x1c\n" +
 	"\tvalidates\x18\b \x01(\bR\tvalidates\x12\x14\n" +
-	"\x05phase\x18\t \x01(\tR\x05phase\"N\n" +
+	"\x05phase\x18\t \x01(\tR\x05phase\"d\n" +
 	"\fStepContract\x12\x14\n" +
 	"\x05scope\x18\x01 \x01(\tR\x05scope\x12\x14\n" +
 	"\x05venue\x18\x02 \x01(\x05R\x05venue\x12\x12\n" +
-	"\x04gate\x18\x03 \x01(\tR\x04gate\"\xbb\x01\n" +
+	"\x04gate\x18\x03 \x01(\tR\x04gate\x12\x14\n" +
+	"\x05emits\x18\x04 \x01(\bR\x05emits\"\xbb\x01\n" +
 	"\rInvokeRequest\x12\x1a\n" +
 	"\breserved\x18\x01 \x01(\tR\breserved\x12\x0e\n" +
 	"\x02op\x18\x02 \x01(\tR\x02op\x12\x1f\n" +

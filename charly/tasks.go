@@ -745,25 +745,39 @@ func emitPluginFragment(prov Provider, op *Op, img *ResolvedBox) (string, error)
 	if err != nil {
 		return "", fmt.Errorf("marshal plugin_input: %w", err)
 	}
-	env, err := marshalJSON(spec.BuildEnv{Distros: img.Tags})
+	var distros []string
+	if img != nil {
+		distros = img.Tags
+	}
+	return invokeOpEmitFragment(context.Background(), prov, op.Plugin, params, distros)
+}
+
+// invokeOpEmitFragment is the ONE OpEmit → EmitReply → empty-guard → Fragment path (R3),
+// shared by the build-context VERB emit (emitPluginFragment, via emitTasks) AND the
+// build-context external-STEP emit (OCITarget.emitExternalStep, F-STEP-EMIT). It Invokes
+// the provider's OpEmit with the already-marshalled params (a verb's plugin_input, or a
+// step's opaque Payload) and a spec.BuildEnv descriptor, decodes the EmitReply, and returns
+// the Containerfile fragment — failing LOUDLY on an empty fragment (a runtime-/deploy-only
+// capability wrongly asked to build-emit; never bake nothing silently, R4). ctx MAY carry an
+// in-proc reverse channel (sdk.ContextWithExecutor) so a HOST-COUPLED plugin can call back
+// HostBuild during its OpEmit; a PURE plugin ignores it and returns the fragment directly.
+func invokeOpEmitFragment(ctx context.Context, prov Provider, word string, params []byte, distros []string) (string, error) {
+	env, err := marshalJSON(spec.BuildEnv{Distros: distros})
 	if err != nil {
 		return "", fmt.Errorf("marshal build env: %w", err)
 	}
-	res, err := prov.Invoke(context.Background(), &Operation{Reserved: op.Plugin, Op: OpEmit, Params: params, Env: env})
+	res, err := prov.Invoke(ctx, &Operation{Reserved: word, Op: OpEmit, Params: params, Env: env})
 	if err != nil {
 		return "", err
 	}
 	var reply spec.EmitReply
-	if err := json.Unmarshal(res.JSON, &reply); err != nil {
-		return "", fmt.Errorf("decode OpEmit reply: %w", err)
+	if res != nil && len(res.JSON) > 0 {
+		if err := json.Unmarshal(res.JSON, &reply); err != nil {
+			return "", fmt.Errorf("decode OpEmit reply: %w", err)
+		}
 	}
-	// A build-emit-capable plugin verb returns a non-empty Containerfile fragment.
-	// An empty fragment means the verb has no build-context act (a runtime-only verb
-	// mistakenly used in a build-context run: step) — fail LOUDLY here rather than
-	// bake nothing silently (R4). The validator (opActsInBuildDeploy) trusts an
-	// external verb is build-emit-capable; THIS is the real enforcement at build.
 	if strings.TrimSpace(reply.Fragment) == "" {
-		return "", fmt.Errorf("plugin verb %q returned an empty OpEmit fragment — it has no build-context act (a runtime-only verb in a build run: step? use context: [runtime])", op.Plugin)
+		return "", fmt.Errorf("plugin %q returned an empty OpEmit fragment — it has no build-context act (a runtime-only verb in a build run: step, or a deploy-only step declaring emits without an OpEmit fragment? use context: [runtime] / set emits=false)", word)
 	}
 	return reply.Fragment, nil
 }

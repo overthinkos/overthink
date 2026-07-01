@@ -3,7 +3,9 @@
 // over Describe (schema_cue) + drives the generated Go params; references no base def so it
 // compiles standalone (BuildCapabilities compiles it alone, failing loudly if broken).
 #ExamplestepkindInput: {
-	// marker is the string the step writes to its venue marker file — proving the OPAQUE
-	// payload round-tripped through the IR (InstallStepView.Payload) to the plugin's OpExecute.
+	// marker is the string the step writes to its marker file — at DEPLOY (OpExecute) the venue
+	// marker /tmp/charly-examplestepkind/marker, at BUILD (OpEmit, F-STEP-EMIT) the baked image
+	// marker /etc/examplestepkind-build-baked — proving the OPAQUE payload round-trips through the
+	// IR (InstallStepView.Payload) to BOTH the plugin's OpExecute and its OpEmit.
 	marker?: string
 }

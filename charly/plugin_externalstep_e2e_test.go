@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	pb "github.com/overthinkos/overthink/charly/plugin/proto"
@@ -55,6 +56,11 @@ func TestExternalStepKind_EndToEnd(t *testing.T) {
 	if !ok || sc.Scope != ScopeUser || sc.Venue != VenueHostNative || sc.Gate != GateNone {
 		t.Fatalf("declared contract = %+v ok=%v, want {ScopeUser, VenueHostNative, GateNone}", sc, ok)
 	}
+	// F-STEP-EMIT: the plugin DECLARES it produces a build-context fragment (Emits=true), so the
+	// pod-overlay OCITarget open external-step arm bakes it (proven below).
+	if !sc.Emits {
+		t.Fatalf("declared contract Emits = false, want true (F-STEP-EMIT build leg)")
+	}
 	if err := providerRegistry.RegisterPluginProviders(unit.Providers, "f3-stepkind-test", closer); err != nil {
 		t.Fatalf("RegisterPluginProviders: %v", err)
 	}
@@ -71,6 +77,20 @@ func TestExternalStepKind_EndToEnd(t *testing.T) {
 	}
 	if step.Word != "examplestepkind" || step.ScopeV != ScopeUser || step.VenueV != VenueHostNative || step.GateV != GateNone {
 		t.Fatalf("externalStep contract = {%q, %v, %v, %v}, want {examplestepkind, ScopeUser, VenueHostNative, GateNone}", step.Word, step.ScopeV, step.VenueV, step.GateV)
+	}
+
+	// F-STEP-EMIT BUILD leg: the pod-overlay OCITarget open external-step arm resolves the
+	// class:step provider by the trimmed word, sees Emits=true, Invokes its OpEmit over the wire,
+	// and splices the returned Containerfile fragment — baking the persistent build marker with
+	// the opaque payload's value (proving the Payload round-trips through OpEmit too, and that a
+	// step kind with an EmitOCI fragment can be EXTERNALIZED — the one addition C1 needs).
+	tgt := &OCITarget{Box: &ResolvedBox{Name: "check-stepkind", Tags: []string{"fedora"}}}
+	if err := tgt.emitStep(step, &InstallPlan{Box: "check-stepkind"}); err != nil {
+		t.Fatalf("OCITarget.emitStep(external:examplestepkind): %v", err)
+	}
+	frag := tgt.String()
+	if !strings.Contains(frag, "/etc/examplestepkind-build-baked") || !strings.Contains(frag, "EXTERNAL-STEPKIND-E2E") {
+		t.Fatalf("baked fragment = %q, want a RUN baking /etc/examplestepkind-build-baked with the payload marker EXTERNAL-STEPKIND-E2E", frag)
 	}
 
 	// Project it to the OPAQUE view (Kind "external:<word>" + Payload).
@@ -114,5 +134,51 @@ func TestExternalStepKind_EndToEnd(t *testing.T) {
 	}
 	if len(ops) == 0 {
 		t.Fatal("external step recorded no teardown op (record-and-replay broken)")
+	}
+}
+
+// TestStepEmitHostBuilder proves the F-STEP-EMIT "step-emit" HostBuild seam — the generic
+// host-builder a HOST-COUPLED external step kind's OpEmit calls back to for a fragment the host
+// build ENGINE renders in-core (the seam C1 registers a per-word emitter into when it externalizes
+// a host-coupled step kind). Foundation: the per-word registry is empty, so the test registers a
+// fixture emitter (unique word) directly, drives hostBuildStepEmit by word, and asserts an
+// unregistered word + the registry-level "step-emit" host-builder registration.
+func TestStepEmitHostBuilder(t *testing.T) {
+	// The "step-emit" host-builder is registered on the F10 hostBuilders seam at init.
+	if _, ok := hostBuilderFor("step-emit"); !ok {
+		t.Fatal("hostBuilderFor(\"step-emit\") = false, want the step-emit host-builder registered")
+	}
+
+	const word = "test-stepemit-fixture"
+	// Register a fixture in-core emitter by word (foundation registry is otherwise empty).
+	stepEmitters[word] = func(req spec.StepEmitRequest, _ buildEngineContext) (string, error) {
+		return "RUN echo host-coupled-" + string(req.Payload) + " > /etc/step-emit-fixture\n", nil
+	}
+	t.Cleanup(func() { delete(stepEmitters, word) })
+
+	// Dispatch by word through the host-builder: the fragment comes back in an EmitReply.
+	reqJSON, err := marshalJSON(spec.StepEmitRequest{Word: word, Payload: []byte(`{"marker":"m"}`), Distros: []string{"fedora"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resJSON, err := hostBuildStepEmit(context.Background(), reqJSON, buildEngineContext{})
+	if err != nil {
+		t.Fatalf("hostBuildStepEmit: %v", err)
+	}
+	var reply spec.EmitReply
+	if err := json.Unmarshal(resJSON, &reply); err != nil {
+		t.Fatalf("decode EmitReply: %v", err)
+	}
+	if !strings.Contains(reply.Fragment, "/etc/step-emit-fixture") {
+		t.Fatalf("fragment = %q, want the fixture emitter's rendered RUN", reply.Fragment)
+	}
+
+	// An UNREGISTERED step word is a LOUD error (never a silent empty bake, R4).
+	bad, err := marshalJSON(spec.StepEmitRequest{Word: "no-such-step-emitter"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := hostBuildStepEmit(context.Background(), bad, buildEngineContext{}); err == nil {
+		t.Fatal("hostBuildStepEmit for an unregistered word = nil error, want a loud failure")
 	}
 }

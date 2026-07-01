@@ -480,6 +480,19 @@ func (t *externalDeployTarget) recordDeploy(reply spec.DeployReply) error {
 	}
 	id := t.deployID()
 	reverseOps := reply.ReverseOps
+	// Fill each ReverseOpPackageRemove op's host-venue removal command from the
+	// deploy's DistroConfig BEFORE it lands in the ledger — the host renders it
+	// (it has the DistroConfig; the out-of-process plugin does not). The aur
+	// builder (kit.BuilderReverse) records a ReverseOpPackageRemove with an EMPTY
+	// UninstallCmd, deferring to exactly this host-side render; without it the
+	// `charly bundle del` teardown fails loudly (reversePackageRemove errors on an
+	// empty command). t.build.DistroCfg is the SAME DistroConfig the deploy compile
+	// used (set by Add from the DeployContext); it is populated for every external
+	// local/vm deploy that routes through here. R3: the SAME shared filler the
+	// in-proc local/vm deploy targets called before externalization — idempotent
+	// (an op already carrying a command, or a non-package-remove op, is skipped;
+	// a nil DistroConfig is a no-op).
+	fillReverseUninstallCmds(reverseOps, t.build.DistroCfg)
 	if err := AddCandyDeployment(paths, candy, id, func(rec *CandyRecord) {
 		rec.Version = reply.Record.Version
 		rec.ReverseOps = append([]ReverseOp(nil), reverseOps...) // replace (idempotent)

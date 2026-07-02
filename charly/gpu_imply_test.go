@@ -93,37 +93,21 @@ func TestApplyImpliedGPUShared_UnionAndNoDoubleClaim(t *testing.T) {
 	}
 }
 
-// I6. End-to-end: a GPU-consuming pod that declared NO claim becomes a tracked,
-// preemptable shared claimant — an exclusive (vfio VM) claim stops it and frees
-// the card. This is the RCA fix: an untracked auto-detected GPU pod no longer
-// silently blocks a requires_exclusive claimant.
-func TestArbiter_PreemptsImpliedSharedGPUPod(t *testing.T) {
-	withDetectGPU(t, true)
-	w := &fakeWorld{running: map[string]bool{"untracked-gpu-pod": true, "vm": true}, resources: gpuResources()}
-	a := newTestArbiter(t, map[string]BundleNode{}, w)
+// The end-to-end "implied GPU pod is preemptable" integration test lives in
+// candy/plugin-preempt now (TestArbiter_ExclusivePreemptsShared, over the relocated seam-faked
+// arbiter): the imply HALF (applyImpliedGPUShared → the gpu token, above) + the preemption HALF
+// (an exclusive claim stops a shared holder) split across the C9 core↔plugin boundary, so the
+// former combined TestArbiter_PreemptsImpliedSharedGPUPod is covered by those two halves.
 
-	// The pod authored NOTHING; the implied-shared promotion makes it claim the
-	// gpu token (exactly what acquireResourceForClaimant does at start).
-	node := applyImpliedGPUShared(gpuPodNode(), w.resources)
-	if len(node.RequiredShared()) == 0 {
-		t.Fatalf("precondition: implied promotion must give the pod a shared claim, got %+v", node)
-	}
-	if _, err := a.AcquireShared("untracked-gpu-pod", node, false); err != nil {
-		t.Fatalf("shared acquire for the auto-tracked GPU pod: %v", err)
-	}
+// --- core test helpers (were in the relocated preempt_test.go / preempt_shared_test.go) ------
 
-	// The operator's exclusive claimant now arrives — it must stop the pod.
-	if _, err := a.AcquireExclusive("vm", claimantNode([]string{"nvidia-gpu"}), false); err != nil {
-		t.Fatalf("vm exclusive acquire: %v", err)
-	}
-	if w.running["untracked-gpu-pod"] {
-		t.Fatalf("exclusive claim must stop the auto-tracked GPU pod; ops=%v", w.ops)
-	}
-	if w.modes["0x10de"] != gpuModeVfio {
-		t.Fatalf("exclusive claim must flip the card to vfio; modes=%v", w.modes)
-	}
-	led, _, _ := a.Status()
-	if len(led.Leases) != 1 || led.Leases[0].Shared || led.Leases[0].Claimant != "vm" {
-		t.Fatalf("only the exclusive vm lease should remain, got %+v", led.Leases)
-	}
+// gpuResources is the token map an implied-GPU test sees (drives the imply logic; core type).
+func gpuResources() map[string]*ResourceDef {
+	return map[string]*ResourceDef{"nvidia-gpu": {Gpu: &GpuSelector{Vendor: "0x10de"}}}
+}
+
+// sharedNode / claimantNode build a pod deploy declaring a SHARED / EXCLUSIVE claim.
+func sharedNode(tokens []string) BundleNode { return BundleNode{Target: "pod", RequiresShared: tokens} }
+func claimantNode(tokens []string) BundleNode {
+	return BundleNode{Target: "pod", RequiresExclusive: tokens}
 }

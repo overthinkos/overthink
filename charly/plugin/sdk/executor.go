@@ -259,3 +259,21 @@ func (e *Executor) HostBuild(ctx context.Context, kind string, spec []byte) ([]b
 	}
 	return r.GetResultJson(), nil
 }
+
+// HostArbiter drives one C9 resource-arbiter host-seam over the reverse channel: the
+// COMPILED-IN candy/plugin-preempt (verb:arbiter) calls back mid-logic for a host
+// dependency it cannot hold across the module boundary — config gather/resources, VM/pod
+// lifecycle running/stop/start, the GPU driver flip switchMode/ensureCDI. action is one of
+// spec.ArbiterSeam*; params/result are the seam's spec request/reply JSON. A non-empty reply
+// error is an infra failure of the RPC handler itself (a seam OP failure rides the reply's
+// own spec error field, decoded by the caller).
+func (e *Executor) HostArbiter(ctx context.Context, action string, params []byte) ([]byte, error) {
+	r, err := e.client.HostArbiter(ctx, &pb.HostArbiterRequest{Action: action, ParamsJson: params})
+	if err != nil {
+		return nil, err
+	}
+	if r.GetError() != "" {
+		return nil, errors.New(r.GetError())
+	}
+	return r.GetResultJson(), nil
+}

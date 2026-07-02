@@ -37,6 +37,7 @@ compiled_plugins:
     - plugin-egress
     - plugin-k8sgen
     - plugin-gpu
+    - plugin-preempt
     - plugin-migrate
     - plugin-enc
     - plugin-port

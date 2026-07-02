@@ -70,8 +70,13 @@ func TestNoSinglePluginAPISurface(t *testing.T) {
 	// RPC (even a generically-named one) must be added here CONSCIOUSLY — and if it were named after
 	// a plugin, the word scan above would also catch it. This arm catches the "added a per-plugin
 	// RPC" regression directly.
+	// HostArbiter (C9) is a class-generic, action-multiplexed reverse-op class (the resource-arbiter
+	// host-seam channel: config gather/resources + deploy running/stop/start + the GPU driver flip),
+	// added CONSCIOUSLY like RunHostStep / InvokeProvider / HostBuild. Its NAME is not a provider word
+	// (the word-scan above proves "hostarbiter" ∉ the universe), and its per-call detail is DATA (the
+	// action string + spec params), never API shape — the F11 contract.
 	assertMethodSet(t, "ExecutorService", pb.ExecutorService_ServiceDesc,
-		"Venue", "RunSystem", "RunUser", "PutFile", "RunCapture", "GetFile", "RunHostStep", "InvokeProvider", "HostBuild")
+		"Venue", "RunSystem", "RunUser", "PutFile", "RunCapture", "GetFile", "RunHostStep", "InvokeProvider", "HostBuild", "HostArbiter")
 	assertMethodSet(t, "CheckContextService", pb.CheckContextService_ServiceDesc,
 		"HTTPDo", "AddBackground")
 

@@ -6,35 +6,35 @@ import (
 	"os"
 	"strings"
 	"text/tabwriter"
+
+	"github.com/overthinkos/overthink/charly/spec"
 )
 
-// preempt_internal_cmd.go implements the two HIDDEN core commands that expose the in-core
-// resource arbiter (preempt.go, ResourceArbiter — which STAYS core: it is shared by
-// `charly vm create`, `charly vm gpu`, and the check-bed runner, so it cannot move, R3) to the
-// externalized `charly preempt …` COMMAND plugin (candy/plugin-preempt). The plugin
-// re-expresses each operator-facing `charly preempt` leaf as a shell-back through these
-// sanctioned hidden verbs — the SAME `charly __cli-model` / `charly __plugin-providers`
-// internal-command pattern — so the `charly preempt status` / `charly preempt restore` CLI is
-// unchanged while the command implementation moved OUT of the core binary. The arbiter logic is
-// NOT duplicated: it stays in preempt.go and is invoked ONLY here.
+// preempt_internal_cmd.go implements the two HIDDEN core commands that expose the resource
+// arbiter to the externalized `charly preempt …` COMMAND plugin (candy/plugin-preempt). Since
+// cutover C9 the arbiter LOGIC lives IN that plugin (verb:arbiter); these hidden verbs reach it
+// through the in-core PROXY (preempt.go newResourceArbiter), so the operator-facing
+// `charly preempt status` / `charly preempt restore` CLI is byte-identical while the
+// implementation is out of the core binary. The SAME `charly __cli-model` / `__plugin-providers`
+// internal-command pattern.
 
 // PreemptStatusInternalCmd: `charly __preempt-status` (hidden machinery). Prints the active
 // resource-arbitration leases exactly as the former `charly preempt status` did.
 type PreemptStatusInternalCmd struct{}
 
 func (PreemptStatusInternalCmd) Run() error {
-	return renderPreemptStatus(newResourceArbiter(), os.Stdout)
-}
-
-// renderPreemptStatus loads the arbiter's lease ledger, flags stranded leases (claimant gone),
-// and prints the active-lease table to out. Split from the command Run so a unit test can drive
-// it with a temp-ledger arbiter (the arbiter read is the only side effect).
-func renderPreemptStatus(a *ResourceArbiter, out io.Writer) error {
-	ledger, stranded, err := a.Status()
+	ledger, stranded, err := newResourceArbiter().Status()
 	if err != nil {
 		return err
 	}
-	if len(ledger.Leases) == 0 {
+	return renderLeaseTable(ledger, stranded, os.Stdout)
+}
+
+// renderLeaseTable formats a lease ledger + its stranded-claimant set as the active-lease table.
+// Split from the arbiter fetch so a unit test drives it with a hand-built ledger (no live
+// plugin needed) — the fetch (the proxy Status() dispatch) is exercised by the R10 bed.
+func renderLeaseTable(ledger *spec.PreemptLedger, stranded []string, out io.Writer) error {
+	if ledger == nil || len(ledger.Leases) == 0 {
 		fmt.Fprintln(out, "No active preemption leases.")
 		return nil
 	}

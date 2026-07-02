@@ -12,7 +12,42 @@ type VmGpuCmd struct {
 	Status  VmGpuStatusCmd  `cmd:"" help:"Report host IOMMU readiness for GPU passthrough"`
 	List    VmGpuListCmd    `cmd:"" help:"List passthrough-capable GPUs and emit a ready-to-paste hostdevs block"`
 	Mode    VmGpuModeCmd    `cmd:"" help:"Show or set the GPU driver mode: vfio (VM passthrough) | nvidia (shared CDI pods)"`
+	Plan    VmGpuPlanCmd    `cmd:"" help:"DRY-RUN: print the exact host commands a mode flip WOULD run, without touching sysfs"`
 	Recover VmGpuRecoverCmd `cmd:"" help:"Recover a card left unbound/half-switched back to vfio-pci (refuses + reports reboot-required on a true device_lock wedge)"`
+}
+
+// VmGpuPlanCmd is the DRY-RUN preview of the vfio<->nvidia driver switch: it prints the EXACT
+// host rebind commands `charly vm gpu mode <mode>` would run, WITHOUT touching sysfs (cutover C9,
+// the driver-switch dispatch proof). It uses the vendor-matched card when one is present, else a
+// documented synthetic example card — so it is completely cred/hardware-free and works on a
+// GPU-less host (the check-step assertion the R10 bed makes).
+type VmGpuPlanCmd struct {
+	Mode   string `arg:"" optional:"" default:"vfio" help:"Mode to preview: vfio (passthrough) | nvidia (CDI pods). Default vfio."`
+	Vendor string `long:"vendor" default:"0x10de" help:"PCI vendor of the GPU to preview (default 0x10de = NVIDIA); a synthetic example card is used when absent."`
+}
+
+func (c *VmGpuPlanCmd) Run() error {
+	if c.Mode != gpuModeVfio && c.Mode != gpuModeNvidia {
+		return fmt.Errorf("invalid mode %q — want %q or %q", c.Mode, gpuModeVfio, gpuModeNvidia)
+	}
+	var gptr *VFIOGpu
+	if gpu, found := selectGPUByVendor(DetectVFIO(), c.Vendor); found {
+		gptr = &gpu
+	}
+	plan, err := gpuSwitchPlan(gptr, c.Mode)
+	if err != nil {
+		return err
+	}
+	src := "the detected card"
+	if gptr == nil {
+		src = "a synthetic example card (no matching GPU on this host)"
+	}
+	fmt.Printf("# DRY RUN — the exact host commands `charly vm gpu mode %s` would run on %s.\n", c.Mode, src)
+	fmt.Println("# NOTHING is executed; no sysfs write, no sudo. This is the driver-switch dispatch proof.")
+	for _, ln := range plan {
+		fmt.Println(ln)
+	}
+	return nil
 }
 
 // VmGpuModeCmd shows or sets the host GPU driver mode for a vendor-matched card.
@@ -22,7 +57,7 @@ type VmGpuCmd struct {
 // claims; this verb is the explicit override + inspector. It does NOT consult
 // the arbiter ledger — a manual flip while an exclusive lease is active is the
 // operator's call. The flip switches the WHOLE IOMMU group (display + audio),
-// never just the display function (see gpu_driver_switch.go).
+// never just the display function (see candy/plugin-gpu/switch.go).
 type VmGpuModeCmd struct {
 	Mode   string `arg:"" optional:"" help:"Target mode: vfio (passthrough) | nvidia (CDI pods). Omit to SHOW the current mode."`
 	Vendor string `long:"vendor" default:"0x10de" help:"PCI vendor of the GPU to switch (default 0x10de = NVIDIA)."`
@@ -101,15 +136,8 @@ func (c *VmGpuRecoverCmd) Run() error {
 	return nil
 }
 
-// gpuWedgeDetected runs a read-only root probe for any task stuck in the nvidia
-// `.remove` path (a D-state task whose kernel stack hits nv_pci_remove/os_delay).
-// Its presence means the device_lock is held by a never-returning `.remove` —
-// the reboot-only wedge. Read-only (no bind/unbind), bounded by runGPUSwitchScript.
-func gpuWedgeDetected() bool {
-	out, _ := runGPUSwitchScript("for p in $(ps -eo pid,stat | awk '$2 ~ /D/{print $1}'); do " +
-		"grep -qs -e nv_pci_remove -e os_delay /proc/$p/stack 2>/dev/null && { echo WEDGED; exit 0; }; done; echo CLEAN\n")
-	return strings.Contains(string(out), "WEDGED")
-}
+// gpuWedgeDetected (the read-only device_lock-wedge probe) moved to candy/plugin-gpu with the
+// driver-switch (cutover C9); vm_gpu_cmd reaches it via the gpu_shim.go shim.
 
 // clearVendorPoison removes the poison marker of every arbiter token whose gpu
 // selector matches `vendor` — called after `charly vm gpu recover` verifies the

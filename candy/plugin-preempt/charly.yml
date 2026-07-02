@@ -1,53 +1,60 @@
 plugin-preempt:
     candy:
-        version: 2026.179.0000
+        version: 2026.183.0000
         description: |-
-            OUT-OF-TREE charly COMMAND-class plugin serving the externalized `charly preempt …`
-            CLI — the exclusive-resource preemption lease inspector/recoverer (status / restore),
-            a standalone Go module (go.mod + main.go) ported OUT of charly's core (the deleted
-            charly/preempt_cmd.go + plugin_command_preempt.go), so the operator-facing preempt
-            command no longer compiles into the core binary.
+            COMPILED-IN charly plugin owning the RESOURCE ARBITER (cutover C9) — the final
+            core-externalization cutover. It serves TWO capabilities:
 
-            The SECOND WELDED-command externalization in the core-externalization program (after
-            candy/plugin-tmux). `charly preempt` was WELDED to the 1225-LOC GPU resource ARBITER
-            (charly/preempt.go, ResourceArbiter) which MUST STAY CORE — it is shared by
-            `charly vm create`, `charly vm gpu`, and the check-bed runner, so the arbiter cannot
-            move (R3). The SOLUTION (the tmux precedent — a plugin shells back through SANCTIONED
-            `charly` CLI verbs, never ad-hoc anything, R4): this plugin re-expresses each
-            `charly preempt` leaf as a shell-back through two NEW HIDDEN core commands that expose
-            the in-core arbiter — `charly __preempt-status` (newResourceArbiter().Status() + the
-            active-lease table) and `charly __preempt-restore [claimant]` (reconcileStranded /
-            ReleaseClaimant). Those hidden verbs are the SAME `charly __cli-model` /
-            `charly __plugin-providers` internal-command pattern; the arbiter logic stays in core,
-            invoked ONLY there. No core symbol crosses the boundary; no ad-hoc podman/virsh.
+              - verb:arbiter — the exclusive/shared resource arbiter, the 1225-LOC coordination
+                logic MOVED OUT of charly core (the former charly/preempt.go ResourceArbiter):
+                acquire/release exclusive+shared leases, stop + restore preemptible holders, the
+                crash-safe lease ledger (~/.local/share/charly/preemption/leases.yml), GPU-resource
+                poisoning (device_lock-wedge containment), owner liveness, and the vfio<->nvidia
+                driver-mode arbitration math (arbiter.go + arbiter_support.go). The arbiter reaches
+                its HOST dependencies — the project config, the VM/pod lifecycle, the GPU driver
+                flip — that it cannot hold across the module boundary over the
+                ExecutorService.HostArbiter reverse channel (the 7 host seams: gather / resources /
+                running / stop[+wait] / start / switchMode / ensureCDI, served in charly by
+                arbiter_host.go). The in-core PROXY (charly/preempt.go newResourceArbiter +
+                acquire*/release* shims) dispatches to it, so the ~6 consumers (check-bed runner,
+                start, vm, commands, vm_gpu_cmd, the hidden __preempt-* verbs) are invisible above
+                the shim (R3).
 
-            charly's loader fetches this candy's repo, go-builds the provider binary on the
-            HOST, and on `charly preempt <args…>` syscall.Exec's it in CLI mode (sdk.Main →
-            cliMain) — or runs the host-installed /usr/lib/charly/plugins binary on a
-            project-less host (the pkg/arch bake). The plugin owns real terminal stdio, so the
-            status table + restore messages reach the operator's terminal natively.
+              - command:preempt — the operator `charly preempt status`/`restore` CLI, UNCHANGED:
+                it shells back through the hidden in-core `charly __preempt-status` /
+                `charly __preempt-restore` verbs, which now drive the arbiter via the proxy. No core
+                symbol crosses the boundary; no ad-hoc podman/virsh (R4).
 
-            command:preempt is dispatched via the CLI syscall.Exec path, NOT the gRPC provider
-            registry — so it is declared in plugin.providers (for the CLI-grammar prescan +
-            baked `.providers` manifest) but advertises NO Describe capability. The R10 witness
-            is the disposable check-preempt-local bed: `charly preempt status` exits 0 on a
-            GPU-less host (reporting a clean arbiter / no active leases), proving the externalized
-            command + the hidden-command shell-back dispatch end-to-end.
+            PLACEMENT — COMPILED-IN (listed in the embedded charly/charly.yml compiled_plugins:).
+            The arbiter is on the deploy / vm-create / check-bed hot paths and needs the LOCAL
+            lease ledger + the LOCAL project config, so in-proc is the right placement (like
+            candy/plugin-gpu); the reverse channel is in-proc (no gRPC broker), the SAME
+            dispatchBuild pattern. The cmd/serve binary backs the out-of-process placement.
+
+            The DRIVER-SWITCH (vfio<->nvidia rebind) that the arbiter's switchMode seam drives now
+            lives in candy/plugin-gpu (C9, 1B); the host receives the arbiter's switchMode call and
+            routes it there via the core gpu shims (a plugin->plugin edge through the host).
+
+            R10: the disposable check-preempt-arbiter-pod bed exercises the FULL acquire/preempt
+            path with ZERO GPU — a preemptible pod holder on a SYNTHETIC selector-less token
+            (test-lock) + a requires_exclusive claimant, so AcquireExclusive -> holdersToStop ->
+            stopHolders+wait -> lease persisted -> applyMode SKIPS (no gpu selector) -> claim, then
+            teardown -> ReleaseClaimant -> restoreHolders, all THROUGH the externalized dispatch +
+            the HostArbiter reverse channel.
     plugin-preempt-decl:
         plugin:
             source: github.com/overthinkos/overthink/candy/plugin-preempt
             providers:
+                - verb:arbiter
                 - command:preempt
-    # ADE build-context check: a deterministic check that does NOT depend on the project
-    # context the `charly preempt` CLI needs (the prescan finds this candy from the project dir).
-    # It mirrors candy/plugin-udev / plugin-tmux — a trivial build-context `plugin: command` (the
-    # built-in command CHECK verb) running `true`, proving the host can build + fork/exec the
-    # module. The full CLI end-to-end (`charly preempt status` → exit 0 on a GPU-less host) is
-    # exercised by the Go e2e (TestExternalCommandExecPlan_Preempt) + the live R10
-    # (check-preempt-local). restore needs a live GPU-preemption scenario (out of scope for the
-    # bed); its dispatch is covered by the Go e2e.
+    # ADE build-context check: a deterministic check that does NOT depend on a live deployment —
+    # it mirrors candy/plugin-gpu's gpu-module-present: a trivial build-context `plugin: command`
+    # (the built-in command CHECK verb) running `true`, proving the host can build + compile in the
+    # module. The full arbiter dispatch (acquire/preempt/release through verb:arbiter + the
+    # HostArbiter reverse channel) is exercised by the live R10 bed (check-preempt-arbiter-pod);
+    # the `charly preempt status` CLI end-to-end by the Go e2e + the live R10.
     preempt-module-present:
-        check: the out-of-tree command plugin ships a buildable Go module (go.mod + the provider main) the host can build + fork/exec; the full `charly preempt` end-to-end is exercised by the Go e2e + the live R10 (check-preempt-local)
+        check: the resource-arbiter plugin ships a buildable Go module the host compiles in; the full arbiter acquire/preempt/release dispatch + the `charly preempt` CLI are exercised by the live R10 (check-preempt-arbiter-pod) + the Go e2e
         id: preempt-module-present
         context:
             - build

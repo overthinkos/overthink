@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -21,31 +20,9 @@ import (
 // is auto-allocated + persisted; a required GPU resource with NO matching card
 // is a HARD ERROR (never a silent GPU-less boot).
 
-// normalizePCIVendor lowercases a PCI vendor id and ensures the "0x" prefix,
-// so "10DE" / "0X10de" / "0x10de" all compare equal to DetectVFIO's reported
-// VendorID (sysfs form "0x10de").
-func normalizePCIVendor(s string) string {
-	s = strings.ToLower(strings.TrimSpace(s))
-	if s == "" {
-		return ""
-	}
-	if !strings.HasPrefix(s, "0x") {
-		s = "0x" + s
-	}
-	return s
-}
-
-// selectGPUByVendor returns the first passthrough-capable GPU whose PCI vendor
-// matches (case/prefix-insensitive). ok=false when no GPU matches.
-func selectGPUByVendor(rep VFIOReport, vendor string) (VFIOGpu, bool) {
-	want := normalizePCIVendor(vendor)
-	for _, g := range rep.GPUs {
-		if normalizePCIVendor(g.VendorID) == want {
-			return g, true
-		}
-	}
-	return VFIOGpu{}, false
-}
+// normalizePCIVendor + selectGPUByVendor moved to package spec (spec.NormalizePCIVendor /
+// spec.SelectGPUByVendor), aliased in gpu_shim.go — shared with candy/plugin-gpu's driver-switch
+// (cutover C9, R3). Auto-allocation below uses the aliases.
 
 // vfioGpuToHostdevs converts a GPU's IOMMU-group members into the STRUCTURED
 // libvirt hostdev form (managed='yes' — libvirt binds each function to

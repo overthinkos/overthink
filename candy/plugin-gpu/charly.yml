@@ -24,13 +24,20 @@ plugin-gpu:
             consumer, `charly doctor`, reads device_patterns) and are threaded in via
             spec.GpuProbeInput — ONE data source (R3).
 
-            The DRIVER-SWITCH (vfio<->nvidia rebind) + auto-allocation primitives stay in core:
-            they are coupled to the arbiter (preempt.go) + `charly vm gpu` (vm_gpu_cmd.go) and
-            externalize WITH the arbiter in cutover C9.
+            The DRIVER-SWITCH (vfio<->nvidia rebind) now ALSO lives here (cutover C9, 1B):
+            switchGPUDriverMode / gpuSwitchModeTolerant / groupInMode / currentGPUMode /
+            gpuDisplayDriver / gpuWedgeDetected / ensureCDIRoot + the switch-plan DRY-RUN, served
+            over verb:gpu's OpRun DRIVER-SWITCH actions (spec.GpuSwitchInput/GpuSwitchReply) beside
+            the C11 detection actions. Core reaches them through the gpu_shim.go driver-switch shims
+            (used by `charly vm gpu` + the arbiter's switchMode/ensureCDI seams — the arbiter, now in
+            candy/plugin-preempt, routes its switchMode call here via the host, an F10-style
+            plugin->plugin edge). Auto-allocation (gpu_allocate.go) STAYS core: it is a host-side
+            VmSpec/LibvirtDomain orchestrator (like GenerateK8sKustomize) consuming the DetectVFIO
+            shim — no dep to shed.
 
-            The R10 witness is the disposable check-gpu-local bed: `charly vm gpu status` +
-            `charly vm gpu list` exit 0 host-side on a GPU-less host, proving plugin-gpu loads +
-            DetectGPU/DetectVFIO dispatch through it.
+            The R10 witness: `charly vm gpu status`/`list`/`plan` exit 0 host-side on a GPU-less host
+            (DetectGPU/DetectVFIO + the switch-plan DRY-RUN dispatch through verb:gpu); the vfio<->nvidia
+            FLIP itself stays gated by the cachyos GPU beds (functionality, not externalization).
     plugin-gpu-decl:
         plugin:
             providers:

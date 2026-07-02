@@ -2,9 +2,10 @@
 // probing that charly core formerly held in charly/devices.go. It was carved out behind
 // thin in-core resolve+Invoke shims (DetectGPU / DetectAMDGPU / DetectVFIO /
 // DetectHostDevices / EnsureCDI / MemlockLimitBytes / VfioGroupAccessible +
-// detectAMDGFXVersion, all in charly/gpu_shim.go). The DRIVER-SWITCH + auto-allocation
-// primitives stay in core (they are coupled to the arbiter preempt.go + `charly vm gpu`
-// vm_gpu_cmd.go and externalize with the arbiter in cutover C9).
+// detectAMDGFXVersion, all in charly/gpu_shim.go). The DRIVER-SWITCH (vfio<->nvidia rebind)
+// ALSO lives in this plugin now (cutover C9, switch.go — served over verb:gpu's OpRun
+// DRIVER-SWITCH actions); auto-allocation (gpu_allocate.go) stays in core as a host-side
+// VmSpec orchestrator consuming the DetectVFIO shim.
 //
 // Compiled-in (an in-proc inprocProvider): the deploy/config hot paths call the shims
 // many times, and MemlockLimitBytes must read charly's OWN process RLIMIT_MEMLOCK — both

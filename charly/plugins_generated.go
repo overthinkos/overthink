@@ -38,6 +38,7 @@ import (
 	cp_plugin_package "github.com/overthinkos/overthink/candy/plugin-package"
 	cp_plugin_package_group "github.com/overthinkos/overthink/candy/plugin-package-group"
 	cp_plugin_port "github.com/overthinkos/overthink/candy/plugin-port"
+	cp_plugin_preempt "github.com/overthinkos/overthink/candy/plugin-preempt"
 	cp_plugin_process "github.com/overthinkos/overthink/candy/plugin-process"
 	cp_plugin_resource "github.com/overthinkos/overthink/candy/plugin-resource"
 	cp_plugin_service "github.com/overthinkos/overthink/candy/plugin-service"
@@ -57,6 +58,7 @@ func init() {
 	registerCompiledPlugin(cp_plugin_egress.NewProvider(), cp_plugin_egress.NewMeta())
 	registerCompiledPlugin(cp_plugin_k8sgen.NewProvider(), cp_plugin_k8sgen.NewMeta())
 	registerCompiledPlugin(cp_plugin_gpu.NewProvider(), cp_plugin_gpu.NewMeta())
+	registerCompiledPlugin(cp_plugin_preempt.NewProvider(), cp_plugin_preempt.NewMeta())
 	registerCompiledPlugin(cp_plugin_migrate.NewProvider(), cp_plugin_migrate.NewMeta())
 	registerCompiledPlugin(cp_plugin_enc.NewProvider(), cp_plugin_enc.NewMeta())
 	registerCompiledCheckVerb(cp_plugin_port.NewCheckVerb(), cp_plugin_port.SchemaFS, cp_plugin_port.InputDefs)

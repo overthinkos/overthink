@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/alecthomas/kong v1.14.0
 	github.com/overthinkos/overthink/charly v0.0.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -30,7 +31,6 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231106174013-bbf56f31fb17 // indirect
 	google.golang.org/grpc v1.61.0 // indirect
 	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 // Local build: charly's git-repo plugin loader builds this on the host against the

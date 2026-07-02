@@ -38,6 +38,21 @@ func (p *provider) Invoke(_ context.Context, req *pb.InvokeRequest) (*pb.InvokeR
 	if req.GetOp() != sdk.OpRun {
 		return nil, fmt.Errorf("gpu: unsupported op %q (only %q)", req.GetOp(), sdk.OpRun)
 	}
+	// verb:gpu multiplexes TWO disjoint action vocabularies on OpRun: the C11 DETECTION
+	// actions (spec.GpuProbeInput) and the C9 DRIVER-SWITCH actions (spec.GpuSwitchInput).
+	// Peek the action to pick the decoder; the switch actions route to invokeSwitch.
+	var peek struct {
+		Action string `json:"action"`
+	}
+	if err := json.Unmarshal(req.GetParamsJson(), &peek); err != nil {
+		return nil, fmt.Errorf("gpu: decode action: %w", err)
+	}
+	switch peek.Action {
+	case spec.GpuSwitchActionMode, spec.GpuSwitchActionEnsureCDI, spec.GpuSwitchActionWedgeDetected,
+		spec.GpuSwitchActionGroupInMode, spec.GpuSwitchActionCurrentMode, spec.GpuSwitchActionDisplayDriver,
+		spec.GpuSwitchActionPlan:
+		return invokeSwitch(req.GetParamsJson())
+	}
 	var in spec.GpuProbeInput
 	if err := json.Unmarshal(req.GetParamsJson(), &in); err != nil {
 		return nil, fmt.Errorf("gpu: decode input: %w", err)

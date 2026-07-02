@@ -59,12 +59,14 @@ type CLI struct {
 	// the gRPC Describe, is not missed). Reuses collectPluginProviders (R3).
 	PluginProviders PluginProvidersCmd `cmd:"" name:"__plugin-providers" hidden:"" help:"internal: print a candy's plugin.providers (one <class>:<word> per line)"`
 
-	// __preempt-status / __preempt-restore expose the in-core resource arbiter (preempt.go,
-	// ResourceArbiter — which STAYS core: shared by `charly vm create`, `charly vm gpu`, and the
-	// check-bed runner) to the externalized `charly preempt …` COMMAND plugin
-	// (candy/plugin-preempt). The plugin shells back to these sanctioned hidden verbs (the SAME
-	// __cli-model / __plugin-providers internal-command pattern) so the operator-facing
-	// `charly preempt status`/`restore` CLI is unchanged while its implementation moved out of core.
+	// __preempt-status / __preempt-restore expose the resource arbiter to the externalized
+	// `charly preempt …` COMMAND plugin (candy/plugin-preempt). Since cutover C9 the arbiter LOGIC
+	// lives IN that plugin (verb:arbiter, compiled-in); these hidden verbs reach it through the
+	// in-core PROXY (preempt.go newResourceArbiter, which dispatches to verb:arbiter over the
+	// in-proc HostArbiter reverse channel). The plugin's `charly preempt` CLI shells back to these
+	// sanctioned hidden verbs (the SAME __cli-model / __plugin-providers internal-command pattern),
+	// so the operator-facing `charly preempt status`/`restore` CLI is byte-identical while the
+	// arbiter — the last core subsystem to externalize — now lives out of the core binary.
 	PreemptStatus  PreemptStatusInternalCmd  `cmd:"" name:"__preempt-status" hidden:"" help:"internal: print active resource-arbitration leases (the externalized charly preempt plugin shells back here)"`
 	PreemptRestore PreemptRestoreInternalCmd `cmd:"" name:"__preempt-restore" hidden:"" help:"internal: recover preempted holders (the externalized charly preempt plugin shells back here)"`
 

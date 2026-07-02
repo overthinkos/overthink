@@ -149,9 +149,14 @@ func bringUpMembers(node *BundleNode) error {
 		// Seed the per-host charly.yml with the member's deploy-shaped overrides
 		// (port / volume / env / security / network) so its declared port:
 		// publishes to the host — the cross-deployment cdp/vnc/mcp probe reaches
-		// the driver via that host-published port. A member node is NON-disposable
-		// (foldMembers marks only the folded top-level copy), so this never writes
-		// a disposable bed the overlay's validateCheckBeds would reject.
+		// the driver via that host-published port. This ALSO seeds the member's
+		// resource-arbitration role (preemptible holder / requires_exclusive
+		// claimant), so a preemptible-holder member + a requires_exclusive-claimant
+		// member drive the arbiter through the member's own `charly start` (the
+		// group live-preemption shape — see check-preempt-live-pod). A member node
+		// is NON-disposable (foldMembers marks only the folded top-level copy), so
+		// this never writes a disposable bed the overlay's validateCheckBeds would
+		// reject.
 		persistBedDeployOverrides(memberKey, *memberNode)
 		switch {
 		case isVmMember(memberNode):

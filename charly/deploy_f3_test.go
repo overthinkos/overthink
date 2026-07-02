@@ -63,3 +63,65 @@ func TestPersistBedDeployOverrides_SkipsLocalBed(t *testing.T) {
 		t.Error("pod bed was NOT persisted — the local skip is too broad")
 	}
 }
+
+// TestPersistBedDeployOverrides_RoundtripsArbiterFields pins the group-member
+// resource-arbitration persistence fix. persistBedDeployOverrides must seed a
+// member's arbiter role — the holder-side preemptible block and the claimant-side
+// requires_exclusive / requires_shared token lists — into the per-host overlay, so
+// the member's subsequent `charly start` reloads them and the arbiter actually
+// fires (start.go → acquireResourceForClaimant; preempt.go's holder gather).
+//
+// Before the fix, saveDeployState dropped all three, so a reloaded member had
+// RequiredExclusive()==[] / IsPreemptible()==false and the arbiter silently
+// no-op'd — the empty-ledger RCA the C9 cutover surfaced (why check-preempt-arbiter-pod
+// had to make the BED ROOT the claimant instead of a member). The check-preempt-live-pod
+// group bed (a preemptible holder member actually stopped by a requires_exclusive
+// claimant member) depends on this round-trip. This test FAILS without the fix.
+func TestPersistBedDeployOverrides_RoundtripsArbiterFields(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if err := os.MkdirAll(filepath.Join(dir, "charly"), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	path := filepath.Join(dir, "charly", "charly.yml")
+	if err := os.WriteFile(path, []byte("version: "+LatestSchemaVersion().String()+"\n"), 0o600); err != nil {
+		t.Fatalf("write initial: %v", err)
+	}
+
+	// The two roles of the group live-preemption bed: a requires_exclusive CLAIMANT
+	// member and a preemptible HOLDER member.
+	persistBedDeployOverrides("preempt-taker", BundleNode{
+		Target:            "pod",
+		Image:             "check-pod",
+		RequiresExclusive: []string{"test-lock"},
+	})
+	persistBedDeployOverrides("preempt-holder", BundleNode{
+		Target:      "pod",
+		Image:       "check-pod",
+		Preemptible: &PreemptibleConfig{Holds: []string{"test-lock"}, Restore: "always"},
+	})
+
+	dc, err := LoadBundleConfig()
+	if err != nil {
+		t.Fatalf("reload per-host overlay: %v", err)
+	}
+
+	taker, ok := dc.Bundle["preempt-taker"]
+	if !ok {
+		t.Fatal("claimant member was not persisted")
+	}
+	if got := taker.RequiredExclusive(); len(got) != 1 || got[0] != "test-lock" {
+		t.Errorf("claimant lost requires_exclusive on round-trip: got %v, want [test-lock] — the arbiter would no-op for this member", got)
+	}
+
+	holder, ok := dc.Bundle["preempt-holder"]
+	if !ok {
+		t.Fatal("holder member was not persisted")
+	}
+	if !holder.IsPreemptible() {
+		t.Errorf("holder lost preemptible on round-trip: IsPreemptible()=false (holds=%v), want true — the arbiter would not gather this holder from the overlay", holder.PreemptionHolds())
+	}
+	if got := holder.PreemptionHolds(); len(got) != 1 || got[0] != "test-lock" {
+		t.Errorf("holder lost preemptible.holds on round-trip: got %v, want [test-lock]", got)
+	}
+}

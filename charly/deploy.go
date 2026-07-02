@@ -1370,6 +1370,22 @@ type SaveDeployStateInput struct {
 	// build wins); other callers (charly config/start) leave it "" so they
 	// never clobber a persisted overlay ref.
 	ResolvedImage string
+
+	// Resource-arbitration axis (the fourth classification, see
+	// classification.go + charly/preempt.go): the holder-side Preemptible
+	// block and the claimant-side RequiresExclusive / RequiresShared token
+	// lists. Persisted so a deploy/bed MEMBER round-trips its arbiter role
+	// through the per-host overlay — a member's `charly start` reads the
+	// reloaded node and drives acquireResourceForClaimant / the arbiter's
+	// holder gather off these fields (start.go / preempt.go). Without them a
+	// member carrying requires_exclusive would reload with RequiredExclusive()
+	// == [] and the arbiter would silently no-op (the group-member arbiter
+	// gap the C9 cutover surfaced). Written when non-empty — the same idiom as
+	// Volume/Tunnel: an unset field is a no-op, so a re-config (charly
+	// config/start passing zero arbiter fields) never clobbers a seeded role.
+	Preemptible       *PreemptibleConfig
+	RequiresExclusive []string
+	RequiresShared    []string
 }
 
 // saveDeployState persists deployment parameters to charly.yml (best-effort).
@@ -1458,6 +1474,21 @@ func saveDeployState(boxName, instance string, input SaveDeployStateInput) {
 	}
 	if input.SetLifecycle {
 		entry.Lifecycle = input.Lifecycle
+	}
+	// Resource-arbitration axis: persist the holder-side preemptible block and
+	// the claimant-side requires_exclusive / requires_shared token lists so a
+	// deploy/bed MEMBER's `charly start` reloads them from the per-host overlay
+	// and the arbiter actually fires for it (start.go → acquireResourceForClaimant;
+	// preempt.go gather). Write-when-non-empty (the Volume/Tunnel idiom): an unset
+	// field never clobbers a previously-seeded role on a re-config.
+	if input.Preemptible != nil {
+		entry.Preemptible = input.Preemptible
+	}
+	if len(input.RequiresExclusive) > 0 {
+		entry.RequiresExclusive = input.RequiresExclusive
+	}
+	if len(input.RequiresShared) > 0 {
+		entry.RequiresShared = input.RequiresShared
 	}
 	// Defensive zero-write guard: refuse to persist a fully-zero
 	// BundleNode (every field at its Go zero value). A future caller

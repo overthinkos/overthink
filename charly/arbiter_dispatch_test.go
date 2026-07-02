@@ -11,11 +11,14 @@ import "testing"
 // + real persistence. It is the resource-free (ZERO GPU) analogue of the check-preempt-arbiter-pod
 // bed, hermetic (temp HOME for the ledger, temp cwd so no project holders/resources are gathered).
 //
-// RCA guard: the first (group) draft of the bed put requires_exclusive on a MEMBER, whose
-// `charly start` reads the per-host config that persistBedDeployOverrides does NOT seed with
-// arbiter fields → no acquire → empty ledger. THIS test proves the canonical path
-// (requires_exclusive on the CLAIMANT node the acquire shim sees) genuinely persists + surfaces a
-// lease through the externalized plugin.
+// This unit test drives the DIRECT-claimant acquire shim (requires_exclusive on the node the shim
+// sees) in isolation — the arbiter DISPATCH + reverse-channel + persistence path, seam-free. The
+// group-MEMBER live-preemption path (a preemptible holder member actually stopped by a
+// requires_exclusive claimant member) is proven live by the check-preempt-live-pod bed: that path
+// now works because persistBedDeployOverrides seeds a member's arbiter fields into the per-host
+// config, so a member's `charly start` reloads requires_exclusive/preemptible and the arbiter
+// fires (the earlier group draft dropped those fields → empty ledger; the persistence gap is
+// fixed). THIS test remains the seam-free dispatch witness the live bed cannot isolate.
 func TestArbiterExternalizedDispatch_AcquirePersistsAndSurfaces(t *testing.T) {
 	t.Setenv("HOME", t.TempDir()) // hermetic lease ledger (~/.local/share/charly/preemption/…)
 	t.Chdir(t.TempDir())          // no charly.yml → gather/resources host seams see no holders/resources

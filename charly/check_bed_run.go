@@ -141,8 +141,15 @@ func printDebugRetentionNotice(w io.Writer, name string, node BundleNode) {
 
 // persistBedDeployOverrides seeds the per-host charly.yml with a kind:check
 // bed's project-declared deploy-shaped fields (port / volume / env / tunnel /
-// security / network) plus its disposable/lifecycle classification, BEFORE the
-// bed's `charly config` step runs. The folded bed node is the source of truth, but
+// security / network), its disposable/lifecycle classification, AND its
+// resource-arbitration role (preemptible holder / requires_exclusive /
+// requires_shared claimant), BEFORE the bed's `charly config` step runs. Seeding
+// the arbiter fields is what lets a bed/deploy MEMBER be an arbiter participant:
+// bringUpMembers persists each member here, then the member's `charly start`
+// reloads the per-host node and fires the arbiter off these fields (start.go →
+// acquireResourceForClaimant; preempt.go's holder gather) — without them a
+// member's requires_exclusive reloaded as [] and the arbiter silently no-op'd.
+// The folded bed node is the source of truth, but
 // `charly bundle add` / `charly config` otherwise source those fields from the IMAGE
 // LABELS and gate port writes behind an operator `-p` — so a bed's declared
 // `port:` remap would never reach the quadlet (it would fall back to the image
@@ -192,6 +199,11 @@ func persistBedDeployOverrides(name string, node BundleNode) {
 		Disposable:    node.IsDisposable(),
 		SetLifecycle:  node.Lifecycle != "",
 		Lifecycle:     node.Lifecycle,
+		// Resource-arbitration role — so a group MEMBER (holder / claimant) can
+		// actually drive the arbiter after its `charly start` reloads this entry.
+		Preemptible:       node.Preemptible,
+		RequiresExclusive: node.RequiresExclusive,
+		RequiresShared:    node.RequiresShared,
 	})
 }
 
